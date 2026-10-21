@@ -162,6 +162,25 @@ window.AC = window.AC || {};
       return this.m._libatari800_mount_disk_image(n, this.cstr(path), 0);
     }
 
+    // AFILE_* code from file content: 1 ATR, 2 XFD, 3 ATR.GZ, 4 XFD.GZ, 5 DCM, 6 XEX, 7 BAS, 8 LST, 9 CART, 10 ROM, 11 CAS, 12 boot tape, 13/14 state, 15 PRO, 16 ATX, 0 unknown.
+    detect(name, bytes) {
+      const path = '/probe_' + name.replace(/[^\w.]/g, '_');
+      this.m.FS.writeFile(path, bytes);
+      const t = this.m._ac_detect(this.cstr(path));
+      this.m.FS.unlink(path);
+      return t;
+    }
+
+    tapeInsert(name, bytes) {
+      const path = '/tape_' + name.replace(/[^\w.]/g, '_');
+      this.m.FS.writeFile(path, bytes);
+      return !!this.m._ac_tape_insert(this.cstr(path));
+    }
+    tapeEject() { this.m._ac_tape_eject(); }
+    tapeRewind() { this.m._ac_tape_rewind(); }
+    tapeBoot() { this.m._ac_tape_boot(); }
+    tapeInfo() { return { status: this.m._ac_tape_status(), size: this.m._ac_tape_size(), pos: this.m._ac_tape_pos() }; }
+
     bootFile(name, bytes) {
       const path = '/boot_' + name.replace(/[^\w.]/g, '_');
       this.m.FS.writeFile(path, bytes);

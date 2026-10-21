@@ -82,6 +82,8 @@
       const si = key in sel_ ? (sel_[key] === '' ? '' : String(list.findIndex((e) => e.name === sel_[key]))) : null;
       if (si !== null && si !== '-1' && [...sel.options].some((o) => o.value === si)) { sel.value = si; if (key === 'basic') S.basicTouched = true; }
       else if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+      const q = $('romfilter').value.trim().toLowerCase();
+      if (q) [...sel.options].forEach((o) => { if (o.value !== '' && o.value !== sel.value && !o.text.toLowerCase().includes(q)) o.remove(); });
     };
     fill($('osrom'), S.lib[kind], false, kind);
     const bas = [...S.lib.basic].sort((a, b) => /bas/i.test(b.name) - /bas/i.test(a.name));
@@ -362,14 +364,89 @@
   }
 
   // ---- media ----
-  async function loadMedia(files, drive) {
+  const MEDIA_EXT = {
+    disk: ['atr', 'xfd', 'atx', 'dcm', 'pro', 'gz', 'dsk'],
+    cart: ['car', 'rom', 'bin', 'cart'],
+    tape: ['cas'],
+    exe: ['xex', 'com', 'exe', 'bas', 'lst', 'obj'],
+  };
+  const extKind = (name) => {
+    const e = (name.split('.').pop() || '').toLowerCase();
+    return Object.keys(MEDIA_EXT).find((k) => MEDIA_EXT[k].includes(e)) || null;
+  };
+  const typeKind = (t) => ([1, 2, 3, 4, 5, 15, 16].includes(t) ? 'disk' : [6, 7, 8].includes(t) ? 'exe' : [9, 10].includes(t) ? 'cart' : [11, 12].includes(t) ? 'tape' : null);
+
+  // Detects the format from the file contents (extensions are only a hint), then routes it to the right device.
+  async function loadAny(file, alt, hint) {
     if (!S.emu) { log('boot first'); return; }
-    for (const f of files) {
-      const bytes = new Uint8Array(await f.arrayBuffer());
-      if (/\.(xex|com|exe|bas|car|bin|rom)$/i.test(f.name) && !/\.atr$/i.test(f.name)) S.emu.bootFile(f.name, bytes);
-      else { S.emu.mountDisk(drive, f.name, bytes); $('d' + drive).textContent = f.name; S.emu.coldStart(); }
-    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const t = S.emu.detect(file.name, bytes);
+    const k = typeKind(t) || hint || extKind(file.name);
+    if (k === 'disk') {
+      const n = alt ? 2 : 1;
+      if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
+      $('d' + n).textContent = file.name;
+      S.emu.coldStart();
+      log(`D${n}: ${file.name}`);
+    } else if (k === 'exe') {
+      S.emu.bootFile(file.name, bytes);
+      log('running ' + file.name);
+    } else if (k === 'cart') {
+      await insertCart(alt ? 2 : 1, file, bytes);
+    } else if (k === 'tape') {
+      if (!S.emu.tapeInsert(file.name, bytes)) { log('could not read tape ' + file.name); return; }
+      $('tn').textContent = file.name;
+      S.emu.tapeBoot();
+      log('tape: ' + file.name + ' (booting with Start held; for BASIC tapes reset and use CLOAD)');
+    } else log(`${file.name}: unrecognised format${t === 13 || t === 14 ? ' (saved states are not supported)' : ''}`);
   }
+  async function loadMedia(files, drive) {
+    for (const f of files) await loadAny(f, drive === 2, drive ? 'disk' : null);
+  }
+
+  // ---- media library (scan a folder, filter by text and type) ----
+  const MED = { files: [], kind: 'all' };
+  function renderMed() {
+    const q = $('medfilter').value.toLowerCase();
+    const box = $('medlist');
+    box.innerHTML = '';
+    const hits = MED.files.filter((f) => (MED.kind === 'all' || f.kind === MED.kind) && f.name.toLowerCase().includes(q));
+    hits.slice(0, 300).forEach((f) => {
+      const d = document.createElement('div');
+      d.textContent = f.name;
+      d.title = f.name;
+      d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      d.onmouseenter = () => (d.style.background = '#2a2f39');
+      d.onmouseleave = () => (d.style.background = '');
+      d.onclick = (e) => loadAny(f.file, e.shiftKey, f.kind);
+      box.append(d);
+    });
+    $('medcount').textContent = MED.files.length ? `${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
+  }
+  $('medfolder').onchange = (e) => {
+    MED.files = [...e.target.files].map((f) => ({ name: f.webkitRelativePath || f.name, file: f, kind: extKind(f.name) })).filter((f) => f.kind);
+    renderMed();
+  };
+  $('medfilter').oninput = renderMed;
+  document.querySelectorAll('#medchips button').forEach((b) => {
+    b.onclick = () => {
+      MED.kind = b.dataset.t;
+      document.querySelectorAll('#medchips button').forEach((x) => x.classList.toggle('on', x === b));
+      renderMed();
+    };
+  });
+  $('romfilter').oninput = () => fillRomSelects();
+
+  // ---- cassette ----
+  $('tape').onchange = (e) => e.target.files[0] && loadAny(e.target.files[0], false, 'tape');
+  $('te').onclick = () => { if (!S.emu) return; S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = ''; };
+  $('tboot').onclick = () => { if (S.emu && S.emu.tapeInfo().status) S.emu.tapeBoot(); };
+  $('trew').onclick = () => { if (S.emu) S.emu.tapeRewind(); };
+  setInterval(() => {
+    if (!S.emu) return;
+    const t = S.emu.tapeInfo();
+    $('tpos').textContent = t.status && t.size ? `block ${t.pos} / ${t.size}` : '';
+  }, 500);
 
   // ---- virtual FujiNet host node (folder browser; no SIO network emulation yet) ----
   const FN = { files: [] };
@@ -388,7 +465,7 @@
     });
   }
   $('fnfolder').onchange = (e) => {
-    FN.files = [...e.target.files].filter((f) => /\.(atr|xex|com|car|bas|xfd|cas)$/i.test(f.name)).map((f) => ({ name: f.webkitRelativePath || f.name, file: f }));
+    FN.files = [...e.target.files].filter((f) => /\.(atr|atx|dcm|pro|gz|xex|com|bas|xfd)$/i.test(f.name)).map((f) => ({ name: f.webkitRelativePath || f.name, file: f }));
     $('fncount').textContent = FN.files.length + ' images';
     FujiNet.setFiles(FN.files.map((f) => ({ rel: f.name, file: f.file })));
     renderFn();
@@ -415,9 +492,9 @@
 
   // ---- cartridges and eject ----
   S.pendingCart = null;
-  async function insertCart(slot, file) {
+  async function insertCart(slot, file, bytes) {
     if (!S.emu) { log('boot first'); return; }
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    bytes = bytes || new Uint8Array(await file.arrayBuffer());
     const r = S.emu.insertCart(slot, file.name, bytes);
     if (!r.ok) { log('cartridge: ' + r.error); return; }
     $('cn' + slot).textContent = (slot === 1 ? '1 (main, right): ' : '2 (left): ') + file.name;

@@ -11,6 +11,7 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 - Persistence: scanned ROMs (IndexedDB), ROM selection and FujiNet config (localStorage), Reset ROMs / Reset config.
 - Virtual FujiNet (`web/js/fujinet.js`): device $70, CONFIG boot disk, host list, directory browse, mount-to-slot, on/off toggle.
 - Responsive layout: collapsible side panel; phone/tablet breakpoints.
+- Media: content-based format detection (AFILE) routes ATR, XFD, ATR/XFD.gz (zlib), DCM, PRO, ATX to drives; XEX/COM/BAS/LST to run; CART and raw ROM (type picker) to cart slots; CAS and boot tapes to a cassette deck (Boot tape / Rewind / Eject). Media library with text + type filter; ROM filter box.
 - Tests (Playwright, `scripts/*-test.cjs`): fujinet, persist, romsel, pixel (layout), kbview.
 
 ## To do / unverified

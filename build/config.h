@@ -51,3 +51,4 @@
 #define HAVE_STDIO_H 1
 #define HAVE_SYS_TYPES_H 1
 #define STDC_HEADERS 1
+#define HAVE_LIBZ 1
