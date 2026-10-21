@@ -1,0 +1,1802 @@
+/* =============================================================================
+ * IMPORTANT: PLATFORM ABSTRACTION BOUNDARY
+ * =============================================================================
+ * This file implements logic common to all FujiNet platforms.
+ * If you find yourself adding `#if` conditionals to this file
+ * then **YOU ARE DOING IT WRONG**.
+ *
+ * Platform-specific differences belong in platform subclasses
+ * (e.g. `rs232Fuji`, `iwmFuji`), not here.
+ *
+ * HOW TO DO PLATFORM-SPECIFIC VARIANTS CORRECTLY:
+ *   - Subclasses should override fujicmd_ methods from the base class.
+ *   - Prefer calling the base method first, then adding subclass behavior.
+ *     This keeps shared logic centralized and minimizes duplication.
+ *
+ * The goal of this structure is to keep the base class free of
+ * platform-specific hacks and `#ifdef` clutter.
+ *
+ * =============================================================================
+ */
+
+#include "fujiDevice.h"
+
+#include "fnConfig.h"
+#include "fnSystem.h"
+#include "fnWiFi.h"
+#include "fsFlash.h"
+#include "fnFsTNFS.h"
+#include "fujiDeviceID.h"
+
+#include "led.h"
+#include "utils.h"
+#include "directoryPageGroup.h"
+#include "compat_string.h"
+#include "fuji_endian.h"
+#include "peoples_url_parser.h"
+
+#ifndef ESP_PLATFORM // why ESP does not like it? it throws a linker error undefined reference to 'basename'
+#include <libgen.h>
+#endif /* ESP_PLATFORM */
+
+#define DIR_BLOCK_SIZE 256
+
+// Constructor
+fujiDevice::fujiDevice(unsigned int numDisk, std::string extension,
+                       std::optional<std::string> lobbyURL)
+    : _totalDiskDevices(numDisk), _diskImageExtension(extension), _lobbyDiskURL(lobbyURL)
+{
+    // Helpful for debugging
+    for (int i = 0; i < MAX_HOSTS; i++)
+        _fnHosts[i].slotid = i;
+
+    handlers = {
+        { CMD::FUJI_RESET, [this](const FUJI_COMMAND_PACKET &packet) {
+            fnSystem.reboot();
+        } },
+        { CMD::FUJI_GET_ADAPTERCONFIG, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_get_adapter_config();
+        } },
+        { CMD::FUJI_GET_ADAPTERCONFIG_EXTENDED, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_get_adapter_config_extended();
+        } },
+        { CMD::FUJI_GET_SCAN_RESULT, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_net_scan_result(packet.param(0));
+        } },
+        { CMD::FUJI_SCAN_NETWORKS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_net_scan_networks();
+        } },
+        { CMD::FUJI_SET_SSID, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_net_set_ssid_success();
+        } },
+        { CMD::FUJI_GET_SSID, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_net_get_ssid();
+        } },
+        { CMD::FUJI_READ_HOST_SLOTS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_read_host_slots();
+        } },
+        { CMD::FUJI_READ_DEVICE_SLOTS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_read_device_slots();
+        } },
+        { CMD::FUJI_WRITE_DEVICE_SLOTS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_write_device_slots();
+        } },
+        { CMD::FUJI_WRITE_HOST_SLOTS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_write_host_slots();
+        } },
+        { CMD::FUJI_GET_WIFI_ENABLED, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_net_get_wifi_enabled();
+        } },
+        { CMD::FUJI_GET_WIFISTATUS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_net_get_wifi_status();
+        } },
+        { CMD::FUJI_MOUNT_HOST, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_mount_host_success(packet.param(0));
+        } },
+        { CMD::FUJI_OPEN_DIRECTORY, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_open_directory_success(packet.param(0));
+        } },
+        { CMD::FUJI_CLOSE_DIRECTORY, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_close_directory();
+        } },
+        { CMD::FUJI_READ_DIR_ENTRY, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_read_directory_entry((uint8_t) packet.param(0), packet.param(1));
+        } },
+        { CMD::FUJI_SET_DIRECTORY_POSITION, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_set_directory_position(packet.param(0));
+        } },
+        { CMD::FUJI_SET_DEVICE_FULLPATH, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujidev_set_device_fullpath(packet);
+        } },
+        { CMD::FUJI_GET_DEVICE_FULLPATH, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_get_device_filename(packet.param(0));
+        } },
+        { CMD::FUJI_MOUNT_IMAGE, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_mount_disk_image_success(packet.param(0),
+                                             (disk_access_flags_t) ((uint8_t)
+                                                                    packet.param(1)));
+        } },
+        { CMD::FUJI_UNMOUNT_HOST, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_unmount_host_success(packet.param(0));
+        } },
+        { CMD::FUJI_UNMOUNT_IMAGE, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_unmount_disk_image_success(packet.param(0));
+        } },
+        { CMD::FUJI_RANDOM_NUMBER, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_random();
+        } },
+        { CMD::FUJI_SET_BOOT_MODE, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_set_boot_mode(packet.param(0), MEDIATYPE_UNKNOWN, FUJI_BOOTDISK);
+        } },
+        { CMD::FUJI_MOUNT_ALL, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_mount_all_success();
+        } },
+        { CMD::FUJI_GET_HOST_PREFIX, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_get_host_prefix(packet.param(0));
+        } },
+        { CMD::FUJI_SET_HOST_PREFIX, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_set_host_prefix(packet.param(0));
+        } },
+        { CMD::FUJI_COPY_FILE, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujidev_copy_file(packet);
+        } },
+        { CMD::FUJI_NEW_DISK, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_new_disk();
+        } },
+        { CMD::FUJI_GENERATE_GUID, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_generate_guid();
+        } },
+        { CMD::FUJI_STATUS, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_status();
+        } },
+        { CMD::FUJI_GET_DIRECTORY_POSITION, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_get_directory_position();
+        } },
+        { CMD::FUJI_CONFIG_BOOT, [this](const FUJI_COMMAND_PACKET &packet) {
+            fujicmd_set_boot_config(packet.param(0));
+        } },
+    };
+}
+
+// Public method to update host in specific slot
+fujiHost *fujiDevice::set_slot_hostname(int host_slot, char *hostname)
+{
+    _fnHosts[host_slot].set_hostname(hostname);
+    populate_config_from_slots();
+    return &_fnHosts[host_slot];
+}
+
+// Temporary(?) function while we move from old config storage to new
+void fujiDevice::populate_slots_from_config()
+{
+    for (int i = 0; i < MAX_HOSTS; i++)
+    {
+        if (Config.get_host_type(i) == fnConfig::host_types::HOSTTYPE_INVALID)
+            _fnHosts[i].set_hostname("");
+        else
+            _fnHosts[i].set_hostname(Config.get_host_name(i).c_str());
+    }
+
+    for (int i = 0; i < _totalDiskDevices; i++)
+    {
+        // A mounted slot is already current; resetting it would drop the fileh
+        // that disk swap counts as mounted.
+        if (_fnDisks[i].fileh != nullptr)
+            continue;
+
+        _fnDisks[i].reset();
+
+        if (Config.get_mount_host_slot(i) != HOST_SLOT_INVALID)
+        {
+            if (Config.get_mount_host_slot(i) >= 0
+                && Config.get_mount_host_slot(i) <= MAX_HOSTS)
+            {
+                strlcpy(_fnDisks[i].filename,
+                        Config.get_mount_path(i).c_str(), sizeof(fujiDisk::filename));
+                _fnDisks[i].host_slot = Config.get_mount_host_slot(i);
+                if (Config.get_mount_mode(i) == fnConfig::mount_modes::MOUNTMODE_WRITE)
+                    _fnDisks[i].access_mode = DISK_ACCESS_MODE_WRITE;
+                else
+                    _fnDisks[i].access_mode = DISK_ACCESS_MODE_READ;
+            }
+        }
+    }
+}
+
+// Temporary(?) function while we move from old config storage to new
+void fujiDevice::populate_config_from_slots()
+{
+    for (int i = 0; i < MAX_HOSTS; i++)
+    {
+        fujiHostType htype = _fnHosts[i].get_type();
+        const char *hname = _fnHosts[i].get_hostname();
+
+        if (hname[0] == '\0')
+        {
+            Config.clear_host(i);
+        }
+        else
+        {
+            Config.store_host(i, hname,
+                              htype == HOSTTYPE_TNFS
+                              ? fnConfig::host_types::HOSTTYPE_TNFS
+                              : fnConfig::host_types::HOSTTYPE_SD);
+        }
+    }
+
+    for (int i = 0; i < _totalDiskDevices; i++)
+    {
+        if (_fnDisks[i].host_slot >= MAX_HOSTS || _fnDisks[i].filename[0] == '\0')
+            Config.clear_mount(i);
+        else
+            Config.store_mount(i, _fnDisks[i].host_slot, _fnDisks[i].filename,
+                               (_fnDisks[i].access_mode & DISK_ACCESS_MODE_WRITE)
+                               ? fnConfig::mount_modes::MOUNTMODE_WRITE
+                               : fnConfig::mount_modes::MOUNTMODE_READ);
+    }
+}
+
+// Mount all - returns true on success and false on error
+success_is_true fujiDevice::fujicore_mount_all_success()
+{
+    bool nodisks = true; // Check at the end if no disks are in a slot and disable config
+
+    for (int i = 0; i < _totalDiskDevices; i++)
+    {
+        fujiDisk &disk = _fnDisks[i];
+        fujiHost &host = _fnHosts[disk.host_slot];
+        char flag[4] = {'r', 'b', 0, 0};
+        if (disk.access_mode & DISK_ACCESS_MODE_WRITE)
+            flag[2] = '+';
+
+        if (disk.host_slot != INVALID_HOST_SLOT && strlen(disk.filename) > 0)
+        {
+            nodisks = false; // We have a disk in a slot
+
+            if (host.mount() == false)
+            {
+                RETURN_ERROR_AS_FALSE();
+            }
+
+            Debug_printf("Selecting '%s' from host #%u as %s on D%u:\n", disk.filename, disk.host_slot, flag, i + 1);
+            if (!fujicore_mount_disk_image_success(i, disk.access_mode))
+            {
+                RETURN_ERROR_AS_FALSE();
+            }
+        }
+    }
+
+    if (nodisks)
+    {
+        // No disks in a slot, disable config
+        boot_config = false;
+    }
+
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+// Mount all - returns true on success and false on error
+success_is_true fujiDevice::fujicmd_mount_all_success()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    if (!fujicore_mount_all_success()) {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicore_mount_all_at_startup()
+{
+    bool was_locked = _startup_mount_lock.exchange(true);
+    if (was_locked) {
+        Debug_println("::fujicore_mount_all_at_startup: another caller "
+                      "already owns the startup mount, skipping");
+        RETURN_SUCCESS_AS_TRUE();
+    }
+
+    success_is_true result = fujicore_mount_all_success();
+    if (!result) {
+        // Release the lock so a later startup caller (typically the
+        // IP_EVENT_STA_GOT_IP handler) can retry.  On success we
+        // intentionally keep the lock held forever.
+        _startup_mount_lock.store(false);
+    }
+    return result;
+}
+
+// This gets called when we're about to shutdown/reboot
+void fujiDevice::shutdown()
+{
+    for (int i = 0; i < _totalDiskDevices; i++)
+        _fnDisks[i].disk_dev.unmount();
+
+    // Clean the mounts and mount tracking, so they re-mount after a restart.
+    for (int i = 0; i < MAX_HOSTS; i++)
+    {
+        fujiHostType htype = _fnHosts[i].get_type();
+        if (htype != HOSTTYPE_UNINITIALIZED && htype != HOSTTYPE_LOCAL)
+            _fnHosts[i].unmount_success();
+        hostMounted[i] = false;
+    }
+    _startup_mount_lock.store(false);
+}
+
+// Derived from the device IDs rather than tracked separately, so it stays
+// correct across mounts and unmounts between rotations.
+int fujiDevice::get_rotate_slot()
+{
+    int count = 0;
+    while (count < (int)_totalDiskDevices && _fnDisks[count].fileh != nullptr)
+        count++;
+
+    if (count < 2)
+        return -1;
+
+    for (int i = 0; i < count; i++)
+        if (get_disk_id(i) == FUJI_DEVICEID::DISK)
+            return i;
+
+    return -1;
+}
+
+// Disk Image Rotate
+/*
+  We rotate disks by changing their disk device ID's. That prevents
+  us from having to unmount and re-mount devices.
+*/
+void fujiDevice::fujicmd_image_rotate()
+{
+    Debug_println("Fuji cmd: IMAGE ROTATE");
+
+    std::vector<DISK_DEVICE *> mounted;
+    for (size_t idx = 0; idx < _totalDiskDevices; idx++)
+    {
+        if (_fnDisks[idx].fileh != nullptr)
+            mounted.push_back(get_disk_dev(idx));
+    }
+
+    // The first slot gets the device ID of the last slot
+    SYSTEM_BUS.rotateDevices(mounted, -1);
+
+    // Blink out which slot is now drive 1, then let the platform announce it
+    int rotate_slot = get_rotate_slot();
+    if (rotate_slot >= 0)
+    {
+        _active_rotate_slot = rotate_slot;
+        fnLedManager.blink(LED_BUS, rotate_slot + 1);
+        announce_rotation(rotate_slot);
+    }
+}
+
+// ============ Validation of inputs ============
+
+success_is_true fujiDevice::validate_host_slot(uint8_t slot, const char *dmsg)
+{
+    if (slot < MAX_HOSTS)
+        RETURN_SUCCESS_AS_TRUE();
+
+    if (dmsg == NULL)
+    {
+        Debug_printf("!! Invalid host slot %hu\n", slot);
+    }
+    else
+    {
+        Debug_printf("!! Invalid host slot %hu @ %s\n", slot, dmsg);
+    }
+
+    RETURN_ERROR_AS_FALSE();
+}
+
+success_is_true fujiDevice::validate_device_slot(uint8_t slot, const char *dmsg)
+{
+    if (slot < _totalDiskDevices)
+        RETURN_SUCCESS_AS_TRUE();
+
+    if (dmsg == NULL)
+    {
+        Debug_printf("!! Invalid device slot %hu\n", slot);
+    }
+    else
+    {
+        Debug_printf("!! Invalid device slot %hu @ %s\n", slot, dmsg);
+    }
+
+    RETURN_ERROR_AS_FALSE();
+}
+
+// ============ Standard Fuji commands ============
+
+// Reset FujiNet
+void fujiDevice::fujicmd_reset()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: REBOOT");
+    SYSTEM_BUS.transaction_success();
+    fnSystem.reboot();
+}
+
+// Get SSID
+SSIDConfig fujiDevice::fujicore_net_get_ssid()
+{
+    SSIDConfig cfg {};
+
+    /*
+      We memcpy instead of strcpy because technically the SSID and
+      passphrase aren't std::strings and aren't null terminated,
+      they're arrays of bytes officially and can contain any byte
+      value - including a zero - at any point in the array.  However,
+      we're not consistent about how we treat this in the different
+      parts of the code.
+    */
+
+    std::string s = Config.get_wifi_ssid();
+    memcpy(cfg.ssid, s.c_str(),
+           s.length() > sizeof(cfg.ssid) ? sizeof(cfg.ssid) : s.length());
+
+    s = Config.get_wifi_passphrase();
+    memcpy(cfg.password, s.c_str(),
+           s.length() > sizeof(cfg.password) ? sizeof(cfg.password) : s.length());
+
+    return cfg;
+}
+
+void fujiDevice::fujicmd_net_get_ssid()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: GET SSID");
+
+    SSIDConfig cfg = fujicore_net_get_ssid();
+    SYSTEM_BUS.transaction_send(&cfg, sizeof(cfg));
+    return;
+}
+
+// Mount Server
+success_is_true fujiDevice::fujicore_mount_host_success(uint8_t hostSlot)
+{
+    Debug_println("Fuji cmd: MOUNT HOST");
+
+    // Make sure we weren't given a bad hostSlot
+    if (!validate_host_slot(hostSlot, "mount_hosts")) {
+        Debug_println("fujicore_mount_host: BAD SLOT");
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (!hostMounted[hostSlot] && !_fnHosts[hostSlot].mount()) {
+        Debug_println("fujicore_mount_host: not host mounted and not _fnHosts[hostSlot].mount");
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    hostMounted[hostSlot] = true;
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicmd_mount_host_success(uint8_t hostSlot)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    if (!validate_host_slot(hostSlot))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (!fujicore_mount_host_success(hostSlot))
+    {
+        Debug_println("fujicore_mount_host_success returned false");
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+void fujiDevice::fujicore_net_scan_networks()
+{
+    _countScannedSSIDs = fnWiFi.scan_networks();
+    return;
+}
+
+void fujiDevice::fujicmd_net_scan_networks()
+{
+    uint8_t ret;
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: SCAN NETWORKS");
+    fujicore_net_scan_networks();
+    ret = _countScannedSSIDs;
+    SYSTEM_BUS.transaction_send(&ret, sizeof(ret));
+    return;
+}
+
+SSIDInfo fujiDevice::fujicore_net_scan_result(uint8_t index, bool *err)
+{
+    SSIDInfo detail {};
+
+    bool is_err = index >= _countScannedSSIDs;
+    if (!is_err)
+        fnWiFi.get_scan_result(index, detail.ssid, &detail.rssi);
+    if (err)
+        *err = is_err;
+
+    return detail;
+}
+
+void fujiDevice::fujicmd_net_scan_result(uint8_t index)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: GET SCAN RESULT");
+
+    bool err;
+    SSIDInfo result = {};
+
+    result = fujicore_net_scan_result(index, &err);
+    SYSTEM_BUS.transaction_send(&result, sizeof(result), err);
+}
+
+// Set SSID
+success_is_true fujiDevice::fujicore_net_set_ssid_success(const char *ssid,
+                                                          const char *password, bool save)
+{
+    Config.save();
+
+    Debug_printf("Connecting to net: %s password: %s\n", ssid, password);
+
+    if (fnWiFi.connect(ssid, password) != 0) {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (save)
+    {
+        Config.store_wifi_ssid(ssid, strlen(ssid) + 1);
+        Config.store_wifi_passphrase(password, strlen(password) + 1);
+        Config.save();
+    }
+
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+// Set SSID
+success_is_true fujiDevice::fujicmd_net_set_ssid_success()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+    Debug_println("Fuji cmd: SET SSID");
+
+    SSIDConfig cfg;
+    if (!SYSTEM_BUS.transaction_get(&cfg, sizeof(cfg)))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (fujicore_net_set_ssid_success(cfg.ssid, cfg.password, true).is_error())
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+// Check if Wifi is enabled
+uint8_t fujiDevice::fujicore_net_get_wifi_enabled()
+{
+    return Config.get_wifi_enabled() ? 1 : 0;
+}
+
+void fujiDevice::fujicmd_net_get_wifi_enabled()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    uint8_t e = fujicore_net_get_wifi_enabled();
+    Debug_printf("Fuji cmd: GET WIFI ENABLED: %d\n", e);
+    SYSTEM_BUS.transaction_send(&e, sizeof(e));
+}
+
+// Disk Image Mount
+success_is_true fujiDevice::fujicore_mount_disk_image_success(uint8_t deviceSlot,
+                                                              disk_access_flags_t access_mode)
+{
+    // TODO: Implement FETCH?
+    char mode[4] = {'r', 'b', 0, 0};
+    if (access_mode & DISK_ACCESS_MODE_WRITE)
+        mode[2] = '+';
+
+    // Make sure we weren't given a bad hostSlot
+    if (!validate_device_slot(deviceSlot))
+        RETURN_ERROR_AS_FALSE();
+
+    if (!validate_host_slot(_fnDisks[deviceSlot].host_slot))
+        RETURN_ERROR_AS_FALSE();
+
+    // A couple of reference variables to make things much easier to read...
+    fujiDisk &disk = *get_disk(deviceSlot);
+    fujiHost &host = _fnHosts[disk.host_slot];
+
+    Debug_printf("Selecting '%s' from host #%u as %s on D%u:\r\n",
+                 disk.filename, disk.host_slot, mode, deviceSlot + 1);
+
+    disk.fileh = host.fnfile_open(disk.filename, disk.filename, sizeof(disk.filename), mode);
+
+    if (disk.fileh == nullptr)
+        RETURN_ERROR_AS_FALSE();
+
+    // We've gotten this far, so make sure our bootable CONFIG disk is disabled
+    boot_config = false;
+
+    // We need the file size for loading XEX files and for CASSETTE, so get that too
+    disk.disk_size = host.file_size(disk.fileh);
+    DISK_DEVICE *disk_dev = get_disk_dev(deviceSlot);
+    disk.disk_type = mount_media(disk_dev, disk, host, access_mode);
+    disk_dev->is_config_device = false;
+
+    // mount() returns MEDIATYPE_UNKNOWN on failure -- without this check that
+    // failure was silently swallowed and MOUNT_IMAGE ACKed as if it had
+    // succeeded.
+    if (disk.disk_type == MEDIATYPE_UNKNOWN)
+        RETURN_ERROR_AS_FALSE();
+
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicmd_mount_disk_image_success(uint8_t deviceSlot,
+                                                             disk_access_flags_t access_mode)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: MOUNT IMAGE");
+
+    if (!fujicore_mount_disk_image_success(deviceSlot, access_mode))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+// Mounts the desired boot disk number
+void fujiDevice::insert_boot_device(uint8_t image_id, mediatype_t disk_type,
+                                    DISK_DEVICE *disk_dev)
+{
+    std::string boot_img;
+    fnFile *fBoot = nullptr;
+    size_t image_size;
+
+    switch (image_id)
+    {
+    case 0:
+        boot_img = "/autorun" + _diskImageExtension;
+        fBoot = fsFlash.fnfile_open(boot_img.c_str());
+        break;
+    case 1:
+        boot_img = "/mount-and-boot" + _diskImageExtension;
+        fBoot = fsFlash.fnfile_open(boot_img.c_str());
+        break;
+    case 2:
+        Debug_printf("Mounting lobby server\n");
+        {
+            if (_lobbyDiskURL)
+            {
+                PeoplesUrlParser parsed(*_lobbyDiskURL);
+                Debug_printf("Starting TNFS connection\n");
+                if (!fnTNFS.start(parsed.host.c_str()))
+                {
+                    Debug_printf("TNFS failed to start.\n");
+                    fBoot = NULL;
+                    return;
+                }
+                boot_img = parsed.path;
+                fBoot = fnTNFS.fnfile_open(boot_img.c_str());
+            }
+        }
+        break;
+    case 3:
+        boot_img = "/hisioboot-fujinet" + _diskImageExtension;
+        fBoot = fsFlash.fnfile_open(boot_img.c_str());
+        break;
+    default:
+        Debug_printf("Invalid boot mode: %d\n", image_id);
+        return;
+    }
+
+    if (fBoot == nullptr)
+    {
+        Debug_printf("Failed to open boot disk image: %s\n", boot_img.c_str());
+        return;
+    }
+
+    image_size = fsFlash.filesize(fBoot);
+    disk_dev->mount(fBoot, boot_img.c_str(), image_size, DISK_ACCESS_MODE_READ, disk_type);
+    disk_dev->is_config_device = true;
+}
+
+// Mounts the alternate config disk in desired boot disk number
+void fujiDevice::insert_boot_device(std::string boot_img, mediatype_t disk_type,
+                                    DISK_DEVICE *disk_dev)
+{
+    fnFile *fBoot = nullptr;
+    size_t image_size;
+
+    fBoot = fnSDFAT.fnfile_open(boot_img.c_str());
+
+    if (fBoot == nullptr)
+    {
+        Debug_printf("Failed to open alternate config boot disk image: %s\n", boot_img.c_str());
+        return;
+    }
+
+    image_size = FileSystem::filesize(fBoot);
+    disk_dev->mount(fBoot, boot_img.c_str(), image_size, DISK_ACCESS_MODE_READ, disk_type);
+    disk_dev->is_config_device = true;
+}
+
+success_is_true fujiDevice::fujicore_open_directory_success(uint8_t hostSlot,
+                                                            const std::string &dirpath)
+{
+    // See if there's a search pattern after the directory path
+    const std::string *finalpath = &dirpath;
+    std::string noslash;
+    std::optional<std::string> pattern;
+    int pathlen = finalpath->find('\0');
+    if (pathlen < finalpath->size() - 3) // Allow for two NULLs and a 1-char pattern
+        pattern = finalpath->substr(pathlen + 1);
+
+    // Remove trailing slash
+    if (pathlen > 1 && (*finalpath)[pathlen - 1] == '/') {
+        noslash = finalpath->substr(0, pathlen - 1);
+        finalpath = &noslash;
+    }
+
+    return fujicore_open_directory_success(hostSlot, *finalpath, pattern);
+}
+
+success_is_true fujiDevice::fujicore_open_directory_success(uint8_t hostSlot,
+                                                            const std::string &dirpath,
+                                                            const std::optional<std::string> &pattern)
+{
+    if (!validate_host_slot(hostSlot))
+        RETURN_ERROR_AS_FALSE();
+
+    // If we already have a directory open, close it first
+    if (_current_open_directory_slot != -1)
+    {
+        Debug_print("Directory was already open - closing it first\r\n");
+        _fnHosts[_current_open_directory_slot].dir_close();
+        _current_open_directory_slot = -1;
+    }
+
+    Debug_printf("Opening directory: \"%s\", pattern: \"%s\"\r\n",
+                 dirpath.c_str(), pattern.value_or("").c_str());
+
+    if (!_fnHosts[hostSlot].dir_open(dirpath.c_str(), pattern ? pattern->c_str() : nullptr, 0))
+        RETURN_ERROR_AS_FALSE();
+
+    _current_open_directory_slot = hostSlot;
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicmd_open_directory_success(uint8_t hostSlot)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+    Debug_println("Fuji cmd: OPEN DIRECTORY");
+
+    if (!validate_host_slot(hostSlot))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    std::string dirpath(256, 0);
+    if (!SYSTEM_BUS.transaction_get(dirpath.data(), dirpath.size())) {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (_current_open_directory_slot != -1)
+    {
+        Debug_print("Directory was already open - closing it first\n");
+        _fnHosts[_current_open_directory_slot].dir_close();
+        _current_open_directory_slot = -1;
+    }
+
+    if (!fujicore_open_directory_success(hostSlot, dirpath))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+void fujiDevice::fujicmd_close_directory()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: CLOSE DIRECTORY");
+
+    if (_current_open_directory_slot != -1)
+        _fnHosts[_current_open_directory_slot].dir_close();
+
+    _current_open_directory_slot = -1;
+    SYSTEM_BUS.transaction_success();
+}
+
+/*
+ * Read directory entries in block mode
+ *
+ * Input parameters:
+ * num_pages: Number of 256-byte pages to return (determines maximum response size)
+ * group_size: Number of entries per page group
+ *
+ * Response format:
+ * Overall response header:
+ * Byte  0    : 'M' (Magic number byte 1)
+ * Byte  1    : 'F' (Magic number byte 2)
+ * Byte  2    : Header size (4)
+ * Byte  3    : Number of page groups that follow
+ *
+ * Followed by one or more complete PageGroups, padded to num_pages * 256 bytes.
+ * Each PageGroup must fit entirely within the response - partial groups are not allowed.
+ * If a PageGroup would exceed the remaining space, the directory position is rewound
+ * and that group is not included.
+ *
+ * PageGroup structure:
+ * Byte  0    : Flags
+ *              - Bit 7: Last group (1=yes, 0=no)
+ *              - Bits 6-0: Reserved
+ * Byte  1    : Number of directory entries in this group
+ * Bytes 2-3  : Group data size (16-bit little-endian, excluding header)
+ * Byte  4    : Group index (0-based, calculated as dir_pos/group_size)
+ * Bytes 5+   : File/Directory entries for this group
+ *              Each entry:
+ *              - Bytes 0-3: Packed timestamp and flags
+ *                          - Byte 0: Years since 1970 (0-255)
+ *                          - Byte 1: FFFF MMMM (4 bits flags, 4 bits month 1-12)
+ *                                   Flags: bit 7 = directory, bits 6-4 reserved
+ *                          - Byte 2: DDDDD HHH (5 bits day 1-31, 3 high bits of hour)
+ *                          - Byte 3: HH mmmmmm (2 low bits hour 0-23, 6 bits minute 0-59)
+ *              - Bytes 4-6: File size (24-bit little-endian, 0 for directories)
+ *              - Byte  7  : Media type (0-255, with 0=unknown)
+ *              - Bytes 8+ : Null-terminated filename
+ *
+ * The last PageGroup in the response has its last_group flag set only when
+ * there are no more directory entries to process.
+ */
+void fujiDevice::fujicmd_read_directory_block(uint8_t num_pages, uint8_t group_size)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: READ DIRECTORY BLOCK");
+
+    size_t max_block_size = num_pages * DIR_BLOCK_SIZE;
+
+    // Debug_printf("Parameters: aux1=$%02X (pages=%d), aux2=$%02X (group_size=%d), max_block_size=%d\n",
+    //              cmdFrame.aux1, num_pages, cmdFrame.aux2, group_size, max_block_size);
+
+#ifdef WE_NEED_TO_REWIND
+    // Save current directory position in case we need to rewind
+    uint16_t starting_pos = _fnHosts[_current_open_directory_slot].dir_tell();
+#endif /* WE_NEED_TO_REWIND */
+    // Debug_printf("Starting directory position: %d\n", starting_pos);
+
+    std::vector<DirectoryPageGroup> page_groups;
+    size_t total_size = 0;
+    bool is_last_entry = false;
+
+    while (!is_last_entry) {
+        // Create a new page group
+        DirectoryPageGroup group;
+        uint16_t group_start_pos = _fnHosts[_current_open_directory_slot].dir_tell();
+
+        // Calculate group index (0-based)
+        group.index = group_start_pos / group_size;
+
+        // Debug_printf("Starting new group at directory position: %d (index=%d)\n",
+        //              group_start_pos, group.index);
+
+        // Fill the group with entries
+        for (int i = 0; i < group_size && !is_last_entry; i++) {
+            fsdir_entry_t *f = _fnHosts[_current_open_directory_slot].dir_nextfile();
+
+            if (f == nullptr) {
+                // Debug_println("Reached end of directory");
+                is_last_entry = true;
+                group.is_last_group = true;
+                break;
+            }
+
+            // Debug_printf("Adding entry %d: \"%s\" (size=%lu)\n",
+            //             i, f->filename, f->size);
+
+            if (!group.add_entry(f)) {
+                // Debug_println("Failed to add entry to group");
+                break;
+            }
+        }
+
+        // If this is the last group, mark it as the last one
+        if (is_last_entry) {
+            Debug_println("This is the last group in the directory");
+            group.is_last_group = true;
+        }
+
+        // this sets all the data for the group up correctly for us to insert into the block
+        group.finalize();
+
+        // Check if adding this group would exceed max_block_size
+        size_t new_total = total_size + group.data.size();
+        // Debug_printf("Group stats: entries=%d, size=%d, new_total=%d/%d\n",
+        //             group.entry_count, group.data.size(), new_total, max_block_size);
+
+        if (new_total > max_block_size) {
+            // Debug_printf("Group would exceed max_block_size (%d > %d), rewinding to pos %d\n",
+            //            new_total, max_block_size, group_start_pos);
+            // Rewind to start of this group and break
+            _fnHosts[_current_open_directory_slot].dir_seek(group_start_pos);
+            break;
+        }
+
+        // Add group to our collection
+        total_size = new_total;
+        page_groups.push_back(std::move(group));
+        // Debug_printf("Added group %d, total_size now %d\n",
+        //             page_groups.size(), total_size);
+    }
+
+    // If we couldn't fit any groups, return error
+    if (page_groups.empty()) {
+        Debug_println("No page groups fit in requested size");
+        Debug_printf("Final stats: total_size=%d, max_block_size=%d\n",
+                    total_size, max_block_size);
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    // Create final response buffer
+    std::vector<uint8_t> response(max_block_size, 0);  // Initialize with zeros at full size
+
+    // Add response header
+    response[0] = 'M';  // Magic byte 1
+    response[1] = 'F';  // Magic byte 2
+    response[2] = 4;    // Header size (magic + size + count)
+    response[3] = page_groups.size(); // Number of page groups that follow
+
+    // Copy all page groups to response
+    size_t current_pos = 4;  // Start after header
+    for (const auto& group : page_groups) {
+        if (current_pos + group.data.size() <= max_block_size) {
+            std::copy(group.data.begin(), group.data.end(), response.begin() + current_pos);
+            current_pos += group.data.size();
+        }
+    }
+
+    // Debug_printf("Directory block stats:\n");
+    // Debug_printf("  Number of groups: %d\n", page_groups.size());
+    // Debug_printf("  Total data size: %d bytes\n", total_size);
+    // Debug_printf("  Last group: %s\n", (page_groups.back().is_last_group ? "Yes" : "No"));
+    // Debug_printf("Full response block:\n%s\n", util_hexdump(response.data(), response.size()).c_str());
+
+    SYSTEM_BUS.transaction_send(response.data(), response.size());
+}
+
+std::optional<std::string> fujiDevice::fujicore_read_directory_entry(size_t maxlen,
+                                                                     uint8_t addtl)
+{
+    // Make sure we have a current open directory
+    if (_current_open_directory_slot == -1)
+    {
+        Debug_print("READ DIRECTORY ENTRY: No currently open directory\n");
+        return std::nullopt;
+    }
+
+    fsdir_entry_t *entry = _fnHosts[_current_open_directory_slot].dir_nextfile();
+
+    if (entry == nullptr)
+        return std::string(2, char(0x7F));
+
+    Debug_printf("::read_direntry \"%s\"\n", entry->filename);
+
+    std::string result;
+
+    // If 0x80 is set on ADDTL, send back additional information
+    if (addtl & 0x80)
+    {
+        result.resize(maxlen);
+        size_t attrib_len = set_additional_direntry_details(entry, (uint8_t *) result.data(), maxlen);
+        result.resize(attrib_len);
+    }
+
+    int buflen = maxlen - result.size();
+    std::string filename;
+
+    if (strlen(entry->filename) >= buflen)
+    {
+        filename.resize(buflen);
+        util_ellipsize(entry->filename, &filename[0], buflen - 1);
+    }
+    else
+        filename = entry->filename;
+
+    // Add a slash at the end of directory entries
+    if (entry->isDir && filename.size() < (buflen - 2))
+    {
+        filename += '/';
+        Debug_printv("It's a dir! \"%s\"", filename.c_str());
+    }
+
+    result += filename;
+    result += '\0'; // Don't forget the null terminator for fixed-length packets
+    return result;
+}
+
+void fujiDevice::fujicmd_read_directory_entry(size_t maxlen, uint8_t addtl)
+{
+    if (_current_open_directory_slot == -1)
+    {
+        Debug_print("READ DIRECTORY ENTRY: No currently open directory\n");
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    // Block mode (addtl $C0-$FF) is handled entirely by fujicmd_read_directory_block,
+    // which owns the transaction. Must not transaction_accept here first.
+    if ((addtl & 0xC0) == 0xC0)
+    {
+        fujicmd_read_directory_block(maxlen, addtl & 0x3F);
+        return;
+    }
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_printf("Fuji cmd: READ DIRECTORY ENTRY (max=%hu) (addtl=%02x)\n", maxlen, addtl);
+
+    auto current_entry = fujicore_read_directory_entry(maxlen, addtl);
+    if (!current_entry)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    if (current_entry->size() < maxlen)
+        current_entry->resize(maxlen, '\0');
+
+    Debug_printf("%s\n", util_hexdump(current_entry->data(), maxlen).c_str());
+    SYSTEM_BUS.transaction_send(current_entry->data(), maxlen);
+}
+
+dirEntryDetails fujiDevice::_additional_direntry_details(fsdir_entry_t *f)
+{
+    dirEntryDetails details;
+
+    // File modified date-time
+    struct tm *modtime = localtime(&f->modified_time);
+
+    details.modified.year = modtime->tm_year;
+    details.modified.month = modtime->tm_mon + 1;
+    details.modified.day = modtime->tm_mday;
+    details.modified.hour = modtime->tm_hour;
+    details.modified.minute = modtime->tm_min;
+    details.modified.second = modtime->tm_sec;
+    details.size = f->size;
+
+    details.flags = 0;
+    if (f->isDir)
+        details.flags |= DET_FF_DIR;
+
+    details.mediatype = MediaType::discover_mediatype(f->filename);
+
+    return details;
+}
+
+success_is_true fujiDevice::fujicore_copy_file_success(uint8_t sourceSlot, uint8_t destSlot,
+                                                       std::string copySpec)
+{
+    std::string sourcePath;
+    std::string destPath;
+    fnFile *sourceFile;
+    fnFile *destFile;
+    char *dataBuf;
+
+    // Check for malformed copyspec.
+    if (copySpec.empty() || copySpec.find_first_of("|") == std::string::npos)
+        RETURN_ERROR_AS_FALSE();
+
+    // Protocol sends 1-based slot numbers; convert to 0-based array indices.
+    if (sourceSlot == 0 || destSlot == 0)
+        RETURN_ERROR_AS_FALSE();
+
+    sourceSlot--;
+    destSlot--;
+
+    if (!validate_host_slot(sourceSlot, "copy_file_source")
+        || !validate_host_slot(destSlot, "copy_file_dest"))
+        RETURN_ERROR_AS_FALSE();
+
+    // Chop up copyspec.
+    sourcePath = copySpec.substr(0, copySpec.find_first_of("|"));
+    destPath = copySpec.substr(copySpec.find_first_of("|") + 1);
+
+    // At this point, if last part of dest path is / then copy filename from source.
+    if (destPath.back() == '/')
+    {
+        Debug_printf("append source file\n");
+        std::string sourceFilename = sourcePath.substr(sourcePath.find_last_of("/") + 1);
+        destPath += sourceFilename;
+    }
+
+    // Mount hosts, if needed.
+    _fnHosts[sourceSlot].mount();
+    _fnHosts[destSlot].mount();
+
+    // Open files...
+    sourceFile = _fnHosts[sourceSlot].fnfile_open(
+        sourcePath.c_str(), (char *)sourcePath.c_str(), sourcePath.size() + 1, "rb");
+    if (sourceFile == nullptr)
+        RETURN_ERROR_AS_FALSE();
+
+    destFile = _fnHosts[destSlot].fnfile_open(destPath.c_str(), (char *)destPath.c_str(),
+                                              destPath.size() + 1, "wb");
+    if (destFile == nullptr)
+    {
+        fnio::fclose(sourceFile);
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    dataBuf = (char *)malloc(532);
+    if (dataBuf == nullptr)
+    {
+        fnio::fclose(sourceFile);
+        fnio::fclose(destFile);
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    size_t count = 0;
+    do
+    {
+        count = fnio::fread(dataBuf, 1, 532, sourceFile);
+        fnio::fwrite(dataBuf, 1, count, destFile);
+    } while (count > 0);
+
+    fnio::fclose(sourceFile);
+    fnio::fclose(destFile);
+    free(dataBuf);
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+void fujiDevice::fujidev_copy_file(const FUJI_COMMAND_PACKET &packet)
+{
+    // Params must be read before data(); argument evaluation order is unspecified.
+    uint8_t source = packet.param(0);
+    uint8_t dest = packet.param(1);
+
+    fujicmd_copy_file_success(source, dest, packet.dataAsString().value_or(""));
+}
+
+success_is_true fujiDevice::fujicore_new_disk_success(const DISK_DEVICE::NewDiskRequest &req)
+{
+    if (validate_host_slot(req.hostSlot, "new disk").is_error()
+        || validate_device_slot(req.deviceSlot, "new disk").is_error())
+        RETURN_ERROR_AS_FALSE();
+
+    if (req.filename[0] == '\0')
+    {
+        Debug_print("fujicore_new_disk No filename\n");
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    fujiDisk &disk = _fnDisks[req.deviceSlot];
+    fujiHost &host = _fnHosts[req.hostSlot];
+
+    disk.host_slot = req.hostSlot;
+    disk.access_mode = DISK_ACCESS_MODE_WRITE;
+    strlcpy(disk.filename, req.filename, sizeof(disk.filename));
+
+    if (host.file_exists(disk.filename))
+    {
+        Debug_printf("fujicore_new_disk File exists: \"%s\"\n", disk.filename);
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    disk.fileh = host.fnfile_open(disk.filename, disk.filename, sizeof(disk.filename), FILE_WRITE);
+    if (disk.fileh == nullptr)
+    {
+        Debug_printf("fujicore_new_disk Couldn't open file for writing: \"%s\"\n", disk.filename);
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    Debug_printf("Creating file %s on host slot %u for disk slot %u\n", disk.filename,
+                 req.hostSlot, req.deviceSlot);
+    auto written = get_disk_dev(req.deviceSlot)->write_blank(disk.fileh, req);
+    fnio::fclose(disk.fileh);
+
+    if (written.is_error())
+    {
+        Debug_print("fujicore_new_disk Data write failed\n");
+        host.file_remove(disk.filename);
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    Debug_print("fujicore_new_disk succeeded\n");
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+void fujiDevice::fujicmd_new_disk()
+{
+    DISK_DEVICE::NewDiskRequest req = {};
+
+    Debug_println("Fuji cmd: NEW DISK");
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+    if (SYSTEM_BUS.transaction_get(&req, sizeof(req)).is_error())
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+    req.filename[sizeof(req.filename) - 1] = '\0';
+
+    if (fujicore_new_disk_success(req).is_error())
+        SYSTEM_BUS.transaction_error();
+    else
+        SYSTEM_BUS.transaction_success();
+}
+
+success_is_true fujiDevice::fujicmd_copy_file_success(uint8_t sourceSlot, uint8_t destSlot,
+                                                      std::string copySpec)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    if (!fujicore_copy_file_success(sourceSlot, destSlot, copySpec)) {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicore_unmount_disk_image_success(uint8_t deviceSlot)
+{
+    DISK_DEVICE *disk_dev;
+
+    Debug_printf("Fuji cmd: UNMOUNT IMAGE 0x%02X\n", deviceSlot);
+
+    // FIXME - handle tape?
+    if (deviceSlot >= _totalDiskDevices)
+        RETURN_ERROR_AS_FALSE();
+
+    disk_dev = get_disk_dev(deviceSlot);
+    disk_dev->unmount();
+    _fnDisks[deviceSlot].reset();
+
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicmd_unmount_disk_image_success(uint8_t deviceSlot)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    if (!fujicore_unmount_disk_image_success(deviceSlot))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    populate_config_from_slots();
+    Config.save();
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+void fujiDevice::fujicmd_get_adapter_config()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_printf("Fuji cmd: GET ADAPTER CONFIG\r\n");
+
+    // AdapterConfigExtended contains AdapterConfig so just get Extended
+    AdapterConfigExtended cfg = fujicore_get_adapter_config_extended();
+
+    // Only write out the AdapterConfig part
+    SYSTEM_BUS.transaction_send(&cfg, sizeof(AdapterConfig));
+}
+
+AdapterConfigExtended fujiDevice::fujicore_get_adapter_config_extended()
+{
+    // also return string versions of the data to save the host some computing
+    AdapterConfigExtended cfg {};
+
+    strlcpy(cfg.fn_version, fnSystem.get_fujinet_version(true), sizeof(cfg.fn_version));
+
+    if (!fnWiFi.connected())
+    {
+        strlcpy(cfg.ssid, "NOT CONNECTED", sizeof(cfg.ssid));
+    }
+    else
+    {
+        strlcpy(cfg.hostname, fnSystem.Net.get_hostname().c_str(), sizeof(cfg.hostname));
+        strlcpy(cfg.ssid, fnWiFi.get_current_ssid().c_str(), sizeof(cfg.ssid));
+        fnWiFi.get_current_bssid(cfg.bssid);
+        fnSystem.Net.get_ip4_info(cfg.localIP, cfg.netmask, cfg.gateway);
+        fnSystem.Net.get_ip4_dns_info(cfg.dnsIP);
+    }
+
+    fnWiFi.get_mac(cfg.macAddress);
+
+    // convert fields to strings
+    strlcpy(cfg.sLocalIP, fnSystem.Net.get_ip4_address_str().c_str(), 16);
+    strlcpy(cfg.sGateway, fnSystem.Net.get_ip4_gateway_str().c_str(), 16);
+    strlcpy(cfg.sDnsIP, fnSystem.Net.get_ip4_dns_str().c_str(), 16);
+    strlcpy(cfg.sNetmask, fnSystem.Net.get_ip4_mask_str().c_str(), 16);
+
+    snprintf(cfg.sMacAddress, sizeof(cfg.sMacAddress), "%02X:%02X:%02X:%02X:%02X:%02X",
+             cfg.macAddress[0], cfg.macAddress[1], cfg.macAddress[2], cfg.macAddress[3],
+             cfg.macAddress[4], cfg.macAddress[5]);
+    snprintf(cfg.sBssid, sizeof(cfg.sBssid), "%02X:%02X:%02X:%02X:%02X:%02X", cfg.bssid[0],
+             cfg.bssid[1], cfg.bssid[2], cfg.bssid[3], cfg.bssid[4], cfg.bssid[5]);
+
+    return cfg;
+}
+
+void fujiDevice::fujicmd_get_adapter_config_extended()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    // also return string versions of the data to save the host some computing
+    Debug_printf("Fuji cmd: GET ADAPTER CONFIG EXTENDED\r\n");
+
+    AdapterConfigExtended cfg = fujicore_get_adapter_config_extended();
+    SYSTEM_BUS.transaction_send(&cfg, sizeof(cfg));
+}
+
+// Get a 256 byte filename from device slot
+std::optional<std::string> fujiDevice::fujicore_get_device_filename(uint8_t slot)
+{
+    if (slot < _totalDiskDevices)
+        return std::string(_fnDisks[slot].filename);
+
+    return std::nullopt;
+}
+
+void fujiDevice::fujicmd_get_device_filename(uint8_t slot)
+{
+    char buf[MAX_FILENAME_LEN] {};
+    bool err = false;
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    auto filename = fujicore_get_device_filename(slot);
+    if (filename)
+        memcpy(buf, filename->data(), std::min(sizeof(buf), filename->size()));
+    else
+        err = true;
+
+    SYSTEM_BUS.transaction_send(buf, sizeof(buf), err);
+}
+
+// Write a 256 byte filename to the device slot
+success_is_true fujiDevice::fujicore_set_device_filename_success(uint8_t deviceSlot,
+                                                                 uint8_t host,
+                                                                 disk_access_flags_t mode,
+                                                                 std::string filename)
+{
+    // Handle DISK slots
+    if (!validate_device_slot(deviceSlot))
+    {
+        Debug_println("BAD DEVICE SLOT");
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (!validate_host_slot(host))
+    {
+        Debug_println("BAD HOST SLOT");
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    if (!filename.size())
+        _fnDisks[deviceSlot].host_slot = INVALID_HOST_SLOT;
+    else
+    {
+        std::strncpy(_fnDisks[deviceSlot].filename, filename.c_str(), MAX_FILENAME_LEN);
+        _fnDisks[deviceSlot].filename[MAX_FILENAME_LEN - 1] = 0;
+        _fnDisks[deviceSlot].host_slot = host;
+    }
+
+    _fnDisks[deviceSlot].access_mode = mode;
+    populate_config_from_slots();
+
+    Config.save();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+success_is_true fujiDevice::fujicmd_set_device_filename_success(uint8_t deviceSlot,
+                                                                uint8_t host,
+                                                                disk_access_flags_t mode)
+{
+    std::string tmp(MAX_FILENAME_LEN, 0);
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+    if (SYSTEM_BUS.transaction_get(tmp.data(), tmp.size()).is_error())
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+    tmp.resize(strlen(tmp.c_str()));
+
+    Debug_printf("Fuji cmd: SET DEVICE SLOT 0x%02X/%02X/%02X FILENAME: %s\n",
+                 deviceSlot, host, mode, tmp.c_str());
+
+    if (fujicore_set_device_filename_success(deviceSlot, host, mode, tmp).is_error())
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+uint16_t fujiDevice::fujicore_get_directory_position()
+{
+    // Make sure we have a current open directory
+    if (_current_open_directory_slot == -1)
+    {
+        Debug_print("No currently open directory\n");
+        return FNFS_INVALID_DIRPOS;
+    }
+
+    uint16_t pos = _fnHosts[_current_open_directory_slot].dir_tell();
+    if (pos == FNFS_INVALID_DIRPOS)
+    {
+        return FNFS_INVALID_DIRPOS;
+    }
+
+    return pos;
+}
+
+void fujiDevice::fujicmd_get_directory_position()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: GET DIRECTORY POSITION");
+
+    uint16_t pos = fujicore_get_directory_position();
+    if (pos == FNFS_INVALID_DIRPOS)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+    // Return the value we read
+    SYSTEM_BUS.transaction_send(&pos, sizeof(pos));
+}
+
+// Retrieve host path prefix
+void fujiDevice::fujicmd_get_host_prefix(uint8_t hostSlot)
+{
+    char prefix[MAX_HOST_PREFIX_LEN];
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_printf("Fuji cmd: GET HOST PREFIX %uh\n", hostSlot);
+
+    if (!validate_host_slot(hostSlot))
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    _fnHosts[hostSlot].get_prefix(prefix, sizeof(prefix));
+    SYSTEM_BUS.transaction_send(prefix, sizeof(prefix));
+}
+
+uint8_t fujiDevice::fujicore_net_get_wifi_status()
+{
+    // WL_CONNECTED = 3, WL_DISCONNECTED = 6
+    return fnWiFi.connected() ? 3 : 6;
+}
+
+void fujiDevice::fujicmd_net_get_wifi_status()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: GET WIFI STATUS");
+    uint8_t wifiStatus = fujicore_net_get_wifi_status();
+    SYSTEM_BUS.transaction_send(&wifiStatus, sizeof(wifiStatus));
+}
+
+void fujiDevice::fujicmd_read_host_slots()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: READ HOST SLOTS");
+
+    char hostSlots[MAX_HOSTS][MAX_HOSTNAME_LEN] = {0};
+
+    for (int i = 0; i < MAX_HOSTS; i++)
+        strlcpy(hostSlots[i], _fnHosts[i].get_hostname(), MAX_HOSTNAME_LEN);
+
+    SYSTEM_BUS.transaction_send(&hostSlots, sizeof(hostSlots));
+}
+
+// Read and save host slot data from computer
+void fujiDevice::fujicmd_write_host_slots()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+    Debug_println("Fuji cmd: WRITE HOST SLOTS");
+
+    char hostSlots[MAX_HOSTS][MAX_HOSTNAME_LEN];
+    if (!SYSTEM_BUS.transaction_get(&hostSlots, sizeof(hostSlots)))
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    for (int i = 0; i < MAX_HOSTS; i++)
+    {
+        // A new name releases the host's file system under any disk mounted from it.
+        if (strncasecmp(_fnHosts[i].get_hostname(), hostSlots[i], MAX_HOSTNAME_LEN) != 0)
+            unmount_disks_on_host(i);
+        hostMounted[i] = false;
+        _fnHosts[i].set_hostname(hostSlots[i]);
+    }
+    populate_config_from_slots();
+    Config.save();
+    SYSTEM_BUS.transaction_success();
+}
+
+// Toggle boot config on/off
+void fujiDevice::fujicmd_set_boot_config(bool enable)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    if (!enable)
+    {
+        fujiDisk &disk = _fnDisks[0];
+        if (disk.host_slot == INVALID_HOST_SLOT)
+        {
+            get_disk_dev(0)->unmount();
+            _fnDisks[0].reset();
+        }
+    }
+    SYSTEM_BUS.transaction_success();
+}
+
+// Set boot mode
+void fujiDevice::fujicmd_set_boot_mode(uint8_t bootMode, mediatype_t disk_type,
+                                       DISK_DEVICE *disk_dev)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    insert_boot_device(bootMode, disk_type, disk_dev);
+    boot_config = true;
+    SYSTEM_BUS.transaction_success();
+}
+
+void fujiDevice::fujicmd_set_directory_position(uint16_t pos)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: SET DIRECTORY POSITION");
+
+    // Make sure we have a current open directory
+    if (_current_open_directory_slot == -1)
+    {
+        Debug_print("No currently open directory\n");
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    bool success = _fnHosts[_current_open_directory_slot].dir_seek(pos);
+    if (success == false)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+    SYSTEM_BUS.transaction_success();
+}
+
+// Store host path prefix
+void fujiDevice::fujicmd_set_host_prefix(uint8_t hostSlot, const char *prefix)
+{
+    char buffer[MAX_HOST_PREFIX_LEN];
+
+    if (!prefix)
+    {
+        SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+        if (!SYSTEM_BUS.transaction_get(buffer, MAX_FILENAME_LEN))
+        {
+            SYSTEM_BUS.transaction_error();
+            return;
+        }
+        prefix = buffer;
+    }
+    else
+        SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    Debug_printf("Fuji cmd: SET HOST PREFIX %uh \"%s\"\n", hostSlot, prefix);
+
+    if (!validate_host_slot(hostSlot))
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    _fnHosts[hostSlot].set_prefix(prefix);
+    SYSTEM_BUS.transaction_success();
+}
+
+void fujiDevice::unmount_disks_on_host(uint8_t hostSlot)
+{
+    for (int i = 0; i < _totalDiskDevices; i++)
+    {
+        if (_fnDisks[i].host_slot == hostSlot)
+        {
+            _fnDisks[i].disk_dev.unmount();
+            _fnDisks[i].disk_dev.device_active = false;
+            _fnDisks[i].reset();
+        }
+    }
+}
+
+// Unmount specified host
+success_is_true fujiDevice::fujicmd_unmount_host_success(uint8_t hostSlot)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_printf("\r\nFuji cmd: UNMOUNT HOST no. %d\n", hostSlot);
+
+    if (!validate_host_slot(hostSlot, "sio_tnfs_mount_hosts")
+        || (hostMounted[hostSlot] == false))
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    unmount_disks_on_host(hostSlot);
+
+    // Unmount the host
+    if (!_fnHosts[hostSlot].unmount_success())
+    {
+        SYSTEM_BUS.transaction_error();
+        RETURN_ERROR_AS_FALSE();
+    }
+
+    hostMounted[hostSlot] = false;
+    SYSTEM_BUS.transaction_success();
+    RETURN_SUCCESS_AS_TRUE();
+}
+
+// Send device slot data to computer
+void fujiDevice::fujicmd_read_device_slots()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: READ DEVICE SLOTS");
+
+    char *filename;
+    disk_slot diskSlots[MAX_DISK_DEVICES] {};
+
+    // Load the data from our current device array
+    for (int i = 0; i < _totalDiskDevices; i++)
+    {
+        diskSlots[i].mode = _fnDisks[i].access_mode;
+        diskSlots[i].hostSlot = _fnDisks[i].host_slot;
+        strlcpy(diskSlots[i].filename, _fnDisks[i].filename, MAX_DISPLAY_FILENAME_LEN);
+
+        if (_fnDisks[i].filename[0] == '\0')
+        {
+            strlcpy(diskSlots[i].filename, "", MAX_DISPLAY_FILENAME_LEN);
+        }
+        else
+        {
+            // Just use the basename of the image, no path. The full path+filename is
+            // usually too long for many platforms to show anyway, so the image name is more important.
+            // Note: Basename can modify the input, so use a copy of the filename
+            filename = strdup(_fnDisks[i].filename);
+            strlcpy(diskSlots[i].filename, basename(filename), MAX_DISPLAY_FILENAME_LEN);
+            free(filename);
+        }
+
+        DISK_DEVICE *disk_dev = get_disk_dev(i);
+        if (disk_dev->device_active && !disk_dev->is_config_device)
+            diskSlots[i].mode |= DISK_ACCESS_MODE_MOUNTED;
+    }
+
+    SYSTEM_BUS.transaction_send(&diskSlots, sizeof(disk_slot) * _totalDiskDevices);
+}
+
+// Read and save disk slot data from computer
+void fujiDevice::fujicmd_write_device_slots()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+    Debug_println("Fuji cmd: WRITE DEVICE SLOTS");
+
+    disk_slot diskSlots[MAX_DISK_DEVICES];
+
+    if (!SYSTEM_BUS.transaction_get(&diskSlots, sizeof(disk_slot) * _totalDiskDevices))
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    // Load the data into our current device array
+    for (int i = 0; i < _totalDiskDevices; i++)
+        _fnDisks[i].reset(diskSlots[i].filename, diskSlots[i].hostSlot,
+                          (disk_access_flags_t) diskSlots[i].mode);
+
+    // Save the data to disk
+    populate_config_from_slots();
+    Config.save();
+    SYSTEM_BUS.transaction_success();
+}
+
+void fujiDevice::fujicmd_status()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    Debug_println("Fuji cmd: STATUS");
+
+    char ret[4] = {0};
+
+    SYSTEM_BUS.transaction_send(ret, sizeof(ret));
+    return;
+}
+
+void fujiDevice::fujicmd_generate_guid()
+{
+    char uuid_str[37];
+    char hex[] = "0123456789abcdef";
+    int i;
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    Debug_printf("Fuji cmd: GENERATE GUID\n");
+
+    for (i = 0; i < 36; i++)
+    {
+        switch (i)
+        {
+        case 8:
+        case 13:
+        case 18:
+        case 23:
+            uuid_str[i] = '-';
+            break;
+
+        case 14:
+            /* UUID version 4 */
+            uuid_str[i] = '4';
+            break;
+
+        case 19:
+            /* UUID variant: 8, 9, a, or b */
+            uuid_str[i] = hex[(fnSystem.random() & 0x3) | 0x8];
+            break;
+
+        default:
+            uuid_str[i] = hex[fnSystem.random() & 0xF];
+            break;
+        }
+    }
+
+    uuid_str[36] = '\0';
+
+    Debug_printf("GUID: %s\n", uuid_str);
+
+    SYSTEM_BUS.transaction_send(uuid_str, sizeof(uuid_str));
+}
+
+void fujiDevice::fujicmd_random()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+    uint32_t r = fnSystem.random();
+    Debug_printf("drivewireFuji::random(%lu)\n",r);
+    SYSTEM_BUS.transaction_send(&r, sizeof(r));
+}
+
+bool fujiDevice::processCommand(const FUJI_COMMAND_PACKET &packet)
+{
+    if (tryAllMixins(packet))
+        return true;
+
+    auto cmdHandler = handlers.find(packet.command());
+    if (cmdHandler == handlers.end())
+        return false;
+
+    auto cmdMethod = cmdHandler->second;
+    cmdMethod(packet);
+    return true;
+}
+
+bool fujiDevice::recognizesCommand(fujiCommandID_t command)
+{
+    if (checkAllMixins(command))
+        return true;
+    return handlers.find(command) != handlers.end();
+}

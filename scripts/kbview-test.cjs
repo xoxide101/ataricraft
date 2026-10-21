@@ -1,0 +1,21 @@
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+(async () => {
+  const R = 'C:/Users/raver/ataricraft/';
+  const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  const p = await b.newPage({ viewport: { width: 1366, height: 900 } });
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto('file:///' + R + 'web/index.html');
+  await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
+  await p.waitForTimeout(800);
+  await p.click('text=Boot');
+  await p.waitForTimeout(2500);
+  await p.locator('#kbdwrap').screenshot({ path: R + 'out/kv-all.png' });
+  await p.click('#kbview [data-v=base]');
+  await p.locator('#kbdwrap').screenshot({ path: R + 'out/kv-nolower.png' });
+  await p.click('#kbview [data-v=shift]');
+  await p.locator('#kbdwrap').screenshot({ path: R + 'out/kv-special.png' });
+  console.log(await p.evaluate(() => { const g=document.querySelector('#kbd .key .g.shift'); const s=getComputedStyle(g); return [document.getElementById('kbdwrap').className, document.getElementById('kbd').dataset.layer, s.right, s.top, s.width, s.margin].join(' | '); }));
+  console.log('errors', errs);
+  await b.close();
+})();

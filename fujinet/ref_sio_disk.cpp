@@ -1,0 +1,419 @@
+#ifdef BUILD_ATARI
+
+#include "disk.h"
+
+#include <cstring>
+#include <memory.h>
+
+#include "../../include/debug.h"
+
+#include "sioFuji.h"
+#include "utils.h"
+
+sioDisk::sioDisk()
+{
+    device_active = false;
+}
+
+// Read disk data and send to computer
+void sioDisk::sio_read(const FujiSIOPacket &packet)
+{
+    if (packet.command() == CMD::DISK_HSIO_READ && !_disk->_allow_hsio)
+        return;
+
+    uint16_t sectorNum = packet.param(0);
+    if (!sectorNum || sectorNum > _disk->_disk_num_sectors)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    // Debug_print("disk READ\n");
+
+    if (_disk == nullptr)
+    {
+        // Send error but dummy sector.
+        uint8_t dummySector[128];
+        memset(dummySector,0,sizeof(dummySector));
+        SYSTEM_BUS.transaction_send(dummySector,128,true);
+        return;
+    }
+
+    uint16_t readcount;
+
+    bool err = _disk->read(sectorNum, &readcount);
+
+    // Send result to Atari
+    SYSTEM_BUS.transaction_send(_disk->_disk_sectorbuff, readcount, err);
+}
+
+// Write disk data from computer
+void sioDisk::sio_write(const FujiSIOPacket &packet)
+{
+    if ((packet.command() == CMD::DISK_HSIO_PUT || packet.command() == CMD::DISK_HSIO_WRITE)
+        && !_disk->_allow_hsio)
+        return;
+
+    uint16_t sectorNum = packet.param(0);
+    bool verify = true;
+    if (packet.command() == CMD::DISK_PUT || packet.command() == CMD::DISK_HSIO_PUT)
+        verify = false;
+
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+
+    // Debug_print("disk WRITE\n");
+
+    if (_disk != nullptr)
+    {
+        uint16_t sectorSize = _disk->sector_size(sectorNum);
+
+        if (SYSTEM_BUS.transaction_get(_disk->_disk_sectorbuff, sectorSize)
+            && _disk->write(sectorNum, verify).is_success())
+        {
+            SYSTEM_BUS.transaction_success();
+            return;
+        }
+    }
+
+    SYSTEM_BUS.transaction_error();
+}
+
+// Status
+void sioDisk::sio_status(const FujiSIOPacket &packet)
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    Debug_print("disk STATUS\n");
+
+    /* STATUS BYTES
+        #0 - Drive status
+            Bit 7 = 1: 26 sectors per track (1050/XF551 drive)
+            Bit 6 = 1: Double sided disk (XF551 drive)
+            Bit 5 = 1: Double density (XF551 drive)
+            Bit 4 = 1: Motor running (always 0 on XF551)
+
+            Bit 3 = 1: Failed due to write protected disk
+            Bit 2 = 1: Unsuccessful PUT operation
+            Bit 1 = 1: Receive error on last data frame (XF551)
+            Bit 0 = 1: Receive error on last command frame (XF551)
+
+        #1 - Floppy drive controller status (inverted from FDC)
+            Bit 7 = 0: Drive not ready (1050 drive)
+            Bit 6 = 0: Write protect error
+            Bit 5 = 0: Deleted sector (sector marked as deleted in sector header)
+            Bit 4 = 0: Record not found (missing sector)
+
+            Bit 3 = 0: CRC error
+            Bit 2 = 0: Lost data
+            Bit 1 = 0: Data request pending
+            Bit 0 = 0: Busy
+
+        #2 - Format timeout
+              810 drive: $E0 = 224 vertical blanks (4 mins NTSC)
+            XF551 drive: $FE = 254 veritcal blanks (4.5 mins NTSC)
+
+        #3 - Unused ($00)
+    */
+    // TODO: Why $DF for second byte?
+    // TODO: Set bit 4 of drive status and bit 6 of FDC status on read-only disk
+#define DRIVE_DEFAULT_TIMEOUT_810 0xE0
+#define DRIVE_DEFAULT_TIMEOUT_XF551 0xFE
+
+    uint8_t _status[4];
+    _status[0] = 0x00;
+
+    if (_disk != nullptr)
+    {
+        if (_disk->_disk_num_sectors == 1040)
+        {
+            _status[0] |= 0x80; // 1050 density
+        }
+
+        if (_disk->_disk_sector_size == 256)
+        {
+            _status[0] |= 0x20; // Double density
+        }
+
+        if (_disk->_disk_num_sectors == 1440 || _disk->_disk_num_sectors == 2880)
+        {
+            _status[0] |= 0x40; // Double sided
+        }
+    }
+
+    _status[1] = ~DISK_CTRL_STATUS_CLEAR; // Negation of default clear status
+    _status[2] = DRIVE_DEFAULT_TIMEOUT_810;
+    _status[3] = 0x00;
+
+    if (_disk != nullptr)
+        _disk->status(_status);
+
+    Debug_printf("response: 0x%02x, 0x%02x, 0x%02x\n", _status[0], _status[1], _status[2]);
+
+    SYSTEM_BUS.transaction_send(_status, sizeof(_status), false);
+}
+
+// Disk format
+void sioDisk::sio_format()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    Debug_print("disk FORMAT\n");
+
+    if (_disk == nullptr)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    uint16_t responsesize;
+    bool err = _disk->format(&responsesize);
+
+    // Send to computer
+    SYSTEM_BUS.transaction_send(_disk->_disk_sectorbuff, responsesize, err);
+}
+
+// Read percom block
+void sioDisk::sio_read_percom_block()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::NO_GET);
+
+    Debug_print("disk READ PERCOM BLOCK\n");
+
+    if (_disk == nullptr)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+#ifdef VERBOSE_DISK
+    _disk->dump_percom_block();
+#endif
+    SYSTEM_BUS.transaction_send((uint8_t *)&_disk->_percomBlock, sizeof(_disk->_percomBlock), false);
+}
+
+// Write percom block
+void sioDisk::sio_write_percom_block()
+{
+    SYSTEM_BUS.transaction_accept(TRANS_STATE::WILL_GET);
+
+    Debug_print("disk WRITE PERCOM BLOCK\n");
+
+    if (_disk == nullptr)
+    {
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+
+    SYSTEM_BUS.transaction_get(&_disk->_percomBlock, sizeof(_disk->_percomBlock));
+#ifdef VERBOSE_DISK
+    _disk->dump_percom_block();
+#endif
+    SYSTEM_BUS.transaction_success();
+}
+
+/* Mount Disk
+   We determine the type of image based on the filename extension.
+   If the disk_type value passed is not MEDIATYPE_UNKNOWN then that's used instead.
+   If filename has no extension or is NULL and disk_type is MEDIATYPE_UNKOWN,
+   then we assume it's MEDIATYPE_ATR.
+   Return value is MEDIATYPE_UNKNOWN in case of failure.
+*/
+mediatype_t sioDisk::mount(fnFile *f, const char *filename, uint32_t disksize,
+                           disk_access_flags_t access_mode, mediatype_t disk_type)
+{
+    // TAPE or CASSETTE: use this function to send file info to cassette device
+    //  MediaType::discover_mediatype(filename) can detect CAS and WAV files
+    Debug_print("disk MOUNT\n");
+
+    // A tape being replaced: the cassette must let go of its file first (see unmount()).
+    if (_is_tape)
+    {
+        _is_tape = false;
+        platformFuji.cassette()->stop_fsk_loader();
+    }
+
+    // Destroy any existing MediaType
+    if (_disk != nullptr)
+    {
+        delete _disk;
+        _disk = nullptr;
+    }
+
+    // Determine MediaType based on filename extension
+    if (disk_type == MEDIATYPE_UNKNOWN && filename != nullptr)
+        disk_type = MediaType::discover_mediatype(filename);
+
+    // Now mount based on MediaType
+    switch (disk_type)
+    {
+    case MEDIATYPE_CAS:
+    case MEDIATYPE_WAV:
+        // open the cassette file
+        _is_tape = true;
+        platformFuji.cassette()->mount_cassette_file(f, disksize);
+        return disk_type;
+        // TODO left off here for tape cassette
+        break;
+    default:
+        return mount_disk_media(f, filename, disksize, disk_type);
+    }
+}
+
+// Mount a disk media type directly (ATR/XEX/ATX).
+// Unlike mount(), this does NOT route CAS/WAV to the cassette handler,
+// so it is safe to call from within cassette code (avoids recursive mount).
+mediatype_t sioDisk::mount_disk_media(fnFile *f, const char *filename, uint32_t disksize,
+                                       mediatype_t disk_type)
+{
+    Debug_print("disk MOUNT\n");
+
+    // Destroy any existing MediaType
+    if (_disk != nullptr)
+    {
+        delete _disk;
+        _disk = nullptr;
+    }
+
+    switch (disk_type)
+    {
+    case MEDIATYPE_XEX:
+        _disk = new MediaTypeXEX();
+        break;
+    case MEDIATYPE_ATX:
+        _disk = new MediaTypeATX();
+        break;
+    default:
+        _disk = new MediaTypeATR();
+        break;
+    }
+    device_active = true;
+    strcpy(_disk->_disk_filename, filename);
+    return _disk->mount(f, disksize);
+}
+
+// Destructor
+sioDisk::~sioDisk()
+{
+    if (_disk != nullptr)
+    {
+        delete _disk;
+        _disk = nullptr;
+    }
+}
+
+// Unmount disk file
+void sioDisk::unmount()
+{
+    Debug_print("disk UNMOUNT\n");
+
+    // A tape has no MediaType, so nothing below sees it, yet the progressive FSK loader reads its file
+    // from its own task and the caller closes that file right after this returns.
+    if (_is_tape)
+    {
+        _is_tape = false;
+        platformFuji.cassette()->stop_fsk_loader();
+    }
+
+    if (_disk != nullptr)
+    {
+        _disk->unmount();
+        device_active = false;
+#ifndef ESP_PLATFORM // apc: good for ESP too?
+        delete _disk;
+        _disk = nullptr;
+#endif
+    }
+}
+
+// Create blank disk
+success_is_true sioDisk::write_blank(fnFile *f, const NewDiskRequest &req)
+{
+    Debug_print("disk CREATE NEW IMAGE\n");
+
+    return MediaTypeATR::create(f, req.sectorSize, req.numSectors);
+}
+
+// Process command
+void sioDisk::sio_process(const FujiSIOPacket &packet)
+{
+    if (_disk == nullptr || _disk->_disktype == MEDIATYPE_UNKNOWN)
+        return;
+
+    if ((device_active == false && packet.device() != FUJI_DEVICEID::DISK) || // not active and not D1
+        (device_active == false && theFuji->boot_config == false)) // not active and not config boot
+        return;
+
+    Debug_printf("disk sio_process(), baud: %d\n", SYSTEM_BUS.getBaudrate());
+
+    switch (packet.command())
+    {
+    case CMD::DISK_READ:
+    case CMD::DISK_HSIO_READ:
+        sio_read(packet);
+        break;
+    case CMD::DISK_PUT:
+    case CMD::DISK_HSIO_PUT:
+    case CMD::DISK_WRITE:
+    case CMD::DISK_HSIO_WRITE:
+        sio_write(packet);
+        break;
+    case CMD::DISK_STATUS:
+    case CMD::DISK_HSIO_STATUS:
+        if (is_config_device == true)
+        {
+            if (theFuji->boot_config == true)
+            {
+                if (status_wait_count > 0 && platformFuji.status_wait_enabled)
+                {
+                    Debug_print("ignoring status command\n");
+                    status_wait_count--;
+                }
+                else
+                {
+                    device_active = true;
+                    sio_status(packet);
+                }
+            }
+        }
+        else
+        {
+            if (packet.command() == CMD::DISK_HSIO_STATUS && _disk->_allow_hsio == false)
+                break;
+            sio_status(packet);
+        }
+        return;
+    case CMD::DISK_FORMAT:
+    case CMD::DISK_FORMAT_MEDIUM:
+        sio_format();
+        return;
+    case CMD::DISK_HSIO_FORMAT:
+    case CMD::DISK_HSIO_FORMAT_MEDIUM:
+        if (_disk->_allow_hsio)
+        {
+            sio_format();
+            return;
+        }
+        break;
+    case CMD::DISK_PERCOM_READ:
+        sio_read_percom_block();
+        return;
+    case CMD::DISK_PERCOM_WRITE:
+        sio_write_percom_block();
+        return;
+    case CMD::DISK_HSIO_INDEX:
+        if (_disk->_allow_hsio)
+        {
+            sio_high_speed();
+            SYSTEM_BUS.toggleBaudrate();
+            return;
+        }
+        break;
+    default:
+        SYSTEM_BUS.transaction_error();
+        return;
+    }
+}
+
+#endif /* BUILD_ATARI */

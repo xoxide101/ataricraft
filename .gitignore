@@ -1,0 +1,14 @@
+roms/
+software_n_roms/
+*.rom
+*.ROM
+*.atr
+*.xex
+*.car
+*.cas
+vendor/
+web/ref/
+node_modules/
+target/
+out/
+books/

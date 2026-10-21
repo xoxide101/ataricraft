@@ -1,0 +1,20 @@
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+(async () => {
+  const dir = 'C:/Users/raver/ataricraft/out/profile';
+  const opts = { executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' };
+  let c = await chromium.launchPersistentContext(dir, opts);
+  let p = await c.newPage();
+  await p.goto('file:///C:/Users/raver/ataricraft/web/index.html');
+  await p.setInputFiles('#romfiles', ['C:/Users/raver/ataricraft/software_n_roms/ATARIXL.ROM', 'C:/Users/raver/ataricraft/software_n_roms/ATARIBAS.ROM']);
+  await p.waitForTimeout(1000);
+  console.log('1st:', await p.textContent('#romstate'));
+  await c.close();
+  c = await chromium.launchPersistentContext(dir, opts);
+  p = await c.newPage();
+  await p.goto('file:///C:/Users/raver/ataricraft/web/index.html');
+  await p.waitForTimeout(1500);
+  console.log('2nd:', await p.textContent('#romstate'));
+  await p.click('#boot'); await p.waitForTimeout(2500);
+  console.log(await p.textContent('#status'));
+  await c.close();
+})();

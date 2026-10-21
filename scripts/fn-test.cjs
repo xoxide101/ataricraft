@@ -1,0 +1,21 @@
+const path = require('path');
+const { chromium } = require(path.resolve(__dirname, '..', '..', 'craftapi', 'node_modules', 'playwright-core'));
+const root = path.resolve(__dirname, '..');
+(async () => {
+  const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+  const p = await b.newPage({ viewport: { width: 1100, height: 1000 } });
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(String(e)));
+  await p.goto('file:///' + path.join(root, 'web', 'index.html').replace(/\\/g, '/'));
+  await p.setInputFiles('#romfiles', [path.join(root, 'software_n_roms', 'ATARIXL.ROM'), path.join(root, 'software_n_roms', 'ATARIBAS.ROM')]);
+  await p.evaluate(() => ataricraft.boot({ model: '130xe', basic: false }));
+  await p.setInputFiles('#fnfolder', path.join(root, 'software_n_roms'));
+  console.log('count', await p.textContent('#fncount'));
+  await p.click('#fnlist div >> text=Eprom Arc');
+  await p.evaluate(() => ataricraft.step(400));
+  console.log('D1', await p.textContent('#d1'));
+  console.log(await p.evaluate(() => ataricraft.screenText()));
+  await p.screenshot({ path: path.join(root, 'out', 'fn.png') });
+  console.log('errors', JSON.stringify(errs));
+  await b.close();
+})();

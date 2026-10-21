@@ -1,0 +1,613 @@
+// ataricraft app: UI + agent API (window.ataricraft). Humans and agents drive the same machine.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const S = { emu: null, roms: { os800: null, osxl: null, basic: null }, running: false, speed: 1, acc: 0, last: 0, typeQ: [], typeWait: 0, joyMode: false, joy: 0, fire: false };
+  const pal = AC.makePalette();
+  const cv = $('screen');
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(AC.SCREEN.w, AC.SCREEN.h);
+  const img32 = new Uint32Array(img.data.buffer);
+  cv.width = AC.SCREEN.w; cv.height = AC.SCREEN.h;
+
+  const log = (m) => { $('status').textContent = m; };
+
+  function classify(name, bytes) {
+    if (bytes.length === 10240) return 'os800';
+    if (bytes.length === 16384) return 'osxl';
+    if (bytes.length === 8192) return 'basic';
+    return null;
+  }
+
+  // ROM library: every scanned/picked file classified by size; the dropdowns choose which to use.
+  S.lib = { os800: [], osxl: [], basic: [] };
+
+  // Persist found ROMs in IndexedDB so they survive reloads.
+  const romDb = new Promise((res) => {
+    try {
+      const rq = indexedDB.open('ataricraft', 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore('roms', { keyPath: 'name' });
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  async function saveRom(kind, name, bytes) {
+    const db = await romDb;
+    if (db) db.transaction('roms', 'readwrite').objectStore('roms').put({ name, kind, bytes });
+  }
+  async function loadSavedRoms() {
+    const db = await romDb;
+    if (!db) return;
+    const all = await new Promise((res) => { const r = db.transaction('roms').objectStore('roms').getAll(); r.onsuccess = () => res(r.result); r.onerror = () => res([]); });
+    for (const e of all) if (S.lib[e.kind] && !S.lib[e.kind].some((x) => x.name === e.name)) S.lib[e.kind].push({ name: e.name, bytes: e.bytes });
+    if (all.length) { fillRomSelects(); log(`restored ${all.length} saved ROMs`); }
+  }
+  $('romforget').onclick = async () => {
+    const db = await romDb;
+    if (db) db.transaction('roms', 'readwrite').objectStore('roms').clear();
+    localStorage.removeItem('ac.romsel');
+    S.lib = { os800: [], osxl: [], basic: [] };
+    fillRomSelects();
+    log('saved ROMs cleared');
+  };
+
+  async function addRoms(files) {
+    for (const f of files) {
+      if (![8192, 10240, 16384].includes(f.size)) continue;
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const k = classify(f.name, bytes);
+      const name = f.webkitRelativePath || f.name;
+      if (k && !S.lib[k].some((e) => e.name === name)) { S.lib[k].push({ name, bytes }); saveRom(k, name, bytes); }
+    }
+    fillRomSelects();
+  }
+
+  function fillRam() {
+    const m = AC.MODELS[$('model').value];
+    const sel = $('ram');
+    const prev = sel.value;
+    sel.innerHTML = '';
+    m.ram.forEach((r) => sel.append(new Option(r.label, r.v)));
+    sel.value = m.ram.some((r) => r.v === prev) ? prev : m.def;
+  }
+
+  function fillRomSelects() {
+    fillRam();
+    const kind = $('model').value === '800' ? 'os800' : 'osxl';
+    const sel_ = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
+    const fill = (sel, list, none, key) => {
+      const prev = sel.value;
+      sel.innerHTML = '';
+      if (none) sel.append(new Option('(none)', ''));
+      list.forEach((e, i) => sel.append(new Option(e.name.replace(/^.*[\\/]/, '') , String(i))));
+      const si = key in sel_ ? (sel_[key] === '' ? '' : String(list.findIndex((e) => e.name === sel_[key]))) : null;
+      if (si !== null && si !== '-1' && [...sel.options].some((o) => o.value === si)) { sel.value = si; if (key === 'basic') S.basicTouched = true; }
+      else if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    };
+    fill($('osrom'), S.lib[kind], false, kind);
+    const bas = [...S.lib.basic].sort((a, b) => /bas/i.test(b.name) - /bas/i.test(a.name));
+    S.basicList = bas;
+    fill($('basicrom'), bas, true, 'basic');
+    if (bas.length && $('basicrom').value === '' && !S.basicTouched) $('basicrom').value = '0';
+    S.roms.os800 = S.lib.os800[0] ? S.lib.os800[0].bytes : null;
+    S.roms.osxl = S.lib.osxl[0] ? S.lib.osxl[0].bytes : null;
+    S.roms.basic = bas[0] ? bas[0].bytes : null;
+    $('romstate').textContent = `OS800 ${S.lib.os800.length} · XL/XE ${S.lib.osxl.length} · BASIC ${S.lib.basic.length}`;
+    updateCharset();
+  }
+
+  const chosenOs = () => { const l = S.lib[$('model').value === '800' ? 'os800' : 'osxl']; const e = l[+$('osrom').value]; return e ? e.bytes : null; };
+  const chosenBasic = () => { const e = $('basicrom').value === '' ? null : S.basicList[+$('basicrom').value]; return e ? e.bytes : null; };
+
+  function updateCharset() {
+    const m = $('model').value;
+    const os = chosenOs();
+    if (os) AC.keyboard.setCharset(os.subarray(m === '800' ? 0x0800 : 0x2000, (m === '800' ? 0x0800 : 0x2000) + 1024));
+  }
+
+  // ---- sound: libatari800 delivers 16-bit mono 44.1 kHz per frame; queue each frame as a scheduled buffer ----
+  const SND = { ctx: null, gain: null, next: 0, on: localStorage.getItem('ac.sound') !== '0', vol: +(localStorage.getItem('ac.vol') || 0.6) };
+  function sndCtx() {
+    if (!SND.ctx) {
+      const AC_ = window.AudioContext || window.webkitAudioContext;
+      if (!AC_) return null;
+      SND.ctx = new AC_({ sampleRate: 44100 });
+      SND.gain = SND.ctx.createGain();
+      SND.gain.connect(SND.ctx.destination);
+    }
+    if (SND.ctx.state === 'suspended') SND.ctx.resume();
+    SND.gain.gain.value = SND.on ? SND.vol * 3 : 0;
+    return SND.ctx;
+  }
+  function pushAudio(s16) {
+    const c = SND.ctx;
+    if (!c || !SND.on || !S.running || Math.abs(S.speed - 1) > 0.01) return;
+    const t = c.currentTime;
+    if (SND.next < t) SND.next = t + 0.06;
+    if (SND.next > t + 0.3) return;
+    const buf = c.createBuffer(1, s16.length, 44100);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < s16.length; i++) ch[i] = s16[i] / 32768;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(SND.gain);
+    src.start(SND.next);
+    SND.next += buf.duration;
+  }
+  const hookAudio = () => { if (S.emu) S.emu.onAudio = pushAudio; };
+  const syncSndUi = () => { $('sndbtn').textContent = SND.on ? 'Sound: on' : 'Sound: off'; $('vol').value = SND.vol; };
+
+  const handle = {
+    down: (id, f) => S.emu && S.emu.down(id, f),
+    up: (id) => S.emu && S.emu.up(id),
+  };
+
+  async function boot() {
+    const model = $('model').value;
+    const os = chosenOs();
+    if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
+    log('booting…');
+    if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
+    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, tv: $('tv').value, host: S.host });
+    FujiNet.attach(S.emu);
+    FujiNet.log = log;
+    S.emu.run(120);
+    hookAudio();
+    sndCtx();
+    S.running = true;
+    draw();
+    renderHost();
+    log('running ' + AC.MODELS[model].label);
+    return true;
+  }
+
+  // ---- H: host drive: LIST "H:PROG.LST" writes a text file here; ENTER "H:PROG.LST" reads it back ----
+  const toText = (b) => { let s = ''; for (const c of b) s += c === 0x9b ? '\n' : c === 0x0a ? '\n' : c === 0x0d ? '' : c >= 32 && c < 127 ? String.fromCharCode(c) : ''; return s; };
+  const toAtari = (t) => { const o = []; for (const ch of t.replace(/\r\n?/g, '\n')) { const c = ch.charCodeAt(0); if (ch === '\n') o.push(0x9b); else if (c >= 32 && c < 127) o.push(c); } return Uint8Array.from(o); };
+  const hostName = (n) => n.toUpperCase().replace(/[^A-Z0-9._-]/g, '').slice(0, 12);
+  let hostSig = '';
+  function renderHost(force) {
+    if (!S.emu) return;
+    const files = S.emu.hostFiles();
+    const sig = Object.entries(files).map(([n, b]) => n + ':' + b.length).join('|');
+    if (sig === hostSig && !force) return;
+    hostSig = sig;
+    const box = $('hostlist');
+    box.innerHTML = '';
+    const names = Object.keys(files).sort();
+    $('hostcount').textContent = names.length ? names.length + ' file(s)' : 'empty';
+    names.forEach((n) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis" title="${n}">${n}</span><span class="dim">${files[n].length}</span>`;
+      const mk = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; row.append(b); };
+      mk('Copy', () => navigator.clipboard.writeText(toText(S.emu.hostFiles()[n])).then(() => log('copied ' + n)).catch((e) => log('clipboard: ' + e.message)));
+      mk('Save', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([S.emu.hostFiles()[n]])); a.download = n; a.click(); });
+      mk('Del', () => { S.emu.hostDelete(n); S.host && delete S.host[n]; renderHost(true); });
+      box.append(row);
+    });
+  }
+  setInterval(() => renderHost(), 1000);
+  $('hostpaste').onclick = () => navigator.clipboard.readText().then((t) => {
+    if (!S.emu) { log('boot first'); return; }
+    const n = hostName($('hostname').value) || 'PASTE.LST';
+    S.emu.hostWrite(n, toAtari(t));
+    renderHost(true);
+    log('wrote H:' + n + ' - in BASIC: ENTER "H:' + n + '"');
+  }).catch((e) => log('clipboard: ' + e.message));
+  $('hostimport').onchange = async (e) => {
+    if (!S.emu) { log('boot first'); return; }
+    for (const f of e.target.files) S.emu.hostWrite(hostName(f.name) || 'FILE', new Uint8Array(await f.arrayBuffer()));
+    e.target.value = '';
+    renderHost(true);
+  };
+
+  function draw() {
+    if (!S.emu) return;
+    S.emu.render(img32, pal);
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // After Return the Atari may be busy (ENTER, RUN, disk I/O) and drops keys, so wait for the screen to go still.
+  function stepFrames(n) {
+    for (let i = 0; i < n; i++) {
+      if (S.typeQ.length && --S.typeWait <= 0) {
+        if (S.settle > 0) {
+          S.settle--;
+          const h = S.emu.screenHash();
+          S.still = h === S.lastHash ? S.still + 1 : 0;
+          S.lastHash = h;
+          if (S.still < 12 && S.settle > 0) { S.emu.frame(); continue; }
+          S.settle = 0;
+        }
+        const k = S.typeQ.shift();
+        S.emu.tap(k, 3);
+        S.typeWait = 6;
+        if (k.keychar === 10) { S.typeWait = 30; S.settle = 400; S.still = 0; }
+      }
+      S.emu.frame();
+    }
+  }
+
+  const fpsStat = { t: 0, draws: 0, f0: 0 };
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (S.emu && S.running) {
+      const fps = $('tv').value === 'pal' ? 50 : 60;
+      S.acc += Math.min(100, t - S.last) * S.speed * fps / 1000;
+      const n = Math.min(Math.floor(S.acc), 600);
+      S.acc -= n;
+      if (n) { stepFrames(n); draw(); fpsStat.draws++; $('fc').textContent = S.emu.frames; }
+    }
+    S.last = t;
+    if (t - fpsStat.t >= 1000) {
+      const dt = (t - fpsStat.t) / 1000;
+      const fr = S.emu ? S.emu.frames : 0;
+      $('fps').textContent = (fpsStat.draws / dt).toFixed(0);
+      $('efps').textContent = ((fr - fpsStat.f0) / dt).toFixed(0);
+      fpsStat.t = t; fpsStat.draws = 0; fpsStat.f0 = fr;
+    }
+  }
+
+  function sendJoy() {
+    if (!S.emu) return;
+    S.emu.down('joy0', { joy0: S.joy, trig0: S.fire ? 1 : 0 });
+  }
+
+  // ---- physical keyboard ----
+  // Profiles: "mame" maps by physical position exactly like MAME's a800/a800xl driver (keyed on KeyboardEvent.code);
+  // "natural" types by the character you press. Overrides from the remap table win over either profile.
+  const MAME_MAP = {
+    Digit1: '1', Digit2: '2', Digit3: '3', Digit4: '4', Digit5: '5', Digit6: '6', Digit7: '7', Digit8: '8', Digit9: '9', Digit0: '0',
+    Minus: 'lt', Equal: 'gt', Backspace: 'break', IntlBackslash: 'bksp',
+    Backslash: '*', Quote: '+', BracketLeft: '-', BracketRight: '=', Semicolon: ';', Comma: ',', Period: '.', Slash: '/',
+    Enter: 'return', Tab: 'tab', Escape: 'esc', Space: 'space', CapsLock: 'caps', ControlRight: 'inv',
+    F1: 'start', F2: 'select', F3: 'option', F8: 'help', F5: 'reset', F6: 'power', Pause: 'break',
+  };
+  for (const c of 'abcdefghijklmnopqrstuvwxyz') MAME_MAP['Key' + c.toUpperCase()] = c;
+  const NATURAL_MAP = { F1: 'start', F2: 'select', F3: 'option', F4: 'start', F5: 'reset', F6: 'power', F8: 'help', Pause: 'break', Delete: 'bksp', Home: 'lt', Insert: 'gt', AltRight: 'inv', CapsLock: 'caps' };
+  const JOY_MAP = { ArrowUp: 'joyU', ArrowDown: 'joyD', ArrowLeft: 'joyL', ArrowRight: 'joyR', Space: 'fire' };
+  const JOYBIT = { joyU: 1, joyD: 2, joyL: 4, joyR: 8 };
+  const ACTIONS = [['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['help', 'Help'], ['reset', 'Reset'], ['power', 'Cold start / Power'], ['break', 'Break'], ['inv', 'Atari / Inverse'], ['caps', 'Caps'], ['joyU', 'Joystick up'], ['joyD', 'Joystick down'], ['joyL', 'Joystick left'], ['joyR', 'Joystick right'], ['fire', 'Joystick fire']];
+  const CURSOR = { ArrowUp: 0x8e, ArrowDown: 0x8f, ArrowLeft: 0x86, ArrowRight: 0x87 };
+  const NAT_SPECIAL = { Enter: { keychar: 10 }, Backspace: { keychar: 8 }, Tab: { keychar: 9 }, Escape: { keychar: 27 }, ' ': { keychar: 32 } };
+  S.profile = localStorage.getItem('ac.profile') || 'mame';
+  try { S.overrides = JSON.parse(localStorage.getItem('ac.keymap') || '{}'); } catch (e) { S.overrides = {}; }
+  S.rctrl = false;
+
+  const effMap = () => Object.assign({}, S.profile === 'mame' ? MAME_MAP : NATURAL_MAP, S.joyMode ? JOY_MAP : {}, S.overrides);
+  const codeFor = (id) => { const m = Object.assign({}, S.profile === 'mame' ? MAME_MAP : NATURAL_MAP, JOY_MAP, S.overrides); return Object.keys(m).find((c) => S.overrides[c] === id) || Object.keys(m).find((c) => m[c] === id) || ''; };
+
+  function joyApply(id, on) {
+    if (id === 'fire') S.fire = on;
+    else S.joy = on ? S.joy | JOYBIT[id] : S.joy & ~JOYBIT[id];
+    sendJoy();
+  }
+
+  const lit = {};
+  const SPECIAL_KEYS = { Enter: 'return', Backspace: 'bksp', Tab: 'tab', Escape: 'esc', Space: 'space', ShiftLeft: 'shift', ShiftRight: 'shift2', ControlLeft: 'control', ControlRight: 'control', CapsLock: 'caps' };
+  function litOn(e) {
+    if (lit[e.code]) return;
+    let id = effMap()[e.code] || SPECIAL_KEYS[e.code];
+    if (!id && e.key && e.key.length === 1) id = AC.keyboard.keyForChar(e.key);
+    const el = id && document.querySelector('#kbd .key[data-id="' + id + '"]');
+    if (el) { el.classList.add('down'); lit[e.code] = el; }
+  }
+  function litOff(code) {
+    if (lit[code]) { lit[code].classList.remove('down'); delete lit[code]; }
+  }
+  window.addEventListener('blur', () => Object.keys(lit).forEach(litOff));
+
+  function syncMods(e) {
+    const K = AC.keyboard, s = e.shiftKey, c = e.ctrlKey;
+    if (K.phys.shift !== s || K.phys.ctrl !== c) { K.phys.shift = s; K.phys.ctrl = c; K.refresh && K.refresh(); }
+  }
+  window.addEventListener('keydown', syncMods, true);
+  window.addEventListener('keyup', syncMods, true);
+  window.addEventListener('pointerdown', syncMods, true);
+  window.addEventListener('blur', () => { AC.keyboard.phys.shift = AC.keyboard.phys.ctrl = false; AC.keyboard.refresh && AC.keyboard.refresh(); });
+
+  window.addEventListener('keydown', (e) => {
+    if (!S.capture && e.target.tagName !== 'SELECT' && e.target.tagName !== 'INPUT' && !$('mapdlg').open) litOn(e);
+    if (S.capture) { e.preventDefault(); const id = S.capture; S.capture = null; for (const c of Object.keys(S.overrides)) if (S.overrides[c] === id) delete S.overrides[c]; S.overrides[e.code] = id; localStorage.setItem('ac.keymap', JSON.stringify(S.overrides)); renderMap(); return; }
+    if (!S.emu || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+    if (e.code === 'ControlRight') S.rctrl = true;
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.code === 'KeyV' || (e.code === 'KeyC' && !String(getSelection())))) {
+      if (e.code === 'KeyC') { e.preventDefault(); $('copytxt').click(); }
+      return;
+    }
+    if (e.repeat) { e.preventDefault(); return; }
+    const map = effMap();
+    const id = map[e.code];
+    if (id && (id.startsWith('joy') || id === 'fire')) {
+      if (S.joyMode) { e.preventDefault(); joyApply(id, true); return; }
+    }
+    let f = null;
+    if (id && !id.startsWith('joy') && id !== 'fire') {
+      const k = AC.keyboard.keyById(id);
+      const ctrl = (e.ctrlKey && !S.rctrl) || AC.keyboard.latch.ctrl;
+      if (k && k.send) f = k.send(e.shiftKey || AC.keyboard.latch.shift, ctrl);
+    } else if (CURSOR[e.code] && !S.joyMode) f = { keycode: CURSOR[e.code] };
+    else if (S.profile === 'natural') {
+      if (e.ctrlKey && e.key.length === 1 && /[a-z]/i.test(e.key)) f = { keychar: e.key.toLowerCase().charCodeAt(0) - 96 };
+      else if (NAT_SPECIAL[e.key]) f = NAT_SPECIAL[e.key];
+      else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) f = { keychar: e.key.charCodeAt(0) };
+    }
+    if (f) {
+      e.preventDefault(); S.emu.down('phys:' + e.code, f);
+      if (AC.keyboard.latch.shift || AC.keyboard.latch.ctrl) { AC.keyboard.latch.shift = AC.keyboard.latch.ctrl = false; AC.keyboard.refresh(); }
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    litOff(e.code);
+    if (e.code === 'ControlRight') S.rctrl = false;
+    if (!S.emu) return;
+    const id = effMap()[e.code];
+    if (id && (id.startsWith('joy') || id === 'fire') && S.joyMode) joyApply(id, false);
+    S.emu.up('phys:' + e.code);
+  });
+
+  function renderMap() {
+    const box = $('mapbox');
+    box.innerHTML = '';
+    ACTIONS.forEach(([id, label]) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span class="dim" style="flex:1">${label}</span>`;
+      const b = document.createElement('button');
+      b.textContent = S.capture === id ? 'press a key…' : (codeFor(id) || '—');
+      b.onclick = () => { S.capture = id; renderMap(); };
+      row.append(b);
+      box.append(row);
+    });
+  }
+
+  // ---- media ----
+  async function loadMedia(files, drive) {
+    if (!S.emu) { log('boot first'); return; }
+    for (const f of files) {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      if (/\.(xex|com|exe|bas|car|bin|rom)$/i.test(f.name) && !/\.atr$/i.test(f.name)) S.emu.bootFile(f.name, bytes);
+      else { S.emu.mountDisk(drive, f.name, bytes); $('d' + drive).textContent = f.name; S.emu.coldStart(); }
+    }
+  }
+
+  // ---- virtual FujiNet host node (folder browser; no SIO network emulation yet) ----
+  const FN = { files: [] };
+  function renderFn() {
+    const q = $('fnfilter').value.toLowerCase();
+    const box = $('fnlist');
+    box.innerHTML = '';
+    FN.files.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 300).forEach((f) => {
+      const d = document.createElement('div');
+      d.textContent = f.name;
+      d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b';
+      d.onmouseenter = () => (d.style.background = '#2a2f39');
+      d.onmouseleave = () => (d.style.background = '');
+      d.onclick = (e) => loadMedia([f.file], e.shiftKey ? 2 : 1);
+      box.append(d);
+    });
+  }
+  $('fnfolder').onchange = (e) => {
+    FN.files = [...e.target.files].filter((f) => /\.(atr|xex|com|car|bas|xfd|cas)$/i.test(f.name)).map((f) => ({ name: f.webkitRelativePath || f.name, file: f }));
+    $('fncount').textContent = FN.files.length + ' images';
+    FujiNet.setFiles(FN.files.map((f) => ({ rel: f.name, file: f.file })));
+    renderFn();
+  };
+  function syncFnUi() {
+    $('fnbtn').textContent = 'FujiNet: ' + (FujiNet.enabled ? 'on' : 'off');
+    $('fnboot').disabled = !FujiNet.enabled;
+  }
+  $('fnbtn').onclick = () => {
+    FujiNet.enabled = !FujiNet.enabled;
+    localStorage.setItem('ac.fujinet', FujiNet.enabled ? '1' : '0');
+    syncFnUi();
+    log('FujiNet ' + (FujiNet.enabled ? 'on' : 'off (device $70 absent; takes effect immediately, reset to reboot)'));
+  };
+  syncFnUi();
+  $('fnreset').onclick = () => { FujiNet.reset(); log('FujiNet config reset (hosts and drive slots cleared)'); };
+  $('fnboot').onclick = () => {
+    if (!S.emu) { log('boot first'); return; }
+    if (!FujiNet.enabled) { log('FujiNet is off'); return; }
+    FujiNet.bootConfig();
+    $('d1').textContent = 'FujiNet CONFIG';
+  };
+  $('fnfilter').oninput = renderFn;
+
+  // ---- cartridges and eject ----
+  S.pendingCart = null;
+  async function insertCart(slot, file) {
+    if (!S.emu) { log('boot first'); return; }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const r = S.emu.insertCart(slot, file.name, bytes);
+    if (!r.ok) { log('cartridge: ' + r.error); return; }
+    $('cn' + slot).textContent = (slot === 1 ? '1 (main, right): ' : '2 (left): ') + file.name;
+    if (r.kb) {
+      const types = S.emu.cartTypes(r.kb);
+      $('ctype').innerHTML = '';
+      types.forEach((t) => $('ctype').append(new Option(t.name, String(t.id))));
+      $('ctyperow').style.display = 'flex';
+      S.pendingCart = slot;
+      log(`choose the cartridge type (${r.kb} KB image)`);
+    } else if (slot === 2) S.emu.coldStart();
+  }
+  for (const n of [1, 2]) {
+    $('c' + n).onchange = (e) => e.target.files[0] && insertCart(n, e.target.files[0]);
+    $('ce' + n).onclick = () => {
+      if (!S.emu) return;
+      S.emu.ejectCart(n);
+      $('cn' + n).textContent = (n === 1 ? '1 (main, right): ' : '2 (left): ') + 'empty';
+      $('c' + n).value = '';
+    };
+    $('de' + n).onclick = () => {
+      if (!S.emu) return;
+      S.emu.ejectDisk(n);
+      $('d' + n).textContent = 'empty';
+      $('f' + n).value = '';
+    };
+  }
+  $('ctypeok').onclick = () => {
+    if (!S.emu || !S.pendingCart) return;
+    S.emu.setCartType(S.pendingCart, +$('ctype').value);
+    if (S.pendingCart === 2) S.emu.coldStart();
+    S.pendingCart = null;
+    $('ctyperow').style.display = 'none';
+    log('cartridge inserted');
+  };
+  // side panel: expandable; on phones it is a drawer that starts closed
+  const phone = () => matchMedia('(max-width:900px)').matches;
+  const saved = localStorage.getItem('ac.sidebar');
+  document.body.classList.toggle('nosb', saved ? saved === '0' : phone());
+  {
+    const wrap = $('kbdwrap');
+    const kv = JSON.parse(localStorage.getItem('ac.kbview') || '{"base":true,"shift":true,"ctrl":true}');
+    const apply = () => {
+      document.querySelectorAll('#kbview button').forEach((b) => {
+        b.classList.toggle('on', !!kv[b.dataset.v]);
+        wrap.classList.toggle('hide-' + b.dataset.v, !kv[b.dataset.v]);
+      });
+      localStorage.setItem('ac.kbview', JSON.stringify(kv));
+    };
+    document.querySelectorAll('#kbview button').forEach((b) => { b.onclick = () => { kv[b.dataset.v] = !kv[b.dataset.v]; apply(); }; });
+    apply();
+  }
+  $('sbtoggle').onclick = () => {
+    const hide = !document.body.classList.contains('nosb');
+    document.body.classList.toggle('nosb', hide);
+    localStorage.setItem('ac.sidebar', hide ? '0' : '1');
+  };
+  $('sbclose').onclick = () => document.body.classList.add('nosb');
+  $('boot').addEventListener('click', () => { if (phone()) document.body.classList.add('nosb'); });
+
+  fillRomSelects();
+  loadSavedRoms();
+
+  // ---- UI wiring ----
+  AC.keyboard.restoreCharset();
+  AC.keyboard.build($('kbd'), handle);
+  $('kblayout').onchange = (e) => AC.keyboard.build($('kbd'), handle, e.target.value);
+  $('romfiles').onchange = (e) => addRoms(e.target.files);
+  $('model').onchange = () => { fillRomSelects(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
+  function saveRomSel() {
+    const kind = $('model').value === '800' ? 'os800' : 'osxl';
+    const s = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
+    const o = S.lib[kind][+$('osrom').value];
+    if (o) s[kind] = o.name;
+    s.basic = $('basicrom').value === '' ? '' : (S.basicList[+$('basicrom').value] || {}).name || '';
+    localStorage.setItem('ac.romsel', JSON.stringify(s));
+  }
+  $('osrom').onchange = () => { updateCharset(); saveRomSel(); };
+  $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); };
+  $('romfolder').onchange = (e) => addRoms(e.target.files);
+  $('boot').onclick = boot;
+  $('reset').onclick = () => S.emu && S.emu.warmStart();
+  $('cold').onclick = () => S.emu && S.emu.coldStart();
+  $('pause').onclick = () => { S.running = !S.running; $('pause').textContent = S.running ? 'Pause' : 'Run'; };
+  $('speed').oninput = (e) => { S.speed = Math.pow(2, +e.target.value); const s = S.speed.toFixed(S.speed < 1 ? 2 : 1); $('speedv').textContent = s + '×'; $('spd').textContent = s; };
+  $('profile').value = S.profile;
+  $('profile').onchange = (e) => { S.profile = e.target.value; localStorage.setItem('ac.profile', S.profile); renderMap(); };
+  $('mapreset').onclick = () => { S.overrides = {}; localStorage.removeItem('ac.keymap'); renderMap(); };
+  renderMap();
+  $('mapbtn').onclick = () => { renderMap(); $('mapdlg').showModal(); };
+  $('sndbtn').onclick = () => { SND.on = !SND.on; localStorage.setItem('ac.sound', SND.on ? '1' : '0'); sndCtx(); syncSndUi(); };
+  $('vol').oninput = (e) => { SND.vol = +e.target.value; localStorage.setItem('ac.vol', SND.vol); sndCtx(); };
+  window.addEventListener('pointerdown', () => sndCtx(), { once: true });
+  window.addEventListener('keydown', () => sndCtx(), { once: true });
+  syncSndUi();
+  $('mapclose').onclick = () => { S.capture = null; $('mapdlg').close(); };
+  $('joy').onchange = (e) => { S.joyMode = e.target.checked; };
+  for (const [id, field] of [['start', 'start'], ['select', 'select'], ['option', 'option'], ['brk', 'special']]) {
+    const b = $(id);
+    const fields = field === 'special' ? { special: 5 } : { [field]: 1 };
+    b.onpointerdown = () => S.emu && S.emu.down('btn:' + id, fields);
+    b.onpointerup = b.onpointerleave = () => S.emu && S.emu.up('btn:' + id);
+  }
+  for (const n of [1, 2]) {
+    $('f' + n).onchange = (e) => loadMedia(e.target.files, n);
+  }
+  document.body.addEventListener('dragover', (e) => e.preventDefault());
+  document.body.addEventListener('drop', (e) => { e.preventDefault(); loadMedia(e.dataTransfer.files, 1); });
+  requestAnimationFrame(loop);
+
+  // ---- clipboard ----
+  // Paste types the clipboard into the Atari (paced); copy sends the text screen or the picture out.
+  function pasteText(text) {
+    if (!S.emu) { log('boot first'); return; }
+    const t = text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
+    let n = 0;
+    for (const ch of t) {
+      const c = ch.charCodeAt(0);
+      if (ch === '\n') S.typeQ.push({ keychar: 10 });
+      else if (c >= 32 && c < 127) S.typeQ.push({ keychar: c });
+      else continue;
+      n++;
+    }
+    log('pasting ' + n + ' chars');
+  }
+  async function copyScreenText() {
+    if (!S.emu) return;
+    const t = S.emu.screenText().replace(/[ \t]+$/gm, '').replace(/\s+$/, '');
+    await navigator.clipboard.writeText(t);
+    log('copied ' + t.length + ' chars of screen text');
+  }
+  async function copyScreenImage() {
+    if (!S.emu) return;
+    const c = document.createElement('canvas');
+    c.width = AC.SCREEN.w * 2; c.height = AC.SCREEN.h * 2;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(cv, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    log('copied screen image');
+  }
+  const clip = (fn) => () => fn().catch((e) => log('clipboard: ' + e.message));
+  window.addEventListener('paste', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    e.preventDefault();
+    pasteText((e.clipboardData && e.clipboardData.getData('text')) || '');
+  });
+  $('pastebtn').onclick = clip(async () => pasteText(await navigator.clipboard.readText()));
+  $('copytxt').onclick = clip(copyScreenText);
+  $('copyimg').onclick = clip(copyScreenImage);
+  $('stoptype').onclick = () => { S.typeQ.length = 0; log('paste cancelled'); };
+
+  // ---- agent API ----
+  function shot(scale, format) {
+    const c = document.createElement('canvas');
+    c.width = AC.SCREEN.w * scale; c.height = AC.SCREEN.h * scale;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(cv, 0, 0, c.width, c.height);
+    return c.toDataURL(format || 'image/png');
+  }
+
+  window.ataricraft = {
+    describe: () => ({
+      name: 'ataricraft', core: 'libatari800 (WASM reference)',
+      calls: ['loadRoms(files)', 'boot({model,tv,basic})', 'screenshot({scale}) -> PNG data URL', 'screenText()', 'type(text)', 'press(fields,frames)',
+        'joy(bits,fire)', 'console({start,select,option})', 'step(n)', 'run()/pause()', 'speed(x)', 'peek(addr,len)', 'poke(addr,bytes)',
+        'mountDisk(n,name,bytes)', 'bootFile(name,bytes)', 'snapshot()', 'restore(snap)', 'reset(cold)', 'state()'],
+      models: Object.keys(AC.MODELS),
+    }),
+    state: () => ({ booted: !!S.emu, running: S.running, frames: S.emu ? S.emu.frames : 0, speed: S.speed, model: $('model').value, tv: $('tv').value, roms: Object.fromEntries(Object.entries(S.roms).map(([k, v]) => [k, !!v])) }),
+    addRoms: (files) => addRoms(files),
+    boot: async (o) => { if (o && o.model) $('model').value = o.model; if (o && o.tv) $('tv').value = o.tv; if (o && o.basic != null) $('basic').checked = !!o.basic; return boot(); },
+    screenshot: (o) => shot((o && o.scale) || 2, o && o.format),
+    screenText: () => S.emu.screenText(),
+    type: (text) => pasteText(text),
+    copyText: () => S.emu.screenText(),
+    press: (fields, frames) => S.emu.tap(fields, frames || 4),
+    joy: (bits, fire) => { S.joy = bits | 0; S.fire = !!fire; sendJoy(); },
+    console: (f) => S.emu.tap(f, 6),
+    step: (n) => { stepFrames(n || 1); draw(); return S.emu.frames; },
+    run: () => { S.running = true; }, pause: () => { S.running = false; },
+    speed: (x) => { S.speed = x; },
+    peek: (a, l) => S.emu.peek(a, l), poke: (a, b) => S.emu.poke(a, b),
+    mountDisk: (n, name, bytes) => S.emu.mountDisk(n, name, bytes), bootFile: (name, bytes) => S.emu.bootFile(name, bytes),
+    insertCart: (slot, name, bytes) => S.emu.insertCart(slot, name, bytes), cartTypes: (kb) => S.emu.cartTypes(kb),
+    setCartType: (slot, t) => S.emu.setCartType(slot, t), ejectCart: (slot) => S.emu.ejectCart(slot), ejectDisk: (n) => S.emu.ejectDisk(n),
+    snapshot: () => S.emu.snapshot(), restore: (s) => { S.emu.restore(s); draw(); },
+    reset: (cold) => (cold ? S.emu.coldStart() : S.emu.warmStart()),
+    typing: () => S.typeQ.length,
+  };
+})();

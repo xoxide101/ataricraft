@@ -1,0 +1,27 @@
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+const fs = require('fs');
+(async () => {
+  const R = 'C:/Users/raver/ataricraft/';
+  fs.mkdirSync(R + 'out/sel', { recursive: true });
+  fs.copyFileSync(R + 'software_n_roms/ATARIXL.ROM', R + 'out/sel/AAA_first.rom');
+  fs.copyFileSync(R + 'software_n_roms/ATARIXL.ROM', R + 'out/sel/ZZZ_second.rom');
+  fs.copyFileSync(R + 'software_n_roms/ATARIBAS.ROM', R + 'out/sel/ATARIBAS.ROM');
+  fs.rmSync(R + 'out/profile2', { recursive: true, force: true });
+  const opts = { executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' };
+  let c = await chromium.launchPersistentContext(R + 'out/profile2', opts);
+  let p = await c.newPage();
+  await p.goto('file:///' + R + 'web/index.html');
+  await p.setInputFiles('#romfiles', [R + 'out/sel/AAA_first.rom', R + 'out/sel/ZZZ_second.rom', R + 'out/sel/ATARIBAS.ROM']);
+  await p.waitForTimeout(800);
+  await p.selectOption('#osrom', { label: 'ZZZ_second.rom' });
+  await p.selectOption('#basicrom', '');
+  const txt = (q) => p.evaluate((s) => document.querySelector(s).selectedOptions[0].textContent, q);
+  console.log('1st:', await txt('#osrom'), '|', await txt('#basicrom'));
+  await c.close();
+  c = await chromium.launchPersistentContext(R + 'out/profile2', opts);
+  p = await c.newPage();
+  await p.goto('file:///' + R + 'web/index.html');
+  await p.waitForTimeout(1500);
+  console.log('2nd:', await txt('#osrom'), '|', await txt('#basicrom'));
+  await c.close();
+})();

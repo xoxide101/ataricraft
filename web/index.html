@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ataricraft</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { --bg:#14161a; --panel:#1e2128; --line:#2c313b; --fg:#d8dce4; --dim:#8a93a3; --acc:#e8a33d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px system-ui,sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 8px 0 0; color:var(--acc); letter-spacing:.5px; }
+  button, select, label.btn { background:#2a2f39; color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 10px; font:inherit; cursor:pointer; }
+  button:hover, label.btn:hover { background:#343a47; }
+  input[type=file] { display:none; }
+  main { display:flex; gap:12px; padding:10px 12px; align-items:flex-start; height:calc(100vh - 50px); }
+  .center { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:10px; max-height:100%; overflow:auto; }
+  #stage { background:#000; border:1px solid var(--line); border-radius:6px; padding:4px; flex:none; }
+  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - 375px) * 1.4)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
+  .side { width:300px; flex:none; max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
+  body { --sbw:370px; }
+  body.nosb { --sbw:70px; }
+  body.nosb .side { display:none; }
+  #sbtoggle { font-size:16px; line-height:1; padding:4px 9px; }
+  @media (max-width:900px) {
+    body, body.nosb { --sbw:24px; }
+    header { gap:6px; padding:6px 8px; }
+    header h1 { display:none; }
+    .stats { display:none; }
+    header select, header button, header label { padding:4px 6px; font-size:12px; }
+    main { padding:6px; gap:0; height:auto; min-height:calc(100vh - 50px); }
+    .side { position:fixed; left:0; top:0; bottom:0; z-index:30; width:min(320px,88vw); background:var(--bg); padding:10px; border-right:1px solid var(--line); max-height:none; box-shadow:4px 0 16px #000a; }
+    body:not(.nosb) .center { opacity:.35; pointer-events:none; }
+    #screen { width:calc(100vw - 28px); min-width:0; }
+    #stage { padding:2px; }
+    #kbdwrap { padding:5px; }
+    #kbd { gap:6px; }
+    .kside { width:44px; }
+    .krow { gap:2px; margin-bottom:2px; }
+    #sbclose { display:block; }
+    .key .t.shift { display:none; }
+  }
+  #sbclose { display:none; width:100%; }
+  @media (max-width:600px) {
+    #kbd { flex-direction:column; gap:4px; }
+    #kbd .kside { width:100%; flex-direction:row; justify-content:stretch; gap:3px; }
+    #kbd .kside .krow { flex:1; margin:0; }
+    #kbd .kside .key { width:100%; height:30px; }
+  }
+  @media (max-width:900px) and (orientation:landscape) {
+    #screen { width:min(calc(100vw - 28px), calc((100vh - 110px) * 1.4)); }
+  }
+  dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px; width:340px; max-height:80vh; }
+  dialog::backdrop { background:rgba(0,0,0,.55); }
+  dialog h3 { margin:0 0 8px; color:var(--acc); }
+  .stats { margin-left:auto; display:flex; gap:14px; font-variant-numeric:tabular-nums; color:var(--dim); }
+  .stats b { color:var(--fg); font-weight:600; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px; }
+  .box h3 { margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:4px 0; }
+  .dim { color:var(--dim); font-size:12px; }
+  #status { color:var(--acc); }
+  #kbdwrap { width:100%; min-width:min(65vw,100%); max-width:1500px; background:#2b2620; border:1px solid #403830; border-radius:8px; padding:10px; }
+  .krow { display:flex; gap:4px; margin-bottom:4px; }
+  .key { position:relative; height:clamp(38px, 4.8cqw, 68px); min-width:0; padding:0; background:#d9d2c3; color:#202020; border:1px solid #9d9585; border-bottom-width:3px; border-radius:5px; display:flex; align-items:center; justify-content:center; user-select:none; touch-action:none; }
+  .key:hover { background:#e6dfd0; }
+  .key.down { transform:translateY(2px); border-bottom-width:1px; background:#c4bba8; }
+  #kbd { display:flex; gap:14px; }
+  .kmain { flex:1; min-width:0; }
+  .kside { width:78px; display:flex; flex-direction:column; justify-content:flex-end; }
+  .kside .key { height:clamp(26px, 3.7cqw, 56px); background:#4a4035; color:#e8e0d0; }
+  .kside .krow { margin-bottom:5px; }
+  #kbd[data-layer] .kmain .krow:first-child .key[data-id^=f] { height:30px; }
+  .key.on { background:var(--acc); }
+  .key .g { position:absolute; image-rendering:pixelated; width:20px; height:20px; }
+  .key .g.base { left:50%; top:50%; margin:-10px 0 0 -10px; }
+  .key .g.shift { right:3px; top:2px; width:14px; height:14px; }
+  .key .g.ctrl { left:3px; bottom:2px; width:14px; height:14px; }
+  .key .t { font-size:clamp(9px, 1.15cqw, 16px); font-weight:600; }
+  .key .t.shift { position:absolute; top:2px; right:4px; font-size:9px; color:#d6701a; }
+  #kbdwrap { container-type:inline-size; --gb:clamp(12px, round(down, 2.8cqw, 4px), 28px); --gs:clamp(8px, round(down, 1.6cqw, 2px), 16px); }
+  .key .g { width:var(--gb); height:var(--gb); }
+  .key .g.base { margin:calc(var(--gb) / -2) 0 0 calc(var(--gb) / -2); }
+  .key .g.shift, .key .g.ctrl { width:var(--gs); height:var(--gs); }
+  #kbd[data-layer=shift] .key .g.base { opacity:.25; }
+  #kbd[data-layer=ctrl] .key .g.base { opacity:.25; }
+  #kbd[data-layer=shift] .key .g.shift, #kbd[data-layer=ctrl] .key .g.ctrl { width:var(--gb); height:var(--gb); }
+  #kbd[data-layer=shift] .key .g.shift { right:50%; top:50%; margin:calc(var(--gb) / -2) calc(var(--gb) / -2) 0 0; }
+  #kbd[data-layer=ctrl] .key .g.ctrl { left:50%; bottom:50%; margin:0 0 calc(var(--gb) / -2) calc(var(--gb) / -2); }
+  #kbview { display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px; color:var(--dim); }
+  #kbview button { padding:3px 9px; font-size:12px; opacity:.5; }
+  #kbview button.on { opacity:1; border-color:var(--acc); }
+  #kbdwrap.hide-base .key .g.base, #kbdwrap.hide-shift .key .g.shift, #kbdwrap.hide-ctrl .key .g.ctrl { display:none; }
+  #kbdwrap.hide-base:not(.hide-shift) #kbd[data-layer=base] .key .g.shift { width:var(--gb); height:var(--gb); right:50%; top:50%; margin:calc(var(--gb) / -2) calc(var(--gb) / -2) 0 0; }
+  #kbdwrap.hide-base.hide-shift:not(.hide-ctrl) #kbd[data-layer=base] .key .g.ctrl { width:var(--gb); height:var(--gb); left:50%; bottom:50%; margin:0 0 calc(var(--gb) / -2) calc(var(--gb) / -2); }
+  #kbd[data-layer=shift] .key .g.shift, #kbd[data-layer=ctrl] .key .g.ctrl { display:block !important; }
+  .legend { font-size:11px; color:var(--dim); margin:4px 2px 0; }
+  .legend b.s { color:#d6701a; } .legend b.c { color:#007d9a; }
+</style>
+</head>
+<body>
+<header>
+  <button id="sbtoggle" title="Show/hide side panel">☰</button>
+  <h1>ATARICRAFT</h1>
+  <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
+  <select id="ram" title="RAM"></select>
+  <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
+  <select id="tv"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select>
+  <label class="dim"><input id="basic" type="checkbox" checked style="display:inline"> BASIC</label>
+  <button id="boot">Boot</button>
+  <button id="mapbtn">Keyboard mapping…</button>
+  <button id="sndbtn">Sound: on</button><button id="fnbtn" title="Virtual FujiNet (SIO device $70) on/off">FujiNet: on</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
+  <span id="status" class="dim">choose ROMs, then Boot</span>
+  <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span></span>
+</header>
+<main>
+  <div class="side">
+    <button id="sbclose">✕ Close panel</button>    <div class="box">
+      <h3>Machine</h3>
+      <div class="row"><button id="reset">Reset</button><button id="cold">Cold start</button><button id="pause">Pause</button></div>
+      <div class="row"><button id="pastebtn" title="Ctrl+V">Paste</button><button id="copytxt" title="Ctrl+C">Copy text</button><button id="copyimg">Copy image</button><button id="stoptype">Stop</button></div>
+      <div class="row"><span class="dim">Speed</span><input id="speed" type="range" min="-3" max="4" step="0.25" value="0"><span id="speedv">1.0×</span></div>
+      <div class="row"><button id="start">Start</button><button id="select">Select</button><button id="option">Option</button><button id="brk">Break</button></div>
+      <div class="row"><label class="dim"><input id="joy" type="checkbox" style="display:inline"> Joystick on arrows + Space</label></div>
+    </div>
+    <div class="box">
+      <h3>ROMs</h3>
+      <div class="row"><label class="btn">Scan folder…<input id="romfolder" type="file" webkitdirectory multiple></label><label class="btn">Files…<input id="romfiles" type="file" multiple></label><button id="romforget" title="Remove ROMs remembered by this browser">Reset ROMs</button></div>
+      <div id="romstate" class="dim">no ROMs scanned</div>
+      <div class="row"><span class="dim" style="width:44px">OS</span><select id="osrom" style="flex:1;min-width:0"></select></div>
+      <div class="row"><span class="dim" style="width:44px">BASIC</span><select id="basicrom" style="flex:1;min-width:0"></select></div>
+    </div>
+    <div class="box">
+      <h3>Cartridges</h3>
+      <div class="row"><label class="btn">Cart 1…<input id="c1" type="file"></label><button id="ce1">Eject</button><span id="cn1" class="dim">1 (main, right): empty</span></div>
+      <div class="row"><label class="btn">Cart 2…<input id="c2" type="file"></label><button id="ce2">Eject</button><span id="cn2" class="dim">2 (left): empty</span></div>
+      <div class="row" id="ctyperow" style="display:none"><span class="dim">Type</span><select id="ctype" style="flex:1;min-width:0"></select><button id="ctypeok">OK</button></div>
+    </div>
+    <div class="box">
+      <h3>Host drive (H:)</h3>
+      <div class="row"><input id="hostname" value="PASTE.LST" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><button id="hostpaste" title="Clipboard text becomes this file">Paste→file</button></div>
+      <div class="row"><label class="btn">Import…<input id="hostimport" type="file" multiple></label><span id="hostcount" class="dim">empty</span></div>
+      <div id="hostlist"></div>
+      <div class="dim">In BASIC: <code>LIST "H:PROG.LST"</code> saves your program as text here; <code>ENTER "H:PROG.LST"</code> loads it back with the same line numbers. Copy puts it on your clipboard.</div>
+    </div>
+    <div class="box">
+      <h3>Drives</h3>
+      <div class="row"><label class="btn">D1…<input id="f1" type="file"></label><button id="de1">Eject</button><span id="d1" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D2…<input id="f2" type="file"></label><button id="de2">Eject</button><span id="d2" class="dim">empty</span></div>
+      <div class="dim">ATR mounts; XEX/BAS/CAR loads directly. You can also drop a file on the page.</div>
+    </div>
+    <div class="box">
+      <h3>Virtual FujiNet node</h3>
+      <div class="row"><label class="btn">Point at folder…<input id="fnfolder" type="file" webkitdirectory multiple></label><span id="fncount" class="dim">no host folder</span></div>
+      <div class="row"><input id="fnfilter" placeholder="filter" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
+      <div id="fnlist" style="max-height:170px;overflow:auto"></div>
+      <div class="row"><button id="fnboot" title="Mounts the FujiNet CONFIG disk on D1 and cold-starts">Boot FujiNet CONFIG</button><button id="fnreset" title="Clear saved FujiNet hosts and drive slots">Reset config</button></div>
+      <div class="dim">Click an image to mount it. Mounts to D1; Shift-click for D2. CONFIG sees this folder as host "SD". Network devices (N:) are not emulated yet.</div>
+    </div>
+  </div>
+  <dialog id="mapdlg">
+    <h3>Keyboard mapping</h3>
+    <div class="row"><select id="profile" style="flex:1"><option value="mame">MAME-style (by position)</option><option value="natural">Natural (by character)</option></select><button id="mapreset">Reset</button></div>
+    <div id="mapbox"></div>
+    <div class="dim">MAME: Start F1, Select F2, Option F3, Help F8, Break Backspace, Atari = Right Ctrl. Click a button, then press a key to remap.</div>
+    <div class="row" style="justify-content:flex-end"><button id="mapclose">Close</button></div>
+  </dialog>
+  <div class="center">
+    <div id="stage"><canvas id="screen"></canvas></div>
+    <div id="kbdwrap">
+      <div id="kbview"><span>Show:</span><button data-v="base" title="Lower-case glyphs">a Lower</button><button data-v="shift" title="Capital glyphs">A Caps</button><button data-v="ctrl" title="Control/special graphics">♥ Special</button></div>
+      <div id="kbd"></div>
+      <div class="legend">Legends come from the Atari's character set. <b class="s">Orange</b> = Shift, <b class="c">teal</b> = Control. Click Shift or Control, then a key.</div>
+    </div>
+  </div>
+</main>
+<script src="ref/atari-ref.js"></script>
+<script src="js/palette.js"></script>
+<script src="js/emu.js"></script>
+<script src="js/keyboard.js"></script>
+<script src="js/fujinet-config.js"></script>
+<script src="js/fujinet.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

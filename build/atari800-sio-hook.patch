@@ -1,0 +1,37 @@
+diff --git a/src/sio.c b/src/sio.c
+index 9a5b710..6b58baf 100644
+--- a/src/sio.c
++++ b/src/sio.c
+@@ -1110,6 +1110,10 @@ static int delay_counter = 0;
+ static int last_ypos = 0;
+ #endif
+ 
++#ifdef __EMSCRIPTEN__
++extern int ac_sio_js(int dev, int cmd, int dstats, int aux, int data, int len);
++#endif
++
+ /* SIO patch emulation routine */
+ void SIO_Handler(void)
+ {
+@@ -1141,9 +1145,19 @@ void SIO_Handler(void)
+ 
+ 	/* Disk 1 is ASCII '1' = 0x31 etc */
+ 	/* Disk 1 -> unit = 0 */
+-	unit -= 0x31;
++	{
++		UBYTE rawunit = unit;
++		unit -= 0x31;
++#ifdef __EMSCRIPTEN__
++		/* ataricraft: let JS (virtual FujiNet) claim the command */
++		result = (UBYTE) ac_sio_js(rawunit, cmd, MEMORY_dGetByte(0x303), sector, data, length);
++#endif
++	}
+ 
+-	if (MEMORY_dGetByte(0x300) != 0x60 && unit < SIO_MAX_DRIVES && (SIO_drive_status[unit] != SIO_OFF || BINLOAD_start_binloading)) {	/* UBYTE range ! */
++	if (result) {
++		/* handled by JS hook */
++	}
++	else if (MEMORY_dGetByte(0x300) != 0x60 && unit < SIO_MAX_DRIVES && (SIO_drive_status[unit] != SIO_OFF || BINLOAD_start_binloading)) {	/* UBYTE range ! */
+ #ifdef DEBUG
+ 		Log_print("SIO disk command is %02x %02x %02x %02x %02x   %02x %02x %02x %02x %02x %02x",
+ 			cmd, MEMORY_dGetByte(0x303), MEMORY_dGetByte(0x304), MEMORY_dGetByte(0x305), MEMORY_dGetByte(0x306),
