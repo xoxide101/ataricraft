@@ -542,7 +542,7 @@
   }
 
   // ---- media library (scan a folder, filter by text and type) ----
-  const MED = { files: [], kind: 'all' };
+  const MED = { files: [], kind: 'all', ext: 'all' };
   // MAME software list titles: short zip/set name -> "Title (year, publisher)"
   let TITLES = {};
   try { TITLES = JSON.parse(localStorage.getItem('ac.titles') || '{}'); } catch (e) { TITLES = {}; }
@@ -610,7 +610,22 @@
     const q = $('medfilter').value.toLowerCase();
     const box = $('medlist');
     box.innerHTML = '';
-    const hits = MED.files.filter((f) => (MED.kind === 'all' || f.kind === MED.kind) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
+    const extOf = (f) => (f.name.split('.').pop() || '').toLowerCase();
+    const ofKind = MED.files.filter((f) => MED.kind === 'all' || f.kind === MED.kind);
+    const counts = {};
+    ofKind.forEach((f) => { const e = extOf(f); counts[e] = (counts[e] || 0) + 1; });
+    if (MED.ext !== 'all' && !counts[MED.ext]) MED.ext = 'all';
+    const eb = $('medexts');
+    eb.innerHTML = '';
+    const exts = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    if (exts.length > 1) exts.forEach((e) => {
+      const b = document.createElement('button');
+      b.textContent = `.${e} ${counts[e]}`;
+      b.style.cssText = 'padding:1px 6px;font-size:11px;opacity:' + (MED.ext === e ? 1 : 0.55) + (MED.ext === e ? ';border-color:var(--acc)' : '');
+      b.onclick = () => { MED.ext = MED.ext === e ? 'all' : e; renderMed(); };
+      eb.append(b);
+    });
+    const hits = ofKind.filter((f) => (MED.ext === 'all' || extOf(f) === MED.ext) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
     hits.slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
       d.textContent = f.title ? `${f.title} — ${f.name}` : f.name;
@@ -686,11 +701,15 @@
     const files = await expandZips(all);
     MED.files = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
     renderMed();
-      }
+    const kc = {};
+    MED.files.forEach((f) => { kc[f.kind] = (kc[f.kind] || 0) + 1; });
+    log(`Scan complete: ${MED.files.length} items (${Object.entries(kc).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'})`);
+    diag('scan summary ' + JSON.stringify(kc));
+  }
   $('medfilter').oninput = renderMed;
   document.querySelectorAll('#medchips button').forEach((b) => {
     b.onclick = () => {
-      MED.kind = b.dataset.t;
+      MED.kind = b.dataset.t; MED.ext = 'all';
       document.querySelectorAll('#medchips button').forEach((x) => x.classList.toggle('on', x === b));
       renderMed();
     };

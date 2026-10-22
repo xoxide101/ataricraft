@@ -135,3 +135,5 @@ Game titles in the media library come from the MAME software lists (a800, a800_f
 Display: the side panel's Display menu picks the scaling: original (default), sharp smooth, smooth edges (EPX, an edge-aware 2x/4x that rounds diagonals without adding colours) or soft bilinear. Scanlines are a separate optional checkbox.
 
 Multi-disk sets: after you load a disk from the library, the other disks of the same set (other sides, 'disk 2', other files in the same zip) are listed below it. Click one to put it in D2 without rebooting (Shift = D1).
+
+After a scan the status line summarises the counts, and extension buttons (.atr 1234, .xex 56...) under the type buttons narrow the list further.
