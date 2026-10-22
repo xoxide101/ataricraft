@@ -1210,6 +1210,21 @@
     if ($('d' + slot)) $('d' + slot).textContent = name;
     log(`D${slot}: blank ${$('blankfmt').selectedOptions[0].textContent}. Format it with your DOS (for example DOS XL or DOS 2.5 option I)`);
   };
+  $('fullreset').onclick = async () => {
+    if (!confirm('Forget everything stored by this page (catalog, remembered folders, ROMs, settings, log) and reload?\nYour files on disk are not touched.')) return;
+    try { localStorage.clear(); sessionStorage.clear(); } catch (e) { /* ignore */ }
+    try {
+      const dbs = indexedDB.databases ? await indexedDB.databases() : [{ name: 'ataricraft' }, { name: 'ataricraft-media' }];
+      await Promise.all(dbs.map((d) => new Promise((res) => { const r = indexedDB.deleteDatabase(d.name); r.onsuccess = r.onerror = r.onblocked = () => res(); })));
+    } catch (e) { /* ignore */ }
+    try {
+      if (navigator.storage && navigator.storage.getDirectory) {
+        const root = await navigator.storage.getDirectory();
+        for await (const [name] of root.entries()) await root.removeEntry(name, { recursive: true }).catch(() => { });
+      }
+    } catch (e) { /* ignore */ }
+    location.reload();
+  };
   $('blankdl').onclick = () => {
     const [ss, n] = $('blankfmt').value.split(',').map(Number);
     const a = document.createElement('a');
