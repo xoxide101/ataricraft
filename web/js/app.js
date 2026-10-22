@@ -388,7 +388,8 @@
 
   // Detects the format from the file contents (extensions are only a hint), then routes it to the right device.
   async function loadAny(file, alt, hint) {
-    if (!S.emu) { log('boot first'); return; }
+    if (!S.emu) { log('boot first (press Boot, then load ' + file.name + ')'); return; }
+    log('loading ' + file.name + '…');
     const bytes = new Uint8Array(await file.arrayBuffer());
     const t = S.emu.detect(file.name, bytes);
     const k = typeKind(t) || hint || extKind(file.name);
