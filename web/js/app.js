@@ -879,13 +879,16 @@
   const srvReady = (async () => {
     if (!/^https?:$/.test(location.protocol)) return;
     try {
-      const base = new URL('library/', location.href).href;
-      let man = { catalog: 'catalog.sqlite', bios: [] };
-      const mr = await fetch(base + 'library.json', { cache: 'no-store' });
-      if (mr.ok) man = Object.assign(man, await mr.json());
+      let base = null, man = { catalog: 'catalog.sqlite', bios: [] }, cr = null;
+      // The library may sit in web/library/ or directly in web/ (software/, bios/ … beside index.html).
+      for (const cand of [new URL('library/', location.href).href, new URL('./', location.href).href]) {
+        const mr = await fetch(cand + 'library.json', { cache: 'no-store' }).catch(() => null);
+        const m = Object.assign({ catalog: 'catalog.sqlite', bios: [] }, mr && mr.ok ? await mr.json().catch(() => ({})) : {});
+        const c = await fetch(cand + encodeURI(m.catalog), { cache: 'no-store' }).catch(() => null);
+        if (c && c.ok) { base = cand; man = m; cr = c; break; }
+      }
+      if (!cr) { $('medcount').textContent = 'no server catalog yet: run server.html (from a local copy of web/) to build catalog.sqlite'; return; }
       SRVMAP = man.map || {};
-      const cr = await fetch(base + encodeURI(man.catalog), { cache: 'no-store' });
-      if (!cr.ok) { $('medcount').textContent = 'no server catalog yet: run server.html (from a local copy of web/) to build library/catalog.sqlite'; return; }
       await AC.Catalog.open(new Uint8Array(await cr.arrayBuffer()));
       SRV = base;
       if (!(await useCatalog())) { SRV = null; return; }

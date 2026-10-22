@@ -59,7 +59,7 @@
     for (const n of names) {
       const l = document.createElement('label');
       l.style.cssText = 'display:block;padding:2px 0';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true; cb.dataset.n = n;
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !/^(js|ref|sql|tools|out|library)$/i.test(n); cb.dataset.n = n;
       l.append(cb, ' ' + n + (BIOS_DIRS.test(n) ? '  (BIOS / BASIC ROMs: listed in library.json, not in the catalog)' : ''));
       box.append(l);
     }

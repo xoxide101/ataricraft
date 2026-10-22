@@ -161,3 +161,5 @@ ode tools/make-diskdb.cjs <folder> hashes the sector data of every ATR/XFD (loos
 
 ## Building the server library index (server.html)
 Open `web/server.html` from your own computer's copy of `web` (a `file://` or localhost page; the folder picker is not allowed on plain http). Pick the server's `library` folder (a mapped network drive works), tick the sub-folders to include and press **Scan and write catalog**. It reads zip/7z directories without extracting, then writes `catalog.sqlite` and `library.json` (BIOS/BASIC ROMs from `bios/` and `basic/`) back into that folder. Folder names become the first part of each path, so no mapping is needed. Re-run it after adding files. When the app is served over http and `catalog.sqlite` is missing, the Media library box says so.
+
+The library folders may sit directly in `web/` beside `index.html` (software/, roms/, dos/, bios/, basic/) or inside `web/library/`; the app checks `library/` first, then `web/`. For a layout in `web/`, pick the `web` folder in server.html (js, ref, sql are unticked by default).
