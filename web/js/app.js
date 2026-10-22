@@ -928,6 +928,13 @@
     };
     idbGet('medDir').then(async (h) => {
       await srvReady;
+      if (!h && !SRV) {
+        // Browsers only allow the folder picker after a click, so a first-run scan can't start by itself: point at the button instead.
+        $('medcount').textContent = 'no library yet: click Pick folder… to choose and scan your folder';
+        $('medpick').classList.add('pulse');
+        $('medpick').addEventListener('click', () => $('medpick').classList.remove('pulse'), { once: true });
+        return;
+      }
       if (!h || SRV) return;
       medHandle = h;
       Object.assign(medHandles, (await idbGet('medDirs')) || {}, { [h.name]: h });

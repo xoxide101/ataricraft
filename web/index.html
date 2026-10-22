@@ -124,12 +124,13 @@
   #kbd[data-layer=shift] .key .g.shift, #kbd[data-layer=ctrl] .key .g.ctrl { display:block !important; }
   .legend { font-size:11px; color:var(--dim); margin:4px 2px 0; }
   .legend b.s { color:#d6701a; } .legend b.c { color:#007d9a; }
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 #5aa9ff}50%{box-shadow:0 0 0 6px #5aa9ff55}}button.pulse{border-color:#5aa9ff;animation:pulse 1.2s infinite}
 </style>
 </head>
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261022f">ATARICRAFT <small class="dim" style="font-size:10px">b20261022f</small></h1>
+  <h1 title="build 20261022g">ATARICRAFT <small class="dim" style="font-size:10px">b20261022g</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -238,16 +239,16 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261022f"></script>
-<script src="js/titles-data.js?v=20261022f"></script>
-<script src="js/zip.js?v=20261022f"></script>
-<script src="js/sevenzip.js?v=20261022f"></script>
-<script src="js/catalog.js?v=20261022f"></script>
-<script src="js/romdb.js?v=20261022f"></script>
-<script src="js/diskdb.js?v=20261022f"></script>
+<script src="js/emu.js?v=20261022g"></script>
+<script src="js/titles-data.js?v=20261022g"></script>
+<script src="js/zip.js?v=20261022g"></script>
+<script src="js/sevenzip.js?v=20261022g"></script>
+<script src="js/catalog.js?v=20261022g"></script>
+<script src="js/romdb.js?v=20261022g"></script>
+<script src="js/diskdb.js?v=20261022g"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261022f"></script>
+<script src="js/app.js?v=20261022g"></script>
 </body>
 </html>
