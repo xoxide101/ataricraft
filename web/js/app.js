@@ -313,7 +313,7 @@
     else if (scaleMode === 'smooth') { ctx.imageSmoothingEnabled = true; ctx.drawImage(src, 0, 0, W, H); }
     else if (scaleMode === 'epx') {
       let b = epx(img32, src.width, src.height, 1);
-      if (W / src.width > 3) b = epx(b.out, b.w, b.h, 2);
+      if (W / src.width > 2) b = epx(b.out, b.w, b.h, 2);
       if (stage.width !== b.w || stage.height !== b.h) { stage.width = b.w; stage.height = b.h; }
       stx.putImageData(b.id, 0, 0);
       ctx.imageSmoothingEnabled = true;
