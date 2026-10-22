@@ -118,6 +118,16 @@
     sel.value = m.ram.some((r) => r.v === prev) ? prev : m.def;
   }
 
+  // "Atari BASIC REV. C (1984) - file.rom" when the CRC is in the WUDSN database, else the file name.
+  function romLabel(e) {
+    const file = e.name.replace(/^.*[\\/]/, '');
+    if (e.label === undefined) {
+      const d = (AC.OS_DB || {})[crc32(e.bytes)];
+      e.label = d ? [d[0], d[2], d[3] ? '(' + d[3] + ')' : '', '[' + d[1].replace(/^SYSROM_/, '') + ']'].filter(Boolean).join(' ') : '';
+    }
+    return e.label ? `${e.label} - ${file}` : file;
+  }
+
   function fillRomSelects() {
     fillRam();
     const kind = $('model').value === '800' ? 'os800' : 'osxl';
@@ -126,7 +136,7 @@
       const prev = sel.value;
       sel.innerHTML = '';
       if (none) sel.append(new Option('(none)', ''));
-      list.forEach((e, i) => sel.append(new Option(e.name.replace(/^.*[\\/]/, '') , String(i))));
+      list.forEach((e, i) => sel.append(new Option(romLabel(e), String(i))));
       const si = key in sel_ ? (sel_[key] === '' ? '' : String(list.findIndex((e) => e.name === sel_[key]))) : null;
       if (si !== null && si !== '-1' && [...sel.options].some((o) => o.value === si)) { sel.value = si; if (key === 'basic') S.basicTouched = true; }
       else if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
