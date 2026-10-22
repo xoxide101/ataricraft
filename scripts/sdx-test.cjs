@@ -12,10 +12,9 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   await p.waitForTimeout(800);
   console.log(await p.evaluate(() => [...document.querySelectorAll('#ctype option')].map((o) => o.value + ':' + o.textContent).join('\n')));
   console.log(await p.textContent('#status'));
-  console.log('selected:', await p.evaluate(() => { const s = document.getElementById('ctype'); return s.options[s.selectedIndex].textContent; }));
-  await p.click('#ctypeok');
-  await p.waitForTimeout(1500);
-  await p.uncheck('#basic');
+  await p.waitForTimeout(800);
+  console.log(await p.textContent('#status'));
+  await p.waitForTimeout(8000);
   await p.waitForTimeout(9000);
   await p.locator('#screen').screenshot({ path: R + 'out/sdx.png' });
   console.log(await p.evaluate(() => ataricraft.screenText ? ataricraft.screenText() : ''));

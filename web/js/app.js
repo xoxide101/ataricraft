@@ -515,7 +515,13 @@
       types.forEach((t) => $('ctype').append(new Option(t.name, String(t.id))));
       const pref = /sparta|sdx|spado/i.test(file.name) ? /SpartaDOS X/i : null;
       const hit = pref && [...$('ctype').options].find((o) => pref.test(o.textContent) && (!/128/.test(o.textContent) || r.kb === 128));
-      if (hit) $('ctype').value = hit.value;
+      if (hit) {
+        $('ctype').value = hit.value;
+        S.pendingCart = slot;
+        $('ctypeok').onclick();
+        if ($('basic').checked) { $('basic').checked = false; $('basic').onchange(); log('SpartaDOS X detected: type set, BASIC turned off'); }
+        return;
+      }
       $('ctyperow').style.display = 'flex';
       S.pendingCart = slot;
       log(`choose the cartridge type (${r.kb} KB image)`);
