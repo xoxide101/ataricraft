@@ -13,14 +13,14 @@
   button, select, label.btn { background:#2a2f39; color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 10px; font:inherit; cursor:pointer; }
   button:hover, label.btn:hover { background:#343a47; }
   input[type=file] { display:none; }
-  main { display:flex; gap:12px; padding:10px 12px; align-items:flex-start; height:calc(100vh - 50px); }
+  main { display:flex; gap:12px; padding:10px 12px; align-items:flex-start; height:calc(100vh - var(--hh,50px)); }
   .center { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:10px; max-height:100%; overflow:auto; }
   #stage { position:relative; background:#000; border:1px solid var(--line); border-radius:6px; padding:4px; flex:none; }
   #infobar { flex-basis:100%; display:flex; align-items:center; gap:14px; font-size:12px; min-height:16px; }
   #infobar .stats { display:flex !important; }
   #toast { position:absolute; top:10px; left:50%; transform:translateX(-50%); max-width:90%; background:rgba(20,24,32,.92); color:var(--acc); border:1px solid var(--acc); border-radius:14px; padding:6px 14px; font-size:13px; pointer-events:none; opacity:0; transition:opacity .4s; text-align:center; z-index:5; }
   #toast.show { opacity:1; }
-  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - 375px) * 1.4)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
+  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - 325px - var(--hh,50px)) * 1.4)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
   .side { width:300px; flex:none; max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
   body { --sbw:370px; }
   body.nosb { --sbw:70px; }
@@ -32,7 +32,7 @@
     header h1 { display:none; }
     .stats { display:none; }
     header select, header button, header label { padding:4px 6px; font-size:12px; }
-    main { padding:6px; gap:0; height:auto; min-height:calc(100vh - 50px); }
+    main { padding:6px; gap:0; height:auto; min-height:calc(100vh - var(--hh,50px)); }
     .side { position:fixed; left:0; top:0; bottom:0; z-index:30; width:min(320px,88vw); background:var(--bg); padding:10px; border-right:1px solid var(--line); max-height:none; box-shadow:4px 0 16px #000a; }
     body:not(.nosb) .center { opacity:.35; pointer-events:none; }
     #screen { width:calc(100vw - 28px); min-width:0; }
@@ -52,7 +52,7 @@
     #kbd .kside .key { width:100%; height:30px; }
   }
   @media (max-width:900px) and (orientation:landscape) {
-    #screen { width:min(calc(100vw - 28px), calc((100vh - 110px) * 1.4)); }
+    #screen { width:min(calc(100vw - 28px), calc((100vh - 60px - var(--hh,50px)) * 1.4)); }
   }
   dialog { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px; width:340px; max-height:80vh; }
   dialog::backdrop { background:rgba(0,0,0,.55); }
@@ -106,7 +106,7 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261021c">ATARICRAFT <small class="dim" style="font-size:10px">b20261021c</small></h1>
+  <h1 title="build 20261021d">ATARICRAFT <small class="dim" style="font-size:10px">b20261021d</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -196,10 +196,10 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261021c"></script>
+<script src="js/emu.js?v=20261021d"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261021c"></script>
+<script src="js/app.js?v=20261021d"></script>
 </body>
 </html>

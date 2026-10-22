@@ -2,7 +2,7 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
 (async () => {
   const R = 'C:/Users/raver/ataricraft/';
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
-  for (const [n,w,h] of [['d',1366,900],['p',412,892]]) {
+  for (const [n,w,h] of [['d',1366,900],['d2',1920,1080],['t',1280,800],['p',412,892],['l',892,412]]) {
     const p = await b.newPage({ viewport: { width: w, height: h } });
     p.on('pageerror', (e) => console.log('ERR', e.message));
     await p.goto('file:///' + R + 'web/index.html');
@@ -14,3 +14,4 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   }
   await b.close();
 })();
+

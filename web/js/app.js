@@ -9,6 +9,10 @@
   const img32 = new Uint32Array(img.data.buffer);
   cv.width = AC.SCREEN.w; cv.height = AC.SCREEN.h;
 
+  const hdr = document.querySelector('header');
+  const setHh = () => document.documentElement.style.setProperty('--hh', hdr.offsetHeight + 1 + 'px');
+  new ResizeObserver(setHh).observe(hdr);
+  setHh();
   let toastT = 0;
   const log = (m) => {
     $('status').textContent = m;
