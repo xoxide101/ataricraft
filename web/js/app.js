@@ -273,10 +273,31 @@
   const sctx = src.getContext('2d');
   const stage = document.createElement('canvas');
   const stx = stage.getContext('2d');
-  let scaleMode = localStorage.getItem('ac.scale') || 'sharpbi';
-  let vig = null, vigKey = '';
+  let scaleMode = localStorage.getItem('ac.scale') || 'sharp';
+  let scanOn = localStorage.getItem('ac.scan') === '1';
+  if (scaleMode === 'crt') { scaleMode = 'sharpbi'; scanOn = true; }
+  // Scale2x/EPX: edge-directed 2x that smooths diagonals without inventing new colours
+  const epxBufs = {};
+  function epx(inp, w, h, level) {
+    const ow = w * 2, oh = h * 2;
+    let b = epxBufs[level];
+    if (!b || b.w !== ow) { const out = new Uint32Array(ow * oh); b = epxBufs[level] = { w: ow, h: oh, out, id: new ImageData(new Uint8ClampedArray(out.buffer), ow, oh) }; }
+    const out = b.out;
+    for (let y = 0; y < h; y++) {
+      const r = y * w, up = (y > 0 ? y - 1 : y) * w, dn = (y < h - 1 ? y + 1 : y) * w, o = y * 2 * ow;
+      for (let x = 0; x < w; x++) {
+        const E = inp[r + x], B = inp[up + x], H = inp[dn + x], D = inp[r + (x > 0 ? x - 1 : x)], F = inp[r + (x < w - 1 ? x + 1 : x)];
+        const i = o + x * 2;
+        if (B !== H && D !== F) {
+          out[i] = D === B ? D : E; out[i + 1] = B === F ? F : E;
+          out[i + ow] = D === H ? D : E; out[i + ow + 1] = H === F ? F : E;
+        } else { out[i] = out[i + 1] = out[i + ow] = out[i + ow + 1] = E; }
+      }
+    }
+    return b;
+  }
   function applyScale() {
-    const native = scaleMode === 'sharp' || scaleMode === 'smooth';
+    const native = (scaleMode === 'sharp' || scaleMode === 'smooth') && !scanOn;
     const dpr = window.devicePixelRatio || 1;
     const w = native ? AC.SCREEN.w : Math.max(AC.SCREEN.w, Math.round(cv.clientWidth * dpr));
     const h = native ? AC.SCREEN.h : Math.max(AC.SCREEN.h, Math.round(cv.clientHeight * dpr));
@@ -286,31 +307,36 @@
   }
   function present() {
     const W = cv.width, H = cv.height;
-    ctx.imageSmoothingEnabled = scaleMode !== 'sharp';
+    const native = W === src.width && H === src.height;
     ctx.imageSmoothingQuality = 'high';
-    if (scaleMode === 'sharp' || scaleMode === 'smooth') { ctx.drawImage(src, 0, 0); return; }
-    // integer nearest-neighbour prescale, then a smooth resample: crisp pixel edges without shimmering
-    const k = Math.max(1, Math.ceil(W / src.width));
-    if (stage.width !== src.width * k || stage.height !== src.height * k) { stage.width = src.width * k; stage.height = src.height * k; }
-    stx.imageSmoothingEnabled = false;
-    stx.drawImage(src, 0, 0, stage.width, stage.height);
-    ctx.drawImage(stage, 0, 0, W, H);
-    if (scaleMode === 'crt') {
-      // 240 real scanlines: darken the lower part of each one, then add a soft vignette
+    if (scaleMode === 'sharp') { ctx.imageSmoothingEnabled = false; ctx.drawImage(src, 0, 0, W, H); }
+    else if (scaleMode === 'smooth') { ctx.imageSmoothingEnabled = true; ctx.drawImage(src, 0, 0, W, H); }
+    else if (scaleMode === 'epx') {
+      let b = epx(img32, src.width, src.height, 1);
+      if (W / src.width > 3) b = epx(b.out, b.w, b.h, 2);
+      if (stage.width !== b.w || stage.height !== b.h) { stage.width = b.w; stage.height = b.h; }
+      stx.putImageData(b.id, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(stage, 0, 0, W, H);
+    } else {
+      // integer nearest-neighbour prescale, then a smooth resample: crisp pixel edges without shimmering
+      const k = Math.max(1, Math.ceil(W / src.width));
+      if (stage.width !== src.width * k || stage.height !== src.height * k) { stage.width = src.width * k; stage.height = src.height * k; }
+      stx.imageSmoothingEnabled = false;
+      stx.drawImage(src, 0, 0, stage.width, stage.height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(stage, 0, 0, W, H);
+    }
+    if (scanOn && !native) {
       const line = H / 240;
-      ctx.fillStyle = 'rgba(0,0,0,0.38)';
-      for (let i = 0; i < 240; i++) ctx.fillRect(0, i * line + line * 0.62, W, line * 0.38);
-      const key = W + 'x' + H;
-      if (vigKey !== key) {
-        vig = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
-        vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.45)');
-        vigKey = key;
-      }
-      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      for (let i = 0; i < 240; i++) ctx.fillRect(0, i * line + line * 0.6, W, line * 0.4);
     }
   }
   $('scalemode').value = scaleMode;
-  $('scalemode').onchange = (e) => { scaleMode = e.target.value; localStorage.setItem('ac.scale', scaleMode); vigKey = ''; e.target.blur(); applyScale(); };
+  $('scalemode').onchange = (e) => { scaleMode = e.target.value; localStorage.setItem('ac.scale', scaleMode); e.target.blur(); applyScale(); };
+  $('scanlines').checked = scanOn;
+  $('scanlines').onchange = (e) => { scanOn = e.target.checked; localStorage.setItem('ac.scan', scanOn ? '1' : '0'); e.target.blur(); applyScale(); };
   new ResizeObserver(() => applyScale()).observe(cv);
   window.addEventListener('resize', applyScale);
 
