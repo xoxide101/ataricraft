@@ -80,16 +80,17 @@
     const out = [];
     let zips = 0;
     for (const f of files) {
-      if (!/\.zip$/i.test(f.name)) { out.push(f); continue; }
+      if (!/\.(zip|7z)$/i.test(f.name)) { out.push(f); continue; }
       try {
         const base = f.webkitRelativePath || f.name;
-        for (const ent of await AC.Zip.list(f)) {
-          out.push({ name: ent.name.split('/').pop(), webkitRelativePath: base + '/' + ent.name, size: ent.size, arrayBuffer: () => AC.Zip.extract(f, ent) });
+        const Z = /\.7z$/i.test(f.name) ? AC.SevenZip : AC.Zip;
+        for (const ent of await Z.list(f)) {
+          out.push({ name: ent.name.split('/').pop(), webkitRelativePath: base + '/' + ent.name, size: ent.size, arrayBuffer: () => Z.extract(f, ent) });
         }
         zips++;
       } catch (e) { out.push(f); }
     }
-    if (zips) log(`read ${zips} zip file${zips > 1 ? 's' : ''}`);
+    if (zips) log(`read ${zips} archive${zips > 1 ? 's' : ''}`);
     return out;
   }
 
@@ -552,7 +553,7 @@
   const setKey = (rel) => {
     const parts = rel.split('/');
     const last = parts[parts.length - 1].replace(/\.[^.]+$/, '');
-    const zip = parts.length > 1 && /\.zip$/i.test(parts[parts.length - 2]) ? parts[parts.length - 2].replace(/\.zip$/i, '') : null;
+    const zip = parts.length > 1 && /\.(zip|7z)$/i.test(parts[parts.length - 2]) ? parts[parts.length - 2].replace(/\.(zip|7z)$/i, '') : null;
     return [zip, last].filter(Boolean).map((s) => s.toLowerCase());
   };
   const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return ''; };
@@ -587,7 +588,7 @@
       .replace(/[\s._-]+(d|s)?[0-9ab]$/g, ' ')
       .replace(/\s+/g, ' ').trim();
   };
-  const zipOf = (n) => { const p = n.split('/'); return p.length > 1 && /\.zip$/i.test(p[p.length - 2]) ? p.slice(0, -1).join('/') : ''; };
+  const zipOf = (n) => { const p = n.split('/'); return p.length > 1 && /\.(zip|7z)$/i.test(p[p.length - 2]) ? p.slice(0, -1).join('/') : ''; };
   function showRelated(f) {
     const box = $('medrel');
     box.innerHTML = '';
@@ -647,7 +648,7 @@
   // Big trees: only keep media-looking files (checked by name, nothing is opened), skip system folders, show progress, allow Stop.
   const SCAN_CAP = 150000;
   const SCAN_SKIP = /^(\$recycle\.bin|system volume information|node_modules|\.git|windows|program files.*)$/i;
-  const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip']);
+  const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip', '7z']);
   const scanWant = (name) => SCAN_EXT.has((name.split('.').pop() || '').toLowerCase()) || /^a(800|5200)[^/]*\.xml$/i.test(name);
   const scanSt = { stop: false, seen: 0, keep: 0, errs: 0 };
   async function walkDir(h, path, out) {

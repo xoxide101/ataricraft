@@ -139,3 +139,5 @@ Multi-disk sets: after you load a disk from the library, the other disks of the 
 After a scan the status line summarises the counts, and extension buttons (.atr 1234, .xex 56...) under the type buttons narrow the list further.
 
 Device lights: the top right of the keyboard panel shows D1: to D8:, C: (tape), P:, R: and N: (FujiNet). A ring means media is mounted; a light flashes green for reads, red for writes and yellow for other commands.
+
+7z support: .7z archives are read like zips (7-Zip compiled to WASM, in web/js/7z, LGPL + unRAR restriction; loaded on first use). Each archive is copied into memory while open, so very large archives need RAM.
