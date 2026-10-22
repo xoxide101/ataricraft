@@ -29,3 +29,6 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 - Test ROMs: `software_n_roms/ATARIXL.ROM`, `ATARIBAS.ROM` (git-ignored). Playwright from `C:/Users/raver/craftapi/node_modules` with Chrome.
 - `setInputFiles` on a `webkitdirectory` input needs a directory path.
 - Never modify `3dcraft` or `AI-AgentKVM` repos.
+
+- Disk formats: DCM + PRO verified (scripts/fmt-test.cjs, dcm-test.cjs); ATX untested (no sample). Mounted disks and carts now survive a reboot (S.disks / S.carts); fixed hookAudio() missing after a Boot-refactor.
+

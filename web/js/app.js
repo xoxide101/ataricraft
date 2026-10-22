@@ -162,6 +162,7 @@
   };
 
   S.carts = {};
+  S.disks = {};
   async function boot() {
     const model = $('model').value;
     const os = chosenOs();
@@ -170,12 +171,14 @@
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
     S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, tv: $('tv').value, host: S.host });
     FujiNet.attach(S.emu);
+    for (const [n, d] of Object.entries(S.disks)) S.emu.mountDisk(+n, d.name, d.bytes);
     for (const [slot, c] of Object.entries(S.carts)) {
       const r = S.emu.insertCart(+slot, c.name, c.bytes);
       if (r.ok && r.kb && c.type != null) S.emu.setCartType(+slot, c.type);
     }
     FujiNet.log = log;
     S.emu.run(120);
+    hookAudio();
     sndCtx();
     S.running = true;
     draw();
@@ -408,6 +411,7 @@
     if (k === 'disk') {
       const n = alt ? 2 : 1;
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
+      S.disks[n] = { name: file.name, bytes };
       $('d' + n).textContent = file.name;
       S.emu.coldStart();
       log(`D${n}: ${file.name}`);
@@ -552,6 +556,7 @@
     $('de' + n).onclick = () => {
       if (!S.emu) return;
       S.emu.ejectDisk(n);
+      delete S.disks[n];
       $('d' + n).textContent = 'empty';
       $('f' + n).value = '';
     };

@@ -54,7 +54,7 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 
 ## Known limits
 
-WAV tapes, 5200 / 7800 carts and saved states are not supported. DCM / PRO / ATX, tape playback, and some FujiNet paths are compiled in but lightly tested. The media library is not remembered between visits. See `NOTES.md`.
+WAV tapes, 5200 / 7800 carts and saved states are not supported. DCM and PRO are verified (DCM sector 1 decodes, PRO boots identically to its ATR). ATX (copy-protected) is compiled in but untested for lack of a sample file. Tape playback and some FujiNet paths are lightly tested. The media library is not remembered between visits. See `NOTES.md`.
 
 ## Licence
 
