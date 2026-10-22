@@ -4,7 +4,63 @@ A web-based Atari 8-bit emulator in the Craft family: humans and agents drive th
 
 Status: **working browser emulator** on the libatari800 reference core (see `NOTES.md` for done / to-do). Open `web/index.html` directly from disk; no server needed.
 
-## Using it
+![ataricraft running Atari BASIC](docs/screenshots/01-desktop-basic.png)
+
+## Quick start
+
+1. Download the release zip and unzip it. Open `web/index.html` in Chrome or Edge (it runs from disk, no server, no install, works offline).
+2. **ROMs are not included.** Click **Scan folder…** (ROMs panel) and pick a folder holding your Atari OS ROM (e.g. XL/XE OS) and optionally the Atari BASIC ROM. Choose them in the **OS** and **BASIC** boxes. The choice is remembered in the browser; **Reset ROMs** forgets it.
+3. Pick a model and memory size in the header, then press **Boot**. You should see `READY`.
+4. Type on your keyboard or use the on-screen keyboard (click Shift/Control, then a key).
+
+## Loading software
+
+Everything is detected from the file contents, not the extension.
+
+| You have | Do this |
+|---|---|
+| Disk (ATR, XFD, ATX, DCM, PRO, `.gz`) | **D1…** button, or click it in the Media library. Shift-click mounts on D2. |
+| Cartridge (CART or raw ROM) | **Cart 1…** (right slot) or **Cart 2…** (left). Raw ROMs ask for the cartridge type. |
+| Program (XEX, COM, BAS, LST) | Click it in the Media library, or Paste for BASIC text. |
+| Cassette (CAS) | **Tape…** then **Boot tape** (Start held). For BASIC tapes: reset, type `CLOAD`, Return, Return. |
+
+**Media library**: **Scan folder…** lists every disk, cart, tape and program in a folder. Filter by text and by type chips, then click a file to load it.
+
+![Media library and SpartaDOS X](docs/screenshots/02-spartados-x.png)
+
+### SpartaDOS X
+
+Click `SpartaDosX*.bin` in the Media library (or load it in Cart 1). It is recognised automatically: the cartridge type is set, **BASIC on** is switched off, and the machine reboots to the `D1:` prompt. Try `DIR`, `HELP`, `X`, `BASIC`, `CAR`.
+
+### BASIC on/off
+
+The **BASIC on** checkbox applies immediately (reboots) and is remembered. Cartridges stay inserted across reboots.
+
+## Keyboard
+
+![Keyboard legends](docs/screenshots/04-keyboard-caps-special.png)
+
+The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps / Special** picks which legends appear. Orange = Shift, teal = Control. It scales to the window. Physical and on-screen keys can be mixed. **Keyboard mapping…** rebinds keys; the **Keys:** box picks the 130XE / 65XE / 800XL / 1200XL / 800 layout.
+
+## Other features
+
+- Messages pop up as a bubble over the screen; the last one stays on the second header line next to FPS.
+- **H: host drive**: in BASIC, `LIST "H:PROG.LST"` saves your program as text in the browser, `ENTER "H:PROG.LST"` loads it back. Import / Copy move it in and out.
+- **FujiNet** (header toggle): virtual SIO device `$70`. **Boot FujiNet CONFIG**, pick a folder as a host, mount disks into slots. Hosts and slots persist; **Reset config** clears them.
+- Sound, volume, speed slider, Paste / Copy text / Copy image, joystick on arrows + Space.
+- The side panel collapses with ☰. Phone and tablet layouts work (tested at Pixel 6 Pro XL and Galaxy Tab S sizes).
+
+![Phone layout](docs/screenshots/03-phone.png)
+
+## Known limits
+
+WAV tapes, 5200 / 7800 carts and saved states are not supported. DCM / PRO / ATX, tape playback, and some FujiNet paths are compiled in but lightly tested. The media library is not remembered between visits. See `NOTES.md`.
+
+## Licence
+
+atari800 / libatari800 is GPL-2.0, and ataricraft ships a WASM build of it, so this project is distributed under **GPL-2.0** (see `LICENSE`). Source for the build is in this repository (`build/`, `scripts/`) plus upstream atari800 with `build/atari800-sio-hook.patch`.
+
+## Using it (short)
 
 - Pick a model and memory size, scan your ROM folder (OS and BASIC), choose the ROMs, then **Boot**. Scanned ROMs and your selection are kept in the browser (IndexedDB / localStorage); **Reset ROMs** clears them.
 - **Media**: disks (ATR, XFD, ATX, DCM, PRO, gzipped), cartridges (CART, raw ROM with type picker; two slots), cassette (CAS), and programs (XEX, COM, BAS, LST). Formats are detected from contents. The Media library panel scans a folder and filters by text and type; ROMs have their own filter.
@@ -50,7 +106,7 @@ powershell -File scripts\build-reference.ps1
 | `scripts/build-reference.ps1` | Build libatari800 to `web/ref/` with Emscripten |
 | `build/config.h` | Hand-written config for the Emscripten build (no autotools) |
 | `core-rs/` | Rust core (not started) |
-| `web/` | Browser shell (not started) |
+| `web/` | Browser shell (the emulator UI) |
 | `roms/` | Your ROMs. Git-ignored. |
 | `vendor/` | Upstream sources (git-ignored): `git clone --depth 1 https://github.com/atari800/atari800 vendor/atari800` |
 
