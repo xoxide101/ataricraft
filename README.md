@@ -145,3 +145,5 @@ Device lights: the top right of the keyboard panel shows D1: to D8:, C: (tape), 
 Scan folders: after Pick folder (or the Folders... button) a dialog lists sub-folders with check boxes (lazy tree). Shift-click ticks a range at the same level, Ctrl-click selects only that folder. The choices are remembered and used by Refresh and the auto-rescan on reload.
 
 Touch pad: the Touch pad box emulates the Atari Touch Tablet or Koala Pad on port 1 (paddle 0/1 for X/Y, stylus = joystick left/right lines). Draw in the pad box or on the main screen. Flip X/Y if a program draws mirrored.
+
+Media catalog: scans are saved to a SQLite database (sql.js, in web/js/sql, MIT) kept in the browser, so the library appears instantly on reload with no scan. Rescan rebuilds it; Export DB / Import DB move it as a .sqlite file. Agents can query it with ataricraft.catalogQuery(sql). Table files(path,name,ext,kind,size,modified,container,title,grp), table meta(k,v).

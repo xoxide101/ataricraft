@@ -606,7 +606,7 @@
       d.textContent = (m.name.split('/').pop()) + (m.title ? ` — ${m.title}` : '');
       d.title = m.name;
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--acc)';
-      d.onclick = (e) => { loadAny(m.file, !e.shiftKey, 'disk', true); };
+      d.onclick = async (e) => { const fl = await fileOf(m); if (fl) loadAny(fl, !e.shiftKey, 'disk', true); };
       box.append(d);
     });
   }
@@ -637,15 +637,81 @@
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
       d.onmouseenter = () => (d.style.background = '#2a2f39');
       d.onmouseleave = () => (d.style.background = '');
-      d.onclick = (e) => { loadAny(f.file, e.shiftKey, f.kind); showRelated(f); };
+      d.onclick = async (e) => { const fl = await fileOf(f); if (fl) { loadAny(fl, e.shiftKey, f.kind); showRelated(f); } };
       box.append(d);
     });
-    $('medcount').textContent = MED.files.length ? `${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
+    $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
   }
   // Remembered folder: the directory handle lives in IndexedDB (needs the File System Access API).
   const idb = () => new Promise((res, rej) => { const r = indexedDB.open('ataricraft-media', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const idbGet = async (k) => { const db = await idb(); return new Promise((res) => { const r = db.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }); };
   const idbSet = async (k, v) => { const db = await idb(); return new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); };
+  // ---- media catalog (SQLite, saved in the browser) ----
+  // Entries loaded from the catalog have no File yet: resolve it from the remembered folder when clicked.
+  let arcCache = null;
+  async function fileOf(m) {
+    if (m.file) return m.file;
+    try {
+      if (!medHandle) throw new Error('no remembered folder');
+      if ((await medHandle.queryPermission({ mode: 'read' })) !== 'granted' && (await medHandle.requestPermission({ mode: 'read' })) !== 'granted') throw new Error('folder access not granted');
+      const parts = m.name.split('/');
+      let h = medHandle, i = 1;
+      for (; i < parts.length; i++) {
+        if (/\.(zip|7z)$/i.test(parts[i]) && i < parts.length - 1) break;
+        if (i === parts.length - 1) break;
+        h = await h.getDirectoryHandle(parts[i]);
+      }
+      const base = parts.slice(0, i + 1).join('/');
+      const fh = await h.getFileHandle(parts[i]);
+      let f = await fh.getFile();
+      Object.defineProperty(f, 'webkitRelativePath', { value: base });
+      if (i < parts.length - 1) {
+        const member = parts.slice(i + 1).join('/');
+        const Z = /\.7z$/i.test(parts[i]) ? AC.SevenZip : AC.Zip;
+        const arc = f;
+        if (!arcCache || arcCache.path !== base) arcCache = { path: base, ents: await Z.list(arc) };
+        const ent = arcCache.ents.find((x) => x.name === member);
+        if (!ent) throw new Error('not in archive');
+        f = { name: member.split('/').pop(), webkitRelativePath: m.name, size: ent.size, arrayBuffer: () => Z.extract(arc, ent) };
+      }
+      m.file = f;
+      return f;
+    } catch (e) {
+      log(`cannot open "${m.name}": ${e.message}. Use Rescan to rebuild the catalog.`);
+      diag(`catalog open failed ${m.name}: ${e.name} ${e.message}`, 'warn');
+      return null;
+    }
+  }
+  const catRow = (f) => {
+    const parts = f.name.split('/');
+    const ci = parts.findIndex((s, i) => i < parts.length - 1 && /\.(zip|7z)$/i.test(s));
+    return { path: f.name, name: parts[parts.length - 1], ext: (parts[parts.length - 1].split('.').pop() || '').toLowerCase(), kind: f.kind, size: f.size || (f.file && f.file.size) || 0, modified: f.file && f.file.lastModified, container: ci >= 0 ? parts.slice(0, ci + 1).join('/') : '', title: f.title || '', grp: groupKey(f) };
+  };
+  async function saveCatalog() {
+    try {
+      await AC.Catalog.rebuild(MED.files.map(catRow), { root: medHandle ? medHandle.name : '', scanned: new Date().toISOString(), count: MED.files.length });
+      await idbSet('catalogDb', await AC.Catalog.exportBytes());
+      MED.fromDb = false;
+      diag(`catalog saved: ${MED.files.length} rows`);
+    } catch (e) { diag('catalog save failed: ' + e.message, 'warn'); log('could not save catalog: ' + e.message); }
+  }
+  async function loadCatalogRows() {
+    const bytes = await idbGet('catalogDb');
+    if (!bytes) return false;
+    await AC.Catalog.open(bytes);
+    return useCatalog();
+  }
+  async function useCatalog() {
+    const rows = await AC.Catalog.rows('SELECT path, kind, size, title FROM files');
+    const meta = Object.fromEntries((await AC.Catalog.rows('SELECT k, v FROM meta')).map((r) => [r.k, r.v]));
+    if (!rows.length) return false;
+    MED.files = rows.map((r) => ({ name: r.path, file: null, kind: r.kind, size: r.size, title: titleFor(r.path) || r.title }));
+    MED.fromDb = true;
+    renderMed();
+    log(`library loaded from saved catalog: ${rows.length} items${meta.scanned ? ' (scanned ' + meta.scanned.slice(0, 16).replace('T', ' ') + ')' : ''}. Rescan to rebuild.`);
+    return true;
+  }
+
   // Big trees: only keep media-looking files (checked by name, nothing is opened), skip system folders, show progress, allow Stop.
   const SCAN_CAP = 150000;
   const SCAN_SKIP = /^(\$recycle\.bin|system volume information|node_modules|\.git|windows|program files.*)$/i;
@@ -696,7 +762,7 @@
     else if (out.length >= SCAN_CAP) log(`scan capped at ${SCAN_CAP} files: pick a smaller folder for the rest`);
     diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates, ${scanSt.errs} unreadable skipped`);
     if (scanSt.errs) log(`${scanSt.errs} unreadable files/folders skipped (see Save log for names)`);
-    await scanMedia(out);
+    await scanMedia(out, true);
     return true;
   }
   $('medstop').onclick = () => { scanSt.stop = true; };
@@ -797,15 +863,37 @@
       medHandle = h;
       const r = await idbGet('medRules');
       if (r && r.name === h.name) medRules = r.rules || {};
-      try { await scanHandle(h, false); } catch (e) { $('medcount').textContent = `"${h.name}" remembered: click Refresh`; }
+      try { if (!(await loadCatalogRows())) await scanHandle(h, false); } catch (e) { $('medcount').textContent = `"${h.name}" remembered: click Rescan`; }
     });
-  }  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
-  async function scanMedia(all) {
+  }  $('medexp').onclick = async () => {
+    try {
+      const blob = new Blob([await AC.Catalog.exportBytes()], { type: 'application/x-sqlite3' });
+      const name = 'ataricraft-library.sqlite';
+      if (window.showSaveFilePicker) {
+        try { const fh = await showSaveFilePicker({ suggestedName: name, id: 'ataricraft-diag' }); const w = await fh.createWritable(); await w.write(blob); await w.close(); log('catalog exported: ' + fh.name); return; } catch (e) { if (e.name === 'AbortError') return; }
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+      log('catalog downloaded: ' + name);
+    } catch (e) { log('export failed: ' + e.message); }
+  };
+  $('medimp').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      await AC.Catalog.open(bytes);
+      if (!(await useCatalog())) { log('that catalog is empty'); return; }
+      await idbSet('catalogDb', bytes);
+    } catch (err) { log('import failed: ' + err.message); }
+  };  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
+  async function scanMedia(all, persist) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
     if (xmls.length) await loadTitlesXml(xmls);
     const files = await expandZips(all);
     MED.files = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
+    MED.fromDb = false;
     renderMed();
+    if (persist) await saveCatalog();
     const kc = {};
     MED.files.forEach((f) => { kc[f.kind] = (kc[f.kind] || 0) + 1; });
     log(`Scan complete: ${MED.files.length} items (${Object.entries(kc).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'})`);
@@ -1237,6 +1325,7 @@
     copyText: () => S.emu.screenText(),
     press: (fields, frames) => S.emu.tap(fields, frames || 4),
     scanDir: (handle) => scanHandle(handle, false),
+    catalogQuery: (sqlText, params) => AC.Catalog.query(sqlText, params),
     chooseFolders: async (handle) => { medRules = {}; const ok = await chooseFolders(handle); return ok ? await scanHandle(handle, false) : false; },
     joy: (bits, fire) => { S.joy = bits | 0; S.fire = !!fire; sendJoy(); },
     console: (f) => S.emu.tap(f, 6),
