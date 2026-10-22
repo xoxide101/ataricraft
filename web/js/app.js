@@ -664,7 +664,7 @@
   // Entries loaded from the catalog have no File yet: resolve it from the remembered folder when clicked.
   let arcCache = null;
   // Server library: a web server hosts library/ (catalog.sqlite, optional library.json, software/ and bios/ folders). SRV is its base URL.
-  let SRV = null, srvLast = null;
+  let SRV = null, srvLast = null, SRVMAP = {};
   async function fileOf(m) {
     if (m.file) return m.file;
     try {
@@ -675,16 +675,17 @@
         base = parts.slice(0, i + 1).join('/');
         if (srvLast && srvLast.base === base) f = srvLast.file;
         else {
-          const r = await fetch(SRV + 'software/' + parts.slice(1, i + 1).map(encodeURIComponent).join('/'));
+          const r = await fetch(SRV + encodeURIComponent(SRVMAP[parts[0]] || parts[0]) + '/' + parts.slice(1, i + 1).map(encodeURIComponent).join('/'));
           if (!r.ok) throw new Error('server returned ' + r.status);
           f = new File([await r.blob()], parts[i]);
           Object.defineProperty(f, 'webkitRelativePath', { value: base });
           srvLast = { base, file: f };
         }
       } else {
-        if (!medHandle) throw new Error('no remembered folder');
-        if ((await medHandle.queryPermission({ mode: 'read' })) !== 'granted' && (await medHandle.requestPermission({ mode: 'read' })) !== 'granted') throw new Error('folder access not granted');
-        let h = medHandle;
+        const root = medHandles[parts[0]] || (medHandle && medHandle.name === parts[0] ? medHandle : null);
+        if (!root) throw new Error('folder ' + parts[0] + ' is not remembered on this computer');
+        if ((await root.queryPermission({ mode: 'read' })) !== 'granted' && (await root.requestPermission({ mode: 'read' })) !== 'granted') throw new Error('folder access not granted');
+        let h = root;
         for (; i < parts.length; i++) {
           if (/\.(zip|7z)$/i.test(parts[i]) && i < parts.length - 1) break;
           if (i === parts.length - 1) break;
@@ -718,7 +719,7 @@
   };
   async function saveCatalog() {
     try {
-      await AC.Catalog.rebuild(MED.files.map(catRow), { root: medHandle ? medHandle.name : '', scanned: new Date().toISOString(), count: MED.files.length });
+      await AC.Catalog.rebuild(MED.files.map(catRow), { root: Object.keys(medHandles).join(', ') || (medHandle ? medHandle.name : ''), scanned: new Date().toISOString(), count: MED.files.length });
       await idbSet('catalogDb', await AC.Catalog.exportBytes());
       MED.fromDb = false;
       diag(`catalog saved: ${MED.files.length} rows`);
@@ -791,11 +792,12 @@
     else if (out.length >= SCAN_CAP) log(`scan capped at ${SCAN_CAP} files: pick a smaller folder for the rest`);
     diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates, ${scanSt.errs} unreadable skipped`);
     if (scanSt.errs) log(`${scanSt.errs} unreadable files/folders skipped (see Save log for names)`);
-    await scanMedia(out, true);
+    await scanMedia(out, true, h.name);
     return true;
   }
   $('medstop').onclick = () => { scanSt.stop = true; };
   let medHandle = null;
+  const medHandles = {};
 
   // Folder chooser: lazy tree of sub-folders with check boxes. Shift-click = range among siblings, Ctrl-click = only this one.
   function chooseFolders(h) {
@@ -873,6 +875,7 @@
       let man = { catalog: 'catalog.sqlite', bios: [] };
       const mr = await fetch(base + 'library.json', { cache: 'no-store' });
       if (mr.ok) man = Object.assign(man, await mr.json());
+      SRVMAP = man.map || {};
       const cr = await fetch(base + encodeURI(man.catalog), { cache: 'no-store' });
       if (!cr.ok) return;
       await AC.Catalog.open(new Uint8Array(await cr.arrayBuffer()));
@@ -900,7 +903,9 @@
       try { h = await showDirectoryPicker({ id: 'ataricraft-media', mode: 'read' }); } catch (e) { return; }
       if (!medHandle || !(await medHandle.isSameEntry(h))) medRules = {};
       medHandle = h;
+      medHandles[h.name] = h;
       await idbSet('medDir', h);
+      await idbSet('medDirs', medHandles);
       if (await chooseFolders(h)) await scanHandle(h, true);
       else $('medcount').textContent = `"${h.name}" picked, not scanned: use Folders… or Refresh`;
     };
@@ -911,12 +916,13 @@
     };
     $('medrefresh').onclick = async () => {
       if (!medHandle) { log('no remembered folder yet: use Pick folder…'); return; }
-      try { await scanHandle(medHandle, true); log('library refreshed'); } catch (e) { log('refresh failed: ' + e.message); }
+      try { for (const h of Object.values(medHandles).length ? Object.values(medHandles) : [medHandle]) await scanHandle(h, true); log('library refreshed'); } catch (e) { log('refresh failed: ' + e.message); }
     };
     idbGet('medDir').then(async (h) => {
       await srvReady;
       if (!h || SRV) return;
       medHandle = h;
+      Object.assign(medHandles, (await idbGet('medDirs')) || {}, { [h.name]: h });
       const r = await idbGet('medRules');
       if (r && r.name === h.name) medRules = r.rules || {};
       try { if (!(await loadCatalogRows())) await scanHandle(h, false); } catch (e) { $('medcount').textContent = `"${h.name}" remembered: click Rescan`; }
@@ -942,11 +948,13 @@
       await idbSet('catalogDb', bytes);
     } catch (err) { log('import failed: ' + err.message); }
   };  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
-  async function scanMedia(all, persist) {
+  async function scanMedia(all, persist, root) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
     if (xmls.length) await loadTitlesXml(xmls);
     const files = await expandZips(all);
-    MED.files = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
+    const fresh = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
+    // A saved scan of one folder replaces only that folder's rows; other scanned folders stay in the catalog.
+    MED.files = persist && root ? MED.files.filter((f) => !f.name.startsWith(root + '/')).concat(fresh) : fresh;
     MED.fromDb = false;
     renderMed();
     if (persist) await saveCatalog();
