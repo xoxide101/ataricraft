@@ -143,6 +143,12 @@
     up: (id) => S.emu && S.emu.up(id),
   };
 
+  $('basic').checked = localStorage.getItem('ac.basicOn') !== '0';
+  $('basic').onchange = () => {
+    localStorage.setItem('ac.basicOn', $('basic').checked ? '1' : '0');
+    if (S.running) boot();
+  };
+
   async function boot() {
     const model = $('model').value;
     const os = chosenOs();

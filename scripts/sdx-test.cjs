@@ -1,0 +1,22 @@
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+(async () => {
+  const R = 'C:/Users/raver/ataricraft/';
+  const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  const p = await b.newPage({ viewport: { width: 1366, height: 900 } });
+  await p.goto('file:///' + R + 'web/index.html');
+  await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
+  await p.waitForTimeout(800);
+  await p.uncheck('#basic').catch(() => {});
+  await p.click('text=Boot');
+  await p.waitForTimeout(2500);
+  await p.setInputFiles('#c1', R + 'software_n_roms/SpartaDosXv420.bin');
+  await p.waitForTimeout(800);
+  console.log(await p.evaluate(() => [...document.querySelectorAll('#ctype option')].map((o) => o.value + ':' + o.textContent).join('\n')));
+  console.log(await p.textContent('#status'));
+  await p.evaluate(() => { const s = document.getElementById('ctype'); const o = [...s.options].find((o) => /SpartaDOS X/i.test(o.textContent)); if (o) s.value = o.value; });
+  await p.click('#ctypeok');
+  await p.waitForTimeout(9000);
+  await p.locator('#screen').screenshot({ path: R + 'out/sdx.png' });
+  console.log(await p.evaluate(() => ataricraft.screenText ? ataricraft.screenText() : ''));
+  await b.close();
+})();
