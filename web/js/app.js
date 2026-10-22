@@ -884,7 +884,7 @@
   }
   syncPadUi();
   // ---- device activity lights (keyboard panel, top right) ----
-  const DEVLIST = [...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']).concat([['K1', 'CART1'], ['K2', 'CART2'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
+  const DEVLIST = [...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']).concat([['H', 'H:'], ['K1', 'CART1'], ['K2', 'CART2'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
   const devEl = {};
   DEVLIST.forEach(([id, label]) => {
     const s = document.createElement('span');
@@ -902,8 +902,26 @@
     clearTimeout(devTimer[id]);
     devTimer[id] = setTimeout(() => el.classList.remove('rd', 'wr', 'ot'), 140);
   }
-  function hookDevices() {
+  // H: is handled by the emulator's host-file layer (not SIO), so watch the in-memory /host files instead.
+  function hookHost(emu) {
+    const FS = emu.m.FS;
+    let quiet = 0;
+    const isHost = (s) => !quiet && s && typeof s.path === 'string' && s.path.startsWith('/host');
+    const open = FS.open, read = FS.read, write = FS.write;
+    FS.open = function (path, flags, ...r) {
+      const s = open.call(this, path, flags, ...r);
+      if (!quiet && typeof path === 'string' && path.startsWith('/host')) devFlash('H', typeof flags === 'number' && (flags & 3) ? 'wr' : 'ot');
+      return s;
+    };
+    FS.read = function (s, ...r) { if (isHost(s)) devFlash('H', 'rd'); return read.call(this, s, ...r); };
+    FS.write = function (s, ...r) { if (isHost(s)) devFlash('H', 'wr'); return write.call(this, s, ...r); };
+    for (const k of ['hostFiles', 'hostWrite', 'hostDelete']) {
+      const f = emu[k];
+      emu[k] = function (...a) { quiet++; try { return f.apply(this, a); } finally { quiet--; } };
+    }
+  }  function hookDevices() {
     const m = S.emu.m, inner = m.acSio;
+    hookHost(S.emu);
     m.acSio = (dev, cmd, dstats, aux, data, len) => {
       const id = devId(dev);
       if (id) devFlash(id, cmd === 0x52 ? 'rd' : cmd === 0x57 || cmd === 0x50 ? 'wr' : 'ot');
@@ -919,6 +937,7 @@
   }
   setInterval(() => {
     for (let n = 1; n <= 8; n++) devEl['D' + n].classList.toggle('has', !!S.disks[n] || !!(FujiNet.slots && FujiNet.slots[n - 1] && FujiNet.slots[n - 1].mounted && FujiNet.enabled));
+    try { devEl.H.classList.toggle('has', !!S.emu && S.emu.m.FS.readdir('/host').length > 2); } catch (e) { /* not booted */ }
     devEl.K1.classList.toggle('has', !!S.carts[1]);
     devEl.K2.classList.toggle('has', !!S.carts[2]);
     devEl.C.classList.toggle('has', $('tn').textContent !== 'empty');
