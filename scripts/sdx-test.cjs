@@ -6,7 +6,6 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   await p.goto('file:///' + R + 'web/index.html');
   await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
   await p.waitForTimeout(800);
-  await p.uncheck('#basic').catch(() => {});
   await p.click('text=Boot');
   await p.waitForTimeout(2500);
   await p.setInputFiles('#c1', R + 'software_n_roms/SpartaDosXv420.bin');
@@ -15,6 +14,8 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   console.log(await p.textContent('#status'));
   await p.evaluate(() => { const s = document.getElementById('ctype'); const o = [...s.options].find((o) => /SpartaDOS X/i.test(o.textContent)); if (o) s.value = o.value; });
   await p.click('#ctypeok');
+  await p.waitForTimeout(1500);
+  await p.uncheck('#basic');
   await p.waitForTimeout(9000);
   await p.locator('#screen').screenshot({ path: R + 'out/sdx.png' });
   console.log(await p.evaluate(() => ataricraft.screenText ? ataricraft.screenText() : ''));

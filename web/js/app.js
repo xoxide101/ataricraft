@@ -149,6 +149,7 @@
     if (S.running) boot();
   };
 
+  S.carts = {};
   async function boot() {
     const model = $('model').value;
     const os = chosenOs();
@@ -157,9 +158,12 @@
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
     S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, tv: $('tv').value, host: S.host });
     FujiNet.attach(S.emu);
+    for (const [slot, c] of Object.entries(S.carts)) {
+      const r = S.emu.insertCart(+slot, c.name, c.bytes);
+      if (r.ok && r.kb && c.type != null) S.emu.setCartType(+slot, c.type);
+    }
     FujiNet.log = log;
     S.emu.run(120);
-    hookAudio();
     sndCtx();
     S.running = true;
     draw();
@@ -504,6 +508,7 @@
     const r = S.emu.insertCart(slot, file.name, bytes);
     if (!r.ok) { log('cartridge: ' + r.error); return; }
     $('cn' + slot).textContent = (slot === 1 ? '1 (main, right): ' : '2 (left): ') + file.name;
+    S.carts[slot] = { name: file.name, bytes, type: null };
     if (r.kb) {
       const types = S.emu.cartTypes(r.kb);
       $('ctype').innerHTML = '';
@@ -518,6 +523,7 @@
     $('ce' + n).onclick = () => {
       if (!S.emu) return;
       S.emu.ejectCart(n);
+      delete S.carts[n];
       $('cn' + n).textContent = (n === 1 ? '1 (main, right): ' : '2 (left): ') + 'empty';
       $('c' + n).value = '';
     };
@@ -531,6 +537,7 @@
   $('ctypeok').onclick = () => {
     if (!S.emu || !S.pendingCart) return;
     S.emu.setCartType(S.pendingCart, +$('ctype').value);
+    if (S.carts[S.pendingCart]) S.carts[S.pendingCart].type = +$('ctype').value;
     if (S.pendingCart === 2) S.emu.coldStart();
     S.pendingCart = null;
     $('ctyperow').style.display = 'none';
