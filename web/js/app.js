@@ -649,22 +649,37 @@
   // ---- media catalog (SQLite, saved in the browser) ----
   // Entries loaded from the catalog have no File yet: resolve it from the remembered folder when clicked.
   let arcCache = null;
+  // Server library: a web server hosts library/ (catalog.sqlite, optional library.json, and the files). SRV is its base URL.
+  let SRV = null, srvLast = null;
   async function fileOf(m) {
     if (m.file) return m.file;
     try {
-      if (!medHandle) throw new Error('no remembered folder');
-      if ((await medHandle.queryPermission({ mode: 'read' })) !== 'granted' && (await medHandle.requestPermission({ mode: 'read' })) !== 'granted') throw new Error('folder access not granted');
       const parts = m.name.split('/');
-      let h = medHandle, i = 1;
-      for (; i < parts.length; i++) {
-        if (/\.(zip|7z)$/i.test(parts[i]) && i < parts.length - 1) break;
-        if (i === parts.length - 1) break;
-        h = await h.getDirectoryHandle(parts[i]);
+      let f, i = 1, base;
+      if (SRV) {
+        while (i < parts.length - 1 && !/\.(zip|7z)$/i.test(parts[i])) i++;
+        base = parts.slice(0, i + 1).join('/');
+        if (srvLast && srvLast.base === base) f = srvLast.file;
+        else {
+          const r = await fetch(SRV + parts.slice(1, i + 1).map(encodeURIComponent).join('/'));
+          if (!r.ok) throw new Error('server returned ' + r.status);
+          f = new File([await r.blob()], parts[i]);
+          Object.defineProperty(f, 'webkitRelativePath', { value: base });
+          srvLast = { base, file: f };
+        }
+      } else {
+        if (!medHandle) throw new Error('no remembered folder');
+        if ((await medHandle.queryPermission({ mode: 'read' })) !== 'granted' && (await medHandle.requestPermission({ mode: 'read' })) !== 'granted') throw new Error('folder access not granted');
+        let h = medHandle;
+        for (; i < parts.length; i++) {
+          if (/\.(zip|7z)$/i.test(parts[i]) && i < parts.length - 1) break;
+          if (i === parts.length - 1) break;
+          h = await h.getDirectoryHandle(parts[i]);
+        }
+        base = parts.slice(0, i + 1).join('/');
+        f = await (await h.getFileHandle(parts[i])).getFile();
+        Object.defineProperty(f, 'webkitRelativePath', { value: base });
       }
-      const base = parts.slice(0, i + 1).join('/');
-      const fh = await h.getFileHandle(parts[i]);
-      let f = await fh.getFile();
-      Object.defineProperty(f, 'webkitRelativePath', { value: base });
       if (i < parts.length - 1) {
         const member = parts.slice(i + 1).join('/');
         const Z = /\.7z$/i.test(parts[i]) ? AC.SevenZip : AC.Zip;
@@ -837,6 +852,32 @@
       load(root).then(render);
     });
   }
+  const srvReady = (async () => {
+    if (!/^https?:$/.test(location.protocol)) return;
+    try {
+      const base = new URL('library/', location.href).href;
+      let man = { catalog: 'catalog.sqlite', bios: [] };
+      const mr = await fetch(base + 'library.json', { cache: 'no-store' });
+      if (mr.ok) man = Object.assign(man, await mr.json());
+      const cr = await fetch(base + encodeURI(man.catalog), { cache: 'no-store' });
+      if (!cr.ok) return;
+      await AC.Catalog.open(new Uint8Array(await cr.arrayBuffer()));
+      SRV = base;
+      if (!(await useCatalog())) { SRV = null; return; }
+      $('medcount').textContent = 'server library: ' + $('medcount').textContent.replace(/^catalog: /, '');
+      const roms = [];
+      for (const p of man.bios) {
+        try {
+          const r = await fetch(base + p.split('/').map(encodeURIComponent).join('/'));
+          if (!r.ok) continue;
+          const f = new File([await r.blob()], p.split('/').pop());
+          Object.defineProperty(f, 'webkitRelativePath', { value: p });
+          roms.push(f);
+        } catch (e) { /* skip */ }
+      }
+      if (roms.length) { await addRoms(roms); log(`server BIOS: ${roms.length} files checked`); }
+    } catch (e) { diag('server library not used: ' + e.message); }
+  })();
   if (window.showDirectoryPicker) {
     $('medpick').style.display = '';
     $('medsel').style.display = '';
@@ -859,7 +900,8 @@
       try { await scanHandle(medHandle, true); log('library refreshed'); } catch (e) { log('refresh failed: ' + e.message); }
     };
     idbGet('medDir').then(async (h) => {
-      if (!h) return;
+      await srvReady;
+      if (!h || SRV) return;
       medHandle = h;
       const r = await idbGet('medRules');
       if (r && r.name === h.name) medRules = r.rules || {};
