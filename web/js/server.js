@@ -77,7 +77,7 @@
       }
       st.seen++;
       if (st.seen % 500 === 0) { $('status').textContent = `${st.seen} files checked, ${rows.length} entries…`; await new Promise((r) => setTimeout(r)); }
-      if (isBios) { if (/\.(rom|bin)$/i.test(name)) bios.push(path + name); continue; }
+      if (isBios) { if (/\.(rom|bin|zip|7z)$/i.test(name)) bios.push(path + name); continue; }
       const ext = extOf(name);
       if (ext === 'zip' || ext === '7z') {
         try {
