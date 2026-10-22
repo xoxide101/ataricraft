@@ -427,6 +427,9 @@
     const bytes = new Uint8Array(await file.arrayBuffer());
     const t = S.emu.detect(file.name, bytes);
     const k = typeKind(t) || hint || extKind(file.name);
+    if (k !== 'tape' && S.emu.tapeInfo().status) {
+      S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
+    }
     if (k === 'disk') {
       const n = alt ? 2 : 1;
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
