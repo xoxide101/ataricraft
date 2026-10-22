@@ -885,7 +885,7 @@
       const roms = [];
       for (const p of man.bios) {
         try {
-          const r = await fetch(base + 'bios/' + p.split('/').map(encodeURIComponent).join('/'));
+          const r = await fetch(base + p.split('/').map(encodeURIComponent).join('/'));
           if (!r.ok) continue;
           const f = new File([await r.blob()], p.split('/').pop());
           Object.defineProperty(f, 'webkitRelativePath', { value: p });
