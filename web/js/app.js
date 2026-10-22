@@ -1121,6 +1121,7 @@
     if (!r.ok) { log('cartridge: ' + r.error); return; }
     $('cn' + slot).textContent = (slot === 1 ? '1 (main, right): ' : '2 (left): ') + file.name;
     S.carts[slot] = { name: file.name, bytes, type: null };
+    devFlash('K' + slot, 'rd');
     if (r.kb) {
       const types = S.emu.cartTypes(r.kb);
       $('ctype').innerHTML = '';
@@ -1152,6 +1153,7 @@
       if (!S.emu) return;
       S.emu.ejectCart(n);
       delete S.carts[n];
+      devFlash('K' + n, 'ot');
       $('cn' + n).textContent = (n === 1 ? '1 (main, right): ' : '2 (left): ') + 'empty';
       $('c' + n).value = '';
     };
