@@ -141,3 +141,5 @@ After a scan the status line summarises the counts, and extension buttons (.atr 
 Device lights: the top right of the keyboard panel shows D1: to D8:, C: (tape), P:, R: and N: (FujiNet). A ring means media is mounted; a light flashes green for reads, red for writes and yellow for other commands.
 
 7z support: .7z archives are read like zips (7-Zip compiled to WASM, in web/js/7z, LGPL + unRAR restriction; loaded on first use). Each archive is copied into memory while open, so very large archives need RAM.
+
+Scan folders: after Pick folder (or the Folders... button) a dialog lists sub-folders with check boxes (lazy tree). Shift-click ticks a range at the same level, Ctrl-click selects only that folder. The choices are remembered and used by Refresh and the auto-rescan on reload.

@@ -651,11 +651,27 @@
   const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip', '7z']);
   const scanWant = (name) => SCAN_EXT.has((name.split('.').pop() || '').toLowerCase()) || /^a(800|5200)[^/]*\.xml$/i.test(name);
   const scanSt = { stop: false, seen: 0, keep: 0, errs: 0 };
-  async function walkDir(h, path, out) {
+  // Folder rules: {path/: true|false}. The nearest explicit rule on a folder or its ancestors wins; the default is include.
+  let medRules = {};
+  const ruleFor = (rules, path) => {
+    let best = '', val = true;
+    for (const k in rules) if (path.startsWith(k) && k.length >= best.length) { best = k; val = rules[k]; }
+    return val;
+  };
+  const anyIncludeUnder = (rules, path) => Object.keys(rules).some((k) => rules[k] && k.startsWith(path));
+  async function walkDir(h, path, out, rules) {
+    const inc = ruleFor(rules, path);
     try {
       for await (const [name, e] of h.entries()) {
         if (scanSt.stop || out.length >= SCAN_CAP) return;
-        if (e.kind === 'directory') { if (!SCAN_SKIP.test(name) && !name.startsWith('.')) await walkDir(e, path + name + '/', out); continue; }
+        if (e.kind === 'directory') {
+          const sub = path + name + '/';
+          if (SCAN_SKIP.test(name) || name.startsWith('.')) continue;
+          if (!ruleFor(rules, sub) && !anyIncludeUnder(rules, sub)) continue;
+          await walkDir(e, sub, out, rules);
+          continue;
+        }
+        if (!inc) continue;
         scanSt.seen++;
         if (!scanWant(name)) continue;
         try {
@@ -666,8 +682,7 @@
         if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; await new Promise((r) => setTimeout(r)); }
       }
     } catch (err) { scanSt.errs++; diag(`scan skipped folder "${path}": ${err.name} ${err.message}`, 'warn'); }
-  }
-  async function scanHandle(h, interactive) {
+  }  async function scanHandle(h, interactive) {
     let p = await h.queryPermission({ mode: 'read' });
     if (p !== 'granted' && interactive) p = await h.requestPermission({ mode: 'read' });
     if (p !== 'granted') { $('medcount').textContent = `"${h.name}" remembered: click Refresh to allow access`; return false; }
@@ -675,7 +690,7 @@
     scanSt.stop = false; scanSt.seen = 0; scanSt.errs = 0;
     $('medstop').style.display = '';
     const out = [];
-    try { await walkDir(h, h.name + '/', out); } finally { $('medstop').style.display = 'none'; }
+    try { await walkDir(h, h.name + '/', out, medRules); } finally { $('medstop').style.display = 'none'; }
     if (scanSt.stop) log(`scan stopped: ${out.length} files kept`);
     else if (out.length >= SCAN_CAP) log(`scan capped at ${SCAN_CAP} files: pick a smaller folder for the rest`);
     diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates, ${scanSt.errs} unreadable skipped`);
@@ -685,12 +700,92 @@
   }
   $('medstop').onclick = () => { scanSt.stop = true; };
   let medHandle = null;
+
+  // Folder chooser: lazy tree of sub-folders with check boxes. Shift-click = range among siblings, Ctrl-click = only this one.
+  function chooseFolders(h) {
+    return new Promise((resolve) => {
+      const rules = { ...medRules };
+      const root = { name: h.name, path: h.name + '/', handle: h, kids: null, open: true, parent: null };
+      const dlg = document.createElement('div');
+      dlg.id = 'scandlg';
+      dlg.innerHTML = '<div class="box"><b>Choose what to scan in "' + h.name.replace(/</g, '&lt;') + '"</b><div class="dim" style="font-size:12px">Tick folders to include. Shift-click ticks a range of folders at the same level; Ctrl-click selects only that folder. Click ▸ to open a folder.</div><div class="row"><button data-a="all">Tick all</button><button data-a="none">Untick all</button><button data-a="exp">Open all loaded</button><span class="dim" id="scsum"></span></div><div class="tree"></div><div class="row" style="justify-content:flex-end"><button data-a="cancel">Cancel</button><button data-a="go" class="on">Scan</button></div></div>';
+      document.body.append(dlg);
+      const tree = dlg.querySelector('.tree');
+      const eff = (n) => ruleFor(rules, n.path);
+      const mixed = (n) => { const v = eff(n); return Object.keys(rules).some((k) => k.startsWith(n.path) && k !== n.path && rules[k] !== v); };
+      const setNode = (n, v) => { for (const k of Object.keys(rules)) if (k.startsWith(n.path)) delete rules[k]; if (ruleFor(rules, n.path) !== v || n === root) rules[n.path] = v; };
+      let last = null;
+      async function load(n) {
+        if (n.kids) return;
+        n.kids = [];
+        try {
+          for await (const [name, en] of n.handle.entries()) {
+            if (en.kind !== 'directory' || SCAN_SKIP.test(name) || name.startsWith('.')) continue;
+            n.kids.push({ name, path: n.path + name + '/', handle: en, kids: null, open: false, parent: n });
+            if (n.kids.length >= 3000) break;
+          }
+        } catch (e) { diag('folder list failed ' + n.path + ': ' + e.message, 'warn'); }
+        n.kids.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+      }
+      function draw(n, depth) {
+        const row = document.createElement('div');
+        row.className = 'nd'; row.style.paddingLeft = depth * 18 + 'px';
+        const tg = document.createElement('span'); tg.className = 'tg'; tg.textContent = n.open ? '▾' : '▸';
+        tg.onclick = async () => { n.open = !n.open; if (n.open) await load(n); render(); };
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = eff(n); cb.indeterminate = mixed(n);
+        cb.onclick = (ev) => {
+          ev.preventDefault();
+          const sibs = n.parent ? n.parent.kids : [n];
+          if (ev.ctrlKey || ev.metaKey) { sibs.forEach((s) => setNode(s, s === n)); setNode(n, true); }
+          else if (ev.shiftKey && last && last.parent === n.parent && n.parent) {
+            const a = sibs.indexOf(last), b = sibs.indexOf(n), v = !eff(n);
+            for (let i = Math.min(a, b); i <= Math.max(a, b); i++) setNode(sibs[i], v);
+          } else setNode(n, !eff(n));
+          last = n; render();
+        };
+        const lb = document.createElement('label'); lb.textContent = n.name; lb.onclick = () => cb.click();
+        row.append(tg, cb, lb);
+        tree.append(row);
+        if (n.open && n.kids) { if (!n.kids.length) { const d = document.createElement('div'); d.className = 'dim'; d.style.cssText = `padding-left:${(depth + 1) * 18 + 20}px;font-size:12px`; d.textContent = '(no sub-folders)'; tree.append(d); } n.kids.forEach((k) => draw(k, depth + 1)); }
+      }
+      function render() {
+        const sc = tree.scrollTop;
+        tree.innerHTML = '';
+        draw(root, 0);
+        tree.scrollTop = sc;
+        const off = Object.keys(rules).filter((k) => !rules[k]).length;
+        dlg.querySelector('#scsum').textContent = off ? off + ' excluded' : 'everything included';
+      }
+      const loaded = (n, f) => { f(n); (n.kids || []).forEach((k) => loaded(k, f)); };
+      dlg.onclick = async (ev) => {
+        const a = ev.target.dataset && ev.target.dataset.a;
+        if (!a) return;
+        if (a === 'all') { for (const k of Object.keys(rules)) delete rules[k]; render(); }
+        else if (a === 'none') { for (const k of Object.keys(rules)) delete rules[k]; rules[root.path] = false; render(); }
+        else if (a === 'exp') { loaded(root, (n) => { if (n.kids && n.kids.length) n.open = true; }); render(); }
+        else { dlg.remove(); document.removeEventListener('keydown', esc, true); if (a === 'go') { medRules = rules; idbSet('medRules', { name: h.name, rules }); } resolve(a === 'go'); }
+      };
+      const esc = (ev) => { if (ev.key === 'Escape') dlg.querySelector('[data-a=cancel]').click(); };
+      document.addEventListener('keydown', esc, true);
+      load(root).then(render);
+    });
+  }
   if (window.showDirectoryPicker) {
     $('medpick').style.display = '';
+    $('medsel').style.display = '';
     $('medpick').onclick = async () => {
-      try { medHandle = await showDirectoryPicker({ id: 'ataricraft-media', mode: 'read' }); } catch (e) { return; }
-      await idbSet('medDir', medHandle);
-      await scanHandle(medHandle, true);
+      let h;
+      try { h = await showDirectoryPicker({ id: 'ataricraft-media', mode: 'read' }); } catch (e) { return; }
+      if (!medHandle || !(await medHandle.isSameEntry(h))) medRules = {};
+      medHandle = h;
+      await idbSet('medDir', h);
+      if (await chooseFolders(h)) await scanHandle(h, true);
+      else $('medcount').textContent = `"${h.name}" picked, not scanned: use Folders… or Refresh`;
+    };
+    $('medsel').onclick = async () => {
+      if (!medHandle) { log('no folder yet: use Pick folder…'); return; }
+      if ((await medHandle.queryPermission({ mode: 'read' })) !== 'granted' && (await medHandle.requestPermission({ mode: 'read' })) !== 'granted') return;
+      if (await chooseFolders(medHandle)) await scanHandle(medHandle, true);
     };
     $('medrefresh').onclick = async () => {
       if (!medHandle) { log('no remembered folder yet: use Pick folder…'); return; }
@@ -699,10 +794,11 @@
     idbGet('medDir').then(async (h) => {
       if (!h) return;
       medHandle = h;
+      const r = await idbGet('medRules');
+      if (r && r.name === h.name) medRules = r.rules || {};
       try { await scanHandle(h, false); } catch (e) { $('medcount').textContent = `"${h.name}" remembered: click Refresh`; }
     });
-  }
-  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
+  }  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
   async function scanMedia(all) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
     if (xmls.length) await loadTitlesXml(xmls);
@@ -1059,6 +1155,7 @@
     copyText: () => S.emu.screenText(),
     press: (fields, frames) => S.emu.tap(fields, frames || 4),
     scanDir: (handle) => scanHandle(handle, false),
+    chooseFolders: async (handle) => { medRules = {}; const ok = await chooseFolders(handle); return ok ? await scanHandle(handle, false) : false; },
     joy: (bits, fire) => { S.joy = bits | 0; S.fire = !!fire; sendJoy(); },
     console: (f) => S.emu.tap(f, 6),
     step: (n) => { stepFrames(n || 1); draw(); return S.emu.frames; },

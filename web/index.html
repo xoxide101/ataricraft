@@ -95,6 +95,12 @@
   #kbview { display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px; color:var(--dim); }
   #kbview button { padding:3px 9px; font-size:12px; opacity:.5; }
   #kbview button.on { opacity:1; border-color:var(--acc); }
+  #scandlg { position:fixed; inset:0; background:#000a; z-index:50; display:flex; align-items:center; justify-content:center; }
+  #scandlg .box { background:#1d2027; border:1px solid #3a4150; border-radius:8px; width:min(640px,94vw); max-height:86vh; display:flex; flex-direction:column; padding:12px; gap:8px; }
+  #scandlg .tree { overflow:auto; flex:1; min-height:180px; border:1px solid #2c313b; border-radius:4px; padding:4px; font-size:13px; }
+  #scandlg .nd { display:flex; align-items:center; gap:5px; padding:2px 0; white-space:nowrap; }
+  #scandlg .nd .tg { width:16px; cursor:pointer; text-align:center; color:#9aa; user-select:none; }
+  #scandlg .nd label { cursor:pointer; overflow:hidden; text-overflow:ellipsis; }
   #devbar { margin-left:auto; display:flex; flex-wrap:wrap; gap:3px 9px; justify-content:flex-end; font:11px ui-monospace,Consolas,monospace; }
   #devbar .dv { display:inline-flex; align-items:center; gap:3px; opacity:.75; }
   #devbar .dv i { width:9px; height:9px; border-radius:50%; background:#3a332b; box-shadow:inset 0 0 0 1px #54493d; transition:background .25s, box-shadow .25s; }
@@ -114,7 +120,7 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261021x">ATARICRAFT <small class="dim" style="font-size:10px">b20261021x</small></h1>
+  <h1 title="build 20261021y">ATARICRAFT <small class="dim" style="font-size:10px">b20261021y</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -159,7 +165,7 @@
     </div>
     <div class="box">
       <h3>Media library</h3>
-      <div class="row"><button id="medpick" style="display:none" title="Choose a folder; it is remembered across page reloads">Pick folder…</button><button id="medrefresh" title="Re-scan the remembered folder">Refresh</button><button id="medstop" style="display:none">Stop</button><label class="btn" title="One-off scan (not remembered)">Scan once…<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="MAME software list XML (a800.xml, a5200.xml…) to show real game titles">Titles XML…<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
+      <div class="row"><button id="medpick" style="display:none" title="Choose a folder; it is remembered across page reloads">Pick folder…</button><button id="medsel" style="display:none" title="Choose which sub-folders to include in the scan">Folders…</button><button id="medrefresh" title="Re-scan the remembered folder">Refresh</button><button id="medstop" style="display:none">Stop</button><label class="btn" title="One-off scan (not remembered)">Scan once…<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="MAME software list XML (a800.xml, a5200.xml…) to show real game titles">Titles XML…<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
       <div id="medtitles" class="dim" style="font-size:11px"></div>
       <div class="row"><input id="medfilter" placeholder="search disks, carts, tapes, programs" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
       <div class="row" id="medchips"><button data-t="all" class="on">All</button><button data-t="disk">Disk</button><button data-t="cart">Cart</button><button data-t="tape">Tape</button><button data-t="exe">Program</button></div>
@@ -213,13 +219,13 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261021x"></script>
-<script src="js/titles-data.js?v=20261021x"></script>
-<script src="js/zip.js?v=20261021x"></script>
-<script src="js/sevenzip.js?v=20261021x"></script>
+<script src="js/emu.js?v=20261021y"></script>
+<script src="js/titles-data.js?v=20261021y"></script>
+<script src="js/zip.js?v=20261021y"></script>
+<script src="js/sevenzip.js?v=20261021y"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261021x"></script>
+<script src="js/app.js?v=20261021y"></script>
 </body>
 </html>
