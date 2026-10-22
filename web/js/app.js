@@ -62,7 +62,26 @@
     log('saved ROMs cleared');
   };
 
+  // MAME-style .zip files are expanded into virtual files (extracted only when used).
+  async function expandZips(files) {
+    const out = [];
+    let zips = 0;
+    for (const f of files) {
+      if (!/\.zip$/i.test(f.name)) { out.push(f); continue; }
+      try {
+        const base = f.webkitRelativePath || f.name;
+        for (const ent of await AC.Zip.list(f)) {
+          out.push({ name: ent.name.split('/').pop(), webkitRelativePath: base + '/' + ent.name, size: ent.size, arrayBuffer: () => AC.Zip.extract(f, ent) });
+        }
+        zips++;
+      } catch (e) { out.push(f); }
+    }
+    if (zips) log(`read ${zips} zip file${zips > 1 ? 's' : ''}`);
+    return out;
+  }
+
   async function addRoms(files) {
+    files = await expandZips(files);
     for (const f of files) {
       if (![8192, 10240, 16384].includes(f.size)) continue;
       const bytes = new Uint8Array(await f.arrayBuffer());
@@ -450,8 +469,9 @@
     });
     $('medcount').textContent = MED.files.length ? `${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
   }
-  $('medfolder').onchange = (e) => {
-    MED.files = [...e.target.files].map((f) => ({ name: f.webkitRelativePath || f.name, file: f, kind: extKind(f.name) })).filter((f) => f.kind);
+  $('medfolder').onchange = async (e) => {
+    const files = await expandZips([...e.target.files]);
+    MED.files = files.map((f) => ({ name: f.webkitRelativePath || f.name, file: f, kind: extKind(f.name) })).filter((f) => f.kind);
     renderMed();
   };
   $('medfilter').oninput = renderMed;
@@ -491,8 +511,8 @@
       box.append(d);
     });
   }
-  $('fnfolder').onchange = (e) => {
-    FN.files = [...e.target.files].filter((f) => /\.(atr|atx|dcm|pro|gz|xex|com|bas|xfd)$/i.test(f.name)).map((f) => ({ name: f.webkitRelativePath || f.name, file: f }));
+  $('fnfolder').onchange = async (e) => {
+    FN.files = (await expandZips([...e.target.files])).filter((f) => /\.(atr|atx|dcm|pro|gz|xex|com|bas|xfd)$/i.test(f.name)).map((f) => ({ name: f.webkitRelativePath || f.name, file: f }));
     $('fncount').textContent = FN.files.length + ' images';
     FujiNet.setFiles(FN.files.map((f) => ({ rel: f.name, file: f.file })));
     renderFn();

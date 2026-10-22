@@ -24,6 +24,8 @@ Everything is detected from the file contents, not the extension.
 | Program (XEX, COM, BAS, LST) | Click it in the Media library, or Paste for BASIC text. |
 | Cassette (CAS) | **Tape…** then **Boot tape** (Start held). For BASIC tapes: reset, type `CLOAD`, Return, Return. |
 
+**Zip files** (e.g. MAME software lists) are read directly: every media file inside appears in the library as `name.zip/file`, and ROM scans look inside zips too. 7z and nested zips are not supported.
+
 **Media library**: **Scan folder…** lists every disk, cart, tape and program in a folder. Filter by text and by type chips, then click a file to load it.
 
 ![Media library and SpartaDOS X](docs/screenshots/02-spartados-x.png)

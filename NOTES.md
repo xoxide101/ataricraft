@@ -32,3 +32,5 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 
 - Disk formats: DCM + PRO verified (scripts/fmt-test.cjs, dcm-test.cjs); ATX untested (no sample). Mounted disks and carts now survive a reboot (S.disks / S.carts); fixed hookAudio() missing after a Boot-refactor.
 
+- Zip support: web/js/zip.js (central directory + DecompressionStream); zips expand to virtual files in ROM scan, media library and FujiNet folder (scripts/zip-test.cjs). 7z/nested zips unsupported.
+

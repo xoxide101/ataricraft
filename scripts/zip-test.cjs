@@ -1,0 +1,26 @@
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+const fs = require('fs');
+(async () => {
+  const R = 'C:/Users/raver/ataricraft/';
+  fs.mkdirSync(R + 'out/zips', { recursive: true });
+  for (const z of ['osromv33.zip', 'xf551.zip']) fs.copyFileSync(R + 'software_n_roms/' + z, R + 'out/zips/' + z);
+  const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  const p = await b.newPage({ viewport: { width: 1366, height: 900 } });
+  p.on('pageerror', (e) => console.log('ERR', e.message));
+  await p.goto('file:///' + R + 'web/index.html');
+  await p.setInputFiles('#romfolder', R + 'out/zips');
+  await p.waitForTimeout(1500);
+  console.log('romstate:', await p.textContent('#romstate'));
+  console.log('os options:', await p.evaluate(() => [...document.querySelectorAll('#osrom option')].map((o) => o.text).join(',')));
+  await p.setInputFiles('#medfolder', R + 'out/zips');
+  await p.waitForTimeout(1500);
+  console.log('lib:', await p.evaluate(() => [...document.querySelectorAll('#medlist div')].map((d) => d.textContent).join(' | ')));
+  await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']); await p.waitForTimeout(800); await p.selectOption('#osrom', { label: 'ATARIXL.ROM' }); await p.click('#boot');
+  await p.waitForTimeout(2500);
+  await p.fill('#medfilter', 'XFTOOLS');
+  await p.click('#medlist div >> nth=0');
+  await p.waitForTimeout(6000);
+  console.log('status:', await p.textContent('#status'), '| d1:', await p.textContent('#d1'));
+  console.log('$700:', await p.evaluate(() => [...ataricraft.peek(0x700, 9)].map((x) => x.toString(16)).join(' ')));
+  await b.close();
+})();
