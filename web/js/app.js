@@ -628,7 +628,7 @@
   const idbGet = async (k) => { const db = await idb(); return new Promise((res) => { const r = db.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }); };
   const idbSet = async (k, v) => { const db = await idb(); return new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); };
   // Big trees: only keep media-looking files (checked by name, nothing is opened), skip system folders, show progress, allow Stop.
-  const SCAN_CAP = 50000;
+  const SCAN_CAP = 150000;
   const SCAN_SKIP = /^(\$recycle\.bin|system volume information|node_modules|\.git|windows|program files.*)$/i;
   const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip']);
   const scanWant = (name) => SCAN_EXT.has((name.split('.').pop() || '').toLowerCase()) || /^a(800|5200)[^/]*\.xml$/i.test(name);
