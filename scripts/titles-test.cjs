@@ -1,0 +1,28 @@
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+const fs = require('fs');
+const { execSync } = require('child_process');
+(async () => {
+  const R = 'C:/Users/raver/ataricraft/';
+  const D = R + 'out/titles';
+  fs.rmSync(D, { recursive: true, force: true });
+  fs.mkdirSync(D, { recursive: true });
+  execSync(`powershell -NoProfile -Command "Compress-Archive -Path '${R}out/fmt/test.atr' -DestinationPath '${D}/rdisk4.zip'"`);
+  fs.writeFileSync(D + '/a800.xml', '<softwarelist name="a800"><software name="rdisk4"><description>Rene Rom Images Disk 4</description><year>1985</year><publisher>Rene</publisher></software><software name="other"><description>Other &amp; Game</description><year>????</year><publisher>&lt;unknown&gt;</publisher></software></softwarelist>');
+  const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  const p = await b.newPage({ viewport: { width: 1366, height: 900 } });
+  p.on('pageerror', (e) => console.log('ERR', e.message));
+  await p.goto('file:///' + R + 'web/index.html');
+  await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
+  await p.waitForTimeout(800);
+  await p.click('#boot');
+  await p.waitForTimeout(2000);
+  await p.setInputFiles('#medfolder', D);
+  await p.waitForTimeout(1500);
+  console.log(await p.evaluate(() => [...document.querySelectorAll('#medlist div')].map((d) => d.textContent).join(' | ')), '|', await p.textContent('#medtitles'));
+  await p.fill('#medfilter', 'rene');
+  console.log('filter rene ->', await p.evaluate(() => document.querySelectorAll('#medlist div').length));
+  await p.click('#medlist div >> nth=0');
+  await p.waitForTimeout(7000);
+  console.log((await p.evaluate(() => ataricraft.screenText())).split('\n').filter((l) => l.trim()).slice(1, 3).join('\n'));
+  await b.close();
+})();

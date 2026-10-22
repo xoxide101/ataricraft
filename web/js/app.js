@@ -452,15 +452,48 @@
 
   // ---- media library (scan a folder, filter by text and type) ----
   const MED = { files: [], kind: 'all' };
+  // MAME software list titles: short zip/set name -> "Title (year, publisher)"
+  let TITLES = {};
+  try { TITLES = JSON.parse(localStorage.getItem('ac.titles') || '{}'); } catch (e) { TITLES = {}; }
+  const syncTitles = () => { $('medtitles').textContent = Object.keys(TITLES).length ? `${Object.keys(TITLES).length} titles known` : ''; };
+  const setKey = (rel) => {
+    const parts = rel.split('/');
+    const last = parts[parts.length - 1].replace(/\.[^.]+$/, '');
+    const zip = parts.length > 1 && /\.zip$/i.test(parts[parts.length - 2]) ? parts[parts.length - 2].replace(/\.zip$/i, '') : null;
+    return [zip, last].filter(Boolean).map((s) => s.toLowerCase());
+  };
+  const titleFor = (rel) => { for (const k of setKey(rel)) if (TITLES[k]) return TITLES[k]; return ''; };
+  async function loadTitlesXml(files) {
+    let n = 0;
+    for (const f of files) {
+      const doc = new DOMParser().parseFromString(await f.text(), 'text/xml');
+      doc.querySelectorAll('software').forEach((s) => {
+        const name = (s.getAttribute('name') || '').toLowerCase();
+        const d = s.querySelector(':scope > description');
+        if (!name || !d) return;
+        const y = s.querySelector(':scope > year'), pub = s.querySelector(':scope > publisher');
+        const extra = [y && y.textContent !== '????' ? y.textContent : '', pub && !/unknown/i.test(pub.textContent) ? pub.textContent : ''].filter(Boolean).join(', ');
+        TITLES[name] = d.textContent + (extra ? ` (${extra})` : '');
+        n++;
+      });
+    }
+    try { localStorage.setItem('ac.titles', JSON.stringify(TITLES)); } catch (e) { log('titles too large to remember, but active for this visit'); }
+    syncTitles();
+    MED.files.forEach((m) => (m.title = titleFor(m.name)));
+    renderMed();
+    log(`${n} titles loaded`);
+  }
+  $('medxml').onchange = (e) => loadTitlesXml([...e.target.files]);
+  syncTitles();
   function renderMed() {
     const q = $('medfilter').value.toLowerCase();
     const box = $('medlist');
     box.innerHTML = '';
-    const hits = MED.files.filter((f) => (MED.kind === 'all' || f.kind === MED.kind) && f.name.toLowerCase().includes(q));
+    const hits = MED.files.filter((f) => (MED.kind === 'all' || f.kind === MED.kind) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
     hits.slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
-      d.textContent = f.name;
-      d.title = f.name;
+      d.textContent = f.title ? `${f.title} — ${f.name}` : f.name;
+      d.title = d.textContent;
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
       d.onmouseenter = () => (d.style.background = '#2a2f39');
       d.onmouseleave = () => (d.style.background = '');
@@ -470,8 +503,11 @@
     $('medcount').textContent = MED.files.length ? `${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
   }
   $('medfolder').onchange = async (e) => {
-    const files = await expandZips([...e.target.files]);
-    MED.files = files.map((f) => ({ name: f.webkitRelativePath || f.name, file: f, kind: extKind(f.name) })).filter((f) => f.kind);
+    const all = [...e.target.files];
+    const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
+    if (xmls.length) await loadTitlesXml(xmls);
+    const files = await expandZips(all);
+    MED.files = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
     renderMed();
   };
   $('medfilter').oninput = renderMed;

@@ -24,7 +24,7 @@ Everything is detected from the file contents, not the extension.
 | Program (XEX, COM, BAS, LST) | Click it in the Media library, or Paste for BASIC text. |
 | Cassette (CAS) | **Tape…** then **Boot tape** (Start held). For BASIC tapes: reset, type `CLOAD`, Return, Return. |
 
-**Zip files** (e.g. MAME software lists) are read directly: every media file inside appears in the library as `name.zip/file`, and ROM scans look inside zips too. 7z and nested zips are not supported.
+**Zip files** (e.g. MAME software lists) are read directly: every media file inside appears in the library as `name.zip/file`, and ROM scans look inside zips too. 7z and nested zips are not supported. For readable names, load MAME's software list with **Titles XML…** (`a800.xml`, `a5200.xml`), or just include them in the scanned folder: short set names like `ms_pacm` then show as the real title, year and publisher, and the filter searches titles too. Titles are remembered.
 
 **Media library**: **Scan folder…** lists every disk, cart, tape and program in a folder. Filter by text and by type chips, then click a file to load it.
 

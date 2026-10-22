@@ -34,3 +34,5 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 
 - Zip support: web/js/zip.js (central directory + DecompressionStream); zips expand to virtual files in ROM scan, media library and FujiNet folder (scripts/zip-test.cjs). 7z/nested zips unsupported.
 
+- MAME titles: #medxml / auto-load a800*.xml from scanned folder; TITLES in localStorage ac.titles; scripts/titles-test.cjs.
+
