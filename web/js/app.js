@@ -263,8 +263,56 @@
   function draw() {
     if (!S.emu) return;
     S.emu.render(img32, pal);
-    ctx.putImageData(img, 0, 0);
+    sctx.putImageData(img, 0, 0);
+    present();
   }
+
+  // ---- display scaling: the emulator frame is kept in `src`, `cv` is the on-screen canvas ----
+  const src = document.createElement('canvas');
+  src.width = AC.SCREEN.w; src.height = AC.SCREEN.h;
+  const sctx = src.getContext('2d');
+  const stage = document.createElement('canvas');
+  const stx = stage.getContext('2d');
+  let scaleMode = localStorage.getItem('ac.scale') || 'sharpbi';
+  let vig = null, vigKey = '';
+  function applyScale() {
+    const native = scaleMode === 'sharp' || scaleMode === 'smooth';
+    const dpr = window.devicePixelRatio || 1;
+    const w = native ? AC.SCREEN.w : Math.max(AC.SCREEN.w, Math.round(cv.clientWidth * dpr));
+    const h = native ? AC.SCREEN.h : Math.max(AC.SCREEN.h, Math.round(cv.clientHeight * dpr));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    cv.style.imageRendering = scaleMode === 'sharp' ? 'pixelated' : 'auto';
+    present();
+  }
+  function present() {
+    const W = cv.width, H = cv.height;
+    ctx.imageSmoothingEnabled = scaleMode !== 'sharp';
+    ctx.imageSmoothingQuality = 'high';
+    if (scaleMode === 'sharp' || scaleMode === 'smooth') { ctx.drawImage(src, 0, 0); return; }
+    // integer nearest-neighbour prescale, then a smooth resample: crisp pixel edges without shimmering
+    const k = Math.max(1, Math.ceil(W / src.width));
+    if (stage.width !== src.width * k || stage.height !== src.height * k) { stage.width = src.width * k; stage.height = src.height * k; }
+    stx.imageSmoothingEnabled = false;
+    stx.drawImage(src, 0, 0, stage.width, stage.height);
+    ctx.drawImage(stage, 0, 0, W, H);
+    if (scaleMode === 'crt') {
+      // 240 real scanlines: darken the lower part of each one, then add a soft vignette
+      const line = H / 240;
+      ctx.fillStyle = 'rgba(0,0,0,0.38)';
+      for (let i = 0; i < 240; i++) ctx.fillRect(0, i * line + line * 0.62, W, line * 0.38);
+      const key = W + 'x' + H;
+      if (vigKey !== key) {
+        vig = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
+        vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.45)');
+        vigKey = key;
+      }
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+    }
+  }
+  $('scalemode').value = scaleMode;
+  $('scalemode').onchange = (e) => { scaleMode = e.target.value; localStorage.setItem('ac.scale', scaleMode); vigKey = ''; e.target.blur(); applyScale(); };
+  new ResizeObserver(() => applyScale()).observe(cv);
+  window.addEventListener('resize', applyScale);
 
   // After Return the Atari may be busy (ENTER, RUN, disk I/O) and drops keys, so wait for the screen to go still.
   function stepFrames(n) {

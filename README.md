@@ -131,3 +131,5 @@ powershell -File scripts\build-reference.ps1
 Anything derived from GPL code must be GPL. A clean-room Rust core written from the hardware manual can use any licence.
 
 Game titles in the media library come from the MAME software lists (a800, a800_flop, a800_cass, a5200), bundled in web/js/titles-data.js and regenerated with scripts/gen-titles.cjs. Titles XML... still adds or overrides names.
+
+Display: the side panel's Display menu picks the scaling: pixel-perfect, sharp smooth (default), soft bilinear, or CRT scanlines.
