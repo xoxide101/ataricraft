@@ -724,7 +724,7 @@
   $('romfilter').oninput = () => fillRomSelects();
 
   // ---- device activity lights (keyboard panel, top right) ----
-  const DEVLIST = [...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']).concat([['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
+  const DEVLIST = [...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']).concat([['K1', 'CART1'], ['K2', 'CART2'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
   const devEl = {};
   DEVLIST.forEach(([id, label]) => {
     const s = document.createElement('span');
@@ -759,6 +759,8 @@
   }
   setInterval(() => {
     for (let n = 1; n <= 8; n++) devEl['D' + n].classList.toggle('has', !!S.disks[n] || !!(FujiNet.slots && FujiNet.slots[n - 1] && FujiNet.slots[n - 1].mounted && FujiNet.enabled));
+    devEl.K1.classList.toggle('has', !!S.carts[1]);
+    devEl.K2.classList.toggle('has', !!S.carts[2]);
     devEl.C.classList.toggle('has', $('tn').textContent !== 'empty');
     devEl.N.classList.toggle('has', !!FujiNet.enabled);
   }, 400);
