@@ -137,3 +137,5 @@ Display: the side panel's Display menu picks the scaling: original (default), sh
 Multi-disk sets: after you load a disk from the library, the other disks of the same set (other sides, 'disk 2', other files in the same zip) are listed below it. Click one to put it in D2 without rebooting (Shift = D1).
 
 After a scan the status line summarises the counts, and extension buttons (.atr 1234, .xex 56...) under the type buttons narrow the list further.
+
+Device lights: the top right of the keyboard panel shows D1: to D8:, C: (tape), P:, R: and N: (FujiNet). A ring means media is mounted; a light flashes green for reads, red for writes and yellow for other commands.

@@ -203,6 +203,7 @@
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
     S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, tv: $('tv').value, host: S.host });
     FujiNet.attach(S.emu);
+    hookDevices();
     for (const [n, d] of Object.entries(S.disks)) S.emu.mountDisk(+n, d.name, d.bytes);
     for (const [slot, c] of Object.entries(S.carts)) {
       const r = S.emu.insertCart(+slot, c.name, c.bytes);
@@ -264,6 +265,7 @@
     if (!S.emu) return;
     S.emu.render(img32, pal);
     sctx.putImageData(img, 0, 0);
+    pollTape();
     present();
   }
 
@@ -720,6 +722,46 @@
     };
   });
   $('romfilter').oninput = () => fillRomSelects();
+
+  // ---- device activity lights (keyboard panel, top right) ----
+  const DEVLIST = [...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']).concat([['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
+  const devEl = {};
+  DEVLIST.forEach(([id, label]) => {
+    const s = document.createElement('span');
+    s.className = 'dv'; s.innerHTML = '<i></i>' + label;
+    $('devbar').append(s);
+    devEl[id] = s;
+  });
+  const devId = (dev) => (dev >= 0x31 && dev <= 0x38 ? 'D' + (dev - 0x30) : dev === 0x60 ? 'C' : dev >= 0x40 && dev <= 0x43 ? 'P' : dev >= 0x50 && dev <= 0x53 ? 'R' : dev >= 0x70 && dev <= 0x7f ? 'N' : null);
+  const devTimer = {};
+  function devFlash(id, cls) {
+    const el = devEl[id];
+    if (!el) return;
+    el.classList.remove('rd', 'wr', 'ot');
+    el.classList.add(cls);
+    clearTimeout(devTimer[id]);
+    devTimer[id] = setTimeout(() => el.classList.remove('rd', 'wr', 'ot'), 140);
+  }
+  function hookDevices() {
+    const m = S.emu.m, inner = m.acSio;
+    m.acSio = (dev, cmd, dstats, aux, data, len) => {
+      const id = devId(dev);
+      if (id) devFlash(id, cmd === 0x52 ? 'rd' : cmd === 0x57 || cmd === 0x50 ? 'wr' : 'ot');
+      return inner ? inner(dev, cmd, dstats, aux, data, len) : 0;
+    };
+  }
+  let tapePosPrev = -1;
+  function pollTape() {
+    if ($('tn').textContent === 'empty') { tapePosPrev = -1; return; }
+    const p = S.emu.tapeInfo().pos;
+    if (tapePosPrev >= 0 && p !== tapePosPrev) devFlash('C', 'rd');
+    tapePosPrev = p;
+  }
+  setInterval(() => {
+    for (let n = 1; n <= 8; n++) devEl['D' + n].classList.toggle('has', !!S.disks[n] || !!(FujiNet.slots && FujiNet.slots[n - 1] && FujiNet.slots[n - 1].mounted && FujiNet.enabled));
+    devEl.C.classList.toggle('has', $('tn').textContent !== 'empty');
+    devEl.N.classList.toggle('has', !!FujiNet.enabled);
+  }, 400);
 
   // ---- diagnostics log ----
   const diagText = () => {
