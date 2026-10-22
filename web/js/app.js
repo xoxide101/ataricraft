@@ -324,7 +324,7 @@
   };
   for (const c of 'abcdefghijklmnopqrstuvwxyz') MAME_MAP['Key' + c.toUpperCase()] = c;
   const NATURAL_MAP = { F1: 'start', F2: 'select', F3: 'option', F4: 'start', F5: 'reset', F6: 'power', F8: 'help', Pause: 'break', Delete: 'bksp', Home: 'lt', Insert: 'gt', AltRight: 'inv', CapsLock: 'caps' };
-  const JOY_MAP = { ArrowUp: 'joyU', ArrowDown: 'joyD', ArrowLeft: 'joyL', ArrowRight: 'joyR', Space: 'fire' };
+  const JOY_MAP = { ArrowUp: 'joyU', ArrowDown: 'joyD', ArrowLeft: 'joyL', ArrowRight: 'joyR', Space: 'fire', KeyW: 'joyU', KeyS: 'joyD', KeyA: 'joyL', KeyD: 'joyR' };
   const JOYBIT = { joyU: 1, joyD: 2, joyL: 4, joyR: 8 };
   const ACTIONS = [['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['help', 'Help'], ['reset', 'Reset'], ['power', 'Cold start / Power'], ['break', 'Break'], ['inv', 'Atari / Inverse'], ['caps', 'Caps'], ['joyU', 'Joystick up'], ['joyD', 'Joystick down'], ['joyL', 'Joystick left'], ['joyR', 'Joystick right'], ['fire', 'Joystick fire']];
   const CURSOR = { ArrowUp: 0x8e, ArrowDown: 0x8f, ArrowLeft: 0x86, ArrowRight: 0x87 };
@@ -776,7 +776,15 @@
   window.addEventListener('keydown', () => sndCtx(), { once: true });
   syncSndUi();
   $('mapclose').onclick = () => { S.capture = null; $('mapdlg').close(); };
-  $('joy').onchange = (e) => { S.joyMode = e.target.checked; };
+  S.joyMode = localStorage.getItem('ac.gameMode') === '1';
+  $('joy').checked = S.joyMode;
+  $('joy').onchange = (e) => {
+    S.joyMode = e.target.checked;
+    localStorage.setItem('ac.gameMode', S.joyMode ? '1' : '0');
+    e.target.blur();
+    if (!S.joyMode) { S.joy = 0; S.fire = false; if (S.emu) sendJoy(); }
+    log(S.joyMode ? 'GAME MODE on: WASD / arrows = joystick, Space = fire (W/A/S/D/Space no longer type)' : 'GAME MODE off: keyboard typing restored');
+  };
   for (const [id, field] of [['start', 'start'], ['select', 'select'], ['option', 'option'], ['brk', 'special']]) {
     const b = $(id);
     const fields = field === 'special' ? { special: 5 } : { [field]: 1 };
