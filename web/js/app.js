@@ -513,6 +513,9 @@
       const types = S.emu.cartTypes(r.kb);
       $('ctype').innerHTML = '';
       types.forEach((t) => $('ctype').append(new Option(t.name, String(t.id))));
+      const pref = /sparta|sdx|spado/i.test(file.name) ? /SpartaDOS X/i : null;
+      const hit = pref && [...$('ctype').options].find((o) => pref.test(o.textContent) && (!/128/.test(o.textContent) || r.kb === 128));
+      if (hit) $('ctype').value = hit.value;
       $('ctyperow').style.display = 'flex';
       S.pendingCart = slot;
       log(`choose the cartridge type (${r.kb} KB image)`);
@@ -538,7 +541,7 @@
     if (!S.emu || !S.pendingCart) return;
     S.emu.setCartType(S.pendingCart, +$('ctype').value);
     if (S.carts[S.pendingCart]) S.carts[S.pendingCart].type = +$('ctype').value;
-    if (S.pendingCart === 2) S.emu.coldStart();
+    S.emu.coldStart();
     S.pendingCart = null;
     $('ctyperow').style.display = 'none';
     log('cartridge inserted');
