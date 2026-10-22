@@ -647,31 +647,36 @@
   const SCAN_SKIP = /^(\$recycle\.bin|system volume information|node_modules|\.git|windows|program files.*)$/i;
   const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip']);
   const scanWant = (name) => SCAN_EXT.has((name.split('.').pop() || '').toLowerCase()) || /^a(800|5200)[^/]*\.xml$/i.test(name);
-  const scanSt = { stop: false, seen: 0, keep: 0 };
+  const scanSt = { stop: false, seen: 0, keep: 0, errs: 0 };
   async function walkDir(h, path, out) {
-    for await (const [name, e] of h.entries()) {
-      if (scanSt.stop || out.length >= SCAN_CAP) return;
-      if (e.kind === 'directory') { if (!SCAN_SKIP.test(name) && !name.startsWith('.')) await walkDir(e, path + name + '/', out); continue; }
-      scanSt.seen++;
-      if (!scanWant(name)) continue;
-      const f = await e.getFile();
-      Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
-      out.push(f);
-      if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; await new Promise((r) => setTimeout(r)); }
-    }
+    try {
+      for await (const [name, e] of h.entries()) {
+        if (scanSt.stop || out.length >= SCAN_CAP) return;
+        if (e.kind === 'directory') { if (!SCAN_SKIP.test(name) && !name.startsWith('.')) await walkDir(e, path + name + '/', out); continue; }
+        scanSt.seen++;
+        if (!scanWant(name)) continue;
+        try {
+          const f = await e.getFile();
+          Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
+          out.push(f);
+        } catch (err) { scanSt.errs++; diag(`scan skipped file "${path + name}": ${err.name} ${err.message}`, 'warn'); continue; }
+        if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; await new Promise((r) => setTimeout(r)); }
+      }
+    } catch (err) { scanSt.errs++; diag(`scan skipped folder "${path}": ${err.name} ${err.message}`, 'warn'); }
   }
   async function scanHandle(h, interactive) {
     let p = await h.queryPermission({ mode: 'read' });
     if (p !== 'granted' && interactive) p = await h.requestPermission({ mode: 'read' });
     if (p !== 'granted') { $('medcount').textContent = `"${h.name}" remembered: click Refresh to allow access`; return false; }
     $('medcount').textContent = 'scanning…';
-    scanSt.stop = false; scanSt.seen = 0;
+    scanSt.stop = false; scanSt.seen = 0; scanSt.errs = 0;
     $('medstop').style.display = '';
     const out = [];
     try { await walkDir(h, h.name + '/', out); } finally { $('medstop').style.display = 'none'; }
     if (scanSt.stop) log(`scan stopped: ${out.length} files kept`);
     else if (out.length >= SCAN_CAP) log(`scan capped at ${SCAN_CAP} files: pick a smaller folder for the rest`);
-    diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates`);
+    diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates, ${scanSt.errs} unreadable skipped`);
+    if (scanSt.errs) log(`${scanSt.errs} unreadable files/folders skipped (see Save log for names)`);
     await scanMedia(out);
     return true;
   }
