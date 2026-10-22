@@ -821,6 +821,19 @@
   });
   $('romfilter').oninput = () => fillRomSelects();
 
+  // ---- collapsible side-panel sections (state remembered) ----
+  {
+    const saved = JSON.parse(localStorage.getItem('ac.collapsed') || '{}');
+    document.querySelectorAll('.box > h3').forEach((h3) => {
+      const box = h3.parentElement, key = h3.textContent.trim();
+      box.classList.toggle('collapsed', !!saved[key]);
+      h3.title = 'Click to collapse / expand';
+      h3.onclick = () => {
+        saved[key] = box.classList.toggle('collapsed');
+        localStorage.setItem('ac.collapsed', JSON.stringify(saved));
+      };
+    });
+  }
   // ---- touch pad (Atari Touch Tablet / Koala Pad on port 1: paddle 0/1 = X/Y, stylus buttons = joystick left/right lines) ----
   const PAD = Object.assign({ on: false, type: 'touch', screen: false, fx: false, fy: false }, JSON.parse(localStorage.getItem('ac.pad') || '{}'));
   const padPos = { x: 0.5, y: 0.5, b: 0 };
