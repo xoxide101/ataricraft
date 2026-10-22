@@ -557,7 +557,18 @@
     const zip = parts.length > 1 && /\.(zip|7z)$/i.test(parts[parts.length - 2]) ? parts[parts.length - 2].replace(/\.(zip|7z)$/i, '') : null;
     return [zip, last].filter(Boolean).map((s) => s.toLowerCase());
   };
-  const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return ''; };
+  // TOSEC names: "Title v1.2 (1984)(Publisher)(US)[a][b]" -> "Title v1.2 (1984, Publisher)"
+  const tosecTitle = (rel) => {
+    const base = rel.split('/').pop().replace(/\.[^.]+$/, '');
+    const m = /^(.+?)\s*\((\d{4}|19xx|20xx|19\d\?|19\d\d-\d\d(?:-\d\d)?)[^)]*\)\s*\(([^)]*)\)/.exec(base);
+    if (!m) return '';
+    const yr = /x|\?/.test(m[2]) ? '' : m[2].slice(0, 4);
+    const pub = /^-$|unknown/i.test(m[3]) ? '' : m[3];
+    return m[1] + (yr || pub ? ` (${[yr, pub].filter(Boolean).join(', ')})` : '');
+  };
+  // Lower is better: [!] verified first, bad dumps / cracks / hacks last.
+  const flagRank = (n) => { const b = n.split('/').pop(); return /\[!\]/.test(b) ? 0 : /\[(b|m|t|o)\d*[ \]]|\[(b|m|t|o)\d*\]/.test(b) ? 3 : /\[(cr|h|f|tr)[^\]]*\]/.test(b) ? 2 : 1; };
+  const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return tosecTitle(rel); };
   async function loadTitlesXml(files) {
     let n = 0;
     for (const f of files) {
@@ -584,6 +595,8 @@
   const groupKey = (f) => {
     const base = (f.title || f.name.split('/').pop()).replace(/\.[^.]+$/, '').toLowerCase();
     return base
+      .replace(/\s*\((\d{4}|19xx|20xx)[^)]*\)\s*$/, '')
+      .replace(/\s+v\d+(\.\d+)*[a-z]?\b/g, ' ')
       .replace(/\([^)]*(dis[ck]|side|part|\d\s*of\s*\d)[^)]*\)/g, ' ')
       .replace(/[\s._-]*\b(dis[ck]|side|part)[\s._-]*[0-9a-z]\b/g, ' ')
       .replace(/[\s._-]+(d|s)?[0-9ab]$/g, ' ')
@@ -630,6 +643,7 @@
       eb.append(b);
     });
     const hits = ofKind.filter((f) => (MED.ext === 'all' || extOf(f) === MED.ext) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
+    if (q) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
     hits.slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
       d.textContent = f.title ? `${f.title} — ${f.name}` : f.name;
