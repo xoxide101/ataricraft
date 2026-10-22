@@ -649,7 +649,7 @@
   // ---- media catalog (SQLite, saved in the browser) ----
   // Entries loaded from the catalog have no File yet: resolve it from the remembered folder when clicked.
   let arcCache = null;
-  // Server library: a web server hosts library/ (catalog.sqlite, optional library.json, and the files). SRV is its base URL.
+  // Server library: a web server hosts library/ (catalog.sqlite, optional library.json, software/ and bios/ folders). SRV is its base URL.
   let SRV = null, srvLast = null;
   async function fileOf(m) {
     if (m.file) return m.file;
@@ -661,7 +661,7 @@
         base = parts.slice(0, i + 1).join('/');
         if (srvLast && srvLast.base === base) f = srvLast.file;
         else {
-          const r = await fetch(SRV + parts.slice(1, i + 1).map(encodeURIComponent).join('/'));
+          const r = await fetch(SRV + 'software/' + parts.slice(1, i + 1).map(encodeURIComponent).join('/'));
           if (!r.ok) throw new Error('server returned ' + r.status);
           f = new File([await r.blob()], parts[i]);
           Object.defineProperty(f, 'webkitRelativePath', { value: base });
@@ -868,7 +868,7 @@
       const roms = [];
       for (const p of man.bios) {
         try {
-          const r = await fetch(base + p.split('/').map(encodeURIComponent).join('/'));
+          const r = await fetch(base + 'bios/' + p.split('/').map(encodeURIComponent).join('/'));
           if (!r.ok) continue;
           const f = new File([await r.blob()], p.split('/').pop());
           Object.defineProperty(f, 'webkitRelativePath', { value: p });
