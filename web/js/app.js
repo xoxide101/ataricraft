@@ -627,10 +627,22 @@
   const idb = () => new Promise((res, rej) => { const r = indexedDB.open('ataricraft-media', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   const idbGet = async (k) => { const db = await idb(); return new Promise((res) => { const r = db.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }); };
   const idbSet = async (k, v) => { const db = await idb(); return new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); };
+  // Big trees: only keep media-looking files (checked by name, nothing is opened), skip system folders, show progress, allow Stop.
+  const SCAN_CAP = 50000;
+  const SCAN_SKIP = /^(\$recycle\.bin|system volume information|node_modules|\.git|windows|program files.*)$/i;
+  const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip']);
+  const scanWant = (name) => SCAN_EXT.has((name.split('.').pop() || '').toLowerCase()) || /^a(800|5200)[^/]*\.xml$/i.test(name);
+  const scanSt = { stop: false, seen: 0, keep: 0 };
   async function walkDir(h, path, out) {
     for await (const [name, e] of h.entries()) {
-      if (e.kind === 'directory') await walkDir(e, path + name + '/', out);
-      else { const f = await e.getFile(); Object.defineProperty(f, 'webkitRelativePath', { value: path + name }); out.push(f); }
+      if (scanSt.stop || out.length >= SCAN_CAP) return;
+      if (e.kind === 'directory') { if (!SCAN_SKIP.test(name) && !name.startsWith('.')) await walkDir(e, path + name + '/', out); continue; }
+      scanSt.seen++;
+      if (!scanWant(name)) continue;
+      const f = await e.getFile();
+      Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
+      out.push(f);
+      if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; await new Promise((r) => setTimeout(r)); }
     }
   }
   async function scanHandle(h, interactive) {
@@ -638,11 +650,17 @@
     if (p !== 'granted' && interactive) p = await h.requestPermission({ mode: 'read' });
     if (p !== 'granted') { $('medcount').textContent = `"${h.name}" remembered: click Refresh to allow access`; return false; }
     $('medcount').textContent = 'scanning…';
+    scanSt.stop = false; scanSt.seen = 0;
+    $('medstop').style.display = '';
     const out = [];
-    await walkDir(h, h.name + '/', out);
+    try { await walkDir(h, h.name + '/', out); } finally { $('medstop').style.display = 'none'; }
+    if (scanSt.stop) log(`scan stopped: ${out.length} files kept`);
+    else if (out.length >= SCAN_CAP) log(`scan capped at ${SCAN_CAP} files: pick a smaller folder for the rest`);
+    diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates`);
     await scanMedia(out);
     return true;
   }
+  $('medstop').onclick = () => { scanSt.stop = true; };
   let medHandle = null;
   if (window.showDirectoryPicker) {
     $('medpick').style.display = '';
@@ -971,6 +989,7 @@
     type: (text) => pasteText(text),
     copyText: () => S.emu.screenText(),
     press: (fields, frames) => S.emu.tap(fields, frames || 4),
+    scanDir: (handle) => scanHandle(handle, false),
     joy: (bits, fire) => { S.joy = bits | 0; S.fire = !!fire; sendJoy(); },
     console: (f) => S.emu.tap(f, 6),
     step: (n) => { stepFrames(n || 1); draw(); return S.emu.frames; },
