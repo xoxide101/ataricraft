@@ -37,6 +37,9 @@
   };
 
   function classify(name, bytes) {
+    const id = (AC.OS_DB || {})[crc32(bytes)];
+    if (id) return /BASIC/i.test(id[0]) ? 'basic' : bytes.length === 10240 ? 'os800' : bytes.length === 16384 ? 'osxl' : null;
+    if ((AC.CART_DB || {})[crc32(bytes)]) return null;
     if (bytes.length === 10240) return 'os800';
     if (bytes.length === 16384) return 'osxl';
     if (bytes.length === 8192) return 'basic';
@@ -529,6 +532,11 @@
       $('d' + n).textContent = file.name;
       S.emu.coldStart && !noBoot && S.emu.coldStart();
       log(`D${n}: ${file.name}${noBoot ? ' (no reboot)' : ''}`);
+      if (AC.DISK_DB) {
+        const body = bytes.length > 16 && bytes[0] === 0x96 && bytes[1] === 0x02 ? bytes.subarray(16) : bytes;
+        const nm = AC.DISK_DB[crc32(body)];
+        if (nm) log('disk recognised: ' + nm);
+      }
     } else if (k === 'exe') {
       S.emu.bootFile(file.name, bytes);
       log('running ' + file.name);
@@ -1177,6 +1185,37 @@
 
   // ---- cartridges and eject ----
   S.pendingCart = null;
+  const crc32 = (b) => {
+    let t = crc32.t;
+    if (!t) { t = crc32.t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } }
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < b.length; i++) c = t[(c ^ b[i]) & 255] ^ (c >>> 8);
+    return ((c ^ 0xFFFFFFFF) >>> 0).toString(16).padStart(8, '0');
+  };
+  // ---- blank disks ----
+  function blankAtr(secSize, nsec) {
+    const len = secSize === 256 ? 384 + (nsec - 3) * 256 : nsec * 128;
+    const out = new Uint8Array(16 + len), par = len >> 4;
+    out.set([0x96, 0x02, par & 255, (par >> 8) & 255, secSize & 255, secSize >> 8, (par >> 16) & 255]);
+    return out;
+  }
+  for (let n = 1; n <= 8; n++) $('blankslot').append(new Option('D' + n, String(n)));
+  const blankName = () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}.atr`; };
+  $('blankmk').onclick = () => {
+    if (!S.emu) { log('boot first, then insert a blank disk'); return; }
+    const [ss, n] = $('blankfmt').value.split(',').map(Number), slot = +$('blankslot').value;
+    const bytes = blankAtr(ss, n), name = blankName();
+    if (!S.emu.mountDisk(slot, name, bytes)) { log('could not mount the blank disk'); return; }
+    S.disks[slot] = { name, bytes };
+    if ($('d' + slot)) $('d' + slot).textContent = name;
+    log(`D${slot}: blank ${$('blankfmt').selectedOptions[0].textContent}. Format it with your DOS (for example DOS XL or DOS 2.5 option I)`);
+  };
+  $('blankdl').onclick = () => {
+    const [ss, n] = $('blankfmt').value.split(',').map(Number);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([blankAtr(ss, n)], { type: 'application/octet-stream' }));
+    a.download = blankName(); a.click();
+  };
   async function insertCart(slot, file, bytes) {
     if (!S.emu) { log('boot first'); return; }
     bytes = bytes || new Uint8Array(await file.arrayBuffer());
@@ -1190,6 +1229,14 @@
       const types = S.emu.cartTypes(r.kb);
       $('ctype').innerHTML = '';
       types.forEach((t) => $('ctype').append(new Option(t.name, String(t.id))));
+      const known = (AC.CART_DB || {})[crc32(bytes)];
+      if (known && [...$('ctype').options].some((o) => +o.value === known[1])) {
+        $('ctype').value = String(known[1]);
+        S.pendingCart = slot;
+        $('ctypeok').onclick();
+        log(`cartridge recognised: ${known[2]}${known[3] ? ' (' + known[3] + ')' : ''}, type "${$('ctype').selectedOptions[0].textContent}"`);
+        return;
+      }
       const pref = /sparta|sdx|spado/i.test(file.name) ? /SpartaDOS X/i : null;
       const hit = pref && [...$('ctype').options].find((o) => pref.test(o.textContent) && (!/128/.test(o.textContent) || r.kb === 128));
       if (hit) {

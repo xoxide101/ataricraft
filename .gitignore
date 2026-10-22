@@ -13,3 +13,4 @@ target/
 out/
 books/
 web/library/
+web/js/diskdb.js

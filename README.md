@@ -151,3 +151,10 @@ Media catalog: scans are saved to a SQLite database (sql.js, in web/js/sql, MIT)
 Server library (NAS or any static web server): copy web/ to the server and make web/library/ beside index.html. Scan each folder you want on the PC with Pick folder (software, roms, dos...): every scan ADDS to the catalog and only replaces that folder's own rows. Press Export DB and rename the file to catalog.sqlite. On the server, library/ holds a folder named exactly like each scanned folder (library/software/, library/roms/, library/dos/), plus bios/ (OS kernels), basic/ (BASIC ROMs) and catalog.sqlite. If a server folder has a different name, add it to library.json as a map, e.g. {"map":{"8bit":"software"}}. Run tools/make-library-json.ps1 -Library <path> to write library.json with the bios/ and basic/ ROM list (it keeps no map, so add that by hand). Open the site over http: it loads the catalog and BIOS automatically and fetches files by URL. Rescan rescans every remembered folder. library/ is git-ignored.
 
 TOSEC names are parsed: titles show as 'Title (year, publisher)' when no MAME title exists, versions and disk numbers group together, and when you search, verified [!] dumps sort first and bad dumps/cracks last. Rescan to refresh saved titles.
+
+## Identifying cartridges and disks (CRC32)
+- **Cartridges / OS ROMs:** web/js/romdb.js holds the CRC32 database from the WUDSN Atari ROM Checker (Peter Dell, GPL v2+). Inserted carts are recognised and typed automatically. Regenerate with 
+ode tools/make-romdb.cjs <dir with CartridgeDatabase.csv and ROMVersions.csv>.
+- **Disks:** 
+ode tools/make-diskdb.cjs <folder> hashes the sector data of every ATR/XFD (loose or inside zips) and writes web/js/diskdb.js (git-ignored, built from your own library). Mounting a known disk logs `disk recognised: <name>`. The hash ignores the ATR header, so re-headered copies and XFD files match.
+- **Blank disks:** the Drives box can insert or save a blank ATR (SS/SD 90K, SS/ED 130K, SS/DD 180K, DS/SD 180K, DS/DD 360K and 720K).
