@@ -14,7 +14,20 @@
   new ResizeObserver(setHh).observe(hdr);
   setHh();
   let toastT = 0;
+  // Diagnostics log: kept in localStorage so it survives reloads; "Save log" writes it to a file.
+  const DIAG_MAX = 500;
+  let DIAG = [];
+  try { DIAG = JSON.parse(localStorage.getItem('ac.diag') || '[]'); } catch (e) { DIAG = []; }
+  const diag = (m, lvl) => {
+    DIAG.push(`${new Date().toISOString()} ${lvl || 'info'} ${m}`);
+    if (DIAG.length > DIAG_MAX) DIAG = DIAG.slice(-DIAG_MAX);
+    try { localStorage.setItem('ac.diag', JSON.stringify(DIAG)); } catch (e) { /* storage full */ }
+  };
+  window.addEventListener('error', (e) => diag(`ERROR ${e.message} @${(e.filename || '').split('/').pop()}:${e.lineno}`, 'error'));
+  window.addEventListener('unhandledrejection', (e) => diag('REJECTION ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason), 'error'));
+  diag('page loaded ' + (document.querySelector('h1 small') || {}).textContent + ' | ' + navigator.userAgent);
   const log = (m) => {
+    diag(m);
     $('status').textContent = m;
     const t = $('toast');
     t.textContent = m;
@@ -427,6 +440,7 @@
     const bytes = new Uint8Array(await file.arrayBuffer());
     const t = S.emu.detect(file.name, bytes);
     const k = typeKind(t) || hint || extKind(file.name);
+    diag(`load "${file.name}" ${bytes.length} bytes, detect=${t}, kind=${k}, first bytes=${[...bytes.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
     if (k !== 'tape' && S.emu.tapeInfo().status) {
       S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
     }
@@ -505,14 +519,52 @@
     });
     $('medcount').textContent = MED.files.length ? `${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
   }
-  $('medfolder').onchange = async (e) => {
-    const all = [...e.target.files];
+  // Remembered folder: the directory handle lives in IndexedDB (needs the File System Access API).
+  const idb = () => new Promise((res, rej) => { const r = indexedDB.open('ataricraft-media', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const idbGet = async (k) => { const db = await idb(); return new Promise((res) => { const r = db.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(null); }); };
+  const idbSet = async (k, v) => { const db = await idb(); return new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); };
+  async function walkDir(h, path, out) {
+    for await (const [name, e] of h.entries()) {
+      if (e.kind === 'directory') await walkDir(e, path + name + '/', out);
+      else { const f = await e.getFile(); Object.defineProperty(f, 'webkitRelativePath', { value: path + name }); out.push(f); }
+    }
+  }
+  async function scanHandle(h, interactive) {
+    let p = await h.queryPermission({ mode: 'read' });
+    if (p !== 'granted' && interactive) p = await h.requestPermission({ mode: 'read' });
+    if (p !== 'granted') { $('medcount').textContent = `"${h.name}" remembered: click Refresh to allow access`; return false; }
+    $('medcount').textContent = 'scanning…';
+    const out = [];
+    await walkDir(h, h.name + '/', out);
+    await scanMedia(out);
+    return true;
+  }
+  let medHandle = null;
+  if (window.showDirectoryPicker) {
+    $('medpick').style.display = '';
+    $('medpick').onclick = async () => {
+      try { medHandle = await showDirectoryPicker({ id: 'ataricraft-media', mode: 'read' }); } catch (e) { return; }
+      await idbSet('medDir', medHandle);
+      await scanHandle(medHandle, true);
+    };
+    $('medrefresh').onclick = async () => {
+      if (!medHandle) { log('no remembered folder yet: use Pick folder…'); return; }
+      try { await scanHandle(medHandle, true); log('library refreshed'); } catch (e) { log('refresh failed: ' + e.message); }
+    };
+    idbGet('medDir').then(async (h) => {
+      if (!h) return;
+      medHandle = h;
+      try { await scanHandle(h, false); } catch (e) { $('medcount').textContent = `"${h.name}" remembered: click Refresh`; }
+    });
+  }
+  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
+  async function scanMedia(all) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
     if (xmls.length) await loadTitlesXml(xmls);
     const files = await expandZips(all);
     MED.files = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
     renderMed();
-  };
+      }
   $('medfilter').oninput = renderMed;
   document.querySelectorAll('#medchips button').forEach((b) => {
     b.onclick = () => {
@@ -522,6 +574,32 @@
     };
   });
   $('romfilter').oninput = () => fillRomSelects();
+
+  // ---- diagnostics log ----
+  const diagText = () => {
+    const st = S.emu ? JSON.stringify({ carts: Object.fromEntries(Object.entries(S.carts).map(([k, c]) => [k, { name: c.name, size: c.bytes.length, type: c.type }])), disks: Object.fromEntries(Object.entries(S.disks).map(([k, d]) => [k, d.name])), tape: $('tn').textContent, model: $('model').value, basic: $('basic').checked }) : 'not booted';
+    return `ataricraft diagnostics\nsaved ${new Date().toISOString()}\nstate: ${st}\n\n${DIAG.join('\n')}\n`;
+  };
+  const syncDiag = () => { $('diagcount').textContent = DIAG.length + ' lines'; };
+  syncDiag();
+  setInterval(syncDiag, 2000);
+  $('diagclear').onclick = () => { DIAG = []; localStorage.removeItem('ac.diag'); syncDiag(); };
+  $('diagsave').onclick = async () => {
+    diag('log saved by user');
+    const name = 'ataricraft-diag-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.txt';
+    const blob = new Blob([diagText()], { type: 'text/plain' });
+    try {
+      if (window.showSaveFilePicker) {
+        const h = await showSaveFilePicker({ suggestedName: name, id: 'ataricraft-diag', types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }] });
+        const w = await h.createWritable(); await w.write(blob); await w.close();
+        log('diagnostics saved: ' + h.name);
+        return;
+      }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    log('diagnostics downloaded: ' + name);
+  };
 
   // ---- cassette ----
   $('tape').onchange = (e) => e.target.files[0] && loadAny(e.target.files[0], false, 'tape');
@@ -582,6 +660,7 @@
     if (!S.emu) { log('boot first'); return; }
     bytes = bytes || new Uint8Array(await file.arrayBuffer());
     const r = S.emu.insertCart(slot, file.name, bytes);
+    diag(`insertCart slot ${slot} "${file.name}" -> ${JSON.stringify(r)}`);
     if (!r.ok) { log('cartridge: ' + r.error); return; }
     $('cn' + slot).textContent = (slot === 1 ? '1 (main, right): ' : '2 (left): ') + file.name;
     S.carts[slot] = { name: file.name, bytes, type: null };
@@ -598,9 +677,16 @@
         if ($('basic').checked) { $('basic').checked = false; $('basic').onchange(); log('SpartaDOS X detected: type set, BASIC turned off'); }
         return;
       }
-      $('ctyperow').style.display = 'flex';
-      S.pendingCart = slot;
-      log(`choose the cartridge type (${r.kb} KB image)`);
+      const opts = [...$('ctype').options];
+      const guess = opts.find((o) => /^Standard/i.test(o.textContent)) || opts.find((o) => !/5200/.test(o.textContent)) || opts[0];
+      if (guess) {
+        $('ctype').value = guess.value;
+        S.pendingCart = slot;
+        $('ctypeok').onclick();
+        $('ctyperow').style.display = 'flex';
+        S.pendingCart = slot;
+        log(`${r.kb} KB cart loaded as "${guess.textContent}". If it shows diagnostics, pick another type and press OK`);
+      }
     } else if (slot === 2) S.emu.coldStart();
   }
   for (const n of [1, 2]) {
