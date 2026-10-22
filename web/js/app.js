@@ -472,14 +472,14 @@
   // MAME software list titles: short zip/set name -> "Title (year, publisher)"
   let TITLES = {};
   try { TITLES = JSON.parse(localStorage.getItem('ac.titles') || '{}'); } catch (e) { TITLES = {}; }
-  const syncTitles = () => { $('medtitles').textContent = Object.keys(TITLES).length ? `${Object.keys(TITLES).length} titles known` : ''; };
+  const syncTitles = () => { $('medtitles').textContent = `${Object.keys(AC.TITLES_BUILTIN || {}).length} built-in titles (MAME)` + (Object.keys(TITLES).length ? ` + ${Object.keys(TITLES).length} from your XML` : ''); };
   const setKey = (rel) => {
     const parts = rel.split('/');
     const last = parts[parts.length - 1].replace(/\.[^.]+$/, '');
     const zip = parts.length > 1 && /\.zip$/i.test(parts[parts.length - 2]) ? parts[parts.length - 2].replace(/\.zip$/i, '') : null;
     return [zip, last].filter(Boolean).map((s) => s.toLowerCase());
   };
-  const titleFor = (rel) => { for (const k of setKey(rel)) if (TITLES[k]) return TITLES[k]; return ''; };
+  const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return ''; };
   async function loadTitlesXml(files) {
     let n = 0;
     for (const f of files) {
