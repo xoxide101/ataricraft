@@ -130,7 +130,7 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261022i">ATARICRAFT <small class="dim" style="font-size:10px">b20261022i</small></h1>
+  <h1 title="build 20261022j">ATARICRAFT <small class="dim" style="font-size:10px">b20261022j</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -192,6 +192,12 @@
       <div class="dim">Click to load (disk → D1, cart → slot 1, tape → cassette, program → run). Shift-click: D2 / cart slot 2. Format is detected from the file contents.</div>
     </div>
     <div class="box">
+      <h3>RAM bank test</h3>
+      <div class="row"><button id="memtest" title="Runs a test program on the emulated Atari: counts the real extended-RAM banks and fills/verifies each one. Reboots the machine into the test; Reset afterwards.">Run RAM test</button><span id="memexp" class="dim"></span></div>
+      <pre id="memout" style="margin:4px 0;white-space:pre-wrap;font-size:12px"></pre>
+      <div class="dim">Checks that the selected RAM size really has the right number of 16 KB banks and that every bank holds its own data. $5000-$57FF is skipped (Self-Test ROM).</div>
+    </div>
+    <div class="box">
       <h3>Diagnostics</h3>
       <div class="row"><button id="diagsave" title="Save everything logged (status messages, loads, errors) to a text file">Save log…</button><button id="diagclear">Clear</button><span id="diagcount" class="dim"></span></div>
       <div class="dim">Hit a problem? Click Save log and put the file in the project's <code>diag</code> folder.</div>
@@ -239,16 +245,17 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261022i"></script>
-<script src="js/titles-data.js?v=20261022i"></script>
-<script src="js/zip.js?v=20261022i"></script>
-<script src="js/sevenzip.js?v=20261022i"></script>
-<script src="js/catalog.js?v=20261022i"></script>
-<script src="js/romdb.js?v=20261022i"></script>
-<script src="js/diskdb.js?v=20261022i"></script>
+<script src="js/emu.js?v=20261022j"></script>
+<script src="js/titles-data.js?v=20261022j"></script>
+<script src="js/zip.js?v=20261022j"></script>
+<script src="js/sevenzip.js?v=20261022j"></script>
+<script src="js/catalog.js?v=20261022j"></script>
+<script src="js/romdb.js?v=20261022j"></script>
+<script src="js/memtest.js?v=20261022j"></script>
+<script src="js/diskdb.js?v=20261022j"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261022i"></script>
+<script src="js/app.js?v=20261022j"></script>
 </body>
 </html>

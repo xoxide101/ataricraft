@@ -1220,6 +1220,30 @@
     if ($('d' + slot)) $('d' + slot).textContent = name;
     log(`D${slot}: blank ${$('blankfmt').selectedOptions[0].textContent}. Format it with your DOS (for example DOS XL or DOS 2.5 option I)`);
   };
+  // ---- RAM bank test ----
+  let memTimer = 0;
+  $('memtest').onclick = () => {
+    if (!S.emu) { $('memout').textContent = 'boot first (press Boot)'; return; }
+    clearInterval(memTimer);
+    const ram = S.emu.opt.ram, want = AC.MemTest.expectedBanks(ram), box = $('memout');
+    box.textContent = `RAM option ${ram}: expecting ${want} extended banks. Running…`;
+    S.emu.bootFile('memtest.xex', AC.MemTest.program());
+    S.running = true;
+    const t0 = Date.now();
+    memTimer = setInterval(() => {
+      const r = AC.MemTest.read(S.emu);
+      const ph = ['', 'fill', 'verify', 'fill (inverted)', 'verify (inverted)'][r.phase] || 'probing';
+      if (!r.done) { box.textContent = `RAM option ${ram}: expecting ${want} extended banks. ${ph} bank ${r.bank}… ${Math.round((Date.now() - t0) / 1000)} s`; if (Date.now() - t0 > 600000) { clearInterval(memTimer); box.textContent += '\nno result after 10 minutes'; } return; }
+      clearInterval(memTimer);
+      const ext = r.mainIntact ? r.found : 0;
+      const ok = ext === want && r.errors === 0;
+      const f = r.first;
+      box.textContent = `${ok ? 'PASS' : 'FAIL'}: ${ram} (${S.emu.opt.model || ''})\nExtended banks found: ${ext} (expected ${want})${r.mainIntact ? '' : ' (no bank switching seen)'}\nMemory errors: ${r.errors}` +
+        (r.errors ? `\nFirst error: PORTB combo ${f.combo} ($${AC.MemTest.combos()[f.combo].toString(16).toUpperCase()}), page $${f.page.toString(16).toUpperCase()}, expected $${f.expected.toString(16).toUpperCase()} got $${f.got.toString(16).toUpperCase()}, ${['', 'pattern', 'pattern', 'inverted', 'inverted'][f.phase]} pass` : '') +
+        `\nTook ${Math.round((Date.now() - t0) / 1000)} s. Press Reset to leave the test.`;
+      diag('ram test ' + box.textContent.replace(/\n/g, ' | '));
+    }, 300);
+  };
   $('fullreset').onclick = async () => {
     if (!confirm('Forget everything stored by this page (catalog, remembered folders, ROMs, settings, log) and reload?\nYour files on disk are not touched.')) return;
     try { localStorage.clear(); sessionStorage.clear(); } catch (e) { /* ignore */ }
