@@ -143,3 +143,5 @@ Device lights: the top right of the keyboard panel shows D1: to D8:, C: (tape), 
 7z support: .7z archives are read like zips (7-Zip compiled to WASM, in web/js/7z, LGPL + unRAR restriction; loaded on first use). Each archive is copied into memory while open, so very large archives need RAM.
 
 Scan folders: after Pick folder (or the Folders... button) a dialog lists sub-folders with check boxes (lazy tree). Shift-click ticks a range at the same level, Ctrl-click selects only that folder. The choices are remembered and used by Refresh and the auto-rescan on reload.
+
+Touch pad: the Touch pad box emulates the Atari Touch Tablet or Koala Pad on port 1 (paddle 0/1 for X/Y, stylus = joystick left/right lines). Draw in the pad box or on the main screen. Flip X/Y if a program draws mirrored.
