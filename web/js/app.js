@@ -9,7 +9,15 @@
   const img32 = new Uint32Array(img.data.buffer);
   cv.width = AC.SCREEN.w; cv.height = AC.SCREEN.h;
 
-  const log = (m) => { $('status').textContent = m; };
+  let toastT = 0;
+  const log = (m) => {
+    $('status').textContent = m;
+    const t = $('toast');
+    t.textContent = m;
+    t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('show'), 4500);
+  };
 
   function classify(name, bytes) {
     if (bytes.length === 10240) return 'os800';

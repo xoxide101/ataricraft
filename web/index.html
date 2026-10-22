@@ -15,7 +15,11 @@
   input[type=file] { display:none; }
   main { display:flex; gap:12px; padding:10px 12px; align-items:flex-start; height:calc(100vh - 50px); }
   .center { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:10px; max-height:100%; overflow:auto; }
-  #stage { background:#000; border:1px solid var(--line); border-radius:6px; padding:4px; flex:none; }
+  #stage { position:relative; background:#000; border:1px solid var(--line); border-radius:6px; padding:4px; flex:none; }
+  #infobar { flex-basis:100%; display:flex; align-items:center; gap:14px; font-size:12px; min-height:16px; }
+  #infobar .stats { display:flex !important; }
+  #toast { position:absolute; top:10px; left:50%; transform:translateX(-50%); max-width:90%; background:rgba(20,24,32,.92); color:var(--acc); border:1px solid var(--acc); border-radius:14px; padding:6px 14px; font-size:13px; pointer-events:none; opacity:0; transition:opacity .4s; text-align:center; z-index:5; }
+  #toast.show { opacity:1; }
   #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - 375px) * 1.4)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
   .side { width:300px; flex:none; max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
   body { --sbw:370px; }
@@ -102,7 +106,7 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261021b">ATARICRAFT <small class="dim" style="font-size:10px">b20261021b</small></h1>
+  <h1 title="build 20261021c">ATARICRAFT <small class="dim" style="font-size:10px">b20261021c</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -111,8 +115,8 @@
   <button id="boot">Boot</button>
   <button id="mapbtn">Keyboard mapping…</button>
   <button id="sndbtn">Sound: on</button><button id="fnbtn" title="Virtual FujiNet (SIO device $70) on/off">FujiNet: on</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
-  <span id="status" class="dim">choose ROMs, then Boot</span>
-  <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span></span>
+  <div id="infobar"><span id="status" class="dim">choose ROMs, then Boot</span>
+  <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span></span></div>
 </header>
 <main>
   <div class="side">
@@ -182,7 +186,7 @@
     <div class="row" style="justify-content:flex-end"><button id="mapclose">Close</button></div>
   </dialog>
   <div class="center">
-    <div id="stage"><canvas id="screen"></canvas></div>
+    <div id="stage"><canvas id="screen"></canvas><div id="toast"></div></div>
     <div id="kbdwrap">
       <div id="kbview"><span>Show:</span><button data-v="base" title="Lower-case glyphs">a Lower</button><button data-v="shift" title="Capital glyphs">A Caps</button><button data-v="ctrl" title="Control/special graphics">♥ Special</button></div>
       <div id="kbd"></div>
@@ -192,10 +196,10 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261021b"></script>
+<script src="js/emu.js?v=20261021c"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261021b"></script>
+<script src="js/app.js?v=20261021c"></script>
 </body>
 </html>
