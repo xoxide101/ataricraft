@@ -1236,6 +1236,7 @@
     if (!S.emu) { $('memout').textContent = 'boot first (press Boot)'; return; }
     clearInterval(memTimer);
     const ram = S.emu.opt.ram, want = AC.MemTest.expectedBanks(ram), box = $('memout');
+    if ($('ram').value !== ram) { box.textContent = `Machine is running ${ram} but the RAM selector says ${$('ram').value}: press Boot first, then run the test.`; return; }
     box.textContent = `RAM option ${ram}: expecting ${want} extended banks. Running…`;
     S.emu.bootFile('memtest.xex', AC.MemTest.program());
     S.running = true;
