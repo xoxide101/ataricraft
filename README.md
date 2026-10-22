@@ -158,3 +158,6 @@ ode tools/make-romdb.cjs <dir with CartridgeDatabase.csv and ROMVersions.csv>.
 - **Disks:** 
 ode tools/make-diskdb.cjs <folder> hashes the sector data of every ATR/XFD (loose or inside zips) and writes web/js/diskdb.js (git-ignored, built from your own library). Mounting a known disk logs `disk recognised: <name>`. The hash ignores the ATR header, so re-headered copies and XFD files match.
 - **Blank disks:** the Drives box can insert or save a blank ATR (SS/SD 90K, SS/ED 130K, SS/DD 180K, DS/SD 180K, DS/DD 360K and 720K).
+
+## Building the server library index (server.html)
+Open `web/server.html` from your own computer's copy of `web` (a `file://` or localhost page; the folder picker is not allowed on plain http). Pick the server's `library` folder (a mapped network drive works), tick the sub-folders to include and press **Scan and write catalog**. It reads zip/7z directories without extracting, then writes `catalog.sqlite` and `library.json` (BIOS/BASIC ROMs from `bios/` and `basic/`) back into that folder. Folder names become the first part of each path, so no mapping is needed. Re-run it after adding files. When the app is served over http and `catalog.sqlite` is missing, the Media library box says so.

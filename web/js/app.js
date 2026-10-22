@@ -885,7 +885,7 @@
       if (mr.ok) man = Object.assign(man, await mr.json());
       SRVMAP = man.map || {};
       const cr = await fetch(base + encodeURI(man.catalog), { cache: 'no-store' });
-      if (!cr.ok) return;
+      if (!cr.ok) { $('medcount').textContent = 'no server catalog yet: run server.html (from a local copy of web/) to build library/catalog.sqlite'; return; }
       await AC.Catalog.open(new Uint8Array(await cr.arrayBuffer()));
       SRV = base;
       if (!(await useCatalog())) { SRV = null; return; }

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ataricraft server library builder</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { background:#14161a; color:#d8dce4; font:14px/1.45 system-ui,sans-serif; max-width:760px; margin:24px auto; padding:0 16px; }
+  h1 { font-size:20px; } h2 { font-size:15px; margin-top:22px; }
+  button { background:#2a2f39; color:#d8dce4; border:1px solid #3a404c; border-radius:5px; padding:6px 14px; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  code, pre { background:#0d0f12; border-radius:4px; padding:1px 5px; }
+  pre { padding:8px; height:200px; overflow:auto; white-space:pre-wrap; }
+  .dim { color:#8b93a1; } .warn { background:#4a2a1a; border:1px solid #a55; padding:8px 12px; border-radius:6px; }
+  #folders { margin:8px 0; }
+</style>
+</head>
+<body>
+<h1>ataricraft · server library builder</h1>
+<p class="dim">Builds the index (<code>catalog.sqlite</code>) and <code>library.json</code> that the app needs when it is served from a web server. Nothing is uploaded anywhere: this page reads the library folder and writes the two files back into it.</p>
+
+<div id="warn" class="warn" style="display:none">
+  This page needs the folder picker, which Chrome/Edge only allow on <b>https</b>, <b>localhost</b> or a local <code>file://</code> copy. Open <code>server.html</code> from your own computer's copy of the <code>web</code> folder (double-click it), not through the NAS address.
+</div>
+
+<h2>1. Pick the library folder</h2>
+<p class="dim">The folder on the server (a mapped network drive or share is fine) that sits beside <code>index.html</code> as <code>library/</code> and holds <code>software/</code>, <code>roms/</code>, <code>dos/</code>, <code>bios/</code> and <code>basic/</code>. Any other sub-folder names work too: the folder name is the first part of every path, so the app finds it on the server without any mapping.</p>
+<button id="pick">Pick library folder…</button> <b id="rootname"></b>
+
+<h2>2. Choose which folders to include</h2>
+<div id="folders" class="dim">pick a folder first</div>
+
+<h2>3. Build</h2>
+<button id="build" disabled>Scan and write catalog</button> <button id="stop" style="display:none">Stop</button> <span id="status" class="dim"></span>
+<pre id="out"></pre>
+
+<p class="dim">Zip and 7z files are listed by reading their directory only; nothing is extracted. Run this again whenever you add or remove files. Copy the whole <code>web</code> folder (including <code>js</code>) to the server; <code>library/</code> goes beside <code>index.html</code>.</p>
+
+<script src="js/titles-data.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/sevenzip.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/server.js"></script>
+</body>
+</html>
