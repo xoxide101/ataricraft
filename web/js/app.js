@@ -508,7 +508,7 @@
   const typeKind = (t) => ([1, 2, 3, 4, 5, 15, 16].includes(t) ? 'disk' : [6, 7, 8].includes(t) ? 'exe' : [9, 10].includes(t) ? 'cart' : [11, 12].includes(t) ? 'tape' : null);
 
   // Detects the format from the file contents (extensions are only a hint), then routes it to the right device.
-  async function loadAny(file, alt, hint) {
+  async function loadAny(file, alt, hint, noBoot) {
     if (!S.emu) { log('boot first (press Boot, then load ' + file.name + ')'); return; }
     log('loading ' + file.name + '…');
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -523,8 +523,8 @@
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
       S.disks[n] = { name: file.name, bytes };
       $('d' + n).textContent = file.name;
-      S.emu.coldStart();
-      log(`D${n}: ${file.name}`);
+      S.emu.coldStart && !noBoot && S.emu.coldStart();
+      log(`D${n}: ${file.name}${noBoot ? ' (no reboot)' : ''}`);
     } else if (k === 'exe') {
       S.emu.bootFile(file.name, bytes);
       log('running ' + file.name);
@@ -576,6 +576,36 @@
   }
   $('medxml').onchange = (e) => loadTitlesXml([...e.target.files]);
   syncTitles();
+  // Multi-disk sets: normalise away "disk 2", "side B", "(1 of 3)" so related disks group together.
+  const groupKey = (f) => {
+    const base = (f.title || f.name.split('/').pop()).replace(/\.[^.]+$/, '').toLowerCase();
+    return base
+      .replace(/\([^)]*(dis[ck]|side|part|\d\s*of\s*\d)[^)]*\)/g, ' ')
+      .replace(/[\s._-]*\b(dis[ck]|side|part)[\s._-]*[0-9a-z]\b/g, ' ')
+      .replace(/[\s._-]+(d|s)?[0-9ab]$/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  };
+  const zipOf = (n) => { const p = n.split('/'); return p.length > 1 && /\.zip$/i.test(p[p.length - 2]) ? p.slice(0, -1).join('/') : ''; };
+  function showRelated(f) {
+    const box = $('medrel');
+    box.innerHTML = '';
+    if (f.kind !== 'disk') return;
+    const key = groupKey(f), zp = zipOf(f.name);
+    const rel = MED.files.filter((m) => m !== f && m.kind === 'disk' && ((zp && zipOf(m.name) === zp) || (key.length >= 3 && groupKey(m) === key)));
+    if (!rel.length) return;
+    const h = document.createElement('div');
+    h.className = 'dim'; h.style.cssText = 'font-size:11px;margin-top:4px';
+    h.textContent = 'Other disks in this set (click = load into D2 without rebooting, Shift = D1):';
+    box.append(h);
+    rel.slice(0, 12).forEach((m) => {
+      const d = document.createElement('div');
+      d.textContent = (m.name.split('/').pop()) + (m.title ? ` — ${m.title}` : '');
+      d.title = m.name;
+      d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--acc)';
+      d.onclick = (e) => { loadAny(m.file, !e.shiftKey, 'disk', true); };
+      box.append(d);
+    });
+  }
   function renderMed() {
     const q = $('medfilter').value.toLowerCase();
     const box = $('medlist');
@@ -588,7 +618,7 @@
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
       d.onmouseenter = () => (d.style.background = '#2a2f39');
       d.onmouseleave = () => (d.style.background = '');
-      d.onclick = (e) => loadAny(f.file, e.shiftKey, f.kind);
+      d.onclick = (e) => { loadAny(f.file, e.shiftKey, f.kind); showRelated(f); };
       box.append(d);
     });
     $('medcount').textContent = MED.files.length ? `${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';

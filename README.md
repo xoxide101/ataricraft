@@ -133,3 +133,5 @@ Anything derived from GPL code must be GPL. A clean-room Rust core written from 
 Game titles in the media library come from the MAME software lists (a800, a800_flop, a800_cass, a5200), bundled in web/js/titles-data.js and regenerated with scripts/gen-titles.cjs. Titles XML... still adds or overrides names.
 
 Display: the side panel's Display menu picks the scaling: original (default), sharp smooth, smooth edges (EPX, an edge-aware 2x/4x that rounds diagonals without adding colours) or soft bilinear. Scanlines are a separate optional checkbox.
+
+Multi-disk sets: after you load a disk from the library, the other disks of the same set (other sides, 'disk 2', other files in the same zip) are listed below it. Click one to put it in D2 without rebooting (Shift = D1).
