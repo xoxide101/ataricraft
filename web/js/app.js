@@ -1352,16 +1352,20 @@
       $('d' + n).textContent = 'empty';
       $('f' + n).value = '';
     };
-    $('ds' + n).onclick = () => {
-      if (!S.emu || !S.disks[n]) { log(`D${n}: nothing to save`); return; }
-      const bytes = S.emu.readDisk(n);
-      if (!bytes) { log(`D${n}: could not read the disk image`); return; }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
-      a.download = S.disks[n].name; a.click();
-      log(`D${n}: saved ${S.disks[n].name} (${bytes.length} bytes) to your Downloads`);
-    };
   }
+  for (let n = 1; n <= 8; n++) $('savedrv').append(new Option('D' + n, String(n)));
+  $('savedisk').onclick = () => {
+    const n = +$('savedrv').value;
+    const path = S.emu && S.emu.diskPaths && S.emu.diskPaths[n];
+    if (!path) { log(`D${n}: no disk mounted`); return; }
+    const bytes = S.emu.readDisk(n);
+    if (!bytes) { log(`D${n}: could not read the disk image`); return; }
+    const name = (S.disks[n] && S.disks[n].name) || path.replace(/^\/d\d_/, '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+    a.download = name; a.click();
+    log(`D${n}: saved ${name} (${bytes.length} bytes) to your Downloads`);
+  };
   $('ctypeok').onclick = () => {
     if (!S.emu || !S.pendingCart) return;
     S.emu.setCartType(S.pendingCart, +$('ctype').value);
