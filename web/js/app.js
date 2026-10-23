@@ -1,7 +1,7 @@
 // ataricraft app: UI + agent API (window.ataricraft). Humans and agents drive the same machine.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const S = { emu: null, roms: { os800: null, osxl: null, basic: null }, running: false, speed: 1, acc: 0, last: 0, typeQ: [], typeWait: 0, joyMode: false, joy: 0, fire: false };
+  const S = { emu: null, dirty: {}, roms: { os800: null, osxl: null, basic: null }, running: false, speed: 1, acc: 0, last: 0, typeQ: [], typeWait: 0, joyMode: false, joy: 0, fire: false };
   const pal = AC.makePalette();
   const cv = $('screen');
   const ctx = cv.getContext('2d');
@@ -554,7 +554,7 @@
     if (k === 'disk') {
       const n = alt ? 2 : 1;
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
-      S.disks[n] = { name: file.name, bytes };
+      S.disks[n] = { name: file.name, bytes }; S.dirty[n] = false;
       $('d' + n).textContent = file.name;
       S.emu.coldStart && !noBoot && S.emu.coldStart();
       log(`D${n}: ${file.name}${noBoot ? ' (no reboot)' : ''}`);
@@ -1121,6 +1121,7 @@
     m.acSio = (dev, cmd, dstats, aux, data, len) => {
       const id = devId(dev);
       if (id) devFlash(id, cmd === 0x52 ? 'rd' : cmd === 0x57 || cmd === 0x50 ? 'wr' : 'ot');
+      if (dev >= 0x31 && dev <= 0x38 && (cmd === 0x57 || cmd === 0x50 || cmd === 0x21 || cmd === 0x22 || cmd === 0x23)) S.dirty[dev - 0x30] = true;
       return inner ? inner(dev, cmd, dstats, aux, data, len) : 0;
     };
   }
@@ -1132,7 +1133,10 @@
     tapePosPrev = p;
   }
   setInterval(() => {
-    for (let n = 1; n <= 8; n++) devEl['D' + n].classList.toggle('has', !!S.disks[n] || !!(FujiNet.slots && FujiNet.slots[n - 1] && FujiNet.slots[n - 1].mounted && FujiNet.enabled));
+    for (let n = 1; n <= 8; n++) {
+      devEl['D' + n].classList.toggle('has', !!S.disks[n] || !!(FujiNet.slots && FujiNet.slots[n - 1] && FujiNet.slots[n - 1].mounted && FujiNet.enabled));
+      devEl['D' + n].classList.toggle('unsaved', !!S.dirty[n] && !!(S.emu && S.emu.diskPaths && S.emu.diskPaths[n]));
+    }
     try { devEl.H.classList.toggle('has', !!S.emu && S.emu.m.FS.readdir('/host').length > 2); } catch (e) { /* not booted */ }
     devEl.K1.classList.toggle('has', !!S.carts[1]);
     devEl.K2.classList.toggle('has', !!S.carts[2]);
@@ -1243,6 +1247,7 @@
     const bytes = blankAtr(ss, n), name = blankName();
     if (!S.emu.mountDisk(slot, name, bytes)) { log('could not mount the blank disk'); return; }
     S.disks[slot] = { name, bytes };
+    S.dirty[slot] = true;
     if ($('d' + slot)) $('d' + slot).textContent = name;
     log(`D${slot}: blank ${$('blankfmt').selectedOptions[0].textContent}. Format it with your DOS (for example DOS XL or DOS 2.5 option I)`);
   };
@@ -1348,7 +1353,7 @@
       if (!S.emu) return;
       S.emu.ejectDisk(n);
       if (S.emu.diskPaths) delete S.emu.diskPaths[n];
-      delete S.disks[n];
+      delete S.disks[n]; delete S.dirty[n];
       $('d' + n).textContent = 'empty';
       $('f' + n).value = '';
     };
@@ -1364,8 +1369,12 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
     a.download = name; a.click();
+    S.dirty[n] = false;
     log(`D${n}: saved ${name} (${bytes.length} bytes) to your Downloads`);
   };
+  window.addEventListener('beforeunload', (e) => {
+    if (Object.keys(S.dirty).some((n) => S.dirty[n] && S.emu && S.emu.diskPaths && S.emu.diskPaths[n])) { e.preventDefault(); e.returnValue = ''; }
+  });
   $('ctypeok').onclick = () => {
     if (!S.emu || !S.pendingCart) return;
     S.emu.setCartType(S.pendingCart, +$('ctype').value);
