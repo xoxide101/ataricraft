@@ -51,7 +51,7 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 - **FujiNet** (header toggle): virtual SIO device `$70`. **Boot FujiNet CONFIG**, pick a folder as a host, mount disks into slots. Hosts and slots persist; **Reset config** clears them.
 - **XEP80 80-column**: see the "80-column display" section below.
 - **RAM disk**: DOS 2.5 on a 128 KB+ machine gives `D8:` automatically (verified: copy to `D8:` lowers free sectors).
-- **Big disks**: blank 4 / 10 / 16 MB ATRs (256 B sectors); a 16 MB SpartaDOS image boots and lists with 63,471 free sectors. Fresh blank HD images still need formatting from SpartaDOS/MyDOS (not tested).
+- **Big disks**: blank 4 / 10 / 16 MB ATRs (256 B sectors); a 16 MB SpartaDOS image boots and lists with 63,471 free sectors. Fresh blank HD images still need formatting from SpartaDOS/MyDOS (4 MB verified by Jeff: formats to 16,369 free sectors on D1:).
 - ROM lists show names from the CRC database, for example `Atari OS REV. 2 (1983) [BB01R2] - ATARIXL.ROM`.
 - Sound, volume, speed slider, Paste / Copy text / Copy image, joystick on arrows + Space.
 - The side panel collapses with ☰. Phone and tablet layouts work (tested at Pixel 6 Pro XL and Galaxy Tab S sizes).
