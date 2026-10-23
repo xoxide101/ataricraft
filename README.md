@@ -104,6 +104,8 @@ git -C vendor/atari800 apply ..\..\build\atari800-sio-hook.patch
 powershell -File scripts\build-reference.ps1
 ```
 
+The patch also sets the XEP80 charset path to `/xep80.chr`. The charset image (`web/js/xep80chr.js`) is generated from the font in atari800 by `node tools/make-xep80chr.cjs`.
+
 ## Goals (from Jeff, 2026-10-21)
 
 - All 8-bit models: 400, 800, 600XL, 800XL, 65XE, 130XE (later XEGS).
