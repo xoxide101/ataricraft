@@ -174,10 +174,18 @@
       SND.gain = SND.ctx.createGain();
       SND.gain.connect(SND.ctx.destination);
     }
-    if (SND.ctx.state === 'suspended') SND.ctx.resume();
+    if (SND.ctx.state !== 'running') SND.ctx.resume().catch(() => {});
     SND.gain.gain.value = SND.on ? SND.vol * 3 : 0;
     return SND.ctx;
   }
+  // Mobile browsers keep the context suspended until a user gesture; (re)create/resume it on every early touch/click/key.
+  const unlockAudio = () => {
+    const c = sndCtx();
+    if (c && c.state === 'running') {
+      ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach((e) => window.removeEventListener(e, unlockAudio, true));
+    }
+  };
+  ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach((e) => window.addEventListener(e, unlockAudio, true));
   function pushAudio(s16) {
     const c = SND.ctx;
     if (!c || !SND.on || !S.running || Math.abs(S.speed - 1) > 0.01) return;
