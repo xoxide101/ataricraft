@@ -132,7 +132,7 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261022s">ATARICRAFT <small class="dim" style="font-size:10px">b20261022s</small></h1>
+  <h1 title="build 20261022t">ATARICRAFT <small class="dim" style="font-size:10px">b20261022t</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -216,6 +216,8 @@
       <h3>Drives</h3>
       <div class="row"><label class="btn">D1…<input id="f1" type="file"></label><button id="de1">Eject</button><span id="d1" class="dim">empty</span></div>
       <div class="row"><label class="btn">D2…<input id="f2" type="file"></label><button id="de2">Eject</button><span id="d2" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D3…<input id="f3" type="file"></label><button id="de3">Eject</button><span id="d3" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D4…<input id="f4" type="file"></label><button id="de4">Eject</button><span id="d4" class="dim">empty</span></div>
       <div class="row" title="Download a mounted disk image with any changes made in the emulator. Works for D1: to D8:."><select id="savedrv"></select><button id="savedisk">Save disk</button></div>
       <div class="row" title="Creates an empty ATR with the chosen geometry. Format it with the Atari's own DOS."><select id="blankfmt" style="flex:1"><option value="128,720">SS/SD 90K (128 B)</option><option value="128,1040">SS/ED 130K (128 B)</option><option value="256,720">SS/DD 180K (256 B)</option><option value="128,1440">DS/SD 180K (128 B)</option><option value="256,1440">DS/DD 360K (256 B)</option><option value="256,2880">DS/DD 720K 3.5" (256 B)</option><option value="256,16384">HD 4 MB (256 B)</option><option value="256,40960">HD 10 MB (256 B)</option><option value="256,65535">HD 16 MB (256 B)</option></select><select id="blankslot"></select></div>
       <div class="row"><button id="blankmk">Insert blank disk</button><button id="blankdl">Save blank .atr</button></div>
@@ -249,18 +251,18 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261022s"></script>
-<script src="js/titles-data.js?v=20261022s"></script>
-<script src="js/zip.js?v=20261022s"></script>
-<script src="js/sevenzip.js?v=20261022s"></script>
-<script src="js/catalog.js?v=20261022s"></script>
-<script src="js/romdb.js?v=20261022s"></script>
-<script src="js/xep80chr.js?v=20261022s"></script>
-<script src="js/memtest.js?v=20261022s"></script>
-<script src="js/diskdb.js?v=20261022s"></script>
+<script src="js/emu.js?v=20261022t"></script>
+<script src="js/titles-data.js?v=20261022t"></script>
+<script src="js/zip.js?v=20261022t"></script>
+<script src="js/sevenzip.js?v=20261022t"></script>
+<script src="js/catalog.js?v=20261022t"></script>
+<script src="js/romdb.js?v=20261022t"></script>
+<script src="js/xep80chr.js?v=20261022t"></script>
+<script src="js/memtest.js?v=20261022t"></script>
+<script src="js/diskdb.js?v=20261022t"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261022s"></script>
+<script src="js/app.js?v=20261022t"></script>
 </body>
 </html>

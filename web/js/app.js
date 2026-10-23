@@ -552,10 +552,11 @@
       S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
     }
     if (k === 'disk') {
-      const n = alt ? 2 : 1;
+      const n = typeof alt === 'number' ? alt : alt ? 2 : 1;
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
       S.disks[n] = { name: file.name, bytes }; S.dirty[n] = false;
       $('d' + n).textContent = file.name;
+      if (n > 2) noBoot = true;
       S.emu.coldStart && !noBoot && S.emu.coldStart();
       log(`D${n}: ${file.name}${noBoot ? ' (no reboot)' : ''}`);
       if (AC.DISK_DB) {
@@ -567,7 +568,7 @@
       S.emu.bootFile(file.name, bytes);
       log('running ' + file.name);
     } else if (k === 'cart') {
-      await insertCart(alt ? 2 : 1, file, bytes);
+      await insertCart(typeof alt === 'number' ? 1 : alt ? 2 : 1, file, bytes);
     } else if (k === 'tape') {
       if (!S.emu.tapeInsert(file.name, bytes)) { log('could not read tape ' + file.name); return; }
       $('tn').textContent = file.name;
@@ -576,7 +577,7 @@
     } else log(`${file.name}: unrecognised format${t === 13 || t === 14 ? ' (saved states are not supported)' : ''}`);
   }
   async function loadMedia(files, drive) {
-    for (const f of files) await loadAny(f, drive === 2, drive ? 'disk' : null);
+    for (const f of files) await loadAny(f, drive >= 2 ? (drive === 2 ? true : drive) : false, drive ? 'disk' : null);
   }
 
   // ---- media library (scan a folder, filter by text and type) ----
@@ -1339,6 +1340,16 @@
       }
     } else if (slot === 2) S.emu.coldStart();
   }
+  for (const n of [1, 2, 3, 4]) {
+    $('de' + n).onclick = () => {
+      if (!S.emu) return;
+      S.emu.ejectDisk(n);
+      if (S.emu.diskPaths) delete S.emu.diskPaths[n];
+      delete S.disks[n]; delete S.dirty[n];
+      $('d' + n).textContent = 'empty';
+      $('f' + n).value = '';
+    };
+  }
   for (const n of [1, 2]) {
     $('c' + n).onchange = (e) => e.target.files[0] && insertCart(n, e.target.files[0]);
     $('ce' + n).onclick = () => {
@@ -1348,14 +1359,6 @@
       devFlash('K' + n, 'ot');
       $('cn' + n).textContent = (n === 1 ? '1 (main, right): ' : '2 (left): ') + 'empty';
       $('c' + n).value = '';
-    };
-    $('de' + n).onclick = () => {
-      if (!S.emu) return;
-      S.emu.ejectDisk(n);
-      if (S.emu.diskPaths) delete S.emu.diskPaths[n];
-      delete S.disks[n]; delete S.dirty[n];
-      $('d' + n).textContent = 'empty';
-      $('f' + n).value = '';
     };
   }
   for (let n = 1; n <= 8; n++) $('savedrv').append(new Option('D' + n, String(n)));
@@ -1460,7 +1463,7 @@
     b.onpointerdown = () => S.emu && S.emu.down('btn:' + id, fields);
     b.onpointerup = b.onpointerleave = () => S.emu && S.emu.up('btn:' + id);
   }
-  for (const n of [1, 2]) {
+  for (const n of [1, 2, 3, 4]) {
     $('f' + n).onchange = (e) => loadMedia(e.target.files, n);
   }
   document.body.addEventListener('dragover', (e) => e.preventDefault());
