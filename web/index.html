@@ -132,7 +132,7 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261023c">ATARICRAFT <small class="dim" style="font-size:10px">b20261023c</small></h1>
+  <h1 title="build 20261023d">ATARICRAFT <small class="dim" style="font-size:10px">b20261023d</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
@@ -185,7 +185,7 @@
       <div class="dim">Emulates the drawing pad on controller port 1 (paddle 0/1 + button). Start Atari Artist, then draw here.</div>
     </div>    <div class="box">
       <h3>Media library</h3>
-      <div class="row"><button id="medpick" style="display:none" title="Pick folder: choose a folder; it is remembered across page reloads">📁 Pick</button><button id="medsel" style="display:none" title="Folders: choose which sub-folders to include in the scan">🗂 Folders</button><button id="medrefresh" title="Rescan: scan the folder again and rebuild the saved catalog">🔄 Rescan</button><button id="medexp" title="Export DB: save the catalog as a .sqlite file">📤 Export</button><label class="btn" title="Import DB: load a catalog .sqlite file">📥 Import<input id="medimp" type="file" accept=".sqlite,.db,.sql" style="display:none"></label><button id="medstop" style="display:none">⛔ Stop</button><label class="btn" title="Scan once: one-off scan (not remembered)">🔍 Scan once<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="Titles XML: MAME software list XML (a800.xml, a5200.xml…) to show real game titles">🏷 Titles<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
+      <div class="row"><button id="medpick" style="display:none" title="Pick folder: choose a folder; it is remembered across page reloads">📁</button><button id="medsel" style="display:none" title="Folders: choose which sub-folders to include in the scan">🗂</button><button id="medrefresh" title="Rescan: scan the folder again and rebuild the saved catalog">🔄</button><button id="medexp" title="Export DB: save the catalog as a .sqlite file">📤</button><label class="btn" title="Import DB: load a catalog .sqlite file">📥<input id="medimp" type="file" accept=".sqlite,.db,.sql" style="display:none"></label><button id="medstop" style="display:none" title="Stop the scan">⛔</button><label class="btn" title="Scan once: one-off scan (not remembered)">🔍<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="Titles XML: MAME software list XML (a800.xml, a5200.xml…) to show real game titles">🏷<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
       <div id="medtitles" class="dim" style="font-size:11px"></div>
       <div class="row" id="medchips"><input id="medfilter" placeholder="search disks, carts, tapes, programs" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><select id="medkind" title="Category"><option value="all">📚 All types</option><option value="disk">💾 Disk</option><option value="cart">🎮 Cart</option><option value="tape">📼 Tape</option><option value="exe">⚙️ Program</option></select></div>
       <div class="row"><select id="medextsel" title="File extension"></select> <button id="medview" title="Switch view">☰</button><button id="medexpand" title="Open every folder">⊞</button><button id="medcollapse" title="Close every folder">⊟</button></div>
@@ -250,18 +250,18 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261023c"></script>
-<script src="js/titles-data.js?v=20261023c"></script>
-<script src="js/zip.js?v=20261023c"></script>
-<script src="js/sevenzip.js?v=20261023c"></script>
-<script src="js/catalog.js?v=20261023c"></script>
-<script src="js/romdb.js?v=20261023c"></script>
-<script src="js/xep80chr.js?v=20261023c"></script>
-<script src="js/memtest.js?v=20261023c"></script>
-<script src="js/diskdb.js?v=20261023c"></script>
+<script src="js/emu.js?v=20261023d"></script>
+<script src="js/titles-data.js?v=20261023d"></script>
+<script src="js/zip.js?v=20261023d"></script>
+<script src="js/sevenzip.js?v=20261023d"></script>
+<script src="js/catalog.js?v=20261023d"></script>
+<script src="js/romdb.js?v=20261023d"></script>
+<script src="js/xep80chr.js?v=20261023d"></script>
+<script src="js/memtest.js?v=20261023d"></script>
+<script src="js/diskdb.js?v=20261023d"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261023c"></script>
+<script src="js/app.js?v=20261023d"></script>
 </body>
 </html>
