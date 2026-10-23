@@ -666,10 +666,69 @@
       box.append(d);
     });
   }
+  // Tree view: folders from the file paths at any depth, expanded lazily. With a search active, matching branches open automatically.
+  MED.tree = localStorage.getItem('ac.medtree') !== '0';
+  MED.open = new Set();
+  const treeOf = (hits) => {
+    const root = { dirs: new Map(), files: [], n: 0, path: '' };
+    hits.forEach((f) => {
+      const parts = f.name.split('/');
+      let node = root;
+      node.n++;
+      for (let i = 0; i < parts.length - 1; i++) {
+        let nx = node.dirs.get(parts[i]);
+        if (!nx) { nx = { dirs: new Map(), files: [], n: 0, path: parts.slice(0, i + 1).join('/') }; node.dirs.set(parts[i], nx); }
+        node = nx;
+        node.n++;
+      }
+      node.files.push(f);
+    });
+    return root;
+  };
+  const allDirs = (node, out) => { node.dirs.forEach((d) => { out.push(d.path); allDirs(d, out); }); return out; };
+  function drawTree(box, hits, forceOpen) {
+    const root = treeOf(hits);
+    window.__medTreeRoot = root;
+    const TREE_FILE_CAP = 400;
+    const row = (depth, text, title) => {
+      const d = document.createElement('div');
+      d.textContent = text;
+      d.title = title || text;
+      d.style.cssText = `padding:2px 4px 2px ${4 + depth * 14}px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`;
+      d.onmouseenter = () => (d.style.background = '#2a2f39');
+      d.onmouseleave = () => (d.style.background = '');
+      box.append(d);
+      return d;
+    };
+    const walk = (node, depth) => {
+      [...node.dirs.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach((name) => {
+        const d = node.dirs.get(name);
+        const open = forceOpen || MED.open.has(d.path);
+        const r = row(depth, `${open ? '▾' : '▸'} ${name}  (${d.n})`, d.path);
+        r.style.color = 'var(--acc)';
+        r.onclick = () => { if (MED.open.has(d.path)) MED.open.delete(d.path); else MED.open.add(d.path); renderMed(); };
+        if (open) walk(d, depth + 1);
+      });
+      const files = node.files.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+      files.slice(0, TREE_FILE_CAP).forEach((f) => {
+        const base = f.name.split('/').pop();
+        const r = row(depth, f.title ? `${base} — ${f.title}` : base, f.title ? `${f.title} — ${f.name}` : f.name);
+        r.style.paddingLeft = `${4 + depth * 14 + 14}px`;
+        r.onclick = async (e) => { const fl = await fileOf(f); if (fl) { loadAny(fl, e.shiftKey, f.kind); showRelated(f); } };
+      });
+      if (files.length > TREE_FILE_CAP) row(depth, `… ${files.length - TREE_FILE_CAP} more here: use the search box`).style.opacity = 0.6;
+    };
+    walk(root, 0);
+    return root;
+  }
   function renderMed() {
     const q = $('medfilter').value.toLowerCase();
     const box = $('medlist');
     box.innerHTML = '';
+    $('medview').textContent = MED.tree ? 'List' : 'Tree';
+    $('medview').title = MED.tree ? 'Switch to a flat list' : 'Switch to the folder tree';
+    ['medexpand', 'medcollapse'].forEach((id) => ($(id).style.display = MED.tree ? '' : 'none'));
+    box.style.maxHeight = MED.tree ? '360px' : '200px';
     const extOf = (f) => (f.name.split('.').pop() || '').toLowerCase();
     const ofKind = MED.files.filter((f) => MED.kind === 'all' || f.kind === MED.kind);
     const counts = {};
@@ -687,6 +746,11 @@
     });
     const hits = ofKind.filter((f) => (MED.ext === 'all' || extOf(f) === MED.ext) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
     if (q) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
+    if (MED.tree) {
+      drawTree(box, hits, !!q && hits.length <= 600);
+      $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${MED.files.length}` : 'no folder';
+      return;
+    }
     hits.slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
       d.textContent = f.title ? `${f.title} — ${f.name}` : f.name;
@@ -1017,13 +1081,16 @@
     diag('scan summary ' + JSON.stringify(kc));
   }
   $('medfilter').oninput = renderMed;
-  document.querySelectorAll('#medchips button').forEach((b) => {
+  document.querySelectorAll('#medchips button[data-t]').forEach((b) => {
     b.onclick = () => {
       MED.kind = b.dataset.t; MED.ext = 'all';
-      document.querySelectorAll('#medchips button').forEach((x) => x.classList.toggle('on', x === b));
+      document.querySelectorAll('#medchips button[data-t]').forEach((x) => x.classList.toggle('on', x === b));
       renderMed();
     };
   });
+  $('medview').onclick = () => { MED.tree = !MED.tree; localStorage.setItem('ac.medtree', MED.tree ? '1' : '0'); renderMed(); };
+  $('medexpand').onclick = () => { allDirs(window.__medTreeRoot || { dirs: new Map() }, []).forEach((p) => MED.open.add(p)); renderMed(); };
+  $('medcollapse').onclick = () => { MED.open.clear(); renderMed(); };
   $('romfilter').oninput = () => fillRomSelects();
 
   // ---- collapsible side-panel sections (state remembered) ----

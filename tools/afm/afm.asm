@@ -35,6 +35,41 @@ INBUF   = $49C0
 IOBUF   = $5000
 VROWS   = 18
 
+; editor / viewer
+SAVMSC  = $58
+EC      = $E0
+EE      = $E2
+ET      = $E4
+EP      = $E6
+ES      = $E8
+EA      = $EA
+EL      = $EC
+EN      = $EE
+EV      = $F0
+EW      = $F2
+EBUF    = $6500
+EMAXPG  = $A5
+
+; 16-bit compare: carry set if a>=b, Z set if equal
+        .macro cmw
+        lda :1+1
+        cmp :2+1
+        bne ?s
+        lda :1
+        cmp :2
+?s
+        .endm
+
+; 16-bit compare against a constant
+        .macro cmi
+        lda :1+1
+        cmp #>:2
+        bne ?s
+        lda :1
+        cmp #<:2
+?s
+        .endm
+
         org $2000
 
 start:
@@ -62,6 +97,7 @@ ks1:    lda kspec,x
         ldx #$30
         lda #4
         jsr openF
+        jsr doinfo
         jsr drawui
         jsr reloadall
         jsr drawui
@@ -145,8 +181,19 @@ c16:    cmp #'?'
         bne c17
         jmp dohelp
 c17:    cmp #'B'
-        bne c18
+        bne c19
         jmp dobulk
+c19:    cmp #'I'
+        bne c20
+        jsr doinfo
+        jsr drawui
+        jmp main
+c20:    cmp #'E'
+        bne c21
+        jmp doedit
+c21:    cmp #'V'
+        bne c18
+        jmp doview
 c18:    jmp main
 
 k_tab:
@@ -318,9 +365,9 @@ doall:  jsr cntmk
         jsr clrmk
         jmp da_dr
 da_set: lda #0
-        sta cmi
+        sta cmiv
 da_l:   ldx act
-        lda cmi
+        lda cmiv
         cmp cnt,x
         bcs da_dr
         jsr entp
@@ -333,11 +380,11 @@ da_l:   ldx act
         cmp #':'
         beq da_n
         ldx act
-        lda cmi
+        lda cmiv
         jsr mky
         lda #1
         sta MARKS,y
-da_n:   inc cmi
+da_n:   inc cmiv
         jmp da_l
 da_dr:  ldx act
         jsr drawpane
@@ -593,6 +640,1112 @@ me_n:   inc fs
         clc
         rts
 
+; ---------- editor / viewer ----------
+doview: lda #1
+        bne ed_set
+doedit: lda #0
+ed_set: sta edro
+        jsr needf
+        bne ed_go
+        jmp main
+ed_go:  ldx act
+        lda sel,x
+        jsr mkspec
+        ldy #0
+        lda (ZP),y
+        cmp #':'
+        beq ed_nf
+        iny
+        lda (ZP),y
+        cmp #':'
+        bne ed_ld
+ed_nf:  jsr msgrow
+        jsr putsi
+        .byte 'NOT A FILE',0
+        jmp main
+ed_ld:  lda $6A
+        sec
+        sbc #5
+        cmp #EMAXPG
+        bcc ed_l1
+        lda #EMAXPG
+ed_l1:  sta elim+1
+        lda #0
+        sta elim
+        sta edmod
+        sta edhex
+        sta edkeep
+        mwa #EBUF EE
+        mwa #EBUF EC
+        mwa #EBUF ET
+        jsr usef1
+        ldx #$10
+        lda #4
+        jsr openF
+        bpl ed_rd
+        sty est
+        jmp ed_fail
+ed_rd:  sec
+        lda elim
+        sbc EE
+        sta EV
+        lda elim+1
+        sbc EE+1
+        sta EV+1
+        ora EV
+        beq ed_full
+        ldx #$10
+        lda #7
+        sta ICCOM,x
+        lda EE
+        sta ICBAL,x
+        lda EE+1
+        sta ICBAH,x
+        lda EV
+        sta ICBLL,x
+        lda EV+1
+        sta ICBLH,x
+        jsr CIOV
+        sty est
+        lda ICBLL+$10
+        clc
+        adc EE
+        sta EE
+        lda ICBLH+$10
+        adc EE+1
+        sta EE+1
+        lda est
+        cmp #1
+        beq ed_rd
+        cmp #136
+        beq ed_ok
+        jsr close1
+        jmp ed_fail
+ed_full:
+        ldx #$10
+        lda #7
+        sta ICCOM,x
+        lda #<INBUF
+        sta ICBAL,x
+        lda #>INBUF
+        sta ICBAH,x
+        lda #1
+        sta ICBLL,x
+        lda #0
+        sta ICBLH,x
+        jsr CIOV
+        sty est
+        jsr close1
+        lda est
+        cmp #136
+        beq ed_ok2
+        jsr msgrow
+        jsr putsi
+        .byte 'FILE TOO BIG FOR EDITOR',0
+        jmp main
+ed_fail:
+        jsr showerr
+        jmp main
+ed_ok:  jsr close1
+ed_ok2: lda #125
+        jsr putraw
+ed_loop:
+        jsr edfix
+        jsr edrender
+        lda edkeep
+        bne ed_k
+        jsr edstat
+ed_k:   lda #0
+        sta edkeep
+        jsr getraw
+        jsr edkey
+        bcc ed_loop
+        jsr reloadall
+        jsr drawui
+        jmp main
+
+edkey:  cmp #$1B
+        bne ek1
+        jmp edesc
+ek1:    cmp #$1C
+        bne ek2
+        jsr edup
+        clc
+        rts
+ek2:    cmp #$1D
+        bne ek3
+        jsr eddn
+        clc
+        rts
+ek3:    cmp #$1E
+        bne ek4
+        jsr edlf
+        clc
+        rts
+ek4:    cmp #$1F
+        bne ek5
+        jsr edrt
+        clc
+        rts
+ek5:    cmp #$7E
+        bne ek6
+        jsr eddel
+        clc
+        rts
+ek6:    cmp #$9B
+        beq ek_ins
+        cmp #$20
+        bcc ek_n
+        cmp #$7D
+        bcs ek_n
+ek_ins: jsr edins
+ek_n:   clc
+        rts
+
+edesc:  jsr getkey
+        cmp #'S'
+        bne es1
+        jmp edsave
+es1:    cmp #'Q'
+        bne es2
+        jmp edquit
+es2:    cmp #'H'
+        bne es3
+        jmp edtoggle
+es3:    cmp #'U'
+        bne es4
+        lda #20
+        sta edpc
+es3l:   jsr edup
+        dec edpc
+        bne es3l
+        clc
+        rts
+es4:    cmp #'D'
+        bne es5
+        lda #20
+        sta edpc
+es4l:   jsr eddn
+        dec edpc
+        bne es4l
+        clc
+        rts
+es5:    cmp #'T'
+        bne es6
+        mwa #EBUF EC
+        clc
+        rts
+es6:    cmp #'E'
+        bne es7
+        mwa EE EC
+        clc
+        rts
+es7:    clc
+        rts
+
+edtoggle:
+        lda edhex
+        eor #1
+        sta edhex
+        beq et_t
+        mwa #EBUF ET
+        clc
+        rts
+et_t:   mwa EC ET
+        inw ET
+        clc
+        rts
+
+edquit: lda edmod
+        beq eq_y
+        jsr edclr22
+        lda #22
+        ldx #0
+        jsr setpos
+        jsr putsi
+        .byte 'DISCARD CHANGES? (Y/N)',0
+        jsr getkey
+        cmp #'Y'
+        beq eq_y
+        clc
+        rts
+eq_y:   sec
+        rts
+
+edmsg22:
+        jsr edclr22
+        lda #22
+        ldx #0
+        jsr setpos
+        lda #1
+        sta edkeep
+        rts
+
+edsave: lda edro
+        beq sv_go
+        jsr edmsg22
+        jsr putsi
+        .byte 'VIEW MODE - CANNOT SAVE',0
+        clc
+        rts
+sv_go:  jsr usef1
+        ldx #$10
+        lda #8
+        jsr openF
+        bpl sv_w
+        sty est
+        jmp sv_err
+sv_w:   sec
+        lda EE
+        sbc #<EBUF
+        sta EV
+        lda EE+1
+        sbc #>EBUF
+        sta EV+1
+        ora EV
+        beq sv_cl
+        ldx #$10
+        lda #11
+        sta ICCOM,x
+        lda #<EBUF
+        sta ICBAL,x
+        lda #>EBUF
+        sta ICBAH,x
+        lda EV
+        sta ICBLL,x
+        lda EV+1
+        sta ICBLH,x
+        jsr CIOV
+        sty est
+        cpy #1
+        bne sv_e2
+sv_cl:  jsr close1
+        bpl sv_ok
+        sty est
+        jmp sv_err
+sv_e2:  jsr close1
+sv_err: jsr edmsg22
+        jsr putsi
+        .byte 'SAVE FAILED - ERROR ',0
+        lda est
+        jsr putdec
+        clc
+        rts
+sv_ok:  lda #0
+        sta edmod
+        jsr edmsg22
+        jsr putsi
+        .byte 'SAVED',0
+        clc
+        rts
+
+edclr22:
+        clc
+        lda SAVMSC
+        adc #<880
+        sta ES
+        lda SAVMSC+1
+        adc #>880
+        sta ES+1
+        ldy #39
+        lda #0
+ec_l:   sta (ES),y
+        dey
+        bpl ec_l
+        rts
+
+edstat: ldy #39
+        lda #$80
+est1:   sta (SAVMSC),y
+        dey
+        bpl est1
+        sta inv
+        lda #0
+        ldx #1
+        jsr setpos
+        lda edro
+        bne est2
+        jsr putsi
+        .byte 'EDIT ',0
+        jmp est3
+est2:   jsr putsi
+        .byte 'VIEW ',0
+est3:   jsr putfs
+        lda edmod
+        beq est4
+        lda #'*'
+        jsr putc
+est4:   lda #0
+        sta inv
+        jsr edclr22
+        lda #22
+        ldx #0
+        jsr setpos
+        jsr putsi
+        .byte 'LEN ',0
+        sec
+        lda EE
+        sbc #<EBUF
+        sta pvl
+        lda EE+1
+        sbc #>EBUF
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte '  FREE ',0
+        sec
+        lda elim
+        sbc EE
+        sta pvl
+        lda elim+1
+        sbc EE+1
+        sta pvh
+        jsr putd16
+        lda edhex
+        beq est5
+        jsr putsi
+        .byte '  HEX',0
+est5:   lda #23
+        ldx #0
+        jsr setpos
+        jsr putsi
+        .byte 'ESC S)AVE Q)UIT H)EX U)P D)N T)OP E)ND',0
+        rts
+
+; keep cursor on screen by adjusting the top-of-window pointer
+edfix:  lda edhex
+        beq ef_t
+        jmp ef_hex
+ef_t:   cmw EC ET
+        bcs ef_t1
+        jsr edls
+        sec
+        lda EC
+        sbc EA
+        sta EV
+        lda EC+1
+        sbc EA+1
+        sta EV+1
+        jsr mod40
+        sec
+        lda EC
+        sbc EV
+        sta ET
+        lda EC+1
+        sbc #0
+        sta ET+1
+        rts
+ef_t1:  mwa ET EL
+        mwa ET EP
+        lda #0
+        sta edrw
+ef_lp:  cmw EL EE
+        bcs ef_dn
+        jsr edadv
+        cmw EL EC
+        bcc ef_ct
+        beq ef_ct
+        jmp ef_dn
+ef_ct:  inc edrw
+        lda edrw
+        cmp #21
+        bcc ef_lp
+        mwa EL EN
+        mwa EP EL
+        jsr edadv
+        mwa EL EP
+        mwa EN EL
+        dec edrw
+        jmp ef_lp
+ef_dn:  mwa EP ET
+        rts
+
+ef_hex: cmw EC EE
+        bcc ef_h0
+        mwa EE EC
+        cmi EC EBUF
+        beq ef_h0
+        dew EC
+ef_h0:  sec
+        lda EC
+        sbc #<EBUF
+        sta EV
+        lda EC+1
+        sbc #>EBUF
+        sta EV+1
+        lda EV
+        and #$F8
+        sta EV
+        clc
+        lda EV
+        adc #<EBUF
+        sta EN
+        lda EV+1
+        adc #>EBUF
+        sta EN+1
+        cmw EN ET
+        bcs ef_h1
+        mwa EN ET
+        rts
+ef_h1:  sec
+        lda EN
+        sbc ET
+        sta EV
+        lda EN+1
+        sbc ET+1
+        bne ef_h2
+        lda EV
+        cmp #168
+        bcc ef_h3
+ef_h2:  sec
+        lda EN
+        sbc #160
+        sta ET
+        lda EN+1
+        sbc #0
+        sta ET+1
+ef_h3:  rts
+
+; EL advanced by one display row (40 chars or to after the EOL)
+edadv:  lda #0
+        sta edcn
+ea_l:   cmw EL EE
+        bcs ea_r
+        ldy #0
+        lda (EL),y
+        inw EL
+        cmp #$9B
+        beq ea_r
+        inc edcn
+        lda edcn
+        cmp #40
+        bcc ea_l
+ea_r:   rts
+
+mod40:  lda EV+1
+        bne m40s
+        lda EV
+        cmp #40
+        bcc m40d
+m40s:   sec
+        lda EV
+        sbc #40
+        sta EV
+        bcs mod40
+        dec EV+1
+        jmp mod40
+m40d:   rts
+
+; EA = start of the line holding EC
+edls:   mwa EC EA
+el1:    cmi EA EBUF
+        beq el9
+        dew EA
+        ldy #0
+        lda (EA),y
+        cmp #$9B
+        bne el1
+        inw EA
+el9:    rts
+
+; EL = end of line (EOL position or EE), scanning from EL
+edle:   cmw EL EE
+        bcs ele_r
+        ldy #0
+        lda (EL),y
+        cmp #$9B
+        beq ele_r
+        inw EL
+        jmp edle
+ele_r:  rts
+
+edlf:   lda edhex
+        beq lf_t
+        jmp hxlf
+lf_t:   cmi EC EBUF
+        beq lf_r
+        dew EC
+lf_r:   rts
+
+edrt:   lda edhex
+        beq rt_t
+        jmp hxrt
+rt_t:   cmw EC EE
+        bcs rt_r
+        inw EC
+rt_r:   rts
+
+eddn:   lda edhex
+        beq dn_t
+        jmp hxdn
+dn_t:   jsr edls
+        sec
+        lda EC
+        sbc EA
+        sta EV
+        lda EC+1
+        sbc EA+1
+        sta EV+1
+        mwa EA EL
+        jsr edle
+        sec
+        lda EL
+        sbc EA
+        sta EW
+        lda EL+1
+        sbc EA+1
+        sta EW+1
+        clc
+        lda EV
+        adc #40
+        sta EN
+        lda EV+1
+        adc #0
+        sta EN+1
+        cmw EW EN
+        bcc dn_nx
+        adw EC #40
+        rts
+dn_nx:  cmw EL EE
+        bcs dn_rt
+        inw EL
+        jsr mod40
+        mwa EL EA
+        jsr edle
+        sec
+        lda EL
+        sbc EA
+        sta EW
+        lda EL+1
+        sbc EA+1
+        bne dn_c
+        lda EW
+        cmp EV
+        bcs dn_c
+        sta EV
+dn_c:   clc
+        lda EA
+        adc EV
+        sta EC
+        lda EA+1
+        adc #0
+        sta EC+1
+dn_rt:  rts
+
+edup:   lda edhex
+        beq up_t
+        jmp hxup
+up_t:   jsr edls
+        sec
+        lda EC
+        sbc EA
+        sta EV
+        lda EC+1
+        sbc EA+1
+        sta EV+1
+        bne up_p
+        lda EV
+        cmp #40
+        bcs up_p
+        cmi EA EBUF
+        beq up_r
+        lda EV
+        sta edcol
+        mwa EA EC
+        dew EC
+        jsr edls
+        sec
+        lda EC
+        sbc EA
+        sta EW
+        lda EC+1
+        sbc EA+1
+        sta EW+1
+        mwa EW EV
+        jsr mod40
+        sec
+        lda EW
+        sbc EV
+        sta EN
+        lda EW+1
+        sbc #0
+        sta EN+1
+        clc
+        lda EN
+        adc edcol
+        sta EN
+        lda EN+1
+        adc #0
+        sta EN+1
+        cmw EN EW
+        bcc up_n
+        mwa EW EN
+up_n:   clc
+        lda EA
+        adc EN
+        sta EC
+        lda EA+1
+        adc EN+1
+        sta EC+1
+up_r:   rts
+up_p:   sbw EC #40
+        rts
+
+; A = character to insert at the cursor
+edins:  sta edtmp
+        lda edro
+        bne ei_r
+        lda edhex
+        bne ei_r
+        cmw EE elim
+        bcs ei_r
+        mwa EE EL
+ei_l:   cmw EL EC
+        beq ei_s
+        dew EL
+        ldy #0
+        lda (EL),y
+        iny
+        sta (EL),y
+        jmp ei_l
+ei_s:   lda edtmp
+        ldy #0
+        sta (EC),y
+        inw EC
+        inw EE
+        lda #1
+        sta edmod
+ei_r:   rts
+
+eddel:  lda edro
+        bne dl_r
+        lda edhex
+        bne dl_r
+        cmi EC EBUF
+        beq dl_r
+        dew EC
+        dew EE
+        mwa EC EL
+dl_l:   cmw EL EE
+        bcs dl_d
+        ldy #1
+        lda (EL),y
+        dey
+        sta (EL),y
+        inw EL
+        jmp dl_l
+dl_d:   lda #1
+        sta edmod
+dl_r:   rts
+
+; ATASCII -> screen code
+tosc:   sta edtmp
+        and #$7F
+        cmp #$20
+        bcc ts_a
+        cmp #$60
+        bcs ts_m
+        sec
+        sbc #$20
+        jmp ts_m
+ts_a:   clc
+        adc #$40
+ts_m:   sta ecv
+        lda edtmp
+        and #$80
+        ora ecv
+        rts
+
+tohc:   sta edtmp
+        and #$7F
+        cmp #$20
+        bcc th_d
+        cmp #$7C
+        bcs th_d
+        jmp tosc
+th_d:   lda #$0E
+        rts
+
+edrender:
+        lda edhex
+        beq er_t
+        jmp edhrender
+er_t:   clc
+        lda SAVMSC
+        adc #40
+        sta ES
+        lda SAVMSC+1
+        adc #0
+        sta ES+1
+        clc
+        lda SAVMSC
+        adc #<880
+        sta edse
+        lda SAVMSC+1
+        adc #>880
+        sta edse+1
+        mwa ET EP
+        lda #0
+        sta ecol
+        sta ecf
+er_l:   cmw ES edse
+        bcc er_c
+        jmp er_done
+er_c:   cmw EP EC
+        bne er_n1
+        mwa ES EN
+        lda #1
+        sta ecf
+er_n1:  cmw EP EE
+        bne er_n2
+        jmp er_fill
+er_n2:  ldy #0
+        lda (EP),y
+        cmp #$9B
+        beq er_eol
+        jsr tosc
+        ldy #0
+        sta (ES),y
+        inw ES
+        inw EP
+        inc ecol
+        lda ecol
+        cmp #40
+        bcc er_l
+        lda #0
+        sta ecol
+        jmp er_l
+er_eol: lda ecol
+        beq er_f40
+        lda #40
+        sec
+        sbc ecol
+        jmp er_fc
+er_f40: lda #40
+er_fc:  tax
+        lda #0
+        sta ecol
+er_fl:  ldy #0
+        sta (ES),y
+        inw ES
+        dex
+        bne er_fl
+        inw EP
+        jmp er_l
+er_fill:
+        cmw ES edse
+        bcs er_done
+        lda #0
+        tay
+        sta (ES),y
+        inw ES
+        jmp er_fill
+er_done:
+        lda ecf
+        beq er_x
+        ldy #0
+        lda (EN),y
+        eor #$80
+        sta (EN),y
+er_x:   rts
+
+; hex dump: offset, 8 bytes, 8 chars per row
+edhrender:
+        clc
+        lda SAVMSC
+        adc #40
+        sta ES
+        lda SAVMSC+1
+        adc #0
+        sta ES+1
+        mwa ET EP
+        lda #21
+        sta edrw
+hr_row: ldy #39
+        lda #0
+hr_c:   sta (ES),y
+        dey
+        bpl hr_c
+        cmw EP EE
+        bcc hr_ok
+        jmp hr_nx
+hr_ok:  sec
+        lda EP
+        sbc #<EBUF
+        sta EV
+        lda EP+1
+        sbc #>EBUF
+        sta EV+1
+        ldy #0
+        lda EV+1
+        jsr hr_h2
+        lda EV
+        jsr hr_h2
+        ldx #0
+hr_b:   stx edi
+        txa
+        clc
+        adc EP
+        sta EN
+        lda EP+1
+        adc #0
+        sta EN+1
+        cmw EN EE
+        bcs hr_nx
+        lda edi
+        asl
+        clc
+        adc edi
+        clc
+        adc #5
+        sta edy
+        ldy #0
+        lda (EN),y
+        sta ecv
+        ldy edy
+        lda ecv
+        jsr hr_h2
+        lda ecv
+        jsr tohc
+        pha
+        lda edi
+        clc
+        adc #30
+        tay
+        pla
+        sta (ES),y
+        ldx edi
+        inx
+        cpx #8
+        bcc hr_b
+hr_nx:  adw EP #8
+        adw ES #40
+        dec edrw
+        beq hr_end
+        jmp hr_row
+hr_end: sec
+        lda EC
+        sbc ET
+        sta EV
+        lda EC+1
+        sbc ET+1
+        bne hr_x
+        lda EV
+        cmp #168
+        bcs hr_x
+        lsr
+        lsr
+        lsr
+        tax
+        lda EV
+        and #7
+        sta edi
+        clc
+        lda SAVMSC
+        adc #40
+        sta ES
+        lda SAVMSC+1
+        adc #0
+        sta ES+1
+hr_m1:  cpx #0
+        beq hr_m2
+        adw ES #40
+        dex
+        jmp hr_m1
+hr_m2:  lda edi
+        asl
+        clc
+        adc edi
+        clc
+        adc #5
+        tay
+        lda (ES),y
+        eor #$80
+        sta (ES),y
+        iny
+        lda (ES),y
+        eor #$80
+        sta (ES),y
+        lda edi
+        clc
+        adc #30
+        tay
+        lda (ES),y
+        eor #$80
+        sta (ES),y
+hr_x:   rts
+
+hr_h2:  pha
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr hr_n
+        pla
+        and #15
+hr_n:   cmp #10
+        bcc hr_d
+        adc #$16
+        jmp hr_s
+hr_d:   ora #$10
+hr_s:   sta (ES),y
+        iny
+        rts
+
+hxlf:   cmi EC EBUF
+        beq hl_r
+        dew EC
+hl_r:   rts
+
+hxrt:   mwa EC EL
+        inw EL
+        cmw EL EE
+        bcs hr_r2
+        inw EC
+hr_r2:  rts
+
+hxup:   cmi EC EBUF+8
+        bcc hu_r
+        sbw EC #8
+hu_r:   rts
+
+hxdn:   mwa EC EL
+        adw EL #8
+        cmw EL EE
+        bcc hd_ok
+        cmi EE EBUF
+        beq hd_r
+        mwa EE EC
+        dew EC
+        rts
+hd_ok:  mwa EL EC
+hd_r:   rts
+
+; system information screen (also shown at startup, I key)
+doinfo:
+        lda #125
+        jsr putraw
+        jsr putsi
+        .byte ' ATARICRAFT AFM - SYSTEM INFO',$9B,$9B
+        .byte 'COMPUTER: ',0
+        lda $FCD8
+        cmp #$4C
+        beq in_xl
+        jsr putsi
+        .byte 'ATARI 400/800',0
+        jmp in_vid
+in_xl:  jsr putsi
+        .byte 'ATARI XL/XE  OS REV ',0
+        lda $FFF7
+        and #$0F
+        ora #'0'
+        jsr putc
+in_vid: jsr putsi
+        .byte $9B,'VIDEO:    ',0
+        lda $D014
+        and #$0E
+        beq in_pal
+        jsr putsi
+        .byte 'NTSC 60HZ',0
+        jmp in_ram
+in_pal: jsr putsi
+        .byte 'PAL 50HZ',0
+in_ram: jsr putsi
+        .byte $9B,'MEMORY:   ',0
+        lda $6A
+        lsr
+        lsr
+        sta pvl
+        lda #0
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte ' KB (RAMTOP $',0
+        lda $6A
+        jsr puthex
+        jsr putsi
+        .byte '00)',$9B,'DOS TOP:  $',0
+        lda $2E8
+        jsr puthex
+        lda $2E7
+        jsr puthex
+        jsr putsi
+        .byte ' (MEMLO)',$9B,'DOS:      ',0
+        ldx #3
+        lda $0700
+        cmp #'M'
+        bne in_a1
+        ldx #1
+        jmp in_got
+in_a1:  cmp #'S'
+        bne in_a2
+        lda $0701
+        cmp #'D'
+        bne in_a2
+        ldx #2
+        jmp in_got
+in_a2:  lda $0B
+        cmp #$17
+        bne in_got
+        ldx #0
+in_got: stx dosid
+        cpx #1
+        bne in_n1
+        jmp in_my
+in_n1:  cpx #2
+        bne in_n2
+        jmp in_sd
+in_n2:  cpx #0
+        bne in_n3
+        jmp in_d2
+in_n3:  jsr putsi
+        .byte 'UNKNOWN - TRY IT AND SEE',$9B,0
+        jmp in_end
+in_my:  jsr putsi
+        .byte 'MYDOS',$9B,$9B
+        .byte 'THIS DOS CAN:',$9B
+        .byte ' FOLDERS - MKDIR, RMDIR, > PATHS',$9B
+        .byte ' RENAME, LOCK, COPY, DELETE',$9B
+        .byte ' BIG DISKS, 128-512 BYTE SECTORS',$9B,$9B
+        .byte 'CANNOT:',$9B
+        .byte ' LONG NAMES (8.3 NAMES ONLY)',$9B,0
+        jmp in_end
+in_sd:  jsr putsi
+        .byte 'SPARTADOS (X)',$9B,$9B
+        .byte 'THIS DOS CAN:',$9B
+        .byte ' FOLDERS - MKDIR, RMDIR, > PATHS',$9B
+        .byte ' RENAME, LOCK, COPY, DELETE',$9B
+        .byte ' LARGE VOLUMES',$9B,$9B
+        .byte 'NOTE:',$9B
+        .byte ' FREE COUNT READS 999 MAX HERE',$9B,0
+        jmp in_end
+in_d2:  jsr putsi
+        .byte 'ATARI DOS 2.0S / 2.5',$9B,$9B
+        .byte 'THIS DOS CAN:',$9B
+        .byte ' RENAME, LOCK, COPY, DELETE, FORMAT',$9B,$9B
+        .byte 'CANNOT:',$9B
+        .byte ' FOLDERS (NO MKDIR / RMDIR)',$9B
+        .byte ' MORE THAN 64 FILES PER DISK',$9B,0
+in_end: jsr putsi
+        .byte $9B,'AFM: TAG COPY DELETE FIND VIEW EDIT',$9B,$9B
+        .byte 'PRESS ANY KEY',0
+        jsr getkey
+        rts
+
+puthex: pha
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr ph_n
+        pla
+        and #15
+ph_n:   cmp #10
+        bcc ph_d
+        adc #6
+ph_d:   adc #'0'
+        jmp putc
+
 dohelp: lda #125
         jsr putraw
         jsr putsi
@@ -611,7 +1764,9 @@ dohelp: lda #125
         .byte 'A TAG ALL / CLEAR TAGS',$9B
         .byte 'P PROPERTIES (TAGGED FILES TOO)',$9B
         .byte '/ FIND NAME  N FIND NEXT',$9B
-        .byte 'Q QUIT',$9B,$9B
+        .byte 'V VIEW FILE (H = HEX)',$9B
+        .byte 'E EDIT TEXT (ESC S SAVE, ESC Q QUIT)',$9B
+        .byte 'I SYSTEM INFO  Q QUIT',$9B,$9B
         .byte 'COPY/DELETE/LOCK/UNLOCK USE TAGS',$9B
         .byte 'PRESS ANY KEY',0
         jsr getkey
@@ -750,16 +1905,16 @@ cm_l:   lda #0
 
 cntmk:  lda #0
         sta mc
-        sta cmi
+        sta cmiv
 cn_l:   ldx act
-        lda cmi
+        lda cmiv
         cmp cnt,x
         bcs cn_d
         jsr mky
         lda MARKS,y
         beq cn_n
         inc mc
-cn_n:   inc cmi
+cn_n:   inc cmiv
         jmp cn_l
 cn_d:   lda mc
         rts
@@ -1445,19 +2600,21 @@ bput:   lda #11
         sta ICBLH,x
         jmp CIOV
 
-getkey: ldx #$30
-        lda #7
-        sta ICCOM,x
-        lda #0
-        sta ICBLL,x
-        sta ICBLH,x
-        jsr CIOV
+getkey: jsr getraw
         cmp #'a'
         bcc gk_r
         cmp #'z'+1
         bcs gk_r
         and #$DF
 gk_r:   rts
+
+getraw: ldx #$30
+        lda #7
+        sta ICCOM,x
+        lda #0
+        sta ICBLL,x
+        sta ICBLH,x
+        jmp CIOV
 
 askyn:  jsr putsi
         .byte '  (Y/N)',0
@@ -1847,7 +3004,7 @@ drawui:
         ldx #0
         jsr setpos
         jsr putsi
-        .byte 'T)AG A)LL /)FIND ?)MORE TAB Q)UIT',0
+        .byte 'T)AG A)LL /)FIND I)NFO ?)MORE Q)UIT',0
         ldx #0
         jsr drawhdr
         ldx #1
@@ -2050,7 +3207,7 @@ ei2:    .byte 0
 isd:    .byte 0
 mkn:    .byte 0
 mc:     .byte 0
-cmi:    .byte 0
+cmiv:   .byte 0
 bn:     .byte 0
 bsing:  .byte 0
 bidx:   .byte 0
@@ -2084,6 +3241,23 @@ rdx:    .byte 0
 rpane:  .byte 0
 ri:     .byte 0
 bkm:    .byte 0
+edro:   .byte 0
+edmod:  .byte 0
+edhex:  .byte 0
+edkeep: .byte 0
+ecol:   .byte 0
+ecf:    .byte 0
+edtmp:  .byte 0
+ecv:    .byte 0
+edcn:   .byte 0
+edpc:   .byte 0
+edrw:   .byte 0
+edi:    .byte 0
+edy:    .byte 0
+edcol:  .byte 0
+edse:   .byte 0,0
+elim:   .byte 0,0
+dosid:  .byte 0
 bkn:    .byte 0
 bke:    .byte 0
 bkch:   .byte 0
