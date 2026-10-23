@@ -192,8 +192,11 @@ c20:    cmp #'E'
         bne c21
         jmp doedit
 c21:    cmp #'V'
-        bne c18
+        bne c22
         jmp doview
+c22:    cmp #'G'
+        bne c18
+        jmp donew
 c18:    jmp main
 
 k_tab:
@@ -640,11 +643,63 @@ me_n:   inc fs
         clc
         rts
 
+; ---------- new file (text or hex, saved from the editor) ----------
+donew:  jsr rowprompt
+        jsr putsi
+        .byte 'NEW FILE NAME: ',0
+        lda #12
+        sta rlmax
+        jsr rdline
+        pha
+        lda #8
+        sta rlmax
+        pla
+        bne nw_ok
+        jmp cancel
+nw_ok:  ldx act
+        stx pn
+        lda drv,x
+        ora #'0'
+        sta FSPEC+1
+        lda #'D'
+        sta FSPEC
+        lda #':'
+        sta FSPEC+2
+        ldx #3
+        jsr apath
+        ldy #0
+nw_c:   lda INBUF,y
+        sta FSPEC,x
+        inx
+        iny
+        cpy ri
+        bcc nw_c
+        lda #$9B
+        sta FSPEC,x
+        jsr usef1
+        ldx #$10
+        lda #4
+        jsr openF
+        bmi nw_new0
+        jsr close1
+        jsr msgrow
+        jsr putsi
+        .byte 'FILE ALREADY EXISTS',0
+        jmp main
+nw_new0: jsr close1
+nw_new: lda #1
+        sta ednew
+        lda #0
+        sta edro
+        jmp ed_ld
+
 ; ---------- editor / viewer ----------
 doview: lda #1
         bne ed_set
 doedit: lda #0
 ed_set: sta edro
+        lda #0
+        sta ednew
         jsr needf
         bne ed_go
         jmp main
@@ -678,7 +733,10 @@ ed_l1:  sta elim+1
         mwa #EBUF EE
         mwa #EBUF EC
         mwa #EBUF ET
-        jsr usef1
+        lda ednew
+        beq ed_old
+        jmp ed_ok2
+ed_old: jsr usef1
         ldx #$10
         lda #4
         jsr openF
@@ -792,7 +850,11 @@ ek5:    cmp #$7E
         jsr eddel
         clc
         rts
-ek6:    cmp #$9B
+ek6:    ldx edhex
+        beq ek6a
+        jsr edhexk
+        bcs ek_n
+ek6a:   cmp #$9B
         beq ek_ins
         cmp #$20
         bcc ek_n
@@ -800,6 +862,73 @@ ek6:    cmp #$9B
         bcs ek_n
 ek_ins: jsr edins
 ek_n:   clc
+        rts
+
+; hex mode: two hex digits write one byte at the cursor (appends at the end)
+eh_no:  lda #0
+        sta ehn
+        lda ehk
+        clc
+        rts
+eh_x:   sec
+        rts
+edhexk: sta ehk
+        lda edro
+        bne eh_no
+        lda ehk
+        cmp #'0'
+        bcc eh_no
+        cmp #'9'+1
+        bcc eh_d
+        and #$DF
+        cmp #'A'
+        bcc eh_no
+        cmp #'G'
+        bcs eh_no
+        sec
+        sbc #'A'-10
+        jmp eh_v
+eh_d:   sec
+        sbc #'0'
+eh_v:   sta ehv
+        lda ehn
+        bne eh_2
+        lda ehv
+        asl
+        asl
+        asl
+        asl
+        sta ehh
+        lda #1
+        sta ehn
+        jsr edmsg22
+        jsr putsi
+        .byte 'HEX: ENTER SECOND DIGIT',0
+        sec
+        rts
+eh_2:   lda #0
+        sta ehn
+        lda ehh
+        ora ehv
+        sta ehb
+        cmw EC EE
+        bcc eh_ow
+        cmw EE elim
+        bcc eh_ap
+        jmp eh_x
+eh_ap:  lda ehb
+        ldy #0
+        sta (EC),y
+        inw EE
+        inw EC
+        jmp eh_m
+eh_ow:  lda ehb
+        ldy #0
+        sta (EC),y
+        inw EC
+eh_m:   lda #1
+        sta edmod
+        sec
         rts
 
 edesc:  jsr getkey
@@ -1063,6 +1192,8 @@ ef_dn:  mwa EP ET
 ef_hex: cmw EC EE
         bcc ef_h0
         mwa EE EC
+        lda edro
+        beq ef_h0
         cmi EC EBUF
         beq ef_h0
         dew EC
@@ -1318,8 +1449,6 @@ ei_s:   lda edtmp
 ei_r:   rts
 
 eddel:  lda edro
-        bne dl_r
-        lda edhex
         bne dl_r
         cmi EC EBUF
         beq dl_r
@@ -1597,7 +1726,13 @@ hxlf:   cmi EC EBUF
         dew EC
 hl_r:   rts
 
-hxrt:   mwa EC EL
+hxrt:   lda edro
+        bne hx_ro
+        cmw EC EE
+        bcs hr_r2
+        inw EC
+        rts
+hx_ro:  mwa EC EL
         inw EL
         cmw EL EE
         bcs hr_r2
@@ -1765,8 +1900,8 @@ dohelp: lda #125
         .byte 'P PROPERTIES (TAGGED FILES TOO)',$9B
         .byte '/ FIND NAME  N FIND NEXT',$9B
         .byte 'V VIEW FILE (H = HEX)',$9B
-        .byte 'E EDIT TEXT (ESC S SAVE, ESC Q QUIT)',$9B
-        .byte 'I SYSTEM INFO  Q QUIT',$9B,$9B
+        .byte 'E EDIT (ESC H = HEX: TYPE 0-9 A-F)',$9B
+        .byte 'I INFO  G NEW FILE  Q QUIT',$9B,$9B
         .byte 'COPY/DELETE/LOCK/UNLOCK USE TAGS',$9B
         .byte 'PRESS ANY KEY',0
         jsr getkey
@@ -2299,7 +2434,7 @@ mk_l:   jsr getkey
         jsr putc
         jmp mk_l
 mk_n:   ldx ri
-        cpx #8
+        cpx rlmax
         bcs mk_l
         cmp #' '
         bcc mk_l
@@ -3242,6 +3377,13 @@ rpane:  .byte 0
 ri:     .byte 0
 bkm:    .byte 0
 edro:   .byte 0
+rlmax:  .byte 8
+ednew:  .byte 0
+ehn:    .byte 0
+ehh:    .byte 0
+ehv:    .byte 0
+ehb:    .byte 0
+ehk:    .byte 0
 edmod:  .byte 0
 edhex:  .byte 0
 edkeep: .byte 0

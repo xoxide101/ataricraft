@@ -17,10 +17,11 @@ Two-pane 6502 file manager for DOS 2.0/2.5, MyDOS and SpartaDOS X. Load `AFM.COM
 | / N | find name, find next |
 | V | view file (H toggles hex dump) |
 | E | edit text file (up to ~16 KB) |
+| G | new file (text, or press ESC H for hex entry), then ESC S to save |
 | I | system info (also shown at start) |
 | ? | help, Q quit |
 
-Editor: arrows/Ctrl-arrows move, Backspace deletes, Return inserts a line break. Commands use an ESC prefix: ESC S save, ESC Q quit, ESC H hex, ESC U/D page, ESC T/E top/end.
+Editor: arrows/Ctrl-arrows move, Backspace deletes, Return inserts a line break. Commands use an ESC prefix: ESC S save, ESC Q quit, ESC H hex, ESC U/D page, ESC T/E top/end. In hex mode (editing) type two hex digits (0-9 A-F) to overwrite the byte at the cursor or append at the end; Backspace deletes.
 
 ## Per-DOS notes
 - DOS 2.0/2.5: no folders, 64 files per disk.
@@ -28,6 +29,6 @@ Editor: arrows/Ctrl-arrows move, Backspace deletes, Return inserts a line break.
 - SpartaDOS X: folders supported; bulk mkdir is slow.
 
 ## Tested (in the ataricraft emulator only, not on real hardware)
-Copy/tags/properties/find/mkdir/bulk mkdir on MyDOS, DOS 2 and SDX; viewer, hex view, edit+save+reload on DOS 2.0S; viewer/hex and save-error path on MyDOS; load/render/insert on SDX. Editor save on SDX and on MyDOS (the beta image used rejects writes) is untested.
+Copy/tags/properties/find/mkdir/bulk mkdir on MyDOS, DOS 2 and SDX; viewer, hex view, edit+save+reload on DOS 2.0S; viewer/hex and save-error path on MyDOS; load/render/insert on SDX. New file (G) tested on DOS 2.5: create, save, "already exists", cancel; hex digit entry tested (41 42 FF). Editor save on SDX and on MyDOS (the beta image used rejects writes) is untested.
 
 Build: `mads afm.asm -o:afm.com`.
