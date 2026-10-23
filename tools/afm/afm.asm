@@ -144,7 +144,10 @@ c15:    cmp #'N'
 c16:    cmp #'?'
         bne c17
         jmp dohelp
-c17:    jmp main
+c17:    cmp #'B'
+        bne c18
+        jmp dobulk
+c18:    jmp main
 
 k_tab:
         lda act
@@ -603,6 +606,7 @@ dohelp: lda #125
         .byte 'L LOCK  U UNLOCK  F FORMAT',$9B
         .byte 'X CLEAR DISK/FOLDER',$9B
         .byte 'M MKDIR  K RMDIR',$9B
+        .byte 'B BULK MKDIR A-Z / 0-9',$9B
         .byte 'T TAG FILE (MULTI-SELECT)',$9B
         .byte 'A TAG ALL / CLEAR TAGS',$9B
         .byte 'P PROPERTIES (TAGGED FILES TOO)',$9B
@@ -1221,6 +1225,122 @@ rm_do:  lda #1
         lda #33
         jsr xioA
 rm_fin: jmp xioFin
+
+; B: make one-character folders A-Z and/or 0-9; existing ones are skipped
+dobulk:
+        jsr rowprompt
+        jsr putsi
+        .byte 'BULK A)-Z 0)-9 B)OTH: ',0
+        jsr getkey
+        ldx #1
+        cmp #'A'
+        beq bk_go
+        ldx #2
+        cmp #'0'
+        beq bk_go
+        ldx #3
+        cmp #'B'
+        beq bk_go
+        jmp cancel
+bk_err: lda #1
+        sta isd
+        ldy est
+        jmp xioFin
+bk_go:  stx bkm
+        lda #0
+        sta bkn
+        sta bke
+        lda bkm
+        and #1
+        beq bk_d
+        lda #'A'
+        sta bkch
+bk_l1:  jsr bkone
+        bcs bk_err
+        inc bkch
+        lda bkch
+        cmp #'Z'+1
+        bcc bk_l1
+bk_d:   lda bkm
+        and #2
+        beq bk_end
+        lda #'0'
+        sta bkch
+bk_l2:  jsr bkone
+        bcs bk_err
+        inc bkch
+        lda bkch
+        cmp #'9'+1
+        bcc bk_l2
+bk_end: ldy #1
+        sty est
+        lda #0
+        sta xa1
+        jsr reloadall
+        jsr drawui
+        jsr msgrow
+        jsr putsi
+        .byte 'CREATED ',0
+        lda bkn
+        sta pvl
+        lda #0
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte ' FOLDERS',0
+        lda bke
+        beq bk_fin
+        jsr putsi
+        .byte ' (LAST ERR ',0
+        sta pvl
+        lda #0
+        sta pvh
+        jsr putd16
+        lda #')'
+        jsr putc
+bk_fin: jmp main
+
+; carry set only when this DOS has no directories
+bkone:  jsr msgrow
+        jsr putsi
+        .byte 'MAKING ',0
+        lda bkch
+        jsr putc
+        ldx act
+        stx pn
+        lda drv,x
+        ora #'0'
+        sta FSPEC+1
+        lda #'D'
+        sta FSPEC
+        lda #':'
+        sta FSPEC+2
+        ldx #3
+        jsr apath
+        lda bkch
+        sta FSPEC,x
+        inx
+        lda #$9B
+        sta FSPEC,x
+        lda #8
+        sta xa1
+        lda #42
+        jsr xioA
+        sty est
+        cpy #1
+        bne bko_e
+        inc bkn
+        clc
+        rts
+bko_e:  sty bke
+        cpy #146
+        beq bko_x
+        cpy #168
+        beq bko_x
+        clc
+        rts
+bko_x:  sec
+        rts
 
 xioDone:
         jsr xioA
@@ -1963,6 +2083,10 @@ dr:     .byte 0
 rdx:    .byte 0
 rpane:  .byte 0
 ri:     .byte 0
+bkm:    .byte 0
+bkn:    .byte 0
+bke:    .byte 0
+bkch:   .byte 0
 pc_a:   .byte 0
 pc_x:   .byte 0
 pc_y:   .byte 0
