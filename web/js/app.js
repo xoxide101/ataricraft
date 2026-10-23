@@ -1347,9 +1347,19 @@
     $('de' + n).onclick = () => {
       if (!S.emu) return;
       S.emu.ejectDisk(n);
+      if (S.emu.diskPaths) delete S.emu.diskPaths[n];
       delete S.disks[n];
       $('d' + n).textContent = 'empty';
       $('f' + n).value = '';
+    };
+    $('ds' + n).onclick = () => {
+      if (!S.emu || !S.disks[n]) { log(`D${n}: nothing to save`); return; }
+      const bytes = S.emu.readDisk(n);
+      if (!bytes) { log(`D${n}: could not read the disk image`); return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+      a.download = S.disks[n].name; a.click();
+      log(`D${n}: saved ${S.disks[n].name} (${bytes.length} bytes) to your Downloads`);
     };
   }
   $('ctypeok').onclick = () => {

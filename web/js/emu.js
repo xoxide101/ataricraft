@@ -174,7 +174,18 @@ window.AC = window.AC || {};
     mountDisk(n, name, bytes) {
       const path = '/d' + n + '_' + name.replace(/[^\w.]/g, '_');
       this.m.FS.writeFile(path, bytes);
+      (this.diskPaths || (this.diskPaths = {}))[n] = path;
       return this.m._libatari800_mount_disk_image(n, this.cstr(path), 0);
+    }
+
+    // Dismount to flush pending writes, read the image back, then remount it.
+    readDisk(n) {
+      const path = this.diskPaths && this.diskPaths[n];
+      if (!path) return null;
+      this.m._ac_disk_eject(n);
+      const out = this.m.FS.readFile(path);
+      this.m._libatari800_mount_disk_image(n, this.cstr(path), 0);
+      return out;
     }
 
     // AFILE_* code from file content: 1 ATR, 2 XFD, 3 ATR.GZ, 4 XFD.GZ, 5 DCM, 6 XEX, 7 BAS, 8 LST, 9 CART, 10 ROM, 11 CAS, 12 boot tape, 13/14 state, 15 PRO, 16 ATX, 0 unknown.
