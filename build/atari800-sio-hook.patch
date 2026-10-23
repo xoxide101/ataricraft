@@ -35,3 +35,16 @@ index 9a5b710..6b58baf 100644
  #ifdef DEBUG
  		Log_print("SIO disk command is %02x %02x %02x %02x %02x   %02x %02x %02x %02x %02x %02x",
  			cmd, MEMORY_dGetByte(0x303), MEMORY_dGetByte(0x304), MEMORY_dGetByte(0x305), MEMORY_dGetByte(0x306),
+diff --git a/src/xep80.c b/src/xep80.c
+index 02a445d..4f0a14c 100644
+--- a/src/xep80.c
++++ b/src/xep80.c
+@@ -184,7 +184,7 @@ UBYTE (*font)[XEP80_FONTS_CHAR_COUNT][XEP80_MAX_CHAR_HEIGHT][XEP80_CHAR_WIDTH];
+ /* Path to the XEP80's charset ROM image, marked as U12 on Jerzy Sobola's
+    schematic: http://www.dereatari.republika.pl/schematy.htm
+    The ROM image is also available there. */
+-static char charset_filename[FILENAME_MAX];
++static char charset_filename[FILENAME_MAX] = "/xep80.chr";
+ 
+ static void UpdateTVSystem(void)
+ {

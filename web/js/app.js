@@ -215,7 +215,7 @@
     if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
     log('booting…');
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
-    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, tv: $('tv').value, host: S.host });
+    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, tv: $('tv').value, host: S.host });
     FujiNet.attach(S.emu);
     hookDevices();
     applyPad();
@@ -278,11 +278,26 @@
 
   function draw() {
     if (!S.emu) return;
-    S.emu.render(img32, pal);
-    sctx.putImageData(img, 0, 0);
+    let xh = S.emu.xepHeight();
+    if (xh) {
+      if (!xepBuf || xepCv.height !== xh) { xepCv.height = xh; xepImg = new ImageData(560, xh); xepBuf = new Uint32Array(xepImg.data.buffer); }
+      S.emu.xepRender(xepBuf, pal, (S.emu.frames >> 5) & 1);
+      xepCv.getContext('2d').putImageData(xepImg, 0, 0);
+      // Stay on the Atari screen until a handler actually draws something on the XEP80.
+      if (S.xepSeen !== S.emu) {
+        let lit = 0;
+        for (let i = 0; i < xepBuf.length && lit < 150; i += 7) if ((xepBuf[i] & 0xffffff) !== (xepBuf[0] & 0xffffff)) lit++;
+        if (lit >= 20) S.xepSeen = S.emu;
+      }
+      if (S.xepSeen !== S.emu) xh = 0;
+    }
+    if (!!xh !== S.xepShown) { S.xepShown = !!xh; applyScale(); }
+    if (!xh) { S.emu.render(img32, pal); sctx.putImageData(img, 0, 0); }
     pollTape();
     present();
   }
+  const xepCv = Object.assign(document.createElement('canvas'), { width: 560, height: 250 });
+  let xepImg = null, xepBuf = null;
 
   // ---- display scaling: the emulator frame is kept in `src`, `cv` is the on-screen canvas ----
   const src = document.createElement('canvas');
@@ -314,7 +329,7 @@
     return b;
   }
   function applyScale() {
-    const native = (scaleMode === 'sharp' || scaleMode === 'smooth') && !scanOn;
+    const native = (scaleMode === 'sharp' || scaleMode === 'smooth') && !scanOn && !S.xepShown;
     const dpr = window.devicePixelRatio || 1;
     const w = native ? AC.SCREEN.w : Math.max(AC.SCREEN.w, Math.round(cv.clientWidth * dpr));
     const h = native ? AC.SCREEN.h : Math.max(AC.SCREEN.h, Math.round(cv.clientHeight * dpr));
@@ -324,6 +339,7 @@
   }
   function present() {
     const W = cv.width, H = cv.height;
+    if (S.xepShown) { ctx.imageSmoothingEnabled = scaleMode !== 'sharp'; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(xepCv, 0, 0, W, H); return; }
     const native = W === src.width && H === src.height;
     ctx.imageSmoothingQuality = 'high';
     if (scaleMode === 'sharp') { ctx.imageSmoothingEnabled = false; ctx.drawImage(src, 0, 0, W, H); }

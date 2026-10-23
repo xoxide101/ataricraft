@@ -130,12 +130,13 @@
 <body>
 <header>
   <button id="sbtoggle" title="Show/hide side panel">☰</button>
-  <h1 title="build 20261022m">ATARICRAFT <small class="dim" style="font-size:10px">b20261022m</small></h1>
+  <h1 title="build 20261022n">ATARICRAFT <small class="dim" style="font-size:10px">b20261022n</small></h1>
   <select id="model"><option value="130xe">Atari 130XE</option><option value="65xe">Atari 65XE</option><option value="800xl">Atari 800XL</option><option value="1200xl">Atari 1200XL</option><option value="800">Atari 800</option></select>
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
   <select id="tv"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select>
   <label class="dim" title="Applies immediately (reboots). Turn off for SpartaDOS X."><input id="basic" type="checkbox" checked style="display:inline"> BASIC on</label>
+  <label class="dim" title="Applies on Boot. Emulates the XEP80 80-column interface on joystick port 1 (load an XEP80 handler such as XEP80.SYS)."><input id="xep80" type="checkbox" style="display:inline"> XEP80</label>
   <button id="boot">Boot</button>
   <button id="mapbtn">Keyboard mapping…</button>
   <button id="sndbtn">Sound: on</button><button id="fnbtn" title="Virtual FujiNet (SIO device $70) on/off">FujiNet: on</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
@@ -245,17 +246,18 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
-<script src="js/emu.js?v=20261022m"></script>
-<script src="js/titles-data.js?v=20261022m"></script>
-<script src="js/zip.js?v=20261022m"></script>
-<script src="js/sevenzip.js?v=20261022m"></script>
-<script src="js/catalog.js?v=20261022m"></script>
-<script src="js/romdb.js?v=20261022m"></script>
-<script src="js/memtest.js?v=20261022m"></script>
-<script src="js/diskdb.js?v=20261022m"></script>
+<script src="js/emu.js?v=20261022n"></script>
+<script src="js/titles-data.js?v=20261022n"></script>
+<script src="js/zip.js?v=20261022n"></script>
+<script src="js/sevenzip.js?v=20261022n"></script>
+<script src="js/catalog.js?v=20261022n"></script>
+<script src="js/romdb.js?v=20261022n"></script>
+<script src="js/xep80chr.js?v=20261022n"></script>
+<script src="js/memtest.js?v=20261022n"></script>
+<script src="js/diskdb.js?v=20261022n"></script>
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261022m"></script>
+<script src="js/app.js?v=20261022n"></script>
 </body>
 </html>

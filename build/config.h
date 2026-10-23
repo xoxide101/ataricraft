@@ -4,6 +4,7 @@
 #define PACKAGE_STRING "atari800 ataricraft-ref"
 #define PACKAGE_BUGREPORT ""
 #define LIBATARI800 1
+#define XEP80_EMULATION 1
 #define SOUND 1
 #define CONSOLE_SOUND 1
 #define POKEYSND_SIGNED_SAMPLES 1

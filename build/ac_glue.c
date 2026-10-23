@@ -6,6 +6,7 @@
 #include "afile.h"
 #include "cassette.h"
 #include "atari.h"
+#include "xep80.h"
 #include <emscripten.h>
 
 /* SIO hook: JS (Module.acSio) returns 0 = not handled, else 'C','N','E' etc. */
@@ -67,6 +68,11 @@ EMSCRIPTEN_KEEPALIVE void ac_tape_boot(void)
 
 /* Disk: 1 = mounted. */
 EMSCRIPTEN_KEEPALIVE int ac_disk_mount(int n, const char *path) { return SIO_Mount(n, path, 0); }
+
+/* XEP80 80-column video: two 560-wide palette-index screens (blink phases), height 10 (NTSC) or 12 (PAL) rows per character. */
+EMSCRIPTEN_KEEPALIVE int ac_xep80_enabled(void) { return XEP80_enabled; }
+EMSCRIPTEN_KEEPALIVE int ac_xep80_height(void) { return XEP80_scrn_height; }
+EMSCRIPTEN_KEEPALIVE unsigned char *ac_xep80_screen(int n) { return n ? XEP80_screen_2 : XEP80_screen_1; }
 
 /* cfg.c references these when HAVE_LIBZ is set; screenshot/video export is not built. */
 int File_Export_ReadConfig(char *string, char *ptr) { return 0; }

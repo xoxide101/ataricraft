@@ -47,6 +47,10 @@ window.AC = window.AC || {};
         m.FS.writeFile('/basic.rom', opt.basic);
         args.push('-basic_rom', '/basic.rom', opt.basicOn ? '-basic' : '-nobasic');
       }
+      if (opt.xep80) {
+        m.FS.writeFile('/xep80.chr', Uint8Array.from(atob(AC.XEP80_CHR), (c) => c.charCodeAt(0)));
+        args.push('-xep80', '-xep80port', '1');
+      }
       const emu = new Emu(m, opt);
       const argv = m._malloc(args.length * 4);
       const dv = new DataView(m.HEAPU8.buffer);
@@ -144,6 +148,17 @@ window.AC = window.AC || {};
       let x = 0;
       for (let i = 0; i < 384 * 240; i += 7) x = (x * 31 + h[p + i]) | 0;
       return x;
+    }
+
+    // XEP80 80-column output: 560 px wide, two blink phases (0/1). Returns the height, or 0 when the XEP80 is off.
+    xepHeight() { return this.m._ac_xep80_enabled ? (this.m._ac_xep80_enabled() ? this.m._ac_xep80_height() : 0) : 0; }
+
+    xepRender(img32, palette, phase) {
+      const h = this.xepHeight();
+      const p = this.m._ac_xep80_screen(phase ? 1 : 0);
+      const src = this.m.HEAPU8;
+      for (let i = 0, n = 560 * h; i < n; i++) img32[i] = palette[src[p + i]];
+      return h;
     }
 
     render(img32, palette) {
