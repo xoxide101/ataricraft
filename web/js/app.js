@@ -704,7 +704,7 @@
       [...node.dirs.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach((name) => {
         const d = node.dirs.get(name);
         const open = forceOpen || MED.open.has(d.path);
-        const r = row(depth, `${open ? '▾' : '▸'} ${name}  (${d.n})`, d.path);
+        const r = row(depth, `${open ? '📂' : '📁'} ${name}  (${d.n})`, d.path);
         r.style.color = 'var(--acc)';
         r.onclick = () => { if (MED.open.has(d.path)) MED.open.delete(d.path); else MED.open.add(d.path); renderMed(); };
         if (open) walk(d, depth + 1);
@@ -712,7 +712,8 @@
       const files = node.files.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
       files.slice(0, TREE_FILE_CAP).forEach((f) => {
         const base = f.name.split('/').pop();
-        const r = row(depth, f.title ? `${base} — ${f.title}` : base, f.title ? `${f.title} — ${f.name}` : f.name);
+        const ico = { disk: '💾', cart: '🎮', tape: '📼', exe: '⚙️' }[f.kind] || '📄';
+        const r = row(depth, f.title ? `${ico} ${base} — ${f.title}` : `${ico} ${base}`, f.title ? `${f.title} — ${f.name}` : f.name);
         r.style.paddingLeft = `${4 + depth * 14 + 14}px`;
         r.onclick = async (e) => { const fl = await fileOf(f); if (fl) { loadAny(fl, e.shiftKey, f.kind); showRelated(f); } };
       });
@@ -725,8 +726,8 @@
     const q = $('medfilter').value.toLowerCase();
     const box = $('medlist');
     box.innerHTML = '';
-    $('medview').textContent = MED.tree ? 'List' : 'Tree';
-    $('medview').title = MED.tree ? 'Switch to a flat list' : 'Switch to the folder tree';
+    $('medview').textContent = MED.tree ? '☰' : '🗂';
+    $('medview').title = MED.tree ? 'Tree view (click for flat list)' : 'List view (click for folder tree)';
     ['medexpand', 'medcollapse'].forEach((id) => ($(id).style.display = MED.tree ? '' : 'none'));
     box.style.maxHeight = MED.tree ? '360px' : '200px';
     const extOf = (f) => (f.name.split('.').pop() || '').toLowerCase();
@@ -734,16 +735,20 @@
     const counts = {};
     ofKind.forEach((f) => { const e = extOf(f); counts[e] = (counts[e] || 0) + 1; });
     if (MED.ext !== 'all' && !counts[MED.ext]) MED.ext = 'all';
-    const eb = $('medexts');
+    const eb = $('medextsel');
     eb.innerHTML = '';
     const exts = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    if (exts.length > 1) exts.forEach((e) => {
-      const b = document.createElement('button');
-      b.textContent = `.${e} ${counts[e]}`;
-      b.style.cssText = 'padding:1px 6px;font-size:11px;opacity:' + (MED.ext === e ? 1 : 0.55) + (MED.ext === e ? ';border-color:var(--acc)' : '');
-      b.onclick = () => { MED.ext = MED.ext === e ? 'all' : e; renderMed(); };
-      eb.append(b);
+    const o0 = document.createElement('option');
+    o0.value = 'all'; o0.textContent = `All extensions (${ofKind.length})`;
+    eb.append(o0);
+    exts.forEach((e) => {
+      const o = document.createElement('option');
+      o.value = e; o.textContent = `.${e} (${counts[e]})`;
+      eb.append(o);
     });
+    eb.value = MED.ext;
+    eb.onchange = () => { MED.ext = eb.value; renderMed(); };
+    $('medkind').value = MED.kind;
     const hits = ofKind.filter((f) => (MED.ext === 'all' || extOf(f) === MED.ext) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
     if (q) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
     if (MED.tree) {
@@ -1081,13 +1086,7 @@
     diag('scan summary ' + JSON.stringify(kc));
   }
   $('medfilter').oninput = renderMed;
-  document.querySelectorAll('#medchips button[data-t]').forEach((b) => {
-    b.onclick = () => {
-      MED.kind = b.dataset.t; MED.ext = 'all';
-      document.querySelectorAll('#medchips button[data-t]').forEach((x) => x.classList.toggle('on', x === b));
-      renderMed();
-    };
-  });
+  $('medkind').onchange = () => { MED.kind = $('medkind').value; MED.ext = 'all'; renderMed(); };
   $('medview').onclick = () => { MED.tree = !MED.tree; localStorage.setItem('ac.medtree', MED.tree ? '1' : '0'); renderMed(); };
   $('medexpand').onclick = () => { allDirs(window.__medTreeRoot || { dirs: new Map() }, []).forEach((p) => MED.open.add(p)); renderMed(); };
   $('medcollapse').onclick = () => { MED.open.clear(); renderMed(); };
