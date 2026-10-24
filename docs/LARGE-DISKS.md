@@ -82,3 +82,12 @@ Mount folder was tested with an in-memory stand-in for the browser's directory h
 - DOS 2 / MyDOS writing.
 - APT/IDE device emulation (FDISK finds no device).
 - Bootable generated SDFS images (needs a boot loader; mkatr's loader is GPL and not copied).
+
+## APT / FDISK virtual device (experimental)
+
+scripts\apt-fdisk-virtual.cjs runs Fujiware FDISK.COM (not redistributable; place it in out\apt_apps\FDISK\) against a virtual APT device implemented with taricraft.sioTap (device $9F/$A0, commands $53, $6E, $EC, $52, $57, 512-byte LBA via DAUX1-4). The OS ROM is patched so the $D803/$D80B ID probe passes.
+
+- An image from 	ools/apt/apt.cjs shows in FDISK with its partitions, drive mapping, sector sizes and names. FDISK requires the header sector to hold only the mapping slots and the partition entries to sit in a chained table sector; the builder now does this.
+- Run with lank: FDISK Initialize writes a protective MBR and an APT header that pt.cjs parses.
+- Not verified against real hardware. The $6E info block and $53 status bytes are guesses that FDISK accepts. A DOS mounting the partitions is untested. The device is listed 5 times because of the ROM patch.
+

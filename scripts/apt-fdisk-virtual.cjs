@@ -69,6 +69,11 @@ const fs = require('fs');
   console.log('0400', await p.evaluate(() => [...ataricraft.peek(0x400, 24)]).then(hx), '7C85', await p.evaluate(() => [...ataricraft.peek(0x7c85, 1)]).then(hx), '79D2', await p.evaluate(() => [...ataricraft.peek(0x79d2, 1)]).then(hx));
   await p.locator('#screen').screenshot({ path: R + 'out/apt/fdisk.png' });
   for (const [n,a,l] of [['ent7A30',0x7a30,16],['zp80',0x80,4],['zp8F',0x8f,4],['7BB1',0x7bb1,4],['0600',0x600,32],['7A40',0x7a40,8]]) console.log(n, await p.evaluate(([a,l]) => ataricraft.peek(a,l).map(v=>v.toString(16).padStart(2,'0')).join(' '), [a,l]));
+  if (process.argv[2] === 'blank') { await p.keyboard.press('Enter'); await p.waitForTimeout(4000); await shot('after init confirm'); await p.keyboard.press('Enter'); await p.waitForTimeout(8000); await shot('after init OK'); await p.keyboard.press('Enter'); await p.waitForTimeout(10000); await shot('after save'); await p.keyboard.press('Enter'); await p.waitForTimeout(15000); await shot('after write'); }
+  const d = new Uint8Array(await p.evaluate(() => [...window.__disk]));
+  const w = await p.evaluate(() => window.__sio.filter((e) => e.cmd === 0x57).map((e) => e.lba));
+  console.log('writes at LBA:', w.join(','));
+  try { console.log('parse:', JSON.stringify(APT.parse(d), (k, v) => (k === 'data' ? undefined : v)).slice(0, 400)); } catch (e) { console.log('parse failed:', e.message); }
   await b.close();
 })();
 
