@@ -121,3 +121,9 @@ Source of truth: BW-DOS 1.5 `SOURCES/COM/APT.ASM` (HolgerJanz/BW-DOS). Symptoms 
 8. **512-byte SDFS partitions are not supported by BW-DOS (not a device bug).** The BW-DOS kernel keeps one byte per drive for the sector size, loaded from SDFS boot-sector byte $1F ($80 = 128, $00 = 256, SpartaDOS 3 heritage). SDX encodes 512 as 1 there, which BW-DOS misreads, hence SIO reads with DBYT $0501 and errors 166/139. The same image reads fine in SDX 4.43/4.51. Use 256-byte (or 128) partitions for BW-DOS; use 512 only for SDX.
 
 Tooling: scripts/apt-bw-virtual.cjs (`node scripts/apt-bw-virtual.cjs "VER" "APT MOUNT 1 2 3" "DIR D3:"`; env `WAIT` = ms per command, `CHECK=1` dumps partition 3 contents via dosfs.js). Needs BW-DOS 1.5 ATR at out/bw15/bw15.atr (from the BW-DOS repo) and the emulator ROMs.
+
+### Limits and XDCB (background)
+
+- Sector IDs are 16 bit in classic DOSes and the SIO RAM handler, so 65535 sectors max: 8 MB at 128, 16 MB at 256, 32 MB at 512 bytes (512 only with newer SDX). dosfs.js enforces 65535.
+- SDFS 2.1 has a 'cluster' concept for bigger volumes with a 16-bit map; no driver implements it. ATR itself is conventionally limited to 16 MB.
+- APT devices use the XDCB (Drac030): the DCB is extended so the sector number is 32 bits (DAUX1-4, bytes $30A-$30D), implemented by all APT firmwares; DracOS 65C816 also has a 24-bit buffer address. The virtual APT device here reads the LBA from those four bytes.
