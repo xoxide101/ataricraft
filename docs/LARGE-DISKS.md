@@ -87,14 +87,22 @@ Mount folder was tested with an in-memory stand-in for the browser's directory h
 - Real hardware test of generated images (sio2bsd / SDrive).
 - 512-byte-sector SDFS verification.
 - DOS 2 / MyDOS writing.
-- APT/IDE device emulation (FDISK finds no device).
 - Bootable generated SDFS images (needs a boot loader; mkatr's loader is GPL and not copied).
 
 ## APT / FDISK virtual device (experimental)
 
 scripts\apt-fdisk-virtual.cjs runs Fujiware FDISK.COM (not redistributable; place it in out\apt_apps\FDISK\) against a virtual APT device implemented with ataricraft.sioTap (device $9F/$A0, commands $53, $6E, $EC, $52, $57, 512-byte LBA via DAUX1-4). The OS ROM is patched so the $D803/$D80B ID probe passes.
 
-- An image from tools/apt/apt.cjs shows in FDISK with its partitions, drive mapping, sector sizes and names. FDISK requires the header sector to hold only the mapping slots and the partition entries to sit in a chained table sector; the builder now does this.
+- An image from tools/apt/apt.cjs shows in FDISK with its partitions, drive mapping, sector sizes and names. Layout follows BW-DOS APT.COM: header byte 0 = $10, entries 1-15 are the drive-mapping slots, entries 16+ of the same sector are the partitions, and byte 5 = $10 + partition count (max 15 partitions).
 - Run with blank: FDISK Initialize writes a protective MBR and an APT header that apt.cjs parses.
 - Not verified against real hardware. The $6E info block and $53 status bytes are guesses that FDISK accepts. A DOS mounting the partitions is untested. The device is listed 5 times because of the ROM patch.
 
+
+### BW-DOS APT.COM against the virtual device (verified in the emulator)
+
+scripts\apt-bw-virtual.cjs boots BW-DOS 1.5 (disk with APT.COM) with the virtual device. Verified: `APT LIST`, `APT INFO 1`, `APT LIST 1`, `APT MOUNT 1 2 3` and then `DIR D3:`, `TYPE`, and `COPY D1:file D3:file`. The written file reads back correctly from the backing image with dosfs.js.
+
+- BW-DOS addresses the device as DDEVIC $A0 / DUNIT 1 and needs PDVMSK ($0247) non-zero; the script pokes $FF because the fake PBI ROM is not scanned at boot.
+- Mounted drive Dn: reaches SIO as device $30+n (D2: = $32). The script serves those calls from the mapped partition ($52 read, $50/$57 write, $53 status, $4E percom).
+- 256-byte SDFS partitions work. 512-byte partitions did not: BW-DOS issues SIO reads with DBYT $0501 (error 166/139). Not investigated further.
+- Not tested on real hardware.

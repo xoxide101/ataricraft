@@ -82,16 +82,14 @@
       lay.push({ ...p, secSz, start: lba + 1, lbas, meta: lba });
       lba += 1 + lbas;
     }
-    const tbl = lba; lba++;
     const img = new Uint8Array(lba * 512);
     img[510] = 0x55; img[511] = 0xaa;
     const m = 0x1be; img[m + 4] = 0x7f; img[m + 5] = 0xff; img[m + 6] = 0xff; img[m + 7] = 0xff;
     wr32(img, m + 8, 1); wr32(img, m + 12, lba - 1);
     const h = 512;
-    img.set([0x41, 0x50, 0x54], h + 1); img[h + 4] = boot; img[h + 5] = 16; wr32(img, h + 8, tbl);
-    const c = tbl * 512; img.set([0x41, 0x50, 0x54], c + 1); img[c + 5] = 16;
+    img[h] = 0x10; img.set([0x41, 0x50, 0x54], h + 1); img[h + 4] = boot; img[h + 5] = 16 + lay.length;
     lay.forEach((p, i) => {
-      const o = h + 16 + i * 16, oc = c + 16 + i * 16;
+      const o = h + 256 + i * 16, oc = h + 16 + i * 16;
       const sz = p.secSz === 128 ? 1 : p.secSz === 256 ? 2 : 3;
       img[o] = sz | ((p.mapping || 0) << 2) | 0x40;
       wr32(img, o + 2, p.start); wr32(img, o + 6, p.sectors);
