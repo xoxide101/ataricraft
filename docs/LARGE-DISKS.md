@@ -106,3 +106,18 @@ scripts\apt-bw-virtual.cjs boots BW-DOS 1.5 (disk with APT.COM) with the virtual
 - Mounted drive Dn: reaches SIO as device $30+n (D2: = $32). The script serves those calls from the mapped partition ($52 read, $50/$57 write, $53 status, $4E percom).
 - 256-byte SDFS partitions work. 512-byte partitions did not: BW-DOS issues SIO reads with DBYT $0501 (error 166/139). Not investigated further.
 - Not tested on real hardware.
+
+#### Findings and fixes needed to make BW-DOS APT work (in order)
+
+Source of truth: BW-DOS 1.5 `SOURCES/COM/APT.ASM` (HolgerJanz/BW-DOS). Symptoms and cures:
+
+1. **"APT PBI devices are not found", no SIO traffic.** APT.COM only polls PBI ids whose bit is set in PDVMSK ($0247). Nothing sets it in the emulator (no real PBI ROM scan). Fix: poke $FF into $0247 after boot.
+2. **LIST shows the device on all 8 PBI ids.** The SIO device ($A0, unit 1) answers regardless of the PBI id. Cosmetic; same cause as FDISK's 5x listing.
+3. **Error 191 (APT signature invalid) / 194.** The MBR must end 55 AA and have a `$7F` partition (type at +4, start LBA at +8, count at +$0C). The APT sector at that start LBA must begin with byte `$10` then `APT` (`10 41 50 54`). The old builder omitted the leading `$10`.
+4. **Error 193 (partition not found) on MOUNT.** APT.COM reads partition entries from `sector + $100` (16 bytes each, entry n at +$100+16*(n-1)), flag bit `$40` = valid, type byte 0 = DOS. Entries 1-15 at +$10 are the drive-mapping slots. Partition count is byte 5 minus `$10`. The old builder put partitions in a separate chained table sector; BW-DOS does not follow it. Fixed in tools/apt/apt.cjs `build()`.
+5. **Each partition is preceded by a metadata sector** starting `APT 00 META` (`41 50 54 00 4D 45 54 41`), name at +$10. APT.COM reads it for LIST (sector = partition start - 1) and fails with 192 if the signature is missing.
+6. **INFO/LIST device query ($6E, 512 bytes):** bytes per sector at +6 (16 bit), sector count at +8 (24 bit), media name at +$10, controller name at +$38 (NUL-terminated). Status ($53) returns 4 bytes; zero is accepted.
+7. **MOUNT then DIR gave Error 138 (timeout).** The mount writes the drive mapping into the APT sector ($57) and sends $46 (media change). After that BW-DOS talks to the mapped drive as a normal SIO disk: device `$30+n` (D2: = $32), commands $52/$50/$57/$53/$4E, with 1-based sector numbers relative to the partition start. These are NOT sent to $A0. A virtual device must answer them itself (the script does: partition start LBA x 512 + (sector-1) x sector size; sectors 1-3 are always 128 bytes in 256-byte volumes).
+8. **Known gap:** 512-byte-sector partitions fail (Error 166/139) because the read length is sent as 1281 ($0501) bytes. Likely needs special SIO framing handling in the hook. Use 256-byte (or 128) partitions for now.
+
+Tooling: scripts/apt-bw-virtual.cjs (`node scripts/apt-bw-virtual.cjs "VER" "APT MOUNT 1 2 3" "DIR D3:"`; env `WAIT` = ms per command, `CHECK=1` dumps partition 3 contents via dosfs.js). Needs BW-DOS 1.5 ATR at out/bw15/bw15.atr (from the BW-DOS repo) and the emulator ROMs.
