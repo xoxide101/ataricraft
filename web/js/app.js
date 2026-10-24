@@ -1314,12 +1314,15 @@
     out.set([0x96, 0x02, par & 255, (par >> 8) & 255, secSize & 255, secSize >> 8, (par >> 16) & 255]);
     return out;
   }
+  const makeBlank = (ss, n) => ($('blanksdfs').checked && ss === 256 ? AC.DosFs.createSdfs({ sectorSize: 256, sectors: n, label: 'BLANK' }) : blankAtr(ss, n));
   for (let n = 1; n <= 8; n++) $('blankslot').append(new Option('D' + n, String(n)));
-  const blankName = () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}.atr`; };
+  for (let n = 1; n <= 8; n++) $('fsdrv').append(new Option('D' + n, String(n)));
+  const blankName = () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${$('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
   $('blankmk').onclick = () => {
     if (!S.emu) { log('boot first, then insert a blank disk'); return; }
     const [ss, n] = $('blankfmt').value.split(',').map(Number), slot = +$('blankslot').value;
-    const bytes = blankAtr(ss, n), name = blankName();
+    if ($('blanksdfs').checked && ss !== 256) log('SDFS needs 256-byte sectors: making an unformatted disk instead');
+    const bytes = makeBlank(ss, n), name = blankName();
     if (!S.emu.mountDisk(slot, name, bytes)) { log('could not mount the blank disk'); return; }
     S.disks[slot] = { name, bytes };
     S.dirty[slot] = true;
@@ -1369,9 +1372,89 @@
   $('blankdl').onclick = () => {
     const [ss, n] = $('blankfmt').value.split(',').map(Number);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([blankAtr(ss, n)], { type: 'application/octet-stream' }));
+    a.href = URL.createObjectURL(new Blob([makeBlank(ss, n)], { type: 'application/octet-stream' }));
     a.download = blankName(); a.click();
   };
+  // ---- browse / extract / add files on a mounted disk ----
+  const fsBytes = (n) => { if (!S.emu) return null; const b = S.emu.readDisk(n); return b || (S.disks[n] && S.disks[n].bytes) || null; };
+  const saveBlob = (name, parts, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(parts, { type: type || 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+  const crcNum = (b) => parseInt(crc32(b), 16);
+  function storedZip(files) {
+    const parts = [], cd = [];
+    let off = 0;
+    const enc = new TextEncoder();
+    for (const f of files) {
+      const nm = enc.encode(f.name), crc = crcNum(f.data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint32(14, crc, true); h.setUint32(18, f.data.length, true); h.setUint32(22, f.data.length, true); h.setUint16(26, nm.length, true);
+      parts.push(h.buffer, nm, f.data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint32(16, crc, true); c.setUint32(20, f.data.length, true); c.setUint32(24, f.data.length, true); c.setUint16(28, nm.length, true); c.setUint32(42, off, true);
+      cd.push(c.buffer, nm);
+      off += 30 + nm.length + f.data.length;
+    }
+    const cdLen = cd.reduce((s, x) => s + (x.byteLength || x.length), 0);
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cdLen, true); e.setUint32(16, off, true);
+    return [...parts, ...cd, e.buffer];
+  }
+  function fsOpen() {
+    const n = +$('fsdrv').value, bytes = fsBytes(n);
+    if (!bytes) { $('fslist').textContent = `D${n}: is empty`; return null; }
+    const v = AC.DosFs.open(bytes);
+    if (!v) { $('fslist').textContent = `D${n}: no DOS 2.x / MyDOS / SpartaDOS-family file system found`; return null; }
+    return { n, bytes, v };
+  }
+  function fsShow() {
+    const o = fsOpen(); if (!o) return;
+    const { n, v } = o, list = v.list(), box = $('fslist');
+    box.textContent = '';
+    const head = document.createElement('div');
+    head.textContent = `D${n}: ${v.kind.toUpperCase()} ${v.label || ''}  ${v.sectors} x ${v.sectorSize} B${v.freeSectors ? ', free ' + v.freeSectors() + ' sectors' : ''}${v.readOnly ? ' (read-only here)' : ''}  ${list.filter((e) => !e.dir).length} files`;
+    box.append(head);
+    for (const e of list.slice(0, 1000)) {
+      const row = document.createElement('div');
+      row.textContent = (e.dir ? '[' + e.path + ']' : e.path) + (e.dir ? '' : `  ${e.approxSize ? '~' : ''}${e.size} B  `);
+      if (!e.dir) { const b = document.createElement('a'); b.href = '#'; b.textContent = 'download'; b.onclick = (ev) => { ev.preventDefault(); saveBlob(e.name, [v.read(e)]); }; row.append(b); }
+      box.append(row);
+    }
+    if (list.length > 1000) box.append('… ' + (list.length - 1000) + ' more (use Save all .zip)');
+  }
+  $('fsbrowse').onclick = fsShow;
+  $('fszip').onclick = () => {
+    const o = fsOpen(); if (!o) return;
+    const files = o.v.list().filter((e) => !e.dir).map((e) => ({ name: e.path, data: o.v.read(e) }));
+    saveBlob(`D${o.n}_files.zip`, storedZip(files), 'application/zip');
+    log(`D${o.n}: saved ${files.length} files as zip`);
+  };
+  const to83 = (name) => {
+    const i = name.lastIndexOf('.'), base = i > 0 ? name.slice(0, i) : name, ext = i > 0 ? name.slice(i + 1) : '';
+    const c = (s, k) => s.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, k);
+    return c(base, 8) + (ext ? '.' + c(ext, 3) : '');
+  };
+  $('fsadd').onchange = async (ev) => {
+    const files = [...ev.target.files]; ev.target.value = '';
+    const o = fsOpen(); if (!o) return;
+    if (o.v.readOnly) { log(`D${o.n}: adding files only works on SpartaDOS-family (SDFS) disks; this is ${o.v.kind}`); return; }
+    const dir = $('fspath').value.trim().toUpperCase().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const added = [];
+    try {
+      for (const f of files) {
+        const data = new Uint8Array(await f.arrayBuffer()), nm = to83(f.name);
+        o.v.writeFile(dir ? dir + '/' + nm : nm, data);
+        const back = o.v.list().find((e) => e.path === (dir ? dir + '/' + nm : nm));
+        if (!back || Buffer_eq(o.v.read(back), data) === false) throw new Error('read-back check failed for ' + nm);
+        added.push(nm + (nm !== f.name ? ` (from ${f.name})` : ''));
+      }
+    } catch (e) { log('add files: ' + e.message + (added.length ? '; added before the error: ' + added.join(', ') : '')); }
+    if (added.length) {
+      const name = (S.disks[o.n] && S.disks[o.n].name) || `d${o.n}.atr`;
+      S.emu.mountDisk(o.n, name, o.bytes); S.disks[o.n] = { name, bytes: o.bytes }; S.dirty[o.n] = true;
+      log(`D${o.n}: added ${added.length} file(s) (${added.join(', ')}), verified by reading back. Press Reset so the DOS rereads the disk.`);
+    }
+    fsShow();
+  };
+  const Buffer_eq = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
   async function insertCart(slot, file, bytes) {
     if (!S.emu) { log('boot first'); return; }
     bytes = bytes || new Uint8Array(await file.arrayBuffer());
@@ -1622,11 +1705,17 @@
     run: () => { S.running = true; }, pause: () => { S.running = false; },
     speed: (x) => { S.speed = x; },
     peek: (a, l) => S.emu.peek(a, l), poke: (a, b) => S.emu.poke(a, b),
+    readDisk: (n) => fsBytes(n),
     mountDisk: (n, name, bytes) => S.emu.mountDisk(n, name, bytes), bootFile: (name, bytes) => S.emu.bootFile(name, bytes),
     insertCart: (slot, name, bytes) => S.emu.insertCart(slot, name, bytes), cartTypes: (kb) => S.emu.cartTypes(kb),
     setCartType: (slot, t) => S.emu.setCartType(slot, t), ejectCart: (slot) => S.emu.ejectCart(slot), ejectDisk: (n) => S.emu.ejectDisk(n),
     snapshot: () => S.emu.snapshot(), restore: (s) => { S.emu.restore(s); draw(); },
     reset: (cold) => (cold ? S.emu.coldStart() : S.emu.warmStart()),
     typing: () => S.typeQ.length,
+    // Debug: fn(dev,cmd,dstats,aux,data,len) sees every SIO call; return a status code ('C' = 0x43) to claim it.
+    sioTap: (fn) => {
+      const m = S.emu.m, inner = m.acSio;
+      m.acSio = (dev, cmd, dstats, aux, data, len) => fn(dev, cmd, dstats, aux, data, len) || (inner ? inner(dev, cmd, dstats, aux, data, len) : 0);
+    },
   };
 })();
