@@ -1107,7 +1107,7 @@
   }
   // ---- touch pad (Atari Touch Tablet / Koala Pad on port 1: paddle 0/1 = X/Y, stylus buttons = joystick left/right lines) ----
   const PAD = Object.assign({ on: false, type: 'touch', screen: false, fx: false, fy: false }, JSON.parse(localStorage.getItem('ac.pad') || '{}'));
-  const padPos = { x: 0.5, y: 0.5, b: 0 };
+  const padPos = { x: 0.5, y: 0.5, b: 0, held: 0 };
   function applyPad() {
     if (!S.emu) return;
     if (!PAD.on) { S.emu.up('pad'); return; }
@@ -1116,15 +1116,14 @@
     const potX = Math.round(fx * 227);
     // Touch Tablet: Y rises going up; Koala Pad: Y rises going down. Direct-mouse mode inverts the value (POT = 227 - value).
     const potY = Math.round((PAD.type === 'koala' ? fy : 1 - fy) * 227);
-    S.emu.down('pad', { mousex: 227 - potX, mousey: 227 - potY, mouse_buttons: padPos.b, mouse_mode: 1 });
-    $('padinfo').textContent = `X ${potX}  Y ${potY}${padPos.b ? '  button' : ''}`;
+    S.emu.down('pad', { mousex: 227 - potX, mousey: 227 - potY, mouse_buttons: padPos.b | padPos.held, mouse_mode: 1 });
+    $('padinfo').textContent = `X ${potX}  Y ${potY}${padPos.b | padPos.held ? '  button' : ''}`;
   }
   function padMove(e, el) {
     const r = el.getBoundingClientRect();
     padPos.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     padPos.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-    $('paddot').style.left = padPos.x * 100 + '%';
-    $('paddot').style.top = padPos.y * 100 + '%';
+    document.querySelectorAll('.paddot, #paddot').forEach((d) => { d.style.left = padPos.x * 100 + '%'; d.style.top = padPos.y * 100 + '%'; });
     applyPad();
   }
   function padWire(el, enabled) {
@@ -1132,17 +1131,38 @@
     el.addEventListener('pointerdown', (e) => {
       if (!enabled()) return;
       down = true; el.setPointerCapture(e.pointerId);
-      padPos.b = (e.buttons & 3) || 1; $('padarea').classList.add('dn');
+      padPos.b = (e.buttons & 3) || 1; el.classList.add('dn');
       padMove(e, el); e.preventDefault();
     });
     el.addEventListener('pointermove', (e) => { if (enabled() && (down || e.pointerType === 'mouse')) { if (down) padPos.b = (e.buttons & 3) || 1; padMove(e, el); } });
-    const end = () => { if (!down) return; down = false; padPos.b = 0; $('padarea').classList.remove('dn'); applyPad(); };
+    const end = () => { if (!down) return; down = false; padPos.b = 0; el.classList.remove('dn'); applyPad(); };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
     el.addEventListener('contextmenu', (e) => { if (enabled()) e.preventDefault(); });
   }
   padWire($('padarea'), () => PAD.on);
   padWire(cv, () => PAD.on && PAD.screen);
+  padWire($('padarea2'), () => PAD.on);
+  document.querySelectorAll('.padbtns button').forEach((b) => {
+    const bit = +b.dataset.b;
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); padPos.held |= bit; applyPad(); });
+    const up = () => { b.classList.remove('down'); padPos.held &= ~bit; applyPad(); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+  });
+  // Keyboard panel tabs: Keys / Arrows / Pad. Pad turns the touch pad on while shown and restores the previous state after.
+  {
+    let padBefore = null;
+    const setMode = (m) => {
+      document.querySelectorAll('#kbmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
+      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kmini').hidden = m !== 'keys';
+      $('kbview').style.display = m === 'keys' ? '' : 'none';
+      if (m === 'pad' && padBefore == null) { padBefore = PAD.on; PAD.on = true; syncPadUi(); applyPad(); }
+      else if (m !== 'pad' && padBefore != null) { PAD.on = padBefore; padBefore = null; padPos.held = 0; syncPadUi(); applyPad(); }
+      localStorage.setItem('ac.kbmode', m);
+    };
+    document.querySelectorAll('#kbmode button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
+    window.AC_setKbMode = setMode;
+  }
   const syncPadUi = () => {
     $('padon').checked = PAD.on; $('padtype').value = PAD.type; $('padscreen').checked = PAD.screen; $('padfx').checked = PAD.fx; $('padfy').checked = PAD.fy;
     $('padarea').classList.toggle('off', !PAD.on);
@@ -1630,6 +1650,9 @@
   // ---- UI wiring ----
   AC.keyboard.restoreCharset();
   AC.keyboard.build($('kbd'), handle);
+  AC.keyboard.buildArrows($('karrows'), handle, false);
+  AC.keyboard.buildArrows($('kmini'), handle, true);
+  window.AC_setKbMode(localStorage.getItem('ac.kbmode') === 'arrows' ? 'arrows' : 'keys');
   $('kblayout').onchange = (e) => AC.keyboard.build($('kbd'), handle, e.target.value);
   $('romfiles').onchange = (e) => addRoms(e.target.files);
   $('model').onchange = () => { fillRomSelects(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };

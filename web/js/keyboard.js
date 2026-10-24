@@ -142,6 +142,36 @@ window.AC = window.AC || {};
       } catch (e) {}
     },
 
+    // Cursor keys are Control+- / = / + / * on the Atari: up, down, left, right.
+    // compact=true: single strip (arrows, Return, Esc, Space, BkSp); otherwise a full pad with D-pad and console keys.
+    buildArrows(el, h, compact) {
+      el.innerHTML = '';
+      const A = {
+        up: ['▲', () => ({ keycode: 0x8e })], down: ['▼', () => ({ keycode: 0x8f })],
+        left: ['◀', () => ({ keycode: 0x86 })], right: ['▶', () => ({ keycode: 0x87 })],
+        ret: ['Return', () => ({ keychar: 10 })], esc: ['Esc', () => ({ keychar: 27 })],
+        space: ['Space', () => ({ keychar: 32 })], bksp: ['BkSp', () => ({ keychar: 8 })], tab: ['Tab', () => ({ keychar: 9 })],
+        brk: ['Break', () => ({ special: 5 })], start: ['Start', () => ({ start: 1 })], select: ['Select', () => ({ select: 1 })],
+        option: ['Option', () => ({ option: 1 })], help: ['Help', () => ({ keycode: 0x11 })], reset: ['Reset', () => ({ special: 2 })],
+        ctrlc: ['Ctrl-C', () => ({ keychar: 3 })],
+      };
+      const btn = (id, cls) => {
+        const b = document.createElement('button');
+        b.className = 'key akey ' + (cls || '') + ' a-' + id;
+        b.textContent = A[id][0];
+        b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); h.down('arr:' + id, A[id][1]()); b.classList.add('down'); });
+        const up = () => { if (!b.classList.contains('down')) return; b.classList.remove('down'); h.up('arr:' + id); };
+        b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+        return b;
+      };
+      const mk = (cls, ids) => { const d = document.createElement('div'); d.className = cls; ids.forEach((i) => d.append(btn(i))); return d; };
+      if (compact) { el.append(mk('amini', ['left', 'down', 'up', 'right', 'ret', 'esc', 'space', 'bksp'])); return; }
+      const dpad = document.createElement('div');
+      dpad.className = 'dpad';
+      dpad.append(btn('up'), btn('left'), btn('down'), btn('right'));
+      el.append(dpad, mk('aside', ['ret', 'esc', 'space', 'bksp', 'tab', 'brk', 'ctrlc', 'help']), mk('aside con', ['start', 'select', 'option', 'reset']));
+    },
+
     build(el, h, layout) {
       this.layout = layout || this.layout || '130xe';
       el.innerHTML = '';

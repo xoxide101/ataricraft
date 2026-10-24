@@ -108,6 +108,29 @@
   #scandlg .nd label { cursor:pointer; overflow:hidden; text-overflow:ellipsis; }
   #padarea { position:relative; width:100%; aspect-ratio:4/3; background:#23262d; border:1px solid #3a4150; border-radius:6px; touch-action:none; cursor:crosshair; margin:4px 0; }
   #padarea.off { opacity:.4; }
+  #kbmode { display:flex; gap:6px; margin-bottom:6px; } #kbmode button { flex:1; padding:5px 8px; opacity:.6; } #kbmode button.on { opacity:1; border-color:var(--acc); }
+  #karrows { display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
+  #karrows[hidden], #kpad[hidden], #kbd[hidden], #kmini[hidden] { display:none; }
+  .akey { height:52px; min-width:54px; padding:0 10px; font-weight:700; font-size:15px; flex:none; }
+  .dpad { display:grid; grid-template-columns:repeat(3,76px); grid-template-rows:repeat(2,64px); gap:6px; }
+  .dpad .akey { height:100%; font-size:24px; } .dpad .a-up { grid-column:2; grid-row:1; } .dpad .a-left { grid-column:1; grid-row:2; } .dpad .a-down { grid-column:2; grid-row:2; } .dpad .a-right { grid-column:3; grid-row:2; }
+  .aside { display:flex; flex-wrap:wrap; gap:6px; max-width:320px; } .aside.con .akey { background:#4a4035; color:#e8e0d0; }
+  .amini { display:flex; gap:4px; margin-top:6px; } .amini .akey { flex:1; min-width:0; height:44px; padding:0 2px; font-size:13px; }
+  .amini .a-left, .amini .a-down, .amini .a-up, .amini .a-right { flex:1.2; font-size:18px; }
+  #kmini { display:none; } #kmini[hidden] { display:none; }
+  @media (max-width:900px), (pointer:coarse) { #kmini:not([hidden]) { display:block; } }
+  .padsurf { position:relative; width:100%; height:clamp(150px,30vh,300px); background:#23262d; border:1px solid #3a4150; border-radius:6px; touch-action:none; cursor:crosshair; }
+  .padsurf .paddot { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; border:2px solid #35e06a; pointer-events:none; left:50%; top:50%; }
+  .padsurf.dn .paddot { background:#ff4a3d; border-color:#ff4a3d; }
+  .padbtns { display:flex; gap:8px; margin-top:8px; } .padbtns button { flex:1; height:56px; font-size:15px; font-weight:700; touch-action:none; user-select:none; } .padbtns button.down { background:var(--acc); color:#000; }
+  @media (max-width:900px) { .center { overflow:auto; max-height:calc(100dvh - var(--hh,50px)); } #stage { position:sticky; top:0; z-index:5; } #screen { width:min(calc(100vw - 20px), calc((100dvh - var(--hh,50px) - 20px) * 1.2)); min-width:0; } }
+  @media (max-width:900px) and (orientation:landscape) {
+    .center { flex-direction:row; flex-wrap:nowrap; align-items:flex-start; gap:8px; overflow:auto; }
+    #stage { position:sticky; top:0; flex:none; }
+    #screen { width:min(42vw, calc((100dvh - var(--hh,50px) - 16px) * 1.4)); }
+    #kbdwrap { flex:1; min-width:0; max-width:none; min-width:0; }
+    .legend, #kbview { display:none; }
+  }
   #paddot { position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; border:2px solid #35e06a; pointer-events:none; left:50%; top:50%; }
   #padarea.dn #paddot { background:#ff4a3d; border-color:#ff4a3d; }
   #devbar { margin-left:auto; display:flex; flex-wrap:wrap; gap:3px 9px; justify-content:flex-end; font:11px ui-monospace,Consolas,monospace; }
@@ -249,7 +272,14 @@
     <div id="stage"><canvas id="screen"></canvas><div id="toast"></div></div>
     <div id="kbdwrap">
       <div id="kbview"><span>Show:</span><button data-v="base" title="Lower-case glyphs">a Lower</button><button data-v="shift" title="Capital glyphs">A Caps</button><button data-v="ctrl" title="Control/special graphics">♥ Special</button><div id="devbar" title="Device activity: green = read, red = write, yellow = other command. A ring means media is mounted."></div></div>
+      <div id="kbmode"><button data-m="keys" class="on">⌨ Keys</button><button data-m="arrows">✥ Arrows</button><button data-m="pad">🖱 Pad</button></div>
       <div id="kbd"></div>
+      <div id="karrows" hidden></div>
+      <div id="kpad" hidden>
+        <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
+        <div class="padbtns"><button data-b="1">Button 1</button><button data-b="2">Button 2</button></div>
+      </div>
+      <div id="kmini"></div>
       <div class="legend">Legends come from the Atari's character set. <b class="s">Orange</b> = Shift, <b class="c">teal</b> = Control. Click Shift or Control, then a key.</div>
     </div>
   </div>
