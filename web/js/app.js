@@ -559,6 +559,7 @@
     if (k !== 'tape' && S.emu.tapeInfo().status) {
       S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
     }
+    S.lastExe = null;
     if (k === 'disk') {
       const n = typeof alt === 'number' ? alt : alt ? 2 : 1;
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
@@ -573,7 +574,7 @@
         if (nm) log('disk recognised: ' + nm);
       }
     } else if (k === 'exe') {
-      S.emu.bootFile(file.name, bytes);
+      S.emu.bootFile(file.name, bytes); S.lastExe = { name: file.name, bytes };
       log('running ' + file.name);
     } else if (k === 'cart') {
       await insertCart(typeof alt === 'number' ? 1 : alt ? 2 : 1, file, bytes);
@@ -1669,7 +1670,8 @@
   $('romfolder').onchange = (e) => addRoms(e.target.files);
   $('boot').onclick = boot;
   $('reset').onclick = () => S.emu && S.emu.warmStart();
-  $('cold').onclick = () => S.emu && S.emu.coldStart();
+  function coldOrExe() { if (S.lastExe) S.emu.bootFile(S.lastExe.name, S.lastExe.bytes); else S.emu.coldStart(); }
+  $('cold').onclick = () => S.emu && coldOrExe();
   $('pause').onclick = () => { S.running = !S.running; $('pause').textContent = S.running ? 'Pause' : 'Run'; };
   $('speed').oninput = (e) => { S.speed = Math.pow(2, +e.target.value); const s = S.speed.toFixed(S.speed < 1 ? 2 : 1); $('speedv').textContent = s + '×'; $('spd').textContent = s; };
   $('profile').value = S.profile;
@@ -1788,7 +1790,7 @@
     insertCart: (slot, name, bytes) => S.emu.insertCart(slot, name, bytes), cartTypes: (kb) => S.emu.cartTypes(kb),
     setCartType: (slot, t) => S.emu.setCartType(slot, t), ejectCart: (slot) => S.emu.ejectCart(slot), ejectDisk: (n) => S.emu.ejectDisk(n),
     snapshot: () => S.emu.snapshot(), restore: (s) => { S.emu.restore(s); draw(); },
-    reset: (cold) => (cold ? S.emu.coldStart() : S.emu.warmStart()),
+    reset: (cold) => (cold ? coldOrExe() : S.emu.warmStart()),
     typing: () => S.typeQ.length,
     // Debug: fn(dev,cmd,dstats,aux,data,len) sees every SIO call; return a status code ('C' = 0x43) to claim it.
     sioTap: (fn) => {
