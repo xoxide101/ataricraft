@@ -1886,7 +1886,14 @@ in_ram: jsr putsi
         lda $6A
         lsr
         lsr
-        sta pvl
+        ldx $FCD8
+        cpx #$4C
+        bne in_m1
+        ldx $6A
+        cpx #$C0
+        bcc in_m1
+        lda #64
+in_m1:  sta pvl
         lda #0
         sta pvh
         jsr putd16
