@@ -14,3 +14,6 @@ out/
 books/
 web/library/
 web/js/diskdb.js
+
+# archive: blank disks are tracked; DOS boot disks (third-party) stay local
+!archive/blank/*.atr
