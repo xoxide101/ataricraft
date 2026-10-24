@@ -18,9 +18,13 @@ const fs = require('fs');
   await p.waitForTimeout(800);
   await p.click('#boot');
   await p.waitForTimeout(2500);
-  await p.evaluate(() => {
+  const APT = require(R + 'tools/apt/apt.cjs');
+  const mk = (n, name, sz) => ({ sectorSize: sz, sectors: n, name, mapping: 0, data: new Uint8Array(n * sz) });
+  const image = process.argv[2] === 'blank' ? new Uint8Array(8 << 20)
+    : APT.build(process.argv[2] === 'one' ? [mk(1000, 'ONE', 512)] : [mk(2000, 'ONE', 512), mk(4000, 'TWO', 256)]);
+  await p.evaluate((img) => {
     window.__sio = [];
-    const SECT = 16384, disk = new Uint8Array(SECT * 512); // 8 MB virtual device
+    const disk = new Uint8Array(img), SECT = disk.length / 512; window.__disk = disk;
     const put = (a, bytes) => { const o = new Uint8Array(512); o.set(bytes.slice(0, 512)); ataricraft.poke(a, [...o]); };
     const str = (s) => [...s].map((c) => c.charCodeAt(0));
     ataricraft.sioTap((dev, cmd, dstats, aux, data, len) => {
@@ -48,17 +52,15 @@ const fs = require('fs');
       if (cmd === 0x57) { disk.set(ataricraft.peek(data, 512), lba * 512); return C; }
       return 0x4e;
     });
-  });
+  }, [...image]);
   await p.evaluate((a) => ataricraft.bootFile('FDISK.COM', new Uint8Array(a)), [...fdisk]);
   await p.waitForTimeout(8000);
   await p.keyboard.press('Escape');
   await p.waitForTimeout(3000);
-  await p.keyboard.press('Enter');
-  await p.waitForTimeout(3000);
-  await p.keyboard.press('Enter');
-  await p.waitForTimeout(3000);
-  await p.keyboard.press('Enter');
-  await p.waitForTimeout(4000);
+  const shot = async (t) => console.log('--- ' + t + '\n' + (await p.evaluate(() => ataricraft.screenText())).split('\n').filter((l) => l.trim()).join('\n'));
+  await p.keyboard.press('Enter'); await p.waitForTimeout(3000); await shot('after device select');
+  await p.keyboard.press('Enter'); await p.waitForTimeout(3000); await shot('after 2nd enter');
+  await p.keyboard.press('Enter'); await p.waitForTimeout(4000);
   console.log((await p.evaluate(() => ataricraft.screenText())).split('\n').filter((l) => l.trim()).join('\n'));
   const log = await p.evaluate(() => window.__sio.filter((e) => e.cmd && e.cmd !== 0x53 && e.cmd !== 0x6e));
   console.log('non-probe SIO calls:', log.length);
@@ -66,6 +68,7 @@ const fs = require('fs');
   const hx = (a) => a.map((v) => v.toString(16).padStart(2, '0')).join(' ');
   console.log('0400', await p.evaluate(() => [...ataricraft.peek(0x400, 24)]).then(hx), '7C85', await p.evaluate(() => [...ataricraft.peek(0x7c85, 1)]).then(hx), '79D2', await p.evaluate(() => [...ataricraft.peek(0x79d2, 1)]).then(hx));
   await p.locator('#screen').screenshot({ path: R + 'out/apt/fdisk.png' });
+  for (const [n,a,l] of [['ent7A30',0x7a30,16],['zp80',0x80,4],['zp8F',0x8f,4],['7BB1',0x7bb1,4],['0600',0x600,32],['7A40',0x7a40,8]]) console.log(n, await p.evaluate(([a,l]) => ataricraft.peek(a,l).map(v=>v.toString(16).padStart(2,'0')).join(' '), [a,l]));
   await b.close();
 })();
 
