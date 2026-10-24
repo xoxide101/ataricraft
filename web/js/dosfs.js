@@ -277,10 +277,116 @@
         }
       }
     }
+    const use16 = nsec > 1023;
+    const nextOf = (s) => { const l = s.length; return use16 ? (s[l - 3] << 8) | s[l - 2] : ((s[l - 3] & 3) << 8) | s[l - 2]; };
+    function chain(start) {
+      const out = []; let n = start;
+      while (n && n <= nsec && out.length <= nsec) { out.push(n); n = nextOf(sec(n)); }
+      return out;
+    }
+    function exactSize(e) { let t = 0; for (const n of chain(e.start)) { const s = sec(n); t += Math.min(s[s.length - 1], s.length - 3); } return t; }
+    // Only layouts with a single, DOS 2-style bitmap model are written (MyDOS multi-VTOC for 256-byte sectors, or 90K single density).
+    const writable = (ss === 256 || nsec === 720) && nsec <= 65535 && nsec >= 720;
+    const nvtoc = 1 + Math.floor((nsec + 80) / (ss * 8));
+    const bitLoc = (s) => { const bi = (s >> 3) + 10; return [sec(360 - Math.floor(bi / ss)), bi % ss, 0x80 >> (s & 7)]; };
+    const isFree = (s) => { const [d, i, m] = bitLoc(s); return !!(d[i] & m); };
+    const setFree = (d) => { const t = sec(360), f = rd16(t, 3) + d; t[3] = f & 255; t[4] = (f >> 8) & 255; };
+    const freeSectors = () => rd16(sec(360), 3);
+    let cursor = 369;
+    function alloc() {
+      for (let k = 0; k < nsec; k++) {
+        const s = ((cursor - 1 + k) % nsec) + 1;
+        if (isFree(s)) { const [d, i, m] = bitLoc(s); d[i] &= ~m; setFree(-1); cursor = s + 1; return s; }
+      }
+      throw new Error('disk full');
+    }
+    function allocRun(n) {
+      for (let s = 369; s + n - 1 <= nsec; s++) {
+        let ok = true;
+        for (let k = 0; k < n; k++) if (!isFree(s + k)) { ok = false; s += k; break; }
+        if (ok) { for (let k = 0; k < n; k++) { const [d, i, m] = bitLoc(s + k); d[i] &= ~m; } setFree(-n); return s; }
+      }
+      throw new Error('disk full (no contiguous space for a directory)');
+    }
+    function release(n) { if (!isFree(n)) { const [d, i, m] = bitLoc(n); d[i] |= m; setFree(1); } }
+    const pack = (name) => {
+      const up = name.toUpperCase(), dot = up.lastIndexOf('.');
+      const c = (x, k) => x.replace(/[^A-Z0-9_]/g, '_').slice(0, k).padEnd(k, ' ');
+      return (dot > 0 ? c(up.slice(0, dot), 8) + c(up.slice(dot + 1), 3) : c(up, 8) + '   ');
+    };
+    function slots(start, cb) {
+      for (let i = 0; i < 8; i++) {
+        const s = sec(start + i);
+        for (let k = 0; k < 8; k++) { const r = cb(s, k * 16, i * 8 + k); if (r !== undefined) return r; }
+      }
+    }
+    function lookup(start, packed, wantDir) {
+      return slots(start, (s, o, idx) => {
+        const f = s[o];
+        if (f === 0) return null;
+        if (f & 0x80) return;
+        if (!!(f & 0x10) !== wantDir) return;
+        for (let k = 0; k < 11; k++) if (s[o + 5 + k] !== packed.charCodeAt(k)) return;
+        return { s, o, idx };
+      }) || null;
+    }
+    function freeSlot(start) {
+      const r = slots(start, (s, o, idx) => ((s[o] === 0 || (s[o] & 0x80)) ? { s, o, idx } : undefined));
+      if (!r) throw new Error('directory full (64 entries)');
+      return r;
+    }
+    function setEntry(slot, flag, count, first, packed) {
+      const { s, o } = slot;
+      s[o] = flag; s[o + 1] = count & 255; s[o + 2] = count >> 8; s[o + 3] = first & 255; s[o + 4] = first >> 8;
+      for (let k = 0; k < 11; k++) s[o + 5 + k] = packed.charCodeAt(k);
+    }
+    function findDir(parts, create) {
+      let cur = 361;
+      for (const part of parts) {
+        const p = pack(part), e = lookup(cur, p, true);
+        if (e) { cur = rd16(e.s, e.o + 3); continue; }
+        if (!create) return null;
+        if (kind !== 'mydos') throw new Error('subdirectories need a MyDOS volume');
+        const slot = freeSlot(cur), first = allocRun(8);
+        for (let k = 0; k < 8; k++) sec(first + k).fill(0);
+        setEntry(slot, 0x10, 8, first, p);
+        cur = first;
+      }
+      return cur;
+    }
+    function splitPath(path) { const parts = path.split('/').filter(Boolean); return [parts.slice(0, -1), parts[parts.length - 1]]; }
+    function freeChain(first) { for (const n of chain(first)) release(n); }
+    function writeFile(path, data, overwrite = true) {
+      if (!writable) throw new Error('this disk geometry is read-only here');
+      const [dirParts, name] = splitPath(path), packed = pack(name), dir = findDir(dirParts, true);
+      const old = lookup(dir, packed, false);
+      if (old) { if (!overwrite) throw new Error('file exists: ' + path); freeChain(rd16(old.s, old.o + 3)); old.s[old.o] = 0x80; }
+      const per = ss - 3, need = Math.max(1, Math.ceil(data.length / per));
+      if (need > freeSectors()) throw new Error('disk full');
+      const slot = freeSlot(dir), ns = [];
+      for (let k = 0; k < need; k++) ns.push(alloc());
+      for (let k = 0; k < need; k++) {
+        const s = sec(ns[k]), part = data.subarray(k * per, Math.min(data.length, (k + 1) * per)), nx = k + 1 < need ? ns[k + 1] : 0;
+        s.fill(0); s.set(part);
+        s[ss - 3] = use16 ? nx >> 8 : ((slot.idx << 2) | (nx >> 8)); s[ss - 2] = nx & 255; s[ss - 1] = part.length;
+      }
+      setEntry(slot, use16 ? 0x46 : 0x42, need, ns[0], packed);
+    }
+    function remove(path) {
+      const [dirParts, name] = splitPath(path), dir = findDir(dirParts, false);
+      if (dir == null) throw new Error('no such path: ' + path);
+      const packed = pack(name), f = lookup(dir, packed, false), d = f ? null : lookup(dir, packed, true);
+      if (f) { freeChain(rd16(f.s, f.o + 3)); f.s[f.o] = 0x80; return; }
+      if (!d) throw new Error('no such file: ' + path);
+      const first = rd16(d.s, d.o + 3);
+      if (slots(first, (s, o) => (s[o] !== 0 && !(s[o] & 0x80) ? true : undefined))) throw new Error('directory not empty: ' + path);
+      for (let k = 0; k < 8; k++) release(first + k);
+      d.s[d.o] = 0x80;
+    }
     return {
       kind, label: '', sectorSize: ss, sectors: nsec, layoutUniform: L.uniform,
-      list: () => { const out = []; dir(361, '', out, 0); return out; },
-      read, readOnly: true,
+      list: () => { const out = []; dir(361, '', out, 0); for (const e of out) if (!e.dir) { try { e.size = exactSize(e); e.approxSize = false; } catch (x) { /* keep estimate */ } } return out; },
+      read, readOnly: !writable, writeFile, remove, mkdir: (p) => { if (!writable) throw new Error('read-only geometry'); findDir(p.split('/').filter(Boolean), true); }, freeSectors,
     };
   }
 
@@ -291,7 +397,11 @@
       if (looksSdfs(L)) return sdfsVol(bytes, L);
       if (L.nsec >= 369) {
         const v = L.sec(360)[0], f0 = L.sec(361)[0];
-        if (v !== 0xff && (f0 === 0 || (f0 & 0x40) || (f0 & 0x10)) && !(f0 & 0x20) && (f0 & 0x80) === 0) return dosVol(bytes, L, v === 2 || v === 0 ? 'dos2' : 'mydos');
+        if (v !== 0xff && (f0 === 0 || (f0 & 0x40) || (f0 & 0x10)) && !(f0 & 0x20) && (f0 & 0x80) === 0) {
+          const nv = 1 + Math.floor((L.nsec + 80) / (L.ss * 8));
+          const myTotal = rd16(L.sec(360), 1) === L.nsec - 11 - nv;
+          return dosVol(bytes, L, (v === 2 || v === 0) && !myTotal && !(f0 & 0x10) ? 'dos2' : 'mydos');
+        }
       }
     } catch (e) { /* not a recognised volume */ }
     return null;
@@ -303,6 +413,25 @@
     const out = new Uint8Array(16 + len), par = len >> 4;
     out.set([0x96, 0x02, par & 255, (par >> 8) & 255, ss & 255, ss >> 8, (par >> 16) & 255]);
     return out;
+  }
+
+  // Empty MyDOS volume (256-byte sectors up to 65535, or 90K single density). Not bootable: add the DOS files or boot another disk.
+  function createMyDos(o) {
+    const ss = o.sectorSize || 256, nsec = o.sectors || 65535;
+    if (ss !== 256 && !(ss === 128 && nsec === 720)) throw new Error('MyDOS volumes here use 256-byte sectors (or 90K single density)');
+    if (nsec > 65535 || nsec < 720) throw new Error('sector count must be 720..65535');
+    const img = makeAtr(ss, nsec), L = layout(img), nv = 1 + Math.floor((nsec + 80) / (ss * 8));
+    const t = L.sec(360);
+    t[0] = ss === 256 && nsec >= 1024 ? 2 + nv : 2;
+    const total = nsec - 11 - nv;
+    t[1] = total & 255; t[2] = total >> 8; t[3] = total & 255; t[4] = total >> 8;
+    const bit = (s) => { const bi = (s >> 3) + 10; return [L.sec(360 - Math.floor(bi / ss)), bi % ss, 0x80 >> (s & 7)]; };
+    for (let s = 1; s <= nsec; s++) { const [d, i, m] = bit(s); d[i] |= m; }
+    const used = [1, 2, 3, 361, 362, 363, 364, 365, 366, 367, 368];
+    for (let k = 0; k < nv; k++) used.push(360 - k);
+    for (const s of used) { const [d, i, m] = bit(s); d[i] &= ~m; }
+    const b1 = L.sec(1); b1[1] = 3; b1[3] = 7;
+    return img;
   }
 
   // Empty SDFS volume (not bootable: add the DOS files, or boot another disk).
@@ -381,7 +510,7 @@
     }
   }
 
-  const api = { open, createSdfs, buildSdfs, to83, makeAtr, layout };
+  const api = { open, createSdfs, createMyDos, buildSdfs, to83, makeAtr, layout };
   if (typeof AC !== 'undefined') AC.DosFs = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

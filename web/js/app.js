@@ -1314,10 +1314,11 @@
     out.set([0x96, 0x02, par & 255, (par >> 8) & 255, secSize & 255, secSize >> 8, (par >> 16) & 255]);
     return out;
   }
-  const makeBlank = (ss, n) => ($('blanksdfs').checked && ss === 256 ? AC.DosFs.createSdfs({ sectorSize: 256, sectors: n, label: 'BLANK' }) : blankAtr(ss, n));
+  const mdOk = (ss, n) => $('blankmydos').checked && (ss === 256 || (ss === 128 && n === 720));
+  const makeBlank = (ss, n) => (mdOk(ss, n) ? AC.DosFs.createMyDos({ sectorSize: ss, sectors: n }) : $('blanksdfs').checked && ss === 256 ? AC.DosFs.createSdfs({ sectorSize: 256, sectors: n, label: 'BLANK' }) : blankAtr(ss, n));
   for (let n = 1; n <= 8; n++) $('blankslot').append(new Option('D' + n, String(n)));
   for (let n = 1; n <= 8; n++) $('fsdrv').append(new Option('D' + n, String(n)));
-  const blankName = () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${$('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
+  const blankName = () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${mdOk(ss, n) ? '_mydos' : $('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
   $('blankmk').onclick = () => {
     if (!S.emu) { log('boot first, then insert a blank disk'); return; }
     const [ss, n] = $('blankfmt').value.split(',').map(Number), slot = +$('blankslot').value;
@@ -1435,7 +1436,7 @@
   $('fsadd').onchange = async (ev) => {
     const files = [...ev.target.files]; ev.target.value = '';
     const o = fsOpen(); if (!o) return;
-    if (o.v.readOnly) { log(`D${o.n}: adding files only works on SpartaDOS-family (SDFS) disks; this is ${o.v.kind}`); return; }
+    if (o.v.readOnly) { log(`D${o.n}: adding files is not possible on this disk (${o.v.kind}, ${o.v.sectorSize}-byte sectors)`); return; }
     const dir = $('fspath').value.trim().toUpperCase().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     const added = [];
     try {
