@@ -264,7 +264,7 @@
     function dir(start, prefix, out, depth) {
       for (let i = 0; i < 8; i++) {
         const s = sec(start + i);
-        for (let o = 0; o + 16 <= s.length; o += 16) {
+        for (let o = 0; o + 16 <= Math.min(s.length, 128); o += 16) {
           const f = s[o];
           if (f === 0) return;
           if (f & 0x80) continue;
