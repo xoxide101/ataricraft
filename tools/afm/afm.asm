@@ -1756,6 +1756,102 @@ hxdn:   mwa EC EL
 hd_ok:  mwa EL EC
 hd_r:   rts
 
+; extended RAM probe. Must live below $4000 (the PORTB bank window). Only one byte per bank is touched and restored.
+; returns A = number of distinct 16 KB banks (0 = none). Combo bits map to PORTB bits 1,2,3,5,6,7.
+xdet:   lda $FCD8
+        cmp #$4C
+        beq xd_go
+        lda #0
+        rts
+xd_go:  php
+        sei
+        lda #0
+        sta $D40E
+        lda $D301
+        sta xsv
+        ora #$10
+        sta xmain
+        sta $D301
+        lda $4000
+        sta xorig
+        lda #$A5
+        sta $4000
+        ldx #0
+xd_1:   jsr xpv
+        sta $D301
+        lda $4000
+        sta $0600,x
+        inx
+        cpx #64
+        bne xd_1
+        ldx #0
+xd_2:   jsr xpv
+        sta $D301
+        txa
+        sta $4000
+        inx
+        cpx #64
+        bne xd_2
+        lda #0
+        sta xcnt
+        ldx #0
+xd_3:   jsr xpv
+        sta $D301
+        lda $4000
+        stx xtmp
+        cmp xtmp
+        bne xd_3n
+        inc xcnt
+xd_3n:  inx
+        cpx #64
+        bne xd_3
+        lda xmain
+        sta $D301
+        lda $4000
+        cmp #$A5
+        beq xd_ok2
+        lda #0
+        sta xcnt
+xd_ok2: ldx #0
+xd_4:   jsr xpv
+        sta $D301
+        lda $0600,x
+        sta $4000
+        inx
+        cpx #64
+        bne xd_4
+        lda xmain
+        sta $D301
+        lda xorig
+        sta $4000
+        lda xsv
+        sta $D301
+        lda #$40
+        sta $D40E
+        plp
+        lda xcnt
+        rts
+
+xpv:    txa
+        and #7
+        asl
+        sta xtmp
+        txa
+        and #$38
+        asl
+        asl
+        ora xtmp
+        ora #1
+        rts
+
+xsv:    .byte 0
+xmain:  .byte 0
+xorig:  .byte 0
+xcnt:   .byte 0
+xtmp:   .byte 0
+xkl:    .byte 0
+xkh:    .byte 0
+
 ; system information screen (also shown at startup, I key)
 doinfo:
         lda #125
@@ -1799,7 +1895,42 @@ in_ram: jsr putsi
         lda $6A
         jsr puthex
         jsr putsi
-        .byte '00)',$9B,'DOS TOP:  $',0
+        .byte '00)',$9B,'EXT RAM:  ',0
+        jsr xdet
+        beq in_nx
+        sta pvh
+        asl
+        asl
+        asl
+        asl
+        sta pvl
+        lda pvh
+        lsr
+        lsr
+        lsr
+        lsr
+        sta pvh
+        sta xkh
+        lda pvl
+        sta xkl
+        jsr putd16
+        jsr putsi
+        .byte ' KB  (TOTAL ',0
+        clc
+        lda xkl
+        adc #64
+        sta pvl
+        lda xkh
+        adc #0
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte ' KB)',0
+        jmp in_xd
+in_nx:  jsr putsi
+        .byte 'NONE',0
+in_xd:  jsr putsi
+        .byte $9B,'DOS TOP:  $',0
         lda $2E8
         jsr puthex
         lda $2E7
