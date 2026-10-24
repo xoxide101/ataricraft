@@ -1455,6 +1455,60 @@
     fsShow();
   };
   const Buffer_eq = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  // ---- mount a host folder as an SDFS disk, and sync changes back ----
+  S.folders = S.folders || {};
+  async function readFolder(dir, prefix, out, st) {
+    for await (const [name, h] of dir.entries()) {
+      if (name.startsWith('.')) continue;
+      const p = prefix ? prefix + '/' + name : name;
+      if (h.kind === 'directory') await readFolder(h, p, out, st);
+      else { const f = await h.getFile(); st.total += f.size; if (st.total > (16 << 20)) throw new Error('folder is larger than a 16 MB SDFS image'); out.push({ path: p, data: new Uint8Array(await f.arrayBuffer()) }); }
+    }
+  }
+  async function hostFile(root, path, create) {
+    const parts = path.split('/'); let d = root;
+    for (let i = 0; i < parts.length - 1; i++) d = await d.getDirectoryHandle(parts[i], { create });
+    return d.getFileHandle(parts[parts.length - 1], { create });
+  }
+  $('fsmount').onclick = async () => {
+    if (!window.showDirectoryPicker) { log('Mount folder needs a Chromium browser (File System Access API)'); return; }
+    if (!S.emu) { log('boot first'); return; }
+    let h; try { h = await showDirectoryPicker({ id: 'ataricraft-folder', mode: 'readwrite' }); } catch (e) { return; }
+    const n = +$('fsdrv').value;
+    try {
+      const files = [], st = { total: 0 };
+      await readFolder(h, '', files, st);
+      const free = Math.max(0, +$('fsfree').value || 0) << 20;
+      let r; try { r = AC.DosFs.buildSdfs(files, { freeBytes: free, label: h.name.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 8) || 'FOLDER' }); }
+      catch (e) { if (!free) throw e; r = AC.DosFs.buildSdfs(files, { freeBytes: 0, label: 'FOLDER' }); log('not enough room for spare space; mounted without it'); }
+      const name = `folder_${h.name}.atr`;
+      S.emu.mountDisk(n, name, r.image); S.disks[n] = { name, bytes: r.image }; S.dirty[n] = false;
+      S.folders[n] = { handle: h, orig: new Map(r.entries.map((e) => [e.sdfs, { host: e.host, data: files.find((f) => f.path === e.host).data }])) };
+      log(`D${n}: mounted folder "${h.name}" as SDFS, ${files.length} files, ${(st.total / 1024).toFixed(0)} KB, ${r.free} free sectors. Use "Sync back" to write changes to the folder. Press Reset so the DOS rereads the disk.`);
+      fsShow();
+    } catch (e) { log('mount folder: ' + e.message); }
+  };
+  $('fssync').onclick = async () => {
+    const o = fsOpen(); if (!o) return;
+    const F = S.folders[o.n]; if (!F) { log(`D${o.n}: no folder mounted here`); return; }
+    if (o.v.kind !== 'sdfs') { log(`D${o.n}: disk is no longer SDFS; not syncing`); return; }
+    try {
+      if ((await F.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') { log('write permission to the folder was denied'); return; }
+      let wrote = 0, same = 0; const seen = new Set();
+      for (const e of o.v.list()) {
+        if (e.dir) continue;
+        seen.add(e.path);
+        const data = o.v.read(e), old = F.orig.get(e.path);
+        if (old && Buffer_eq(old.data, data)) { same++; continue; }
+        const host = old ? old.host : e.path.toLowerCase();
+        const fh = await hostFile(F.handle, host, true), w = await fh.createWritable();
+        await w.write(data); await w.close();
+        F.orig.set(e.path, { host, data }); wrote++;
+      }
+      const gone = [...F.orig.keys()].filter((p) => !seen.has(p));
+      log(`D${o.n}: synced to folder "${F.handle.name}": ${wrote} written, ${same} unchanged${gone.length ? `, ${gone.length} deleted on the disk but left in the folder (${gone.slice(0, 5).join(', ')}${gone.length > 5 ? ', …' : ''})` : ''}`);
+    } catch (e) { log('sync back: ' + e.message); }
+  };
   async function insertCart(slot, file, bytes) {
     if (!S.emu) { log('boot first'); return; }
     bytes = bytes || new Uint8Array(await file.arrayBuffer());

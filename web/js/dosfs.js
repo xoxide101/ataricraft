@@ -331,7 +331,57 @@
     return img;
   }
 
-  const api = { open, createSdfs, makeAtr, layout };
+  // Host name -> unique upper-case 8.3 name within `used` (a Set of upper-case names in that directory).
+  function to83(name, used, isDir) {
+    const i = isDir ? -1 : name.lastIndexOf('.');
+    const c = (s, k) => s.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, k);
+    const ext = i > 0 ? c(name.slice(i + 1), 3) : '', base = c(i > 0 ? name.slice(0, i) : name, 8) || '_';
+    let out = base + (ext ? '.' + ext : ''), k = 1;
+    while (used && used.has(out)) { const suf = '_' + k++; out = base.slice(0, 8 - suf.length) + suf + (ext ? '.' + ext : ''); }
+    if (used) used.add(out);
+    return out;
+  }
+
+  // Build an SDFS image holding `files` ([{path:'dir/file.ext', data}]) plus `freeBytes` of spare room.
+  // Returns {image, entries:[{host, sdfs}]} where entries map each host path to the 8.3 path used on the disk.
+  function buildSdfs(files, o) {
+    o = o || {};
+    const ss = o.sectorSize || 256, perMap = (ss - 4) >> 1, used = new Map(), entries = [], dirsSeen = new Map();
+    const nameFor = (dirKey, hostName, isDir) => { if (!used.has(dirKey)) used.set(dirKey, new Set()); return to83(hostName, used.get(dirKey), isDir); };
+    const dirMap = new Map(); // host dir path -> sdfs dir path
+    const sdfsDir = (hostDir) => {
+      if (!hostDir) return '';
+      if (dirMap.has(hostDir)) return dirMap.get(hostDir);
+      const k = hostDir.lastIndexOf('/'), parent = sdfsDir(k < 0 ? '' : hostDir.slice(0, k));
+      const p = (parent ? parent + '/' : '') + nameFor(parent, hostDir.slice(k + 1), true);
+      dirMap.set(hostDir, p); dirsSeen.set(p, 0);
+      return p;
+    };
+    let need = 0;
+    for (const f of files) {
+      const k = f.path.lastIndexOf('/'), d = sdfsDir(k < 0 ? '' : f.path.slice(0, k));
+      const sd = (d ? d + '/' : '') + nameFor(d, f.path.slice(k + 1), false);
+      entries.push({ host: f.path, sdfs: sd, data: f.data });
+      const ds = Math.ceil(f.data.length / ss);
+      need += ds + Math.max(1, Math.ceil(ds / perMap));
+      dirsSeen.set(d, (dirsSeen.get(d) || 0) + 1);
+    }
+    need += 3 * dirsSeen.size + Math.ceil(((files.length + dirsSeen.size) * 23) / ss);
+    need += Math.ceil((o.freeBytes || 0) / ss) + 64;
+    let nsec = Math.min(65535, Math.max(o.minSectors || 1440, Math.ceil(need * 1.02) + 64));
+    for (;;) {
+      const img = createSdfs({ sectorSize: ss, sectors: nsec, label: o.label || 'FOLDER' }), v = open(img);
+      try {
+        for (const e of entries) v.writeFile(e.sdfs, e.data);
+        return { image: img, entries: entries.map((e) => ({ host: e.host, sdfs: e.sdfs })), free: v.freeSectors() };
+      } catch (err) {
+        if (!/full|space/i.test(err.message) || nsec >= 65535) throw new Error(nsec >= 65535 ? 'folder does not fit in a 16 MB SDFS image (' + err.message + ')' : err.message);
+        nsec = Math.min(65535, Math.ceil(nsec * 1.1) + 64);
+      }
+    }
+  }
+
+  const api = { open, createSdfs, buildSdfs, to83, makeAtr, layout };
   if (typeof AC !== 'undefined') AC.DosFs = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -46,6 +46,8 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 
 ## Other features
 
+- **Big disks**: browse/extract DOS 2, MyDOS and SpartaDOS/BW-DOS images, create and write 16 MB SDFS disks, mount a host folder as a disk. See [docs/LARGE-DISKS.md](docs/LARGE-DISKS.md).
+
 - Messages pop up as a bubble over the screen; the last one stays on the second header line next to FPS.
 - **H: host drive**: in BASIC, `LIST "H:PROG.LST"` saves your program as text in the browser, `ENTER "H:PROG.LST"` loads it back. Import / Copy move it in and out.
 - **FujiNet** (header toggle): virtual SIO device `$70`. **Boot FujiNet CONFIG**, pick a folder as a host, mount disks into slots. Hosts and slots persist; **Reset config** clears them.
