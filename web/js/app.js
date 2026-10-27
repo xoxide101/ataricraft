@@ -1710,6 +1710,13 @@
       localStorage.setItem('ac.kbmode', m);
     };
     document.querySelectorAll('#kbmode button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
+    const sizeSel = $('padsize'), applySize = () => {
+      const v = sizeSel.value;
+      $('kpad').style.setProperty('--padw', v === 'auto' ? 'calc(min(34dvh,423px) + 92px)' : (+v + 92) + 'px');
+      localStorage.setItem('ac.padsize', v);
+    };
+    sizeSel.value = localStorage.getItem('ac.padsize') || 'auto'; if (sizeSel.value !== (localStorage.getItem('ac.padsize') || 'auto')) sizeSel.value = 'auto';
+    sizeSel.onchange = applySize; applySize();
     window.AC_setKbMode = setMode;
   }
   // Controllers that can sit in the Pad tab. Add new devices here; each one needs only a name and what its two buttons mean.
