@@ -9,7 +9,7 @@
 
   const FujiNet = {
     emu: null,
-    enabled: localStorage.getItem('ac.fujinet') !== '0',
+    enabled: localStorage.getItem('ac.fujinet') === '1',
     files: [],              // [{path:'/dir/x.atr', file:File}]
     cache: new Map(),       // path -> Uint8Array
     hosts: Array.from({ length: HOSTS }, (_, i) => (i === 0 ? 'SD' : '')),
@@ -227,13 +227,18 @@
       return C;
     },
 
-    // Mounts the CONFIG disk on D1 so the Atari boots into the FujiNet menu.
-    bootConfig() {
+    // Puts the CONFIG disk on D1 without resetting (used when powering on with FujiNet selected).
+    mountConfig() {
       const bin = atob(window.FUJI_CONFIG_B64);
       const b = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
       this.slots.forEach((s) => { s.mounted = false; });
       this.emu.mountDisk(1, 'fujinet-config.atr', b);
+    },
+
+    // Mounts the CONFIG disk on D1 so the Atari boots into the FujiNet menu.
+    bootConfig() {
+      this.mountConfig();
       this.emu.coldStart();
     },
   };

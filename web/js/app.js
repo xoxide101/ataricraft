@@ -275,6 +275,12 @@
       const r = S.emu.insertCart(+slot, c.name, c.bytes);
       if (r.ok && r.kb && c.type != null) S.emu.setCartType(+slot, c.type);
     }
+    // FujiNet selected and nothing else to boot from: power on straight into the FujiNet CONFIG menu.
+    if (FujiNet.enabled && !S.disks[1] && !Object.keys(S.carts).length && !S.pending) {
+      FujiNet.mountConfig();
+      $('d1').textContent = 'FujiNet CONFIG';
+      log('FujiNet: booting the CONFIG menu (mount a disk on D1 or insert a cartridge to boot something else)');
+    }
     if (S.tape && S.emu.tapeInsert(S.tape.name, S.tape.bytes)) $('tn').textContent = S.tape.name;
     FujiNet.log = log;
     S.emu.run(120);
@@ -2347,6 +2353,7 @@
     localStorage.setItem('ac.fujinet', FujiNet.enabled ? '1' : '0');
     syncFnUi();
     log('FujiNet ' + (FujiNet.enabled ? 'on' : 'off (device $70 absent; takes effect immediately, reset to reboot)'));
+    if (FujiNet.enabled && S.emu && !S.off) { FujiNet.bootConfig(); $('d1').textContent = 'FujiNet CONFIG'; }
   };
   syncFnUi();
   $('fnreset').onclick = () => { FujiNet.reset(); log('FujiNet config reset (hosts and drive slots cleared)'); };
