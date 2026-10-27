@@ -1619,8 +1619,8 @@
     if (JSH.two) row.append(players[1].render());
     if (JSH.con) {
       const con = document.createElement('div'); con.className = 'jcon';
-      for (const [k, l] of [['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['reset', 'Reset']]) {
-        const b = document.createElement('button'); b.textContent = l; b.className = 'jb small';
+      for (const [k, l] of [['reset', 'Reset'], ['option', 'Option'], ['select', 'Select'], ['start', 'Start']]) {
+        const b = document.createElement('button'); b.textContent = l; b.className = 'jb small ck ck-' + k;
         b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
         const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
         b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
