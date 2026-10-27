@@ -1735,6 +1735,7 @@
       row.append(con);
     }
     box.append(bar, row);
+    if (window.AC_fitPanel) AC_fitPanel();
   }
   const gpPrev = {};
   setInterval(() => {
@@ -1774,15 +1775,56 @@
       }
       $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kjoy').hidden = !(m === 'joy' || forced); $('kmini').hidden = m !== 'keys';
       $('kbview').style.display = m === 'keys' ? '' : 'none';
+      fitPanel();
       if (m === 'pad' && padBefore == null) { padBefore = PAD.on; PAD.on = true; syncPadUi(); applyPad(); }
       else if (m !== 'pad' && padBefore != null) { PAD.on = padBefore; padBefore = null; padPos.held = 0; syncPadUi(); applyPad(); }
       localStorage.setItem('ac.kbmode', m);
     };
-    document.querySelectorAll('#kbmode button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
+    // Every controller page fills the same area as the Keys page and never grows past it: scale until it fits.
+    const keysArea = () => {
+      const kb = $('kbd'), mini = $('kmini'), wasK = kb.hidden, wasM = mini.hidden;
+      kb.hidden = false; mini.hidden = false;
+      const h = kb.offsetHeight + (mini.offsetParent ? mini.offsetHeight + 6 : 0);
+      kb.hidden = wasK; mini.hidden = wasM;
+      return h;
+    };
+    const fitTo = (el, H, set, lo, hi, v0) => {
+      let v = Math.max(lo, Math.min(hi, v0));
+      for (let i = 0; i < 4; i++) {
+        set(v);
+        const h = el.offsetHeight; if (!h) return;
+        let nv = v * H / h;
+        if (el.scrollWidth > el.clientWidth + 1) nv = Math.min(nv, v * el.clientWidth / el.scrollWidth);
+        nv = Math.max(lo, Math.min(hi, nv));
+        if (Math.abs(nv - v) < 0.5) { v = nv; break; }
+        v = nv;
+      }
+      set(v);
+    };
+    const fitPanel = () => {
+      const H = keysArea(); if (H < 120) return;
+      const pad = $('kpad'), ar = $('karrows'), jy = $('kjoy');
+      if (!ar.hidden) {
+        ar.style.minHeight = ''; ar.style.flexWrap = 'nowrap';
+        fitTo(ar, H, (v) => ar.style.setProperty('--as', v.toFixed(3)), 0.4, 1.7, 1);
+        ar.style.minHeight = H + 'px';
+      }
+      if (!jy.hidden) {
+        jy.style.minHeight = '';
+        fitTo(jy, H, (v) => jy.style.setProperty('--js', Math.round(v) + 'px'), 70, 340, 200);
+        jy.style.minHeight = H + 'px';
+      }
+      if (!pad.hidden) {
+        const sel = $('padsize').value, cap = sel === 'auto' ? 548 : +sel;
+        fitTo(pad, H, (v) => pad.style.setProperty('--padw', Math.round(v + 92) + 'px'), 120, cap, cap);
+      }
+    };
+    window.AC_fitPanel = fitPanel;
+    window.addEventListener('resize', fitPanel);    document.querySelectorAll('#kbmode button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
     const sizeSel = $('padsize'), applySize = () => {
       const v = sizeSel.value;
-      $('kpad').style.setProperty('--padw', v === 'auto' ? 'calc(min(30.6dvh,381px) + 92px)' : (+v + 92) + 'px');
-      localStorage.setItem('ac.padsize', v);
+      void v;
+      localStorage.setItem('ac.padsize', v); fitPanel();
     };
     sizeSel.value = localStorage.getItem('ac.padsize') || 'auto'; if (sizeSel.value !== (localStorage.getItem('ac.padsize') || 'auto')) sizeSel.value = 'auto';
     sizeSel.onchange = applySize; applySize();

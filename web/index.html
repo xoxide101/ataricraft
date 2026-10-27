@@ -131,7 +131,7 @@
   #padarea { position:relative; width:100%; aspect-ratio:4/3; background:#23262d; border:1px solid #3a4150; border-radius:6px; touch-action:none; cursor:crosshair; margin:4px 0; }
   #padarea.off { opacity:.4; }
   #kbmode { display:flex; gap:6px; margin-bottom:6px; } #kbmode button { flex:1; padding:5px 8px; opacity:.6; } #kbmode button.on { opacity:1; border-color:var(--acc); }
-  #karrows { display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
+  #karrows { display:flex; gap:calc(14px*var(--as,1)); align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
   #karrows[hidden], #kpad[hidden], #kjoy[hidden], #kbd[hidden], #kmini[hidden] { display:none; }
   .jplayers { display:flex; gap:12px; justify-content:center; align-items:flex-start; flex-wrap:wrap; }
 .jplayer { flex:1 1 260px; min-width:0; border:1px solid #333a46; border-radius:8px; padding:4px 6px; }
@@ -152,15 +152,15 @@
   .jpaddle { position:relative; width:min(100%,calc(var(--js)*1.5)); height:calc(var(--js)*.33); border-radius:999px; background:linear-gradient(#2d3037,#1b1d22); border:2px solid #3a4150; touch-action:none; cursor:ew-resize; flex:none; }
   .jpaddle .jtick { position:absolute; top:4px; bottom:4px; width:10px; margin-left:-5px; border-radius:5px; background:#c63b22; border:1px solid #7a2415; pointer-events:none; }
 .jcon { display:flex; flex-direction:column; gap:5px; min-width:84px; }
-  .akey { height:52px; min-width:54px; padding:0 10px; font-weight:700; font-size:15px; flex:none; }
-  .dpad { display:grid; grid-template-columns:repeat(3,76px); grid-template-rows:repeat(2,64px); gap:6px; }
-  .dpad .akey { height:100%; font-size:24px; } .dpad .a-up { grid-column:2; grid-row:1; } .dpad .a-left { grid-column:1; grid-row:2; } .dpad .a-down { grid-column:2; grid-row:2; } .dpad .a-right { grid-column:3; grid-row:2; }
-.aside { display:flex; flex-wrap:wrap; gap:6px; max-width:320px; } .aside.con { flex-direction:column; flex-wrap:nowrap; max-width:none; width:96px; gap:5px; margin-left:8px; }
+  .akey { height:calc(52px*var(--as,1)); min-width:calc(54px*var(--as,1)); padding:0 calc(10px*var(--as,1)); font-weight:700; font-size:calc(15px*var(--as,1)); flex:none; }
+  .dpad { display:grid; grid-template-columns:repeat(3,calc(76px*var(--as,1))); grid-template-rows:repeat(2,calc(64px*var(--as,1))); gap:calc(6px*var(--as,1)); }
+  .dpad .akey { height:100%; font-size:calc(24px*var(--as,1)); } .dpad .a-up { grid-column:2; grid-row:1; } .dpad .a-left { grid-column:1; grid-row:2; } .dpad .a-down { grid-column:2; grid-row:2; } .dpad .a-right { grid-column:3; grid-row:2; }
+.aside { display:flex; flex-wrap:wrap; gap:calc(6px*var(--as,1)); max-width:calc(320px*var(--as,1)); } .aside.con { flex-direction:column; flex-wrap:nowrap; max-width:none; width:calc(96px*var(--as,1)); gap:calc(5px*var(--as,1)); margin-left:calc(8px*var(--as,1)); }
 /* shared Atari console keycap (Reset/Option/Select/Start/Help) used on every page */
 .ckey, .kside .key { background:linear-gradient(#ddd7c8,#bfb8a6); color:#2a2a2a; border:1px solid #8a8474; border-radius:7px; box-shadow:inset 0 1px 0 #fff9, 0 3px 0 #6d685b, 0 4px 6px #0009; font-weight:600; }
 .ckey:hover, .kside .key:hover { background:linear-gradient(#e8e3d6,#cac3b1); }
 .ckey.down, .kside .key.down { background:linear-gradient(#bfb8a6,#aaa391); color:#2a2a2a; transform:translateY(3px); box-shadow:0 0 0 #6d685b, 0 0 10px var(--acc); }
-.jcon .ckey { height:38px; font-size:12px; padding:0 8px; } .aside.con .akey.ckey { height:38px; font-size:12px; }
+.jcon .ckey { height:38px; font-size:12px; padding:0 8px; } .aside.con .akey.ckey { height:calc(38px*var(--as,1)); font-size:calc(12px*var(--as,1)); }
 .amini { display:flex; gap:4px; margin-top:6px; } .amini .akey { flex:1; min-width:0; height:44px; padding:0 2px; font-size:13px; }
   .amini .a-left, .amini .a-down, .amini .a-up, .amini .a-right { flex:1.2; font-size:18px; }
   #kmini { display:none; } #kmini[hidden] { display:none; }
@@ -403,6 +403,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zp"></script>
+<script src="js/app.js?v=20261027zr"></script>
 </body>
 </html>
