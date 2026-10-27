@@ -365,7 +365,7 @@
     </div>
     <div class="box" data-tab="net">
       <h3>Virtual FujiNet node</h3>
-      <div class="row"><label class="btn">Point at folder…<input id="fnfolder" type="file" webkitdirectory multiple></label><span id="fncount" class="dim">no host folder</span></div>
+      <div class="row"><button id="fnpick" style="display:none" title="Pick folder: choose the SD folder; it is remembered across page reloads">📁</button><button id="fnrescan" style="display:none" title="Rescan: scan the remembered folder again">🔄</button><label class="btn" title="Scan once: one-off folder (not remembered)">🔍<input id="fnfolder" type="file" webkitdirectory multiple></label><button id="fnview" title="Switch view">☰</button><button id="fnexpand" title="Open every folder">⊞</button><button id="fncollapse" title="Close every folder">⊟</button><span id="fncount" class="dim">no host folder</span></div>
       <div class="row"><input id="fnfilter" title="Wildcards: * any text, ? one character" placeholder="filter (wildcards * ?)" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
       <div id="fnlist" style="max-height:170px;overflow:auto"></div>
       <div class="row"><button id="fnboot" title="Mounts the FujiNet CONFIG disk on D1 and cold-starts">Boot FujiNet CONFIG</button><button id="fnreset" title="Clear saved FujiNet hosts and drive slots">Reset config</button></div>
@@ -427,6 +427,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzz"></script>
+<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzzz"></script>
 </body>
 </html>

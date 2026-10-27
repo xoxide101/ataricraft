@@ -895,9 +895,10 @@
     return root;
   };
   const allDirs = (node, out) => { node.dirs.forEach((d) => { out.push(d.path); allDirs(d, out); }); return out; };
-  function drawTree(box, hits, forceOpen) {
+  function drawTree(box, hits, forceOpen, ctx) {
     const root = treeOf(hits);
-    window.__medTreeRoot = root;
+    const OPEN = ctx ? ctx.open : MED.open, REDRAW = ctx ? ctx.redraw : renderMed;
+    if (!ctx) window.__medTreeRoot = root;
     const TREE_FILE_CAP = 400;
     const row = (depth, text, title) => {
       const d = document.createElement('div');
@@ -912,10 +913,10 @@
     const walk = (node, depth) => {
       [...node.dirs.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach((name) => {
         const d = node.dirs.get(name);
-        const open = forceOpen || MED.open.has(d.path);
+        const open = forceOpen || OPEN.has(d.path);
         const r = row(depth, `${open ? '📂' : '📁'} ${name}  (${d.n})`, d.path);
         r.style.color = 'var(--acc)';
-        r.onclick = () => { if (MED.open.has(d.path)) MED.open.delete(d.path); else MED.open.add(d.path); renderMed(); };
+        r.onclick = () => { if (OPEN.has(d.path)) OPEN.delete(d.path); else OPEN.add(d.path); REDRAW(); };
         if (open) walk(d, depth + 1);
       });
       const files = node.files.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
@@ -925,7 +926,7 @@
         const ico = { disk: '💾', cart: '🎮', tape: '📼', exe: '⚙️' }[f.kind] || '📄';
         const r = row(depth, f.title ? `${ico} ${base} — ${f.title}` : `${ico} ${base}`, f.title ? `${f.title} — ${f.name}` : longTip(f));
         r.style.paddingLeft = `${4 + depth * 14 + 14}px`;
-        attachLoad(r, f, f.kind, () => fileOf(f), () => showRelated(f));
+        attachLoad(r, f, f.kind, () => fileOf(f), ctx ? undefined : () => showRelated(f));
       });
       if (files.length > TREE_FILE_CAP) row(depth, `… ${files.length - TREE_FILE_CAP} more here: use the search box`).style.opacity = 0.6;
     };
@@ -2323,28 +2324,71 @@
   }, 500);
 
   // ---- virtual FujiNet host node (folder browser; no SIO network emulation yet) ----
-  const FN = { files: [] };
+  const FN = { files: [], open: new Set(), tree: localStorage.getItem('ac.fntree') !== '0', handle: null };
+  const FN_IMG = /\.(atr|atx|dcm|pro|gz|xex|com|bas|xfd)$/i;
   function renderFn() {
     const q = $('fnfilter').value.toLowerCase();
     const box = $('fnlist');
     box.innerHTML = '';
     const fqm = textMatcher(q);
-    FN.files.filter((f) => fqm(f.name)).slice(0, 300).forEach((f) => {
+    const hits = FN.files.filter((f) => fqm(f.name));
+    $('fnview').textContent = FN.tree ? '☰' : '🗂';
+    $('fnview').title = FN.tree ? 'Tree view (click for flat list)' : 'List view (click for folder tree)';
+    ['fnexpand', 'fncollapse'].forEach((id) => ($(id).style.display = FN.tree ? '' : 'none'));
+    box.style.maxHeight = FN.tree ? '360px' : '170px';
+    if (FN.tree) { drawTree(box, hits, !!q && hits.length <= 600, { open: FN.open, redraw: renderFn }); return; }
+    hits.slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
       d.textContent = f.name;
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b';
       d.onmouseenter = () => (d.style.background = '#2a2f39');
       d.onmouseleave = () => (d.style.background = '');
-      attachLoad(d, f, extKind(f.name) || 'disk', async () => f.file);
+      attachLoad(d, f, f.kind, async () => f.file);
       box.append(d);
     });
   }
-  $('fnfolder').onchange = async (e) => {
-    FN.files = (await expandZips([...e.target.files])).filter((f) => /\.(atr|atx|dcm|pro|gz|xex|com|bas|xfd)$/i.test(f.name)).map((f) => ({ name: f.webkitRelativePath || f.name, file: f }));
-    $('fncount').textContent = FN.files.length + ' images';
+  function setFnFiles(list, label) {
+    FN.files = list.map((f) => ({ name: f.name, file: f.file, kind: extKind(f.name) || 'disk' }));
+    $('fncount').textContent = (label ? label + ': ' : '') + FN.files.length + ' images';
     FujiNet.setFiles(FN.files.map((f) => ({ rel: f.name, file: f.file })));
     renderFn();
+  }
+  $('fnfolder').onchange = async (e) => {
+    const fl = (await expandZips([...e.target.files])).filter((f) => FN_IMG.test(f.name));
+    setFnFiles(fl.map((f) => ({ name: f.webkitRelativePath || f.name, file: f })));
   };
+  async function scanFnHandle(h, path, out) {
+    for await (const [name, e] of h.entries()) {
+      if (e.kind === 'directory') await scanFnHandle(e, path + name + '/', out);
+      else if (FN_IMG.test(name)) { const file = await e.getFile(); Object.defineProperty(file, 'webkitRelativePath', { value: path + name }); out.push({ name: path + name, file }); }
+    }
+  }
+  async function loadFnHandle(h, ask) {
+    if ((await h.queryPermission({ mode: 'read' })) !== 'granted') {
+      if (!ask) { $('fncount').textContent = `"${h.name}" remembered: click Rescan`; return; }
+      if ((await h.requestPermission({ mode: 'read' })) !== 'granted') return;
+    }
+    $('fncount').textContent = 'scanning…';
+    const out = [];
+    await scanFnHandle(h, h.name + '/', out);
+    setFnFiles(out);
+  }
+  if (window.showDirectoryPicker) {
+    ['fnpick', 'fnrescan'].forEach((id) => ($(id).style.display = ''));
+    $('fnpick').onclick = async () => {
+      let h;
+      try { h = await showDirectoryPicker({ id: 'ataricraft-fujinet', mode: 'read' }); } catch (e) { return; }
+      FN.handle = h; await idbSet('fnDir', h); await loadFnHandle(h, true);
+    };
+    $('fnrescan').onclick = async () => {
+      if (!FN.handle) { log('no remembered FujiNet folder yet: use Pick folder'); return; }
+      try { await loadFnHandle(FN.handle, true); log('FujiNet SD rescanned'); } catch (e) { log('rescan failed: ' + e.message); }
+    };
+    idbGet('fnDir').then(async (h) => { if (!h) return; FN.handle = h; try { await loadFnHandle(h, false); } catch (e) {} });
+  }
+  $('fnview').onclick = () => { FN.tree = !FN.tree; localStorage.setItem('ac.fntree', FN.tree ? '1' : '0'); renderFn(); };
+  $('fnexpand').onclick = () => { allDirs(treeOf(FN.files), []).forEach((p) => FN.open.add(p)); renderFn(); };
+  $('fncollapse').onclick = () => { FN.open.clear(); renderFn(); };
   function syncFnUi() {
     $('fnbtn').classList.toggle('on', FujiNet.enabled);
     $('fnboot').disabled = !FujiNet.enabled;
