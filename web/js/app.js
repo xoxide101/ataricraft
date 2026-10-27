@@ -126,6 +126,17 @@
     sel.value = m.ram.some((r) => r.v === prev) ? prev : m.def;
   }
 
+  // Open-licence Altirra firmware shipped with the app; always listed after any ROMs the user supplies.
+  const BUILTIN = { os800: 'Altirra OS 3.44 (800, built-in)', osxl: 'Altirra OS 3.44 (XL/XE, built-in)', basic: 'Altirra BASIC 1.59 (built-in)' };
+  function ensureBuiltinRoms() {
+    for (const k of Object.keys(BUILTIN)) {
+      let e = S.lib[k].find((x) => x.builtin);
+      if (e) S.lib[k].splice(S.lib[k].indexOf(e), 1);
+      else e = { name: BUILTIN[k], builtin: true, label: BUILTIN[k], bytes: Uint8Array.from(atob(AC.ALTIRRA[k]), (c) => c.charCodeAt(0)) };
+      S.lib[k].push(e);
+    }
+  }
+
   // "Atari BASIC REV. C (1984) - file.rom" when the CRC is in the WUDSN database, else the file name.
   function romLabel(e) {
     const file = e.name.replace(/^.*[\\/]/, '');
@@ -133,10 +144,11 @@
       const d = (AC.OS_DB || {})[crc32(e.bytes)];
       e.label = d ? [d[0], d[2], d[3] ? '(' + d[3] + ')' : '', '[' + d[1].replace(/^SYSROM_/, '') + ']'].filter(Boolean).join(' ') : '';
     }
-    return e.label ? `${e.label} - ${file}` : file;
+    return e.builtin ? e.label : e.label ? `${e.label} - ${file}` : file;
   }
 
   function fillRomSelects() {
+    ensureBuiltinRoms();
     fillRam();
     const kind = $('model').value === '800' ? 'os800' : 'osxl';
     const sel_ = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
