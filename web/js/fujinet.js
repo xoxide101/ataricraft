@@ -107,14 +107,28 @@
         case 0xfa: this.put(data, [3], 1); return C;           // wifi status: connected
         case 0xea: this.put(data, [1], 1); return C;           // wifi enabled
         case 0xfe: this.put(data, this.str('ataricraft', 33), 33 + 64); return C; // get ssid
-        case 0xfb: return C;                                   // set ssid
-        case 0xe8: {                                           // adapter config (140 bytes)
-          const b = new Uint8Array(140);
+        case 0xfb: return C;                                   // set ssid (accepted; the browser is already online)
+        case 0xfd: this.put(data, [1], 1); return C;           // scan networks: one virtual network
+        case 0xfc: {                                           // scan result: ssid[33] + rssi
+          if (a1 !== 0) return E;
+          const b = new Uint8Array(34);
+          b.set(this.str('ataricraft', 33), 0); b[33] = 0xd0;
+          this.put(data, b, len);
+          return C;
+        }
+        case 0xe8: case 0xc4: {                                // adapter config (140 bytes; 0xc4 adds display strings)
+          const ext = cmd === 0xc4;
+          const b = new Uint8Array(ext ? 140 + 64 + 36 : 140);
+          const sf = (s, off, n) => b.set(this.str(s, n), off);
           b.set(this.str('ataricraft', 33), 0);
           b.set(this.str('fujinet-virtual', 64), 33);
           b.set([127, 0, 0, 1], 97); b.set([127, 0, 0, 1], 101); b.set([255, 0, 0, 0], 105); b.set([8, 8, 8, 8], 109);
           b.set([2, 0, 0, 0, 0, 1], 113); b.set([2, 0, 0, 0, 0, 2], 119);
           b.set(this.str('1.0-virtual', 15), 125);
+          if (ext) {
+            sf('127.0.0.1', 140, 16); sf('127.0.0.1', 156, 16); sf('255.0.0.0', 172, 16); sf('8.8.8.8', 188, 16);
+            sf('02:00:00:00:00:01', 204, 18); sf('02:00:00:00:00:02', 222, 18);
+          }
           this.put(data, b, len);
           return C;
         }
