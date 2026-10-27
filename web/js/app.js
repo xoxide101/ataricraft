@@ -1781,7 +1781,7 @@
     document.querySelectorAll('#kbmode button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
     const sizeSel = $('padsize'), applySize = () => {
       const v = sizeSel.value;
-      $('kpad').style.setProperty('--padw', v === 'auto' ? 'calc(min(34dvh,423px) + 92px)' : (+v + 92) + 'px');
+      $('kpad').style.setProperty('--padw', v === 'auto' ? 'calc(min(30.6dvh,381px) + 92px)' : (+v + 92) + 'px');
       localStorage.setItem('ac.padsize', v);
     };
     sizeSel.value = localStorage.getItem('ac.padsize') || 'auto'; if (sizeSel.value !== (localStorage.getItem('ac.padsize') || 'auto')) sizeSel.value = 'auto';

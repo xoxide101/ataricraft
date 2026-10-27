@@ -141,7 +141,7 @@
 .jdir.on { background:var(--acc); border-color:#fff; box-shadow:0 0 12px var(--acc); }
 .jb.big.down { background:#ffd24a; border-color:#fff; color:#000; transform:scale(.92); box-shadow:0 0 20px #ffd24a; }
 .jrow { display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
-  :root { --js:clamp(120px,30vmin,260px); }
+  :root { --js:clamp(108px,27vmin,234px); }
 .jstick { position:relative; width:var(--js); height:var(--js); border-radius:50%; background:radial-gradient(#2d3037,#1b1d22); border:2px solid #3a4150; touch-action:none; cursor:grab; flex:none; }
   .jstick .jknob { position:absolute; left:50%; top:50%; width:36%; height:36%; margin:-18% 0 0 -18%; border-radius:50%; background:radial-gradient(#555a64,#2a2d34); border:2px solid #6a7080; pointer-events:none; }
   .jbtns { display:flex; flex-wrap:wrap; gap:8px; max-width:300px; align-items:center; }
@@ -168,7 +168,7 @@
   .padsurf { position:relative; width:100%; aspect-ratio:4/3; background:#23262d; border:1px solid #3a4150; border-radius:6px; touch-action:none; cursor:crosshair; }
   .padsurf .paddot { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; border:2px solid #35e06a; pointer-events:none; left:50%; top:50%; }
   .padsurf.dn .paddot { background:#ff4a3d; border-color:#ff4a3d; }
-  #kpad { --padw:calc(min(34dvh,423px) + 92px); width:min(100%,var(--padw),640px); margin:0 auto; }
+  #kpad { --padw:calc(min(30.6dvh,381px) + 92px); width:min(100%,var(--padw),640px); margin:0 auto; }
   #padsize { font-size:12px; }
 .padbtns { display:flex; gap:8px; margin-top:8px; } .padbtns button { flex:1; height:clamp(44px,9dvh,72px); transition:transform .05s; } .padbtns button.down { transform:translateY(3px); box-shadow:0 0 12px var(--acc); } .padbtns button { font-size:15px; font-weight:700; touch-action:none; user-select:none; } .padbtns button.down { background:var(--acc); color:#000; }
   @media (max-width:900px) { .center { overflow:auto; max-height:calc(100dvh - var(--hh,50px)); } #stage { position:sticky; top:0; z-index:5; } #screen { width:min(calc(100vw - 20px), calc((100dvh - var(--hh,50px) - 20px) * 1.2)); min-width:0; } }
@@ -374,7 +374,7 @@
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
         <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0">
-        <div style="display:flex;gap:8px;align-items:center"><button id="padmap" type="button" title="Choose the pad / mouse device">🎛 Device…</button><div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-touch-callout:none;flex:1"></div><select id="padsize" title="Pad size: Auto fits the window"><option value="auto">⤢ Auto</option><option value="260">Small</option><option value="340">Medium</option><option value="430">Large</option><option value="540">Extra large</option></select></div>
+        <div style="display:flex;gap:8px;align-items:center"><button id="padmap" type="button" title="Choose the pad / mouse device">🎛 Device…</button><div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-touch-callout:none;flex:1"></div><select id="padsize" title="Pad size: Auto fits the window"><option value="auto">⤢ Auto</option><option value="234">Small</option><option value="270">Small-medium</option><option value="306">Medium</option><option value="387">Large</option><option value="486">Extra large</option></select></div>
         <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
         <div class="padbtns"><button data-b="1">Button 1 (left click)</button><button data-b="2">Button 2 (right click)</button></div>
         </div><div id="padcon" class="jcon"></div></div>
@@ -402,6 +402,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zn"></script>
+<script src="js/app.js?v=20261027zo"></script>
 </body>
 </html>
