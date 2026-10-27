@@ -1371,6 +1371,7 @@
     </svg><div class="nm">empty</div>`;
     $('drvviz').append(d);
     xfEl[n] = d;
+    bindPic(d, () => $('f' + n).click(), (x, y) => drvMenu(n, x, y), (files) => loadMedia(files, n));
     const span = $('d' + n);
     const sync = () => {
       const t = span.textContent.trim();
@@ -1382,6 +1383,80 @@
     xfSync[n] = sync;
     new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
     sync();
+  }
+  // Click = load a file, right-click / long-press = menu, drop a file = load it here.
+  function bindPic(el, onClick, menu, onDrop) {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => { if (Date.now() >= PM.suppressClickUntil) onClick(); });
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); if (Date.now() - PM.openedAt > 700) menu(e.clientX, e.clientY); });
+    let t = null, sx = 0, sy = 0;
+    const clear = () => { clearTimeout(t); t = null; };
+    el.addEventListener('touchstart', (e) => {
+      const p = e.touches[0]; sx = p.clientX; sy = p.clientY; clear();
+      t = setTimeout(() => { t = null; PM.suppressClickUntil = Date.now() + 800; if (Date.now() - PM.openedAt > 700) menu(sx, sy); }, 450);
+    }, { passive: true });
+    el.addEventListener('touchmove', (e) => { const p = e.touches[0]; if (Math.abs(p.clientX - sx) + Math.abs(p.clientY - sy) > 10) clear(); }, { passive: true });
+    el.addEventListener('touchend', clear); el.addEventListener('touchcancel', clear);
+    el.style.webkitTouchCallout = 'none'; el.style.userSelect = 'none';
+    el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drop'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drop'));
+    el.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove('drop'); if (e.dataTransfer.files.length) onDrop(e.dataTransfer.files); });
+  }
+  // The old blank/browse/save controls take their drive from a hidden value: borrow it, press the button, put it back.
+  const viaVal = (id, v, fn) => { const h = $(id), old = h.value; h.value = String(v); try { fn(); } finally { h.value = old; } };
+  function insertBlank(n, fmt, f) {
+    const sd = $('blanksdfs'), md = $('blankmydos'), fm = $('blankfmt'), o = [sd.checked, md.checked, fm.value];
+    sd.checked = !!f.sd; md.checked = !!f.md; fm.value = fmt;
+    try { viaVal('blankslot', n, () => $('blankmk').click()); } finally { sd.checked = o[0]; md.checked = o[1]; fm.value = o[2]; }
+  }
+  function blankMenu(n, x, y) {
+    openPick(x, y, `Blank disk for D${n}:`, [...$('blankfmt').options].map((o) => ({
+      label: o.textContent,
+      run: () => {
+        const [ss, sec] = o.value.split(',').map(Number);
+        const fs = [{ label: 'Unformatted (format with your DOS)' }];
+        if (ss === 256) fs.push({ label: 'Pre-formatted SpartaDOS / BW-DOS (SDFS)', sd: true });
+        if (ss === 256 || (ss === 128 && sec === 720)) fs.push({ label: 'Pre-formatted MyDOS', md: true });
+        if (fs.length === 1) insertBlank(n, o.value, fs[0]);
+        else openPick(x, y, o.textContent, fs.map((f) => ({ label: f.label, run: () => insertBlank(n, o.value, f) })));
+      },
+    })));
+  }
+  function drvMenu(n, x, y) {
+    const have = S.disks[n];
+    const items = [
+      { label: 'Load disk image…', run: () => $('f' + n).click() },
+      { label: have ? 'Eject' : 'Eject (nothing mounted)', run: () => $('de' + n).click() },
+      { label: 'Insert blank disk…', run: () => blankMenu(n, x, y) },
+    ];
+    if (have) items.push(
+      { label: 'Browse files', run: () => viaVal('fsdrv', n, () => $('fsbrowse').click()) },
+      { label: 'Save disk image', run: () => viaVal('savedrv', n, () => $('savedisk').click()) });
+    if (n === 8) items.push({ label: ramOn() ? 'Unmark D8: as a RAM disk' : 'Mark D8: as a RAM disk', run: () => $('ramd8').click() });
+    openPick(x, y, `D${n}: ${have ? have.name : 'empty'}`, items);
+  }
+  for (const n of [1, 2]) {
+    const d = document.createElement('div');
+    d.className = 'xf cart';
+    d.title = n === 1 ? 'Cartridge 1 (main, right slot)' : 'Cartridge 2 (left slot)';
+    d.innerHTML = `<svg viewBox="0 0 220 68" aria-hidden="true">
+      <rect class="slot" x="2" y="2" width="216" height="64" rx="6" fill="#14161a" stroke="#6a6f7a" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <image class="cartimg" href="img/cart-top.png" x="2" y="1" width="216" height="66" preserveAspectRatio="xMidYMid meet"/>
+      <text class="ct" x="210" y="62" text-anchor="end" font-size="10" font-weight="bold" font-family="Consolas,monospace">CART ${n}:</text>
+    </svg><div class="nm">empty</div>`;
+    $('drvviz').append(d);
+    const span = $('cn' + n);
+    const sync = () => {
+      const t = span.textContent.replace(/^[^:]*:\s*/, '').trim();
+      d.classList.toggle('has', !!t && t !== 'empty');
+      d.querySelector('.nm').textContent = t || 'empty';
+    };
+    new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
+    sync();
+    bindPic(d, () => $('c' + n).click(), (x, y) => openPick(x, y, `Cart ${n}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, [
+      { label: 'Load cartridge…', run: () => $('c' + n).click() },
+      { label: 'Eject', run: () => $('ce' + n).click() },
+    ]), (files) => insertCart(n, files[0]));
   }
   const devTimer = {};
   $('ramd8').checked = localStorage.getItem('ac.ramd8') === '1';

@@ -168,6 +168,11 @@
   #drvviz .xf.rd .led { fill:#35e06a; filter:drop-shadow(0 0 3px #35e06a); transition:none; }
   #drvviz .xf.wr .led { fill:#ff4a3d; filter:drop-shadow(0 0 3px #ff4a3d); transition:none; }
   #drvviz .xf.ot .led { fill:#ffc233; filter:drop-shadow(0 0 3px #ffc233); transition:none; }
+  #drvviz .xf.drop { outline:2px dashed #35e06a; outline-offset:2px; }
+  #drvviz .xf.cart .cartimg { opacity:0; transition:opacity .2s; }
+  #drvviz .xf.cart.has .cartimg { opacity:1; }
+  #drvviz .xf.cart .ct { fill:#7d8391; }
+  #drvviz .xf.cart.has .ct { fill:#e6dcc4; }
   #drvviz .ramtag { display:none; }
   #drvviz .xf.ram .ramtag { display:inline; }
   #drvviz .xf.ram .disk { opacity:0; }
@@ -223,12 +228,6 @@
       <div class="row"><span class="dim" style="width:44px">BASIC</span><select id="basicrom" style="flex:1;min-width:0"></select></div>
     </div>
     <div class="box">
-      <h3>Cartridges</h3>
-      <div class="row"><label class="btn">Cart 1…<input id="c1" type="file"></label><button id="ce1">Eject</button><span id="cn1" class="dim">1 (main, right): empty</span></div>
-      <div class="row"><label class="btn">Cart 2…<input id="c2" type="file"></label><button id="ce2">Eject</button><span id="cn2" class="dim">2 (left): empty</span></div>
-      <div class="row" id="ctyperow" style="display:none"><span class="dim">Type</span><select id="ctype" style="flex:1;min-width:0"></select><button id="ctypeok">OK</button></div>
-    </div>
-    <div class="box">
       <h3>Cassette</h3>
       <div class="row"><label class="btn">Tape…<input id="tape" type="file"></label><button id="te">Eject</button><span id="tn" class="dim">empty</span></div>
       <div class="row"><button id="tboot" title="Rewind and cold-start with Start held (tape boot)">Boot tape</button><button id="trew">Rewind</button><span id="tpos" class="dim"></span></div>
@@ -271,8 +270,13 @@
       <div class="dim">In BASIC: <code>LIST "H:PROG.LST"</code> saves your program as text here; <code>ENTER "H:PROG.LST"</code> loads it back with the same line numbers. Copy puts it on your clipboard.</div>
     </div>
     <div class="box">
-      <h3>Drives</h3>
+      <h3>Drives &amp; cartridges</h3>
       <div id="drvviz"></div>
+      <div class="dim" style="margin:-4px 0 8px">Click a drive or cartridge to load a file, or drop one on it. Right-click (long-press on a phone) for eject, blank and pre-formatted disks, browse, save and more.</div>
+      <div class="row" id="ctyperow" style="display:none"><span class="dim">Cart type</span><select id="ctype" style="flex:1;min-width:0"></select><button id="ctypeok">OK</button></div>
+      <div id="legacy" style="display:none">
+      <div class="row"><label class="btn">Cart 1…<input id="c1" type="file"></label><button id="ce1">Eject</button><span id="cn1" class="dim">1 (main, right): empty</span></div>
+      <div class="row"><label class="btn">Cart 2…<input id="c2" type="file"></label><button id="ce2">Eject</button><span id="cn2" class="dim">2 (left): empty</span></div>
       <div class="row"><label class="btn">D1…<input id="f1" type="file"></label><button id="de1">Eject</button><span id="d1" class="dim">empty</span></div>
       <div class="row"><label class="btn">D2…<input id="f2" type="file"></label><button id="de2">Eject</button><span id="d2" class="dim">empty</span></div>
       <div class="row"><label class="btn">D3…<input id="f3" type="file"></label><button id="de3">Eject</button><span id="d3" class="dim">empty</span></div>
@@ -282,6 +286,7 @@
       <div class="row"><label class="btn">D7…<input id="f7" type="file"></label><button id="de7">Eject</button><span id="d7" class="dim">empty</span></div>
       <div class="row"><label class="btn">D8…<input id="f8" type="file"></label><button id="de8">Eject</button><span id="d8" class="dim">empty</span></div>
       <div class="row" title="Many DOSes (SpartaDOS X, DOS XL, MyDOS with a RAM disk driver) claim D8: as a RAM disk, which the emulator cannot see because it never goes through the disk bus. Tick this to mark D8: as your RAM disk so it is identified in the drive pictures."><label><input id="ramd8" type="checkbox"> D8: is a RAM disk (set up by my DOS)</label></div>
+      </div>
       <div class="row" title="Download a mounted disk image with any changes made in the emulator. Works for D1: to D8:."><select id="savedrv"></select><button id="savedisk">Save disk</button></div>
       <div class="row" title="Creates an empty ATR with the chosen geometry. Format it with the Atari's own DOS."><select id="blankfmt" style="flex:1"><option value="128,720">SS/SD 90K (128 B)</option><option value="128,1040">SS/ED 130K (128 B)</option><option value="256,720">SS/DD 180K (256 B)</option><option value="128,1440">DS/SD 180K (128 B)</option><option value="256,1440">DS/DD 360K (256 B)</option><option value="256,2880">DS/DD 720K 3.5" (256 B)</option><option value="256,16384">HD 4 MB (256 B)</option><option value="256,40960">HD 10 MB (256 B)</option><option value="256,65535">HD 16 MB (256 B)</option></select><select id="blankslot"></select></div>
       <div class="row"><button id="blankmk">Insert blank disk</button><button id="blankdl">Save blank .atr</button></div>
@@ -343,6 +348,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027d"></script>
+<script src="js/app.js?v=20261027e"></script>
 </body>
 </html>
