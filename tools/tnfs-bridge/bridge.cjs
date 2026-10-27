@@ -8,7 +8,7 @@ const http = require('http');
 
 const TIMEOUT = 2000, RETRIES = 2;
 
-const tcpHosts = new Set();
+const udpHosts = new Set(); // hosts that refused TCP
 
 // TCP has no datagram boundaries, so work out each reply's length from its command.
 function frameLen(b) {
@@ -103,18 +103,21 @@ class Conn {
     this.id = r[0] | (r[1] << 8);
     this.seq = 0;
   }
-  // Some hosts answer TCP but drop UDP. A "tcp:" or "udp:" prefix forces one; otherwise try UDP, then TCP.
+  // TCP is faster and more reliable, so try it first. A "tcp:" or "udp:" prefix forces one;
+  // otherwise fall back to UDP for UDP-only hosts and remember them.
   async mount() {
-    if (this.force !== 'tcp' && !(this.force !== 'udp' && tcpHosts.has(this.host))) {
-      this.openUdp();
-      try { return await this.mountOnce(); } catch (e) {
-        this.sock.close();
-        if (this.force === 'udp' || !/timeout/.test(e.message)) throw e;
+    if (this.force !== 'udp' && !(this.force !== 'tcp' && udpHosts.has(this.host))) {
+      try {
+        await this.openTcp();
+        return await this.mountOnce();
+      } catch (e) {
+        try { this.sock.destroy(); } catch (x) {}
+        if (this.force === 'tcp') throw e;
       }
+      udpHosts.add(this.host);
     }
-    await this.openTcp();
-    await this.mountOnce();
-    if (!this.force) tcpHosts.add(this.host);
+    this.openUdp();
+    try { await this.mountOnce(); } catch (e) { this.sock.close(); throw e; }
   }
   close() {
     try { this.req(0x01, Buffer.alloc(0)).catch(() => {}); } catch (e) {}
