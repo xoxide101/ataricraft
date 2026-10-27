@@ -15,8 +15,7 @@ const files = walk(dir).filter((f) => [8192, 10240, 16384].includes(fs.statSync(
   await p.waitForTimeout(4000);
   const st = await p.evaluate(() => document.getElementById('romstate').textContent);
   const bad = await p.evaluate(() => {
-    const re = /MIO|Black ?Box|bbrom|Speedy|Speeder|Q-?Meg|DOS|speedy/i;
-    return [...document.getElementById('osrom').options].map((o) => o.textContent).filter((t) => /MIO|Black ?Box|bbrom|DOS v|DOS \(/i.test(t));
+    return [...document.getElementById('osrom').options].map((o) => o.textContent).filter((t) => /MIO|Black ?Box|bbrom|\bDOS\b/i.test(t));
   });
   console.log('input', files.length, '|', st);
   console.log('non-OS names in OS list:', bad.length, bad.slice(0, 5));
