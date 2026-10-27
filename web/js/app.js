@@ -116,7 +116,7 @@
       const bytes = new Uint8Array(await f.arrayBuffer());
       const k = classify(f.name, bytes);
       const name = f.webkitRelativePath || f.name;
-      if (k && !S.lib[k].some((e) => e.name === name)) { S.lib[k].push({ name, bytes }); saveRom(k, name, bytes); }
+      if (k && !S.lib[k].some((e) => e.name === name) && !S.lib[k].some((e) => e.builtin && e.bytes.length === bytes.length && e.bytes.every((v, i) => v === bytes[i]))) { S.lib[k].push({ name, bytes }); saveRom(k, name, bytes); }
     }
     fillRomSelects();
   }
@@ -2880,24 +2880,39 @@
       log(`ROM folder "${h.name}" scanned`);
       return true;
     };
+    // Several ROM folders can be remembered (e.g. your own dumps plus the bundled roms/altirra); Scan folder… adds one, Rescan reads them all.
+    const romDirs = async () => {
+      const l = (await idbGet('romDirs')) || [];
+      const old = await idbGet('romDir');
+      if (old && !l.length) l.push(old);
+      return l;
+    };
     $('romfolder').addEventListener('click', async (e) => {
       e.preventDefault();
       let h;
       try { h = await showDirectoryPicker({ id: 'ataricraft-roms', mode: 'read' }); } catch (err) { return; }
-      await idbSet('romDir', h);
+      const l = await romDirs();
+      let dup = false;
+      for (const x of l) if (await x.isSameEntry(h)) dup = true;
+      if (!dup) l.push(h);
+      await idbSet('romDirs', l);
       $('romrescan').style.display = '';
       await romScan(h, true);
     });
     $('romrescan').onclick = async () => {
-      const h = await idbGet('romDir');
-      if (!h) { log('no ROM folder yet: use Scan folder…'); return; }
-      try { if (!(await romScan(h, true))) log('access to the ROM folder was not granted'); } catch (e) { log('ROM rescan failed: ' + e.message); }
+      const l = await romDirs();
+      if (!l.length) { log('no ROM folder yet: use Scan folder…'); return; }
+      for (const h of l) {
+        try { if (!(await romScan(h, true))) log(`access to "${h.name}" was not granted`); } catch (e) { log('ROM rescan failed: ' + e.message); }
+      }
     };
-    idbGet('romDir').then(async (h) => {
-      if (!h) return;
+    romDirs().then(async (l) => {
+      if (!l.length) return;
       $('romrescan').style.display = '';
-      try { if (await romScan(h, false)) return; } catch (e) { return; }
-      const regrant = async () => { try { await romScan(h, true); } catch (e) { /* denied */ } };
+      const pending = [];
+      for (const h of l) { try { if (!(await romScan(h, false))) pending.push(h); } catch (e) { /* skip */ } }
+      if (!pending.length) return;
+      const regrant = async () => { for (const h of pending) { try { await romScan(h, true); } catch (e) { /* denied */ } } };
       document.addEventListener('pointerdown', regrant, { once: true });
       document.addEventListener('keydown', regrant, { once: true });
     }).catch(() => {});
