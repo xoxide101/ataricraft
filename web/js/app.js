@@ -480,10 +480,14 @@
     let id = effMap()[e.code] || SPECIAL_KEYS[e.code];
     if (!id && e.key && e.key.length === 1) id = AC.keyboard.keyForChar(e.key);
     const el = id && document.querySelector('#kbd .key[data-id="' + id + '"]');
-    if (el) { el.classList.add('down'); lit[e.code] = el; }
+    const ARR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'ret', Escape: 'esc', Space: 'space', Backspace: 'bksp', Tab: 'tab', Pause: 'brk' };
+    const aid = ARR[e.code] || ({ start: 'start', select: 'select', option: 'option', reset: 'reset', help: 'help', break: 'brk' })[id];
+    const ae = aid && document.querySelector('#karrows .a-' + aid + ', #kmini .a-' + aid);
+    const els = [el, ae].filter(Boolean);
+    if (els.length) { els.forEach((x) => x.classList.add('down')); lit[e.code] = els; }
   }
   function litOff(code) {
-    if (lit[code]) { lit[code].classList.remove('down'); delete lit[code]; }
+    if (lit[code]) { lit[code].forEach((x) => x.classList.remove('down')); delete lit[code]; }
   }
   window.addEventListener('blur', () => Object.keys(lit).forEach(litOff));
 
