@@ -65,3 +65,44 @@ index d383ddb..5a9a7a0 100644
 +#ifdef __EMSCRIPTEN__
 +#include "web_api.inc"
 +#endif
+diff --git a/src/AltirraLibretro/libretro_ui_stubs.cpp b/src/AltirraLibretro/libretro_ui_stubs.cpp
+index c3bb88d..af10bd2 100644
+--- a/src/AltirraLibretro/libretro_ui_stubs.cpp
++++ b/src/AltirraLibretro/libretro_ui_stubs.cpp
+@@ -42,6 +42,10 @@ void ATUIPushDeferred(ATDeferredActionType, const char *, int) {}
+ void ATSetFullscreen(bool) {}
+ 
+ extern "C" void ATLibretroSetDiskLedState(uint32 index, bool active);
++// Activity counters polled by the web front end: +2 per event, bit 0 set when any event was a write.
++// Ids: 0-14 disk LEDs, 15 H:, 16 IDE, 17 PCLink, 18 flash write, 19 cartridge.
++extern "C" uint32 g_ATLibretroAct[24] = {};
++static inline void ATLibretroAct(uint32 id, bool write) { if (id < 24) g_ATLibretroAct[id] += 2, g_ATLibretroAct[id] |= write ? 1u : 0u; }
+ 
+ namespace {
+ class ATLibretroNullUIRenderer final : public IATUIRenderer {
+@@ -117,11 +121,11 @@ public:
+ 		}
+ 	}
+ 	void SetDiskErrorState(uint32, bool) override {}
+-	void SetHActivity(bool) override {}
+-	void SetIDEActivity(bool, uint32) override {}
+-	void SetPCLinkActivity(bool) override {}
+-	void SetFlashWriteActivity() override {}
+-	void SetCartridgeActivity(sint32, sint32) override {}
++	void SetHActivity(bool w) override { ATLibretroAct(15, w); }
++	void SetIDEActivity(bool w, uint32) override { ATLibretroAct(16, w); }
++	void SetPCLinkActivity(bool w) override { ATLibretroAct(17, w); }
++	void SetFlashWriteActivity() override { ATLibretroAct(18, true); }
++	void SetCartridgeActivity(sint32, sint32) override { ATLibretroAct(19, false); }
+ 	void SetCassetteIndicatorVisible(bool) override {}
+ 	void SetCassettePosition(float, float, bool, bool) override {}
+ 	void SetRecordingPosition() override {}
+@@ -139,6 +143,8 @@ private:
+ 
+ 	void UpdateDiskLed(uint32 index) {
+ 		const uint32 bit = 1u << index;
++		if ((mDiskActivityFlags | mDiskMotorFlags | mDiskReadoutFlags) & bit)
++			ATLibretroAct(index, false);
+ 		ATLibretroSetDiskLedState(index,
+ 			((mDiskActivityFlags | mDiskMotorFlags | mDiskReadoutFlags) & bit) != 0);
+ 	}

@@ -22,8 +22,8 @@ window.AC = window.AC || {};
   function loadModule() {
     if (!modPromise) {
       modPromise = (async () => {
-        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=4');
-        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=4');
+        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=5');
+        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=5');
         return AltirraWeb({ locateFile: (p) => (p.endsWith('.wasm') ? 'data:application/wasm;base64,' + window.ALTIRRA_WASM_B64 : p), print: () => {}, printErr: () => {} });
       })();
       modPromise.catch(() => { modPromise = null; });
@@ -37,7 +37,7 @@ window.AC = window.AC || {};
       this.m = m;
       const cw = (n, r, a) => m.cwrap(n, r, a || []);
       this.aw = {
-        init: cw('aw_init', 'number'), opt: cw('aw_opt', null, ['string', 'string']), boot: cw('aw_boot', 'number'), run: cw('aw_run'),
+        init: cw('aw_init', 'number'), opt: cw('aw_opt', null, ['string', 'string']), boot: cw('aw_boot', 'number'), run: cw('aw_run'), act: cw('aw_act', 'number', ['number']),
         reset: cw('aw_reset', null, ['number']), frame: cw('aw_frame', 'number'), fw: cw('aw_frame_w', 'number'), fh: cw('aw_frame_h', 'number'),
         pitch: cw('aw_frame_pitch', 'number'), audio: cw('aw_audio', 'number'), afr: cw('aw_audio_frames', 'number'),
         scan: cw('aw_scan', null, ['number']), chScan: cw('aw_char_scan', 'number', ['number']), brk: cw('aw_break', null, ['number']),
@@ -154,9 +154,22 @@ window.AC = window.AC || {};
       if (sc >= 0) a.scan(f.control ? sc | 0x80 : sc);
     }
 
+    // Activity from the core's indicator hooks: ids 0-7 are D1-D8, 15-17 are H:/IDE/PCLink, 18 flash, 19 cartridge.
+    pollActivity() {
+      if (!this.onActivity) return;
+      const ids = { 15: 'H', 16: 'H', 17: 'H', 19: 'K1' };
+      for (let i = 0; i < 20; i++) {
+        const v = this.aw.act(i);
+        if (!v) continue;
+        const id = i < 8 ? 'D' + (i + 1) : ids[i];
+        if (id) this.onActivity(id, v & 1 ? 'wr' : i < 8 ? 'ot' : 'rd');
+      }
+    }
+
     frame() {
       this.applyInput();
       this.aw.run();
+      this.pollActivity();
       this.frames++;
       if (this.onAudio) this.pushAudio();
     }

@@ -369,6 +369,10 @@
       <div class="row"><input id="fnfilter" title="Wildcards: * any text, ? one character" placeholder="filter (wildcards * ?)" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
       <div id="fnlist" style="max-height:170px;overflow:auto"></div>
       <div class="row"><button id="fnboot" title="Mounts the FujiNet CONFIG disk on D1 and cold-starts">Boot FujiNet CONFIG</button><button id="fnreset" title="Clear saved FujiNet hosts and drive slots">Reset config</button></div>
+      <div class="dim" style="margin-top:6px">Host slots (what CONFIG shows). Slot 1 is always your local folder (SD).</div>
+      <div id="fnhosts"></div>
+      <datalist id="fnpub"></datalist>
+      <div class="row"><button id="fnhostfill" title="Fill slots 2-8 with public TNFS servers">Fill from public list</button><button id="fnhostrefresh" title="Fetch the current list of online public servers from fujinet.online">Refresh list online</button><span id="fnhostmsg" class="dim"></span></div>
       <div class="dim">Click an image to mount it. Mounts to D1; Shift-click for D2. CONFIG sees this folder as host "SD". Network devices (N:) are not emulated yet.</div>
     </div>
   </div>
@@ -423,6 +427,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zzzzzzzzzzzzzzz"></script>
+<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzz"></script>
 </body>
 </html>

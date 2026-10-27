@@ -6,13 +6,17 @@
   const HOSTS = 8, SLOTS = 8, HOSTLEN = 32, FNAME = 256, SLOTREC = 38;
   const C = 0x43, N = 0x4e, E = 0x45;
   const IMG = /\.(atr|xfd|dcm|atx|pro)$/i;
+  // Public TNFS servers (fujinet.online/tnfs-server-status). Host slot 1 is always the local SD folder.
+  const PUBLIC_HOSTS = ['tnfs.fujinet.online', 'apps.irata.online', 'fujinet.abbuc.de', 'fujinet.diller.org', 'fujinet.pl', 'ec.tnfs.io', 'atarionline.eu', 'fujinet.skdev.org', '13leader.net', 'tnfs.scatarians.org', 'alcatrazbbs.ddns.net', 'atari8.us', 'fujinet.sideburn.com', 'tnfs.adamarchive.org', 'coconet.ddns.net', 'tnfs.8bitatari.com', 'tnfs.calaluis.cl', 'fujinet.buriedbits.org'];
+  const defaultHosts = () => ['SD', ...PUBLIC_HOSTS.slice(0, HOSTS - 1)];
 
   const FujiNet = {
     emu: null,
     enabled: localStorage.getItem('ac.fujinet') === '1',
     files: [],              // [{path:'/dir/x.atr', file:File}]
     cache: new Map(),       // path -> Uint8Array
-    hosts: Array.from({ length: HOSTS }, (_, i) => (i === 0 ? 'SD' : '')),
+    hosts: defaultHosts(),
+    publicHosts: PUBLIC_HOSTS.slice(),
     slots: Array.from({ length: SLOTS }, () => ({ host: 0xff, mode: 0, path: '', mounted: false })),
     dir: null,              // {entries, pos}
     onMount: null,          // (slot, path) UI hook
@@ -26,12 +30,14 @@
         const c = JSON.parse(localStorage.getItem('ac.fujinet.cfg') || 'null');
         if (!c) return;
         c.hosts.slice(0, HOSTS).forEach((h, i) => { this.hosts[i] = h; });
+        if (c.hosts.slice(1).every((h) => !h)) this.hosts = defaultHosts();
+        this.hosts[0] = 'SD';
         c.slots.slice(0, SLOTS).forEach((s, i) => { this.slots[i] = { host: s.host, mode: s.mode, path: s.path, mounted: false }; });
       } catch (e) { /* ignore corrupt config */ }
     },
     reset() {
       localStorage.removeItem('ac.fujinet.cfg');
-      this.hosts = this.hosts.map((_, i) => (i === 0 ? 'SD' : ''));
+      this.hosts = defaultHosts();
       this.slots = this.slots.map(() => ({ host: 0xff, mode: 0, path: '', mounted: false }));
       this.dir = null;
     },
@@ -46,6 +52,23 @@
           return r;
         } catch (e) { console.error('fujinet', e); return E; }
       };
+    },
+
+    fillPublic() {
+      this.hosts = ['SD', ...this.publicHosts.slice(0, HOSTS - 1)];
+      this.save();
+    },
+    // Best effort: the status page may be unreachable (offline, or blocked by CORS); the built-in list is kept then.
+    async refreshPublic() {
+      const t = await (await fetch('https://fujinet.online/tnfs-server-status/')).text();
+      const up = [];
+      for (const row of t.split(/<tr/i)) {
+        const h = row.match(/>\s*([a-z0-9][a-z0-9.-]+\.[a-z]{2,})\s*</i);
+        if (h && /up\.svg/.test(row) && !/down\.svg/.test(row)) up.push(h[1].toLowerCase());
+      }
+      if (!up.length) throw new Error('no servers found in the status page');
+      this.publicHosts = up;
+      return up.length;
     },
 
     setFiles(list) {
@@ -141,6 +164,7 @@
         case 0xf3: {                                           // write host slots
           const m = this.mem();
           for (let i = 0; i < HOSTS; i++) this.hosts[i] = this.cstr(m, data + i * HOSTLEN, HOSTLEN);
+          this.hosts[0] = 'SD';
           return C;
         }
         case 0xf2: {                                           // read device slots

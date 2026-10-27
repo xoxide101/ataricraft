@@ -2191,6 +2191,7 @@
   }  function hookDevices() {
     const m = S.emu.m, inner = m.acSio;
     hookHost(S.emu);
+    S.emu.onActivity = (id, kind) => devFlash(id, kind);
     m.acSio = (dev, cmd, dstats, aux, data, len) => {
       const id = devId(dev);
       if (id) devFlash(id, cmd === 0x52 ? 'rd' : cmd === 0x57 || cmd === 0x50 ? 'wr' : 'ot');
@@ -2356,7 +2357,37 @@
     if (FujiNet.enabled && S.emu && !S.off) { FujiNet.bootConfig(); $('d1').textContent = 'FujiNet CONFIG'; }
   };
   syncFnUi();
-  $('fnreset').onclick = () => { FujiNet.reset(); log('FujiNet config reset (hosts and drive slots cleared)'); };
+  $('fnreset').onclick = () => { FujiNet.reset(); renderHosts(); log('FujiNet config reset (hosts and drive slots cleared)'); };
+  function renderHosts() {
+    const box = $('fnhosts');
+    box.innerHTML = '';
+    $('fnpub').innerHTML = FujiNet.publicHosts.map((h) => `<option value="${h}">`).join('');
+    FujiNet.hosts.forEach((h, i) => {
+      const r = document.createElement('div');
+      r.style.cssText = 'display:flex;gap:6px;align-items:center;margin:2px 0';
+      const n = document.createElement('span');
+      n.textContent = i + 1; n.style.cssText = 'width:12px;color:#8b93a1';
+      const inp = document.createElement('input');
+      inp.value = h; inp.setAttribute('list', 'fnpub');
+      inp.style.cssText = 'flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:3px 5px';
+      if (i === 0) { inp.disabled = true; inp.title = 'Reserved for local files (the folder you point at)'; }
+      else inp.onchange = () => { FujiNet.hosts[i] = inp.value.trim().slice(0, 31); FujiNet.save(); };
+      r.append(n, inp);
+      box.append(r);
+    });
+  }
+  renderHosts();
+  $('fnhostfill').onclick = () => { FujiNet.fillPublic(); renderHosts(); $('fnhostmsg').textContent = 'filled'; };
+  $('fnhostrefresh').onclick = async () => {
+    $('fnhostmsg').textContent = 'checking…';
+    try {
+      const n = await FujiNet.refreshPublic();
+      FujiNet.fillPublic(); renderHosts();
+      $('fnhostmsg').textContent = n + ' servers online';
+    } catch (e) {
+      $('fnhostmsg').textContent = 'could not reach fujinet.online; using the built-in list';
+    }
+  };
   $('fnboot').onclick = () => {
     if (!S.emu) { log('boot first'); return; }
     if (!FujiNet.enabled) { log('FujiNet is off'); return; }

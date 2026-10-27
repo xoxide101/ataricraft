@@ -291,6 +291,15 @@ EMSCRIPTEN_KEEPALIVE void aw_run() {
 	g_webRate = av.timing.sample_rate;
 }
 
+extern "C" uint32 g_ATLibretroAct[24];
+// Returns and clears the activity counter for an id (see libretro_ui_stubs.cpp); bit 0 = write.
+EMSCRIPTEN_KEEPALIVE int aw_act(int id) {
+	if (id < 0 || id >= 24) return 0;
+	const uint32 v = g_ATLibretroAct[id];
+	g_ATLibretroAct[id] = 0;
+	return (int)v;
+}
+
 EMSCRIPTEN_KEEPALIVE const uint8_t *aw_frame() { return g_webFrame.data(); }
 EMSCRIPTEN_KEEPALIVE int aw_frame_w() { return (int)g_webW; }
 EMSCRIPTEN_KEEPALIVE int aw_frame_h() { return (int)g_webH; }
