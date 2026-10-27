@@ -1870,11 +1870,43 @@
     sync();
     bindPic(d, () => $('c' + n).click(), (x, y) => openPick(x, y,     `Cart ${n}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, cartItems(n)), (files) => insertCart(n, files[0]));
   }
+  const tapeItems = () => [
+    { label: 'Load tape…', run: () => $('tape').click() },
+    { label: 'Eject', run: () => $('te').click() },
+    { label: 'Boot tape (Start held)', run: () => $('tboot').click() },
+    { label: 'Rewind', run: () => $('trew').click() },
+  ];
+  {
+    const d = document.createElement('div');
+    d.className = 'xf tape';
+    d.title = 'Cassette recorder (C:)';
+    const reel = (cx) => `<g class="reel" style="transform-origin:${cx}px 33px"><circle cx="${cx}" cy="33" r="11" fill="#2a2a2e" stroke="#777"/><circle cx="${cx}" cy="33" r="3" fill="#ddd"/>${[0, 60, 120, 180, 240, 300].map((a) => `<line x1="${cx}" y1="33" x2="${cx + 9 * Math.cos(a * Math.PI / 180)}" y2="${33 + 9 * Math.sin(a * Math.PI / 180)}" stroke="#ddd" stroke-width="1.6"/>`).join('')}</g>`;
+    d.innerHTML = `<svg viewBox="0 0 220 68" aria-hidden="true">
+      <rect x="2" y="2" width="216" height="64" rx="6" fill="#ebe8e1" stroke="#9c988e"/>
+      <rect x="2" y="2" width="216" height="9" rx="4" fill="#f7f5f0"/>
+      <rect x="14" y="14" width="140" height="44" rx="3" fill="#121214" stroke="#55524b"/>
+      <g class="tapeimg"><rect x="20" y="18" width="128" height="36" rx="3" fill="#c9c2ae" stroke="#8a8474"/><rect x="28" y="22" width="112" height="12" fill="#fbfaf6"/><rect x="28" y="22" width="30" height="12" fill="#d9362c"/>${reel(58)}${reel(110)}</g>
+      <rect x="162" y="18" width="14" height="10" rx="2" fill="#a8a49a"/><rect x="180" y="18" width="14" height="10" rx="2" fill="#a8a49a"/><rect x="198" y="18" width="12" height="10" rx="2" fill="#a8a49a"/>
+      <circle class="led" cx="196" cy="50" r="4"/>
+      <text x="210" y="9.5" text-anchor="end" font-size="8" font-weight="bold" fill="#5f5b52" font-family="Consolas,monospace">C: CASSETTE</text>
+    </svg><div class="nm">empty</div>`;
+    $('drvviz').append(d);
+    xfEl.C = d;
+    const span = $('tn');
+    const sync = () => {
+      const t = span.textContent.trim();
+      d.classList.toggle('has', !!t && t !== 'empty');
+      d.querySelector('.nm').textContent = t || 'empty';
+    };
+    new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
+    sync();
+    bindPic(d, () => $('tape').click(), (x, y) => openPick(x, y, 'C: cassette: ' + (span.textContent.trim() || 'empty'), tapeItems()), (files) => loadAny(files[0], false, 'tape'));
+  }
   const devTimer = {};
   $('ramd8').checked = localStorage.getItem('ac.ramd8') === '1';
   $('ramd8').onchange = () => { localStorage.setItem('ac.ramd8', $('ramd8').checked ? '1' : '0'); xfSync[8](); };
   xfSync[8]();
-  function devFlash(id, cls) {    const xf = xfEl[id && id[0] === 'D' ? +id.slice(1) : 0];
+  function devFlash(id, cls) {    const xf = id === 'C' ? xfEl.C : xfEl[id && id[0] === 'D' ? +id.slice(1) : 0];
     if (xf) {
       xf.classList.remove('rd', 'wr', 'ot'); xf.classList.add(cls);
       clearTimeout(xf._t); xf._t = setTimeout(() => xf.classList.remove('rd', 'wr', 'ot'), 140);
@@ -1965,7 +1997,10 @@
       L.push(n > 0 ? `${n} file(s) shared with the emulator` : 'No host files shared');
     } else if (id === 'C') {
       title = 'C: cassette';
-      L.push($('tn').textContent === 'empty' ? 'Empty - no tape loaded' : 'Tape: ' + $('tn').textContent);
+      const has = $('tn').textContent !== 'empty';
+      L.push(has ? 'Tape: ' + $('tn').textContent : 'Empty - no tape loaded');
+      if (has && S.emu) { const ti = S.emu.tapeInfo(); if (ti && ti.pos != null) L.push('Position: block ' + ti.pos + (ti.size ? ' of ' + ti.size : '')); }
+      acts = tapeItems();
     } else if (id === 'N') {
       title = 'N: FujiNet';
       L.push(FujiNet.enabled ? 'FujiNet emulation is on' : 'FujiNet emulation is off');
