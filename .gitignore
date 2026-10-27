@@ -1,4 +1,5 @@
-roms/
+/roms/*
+!/roms/altirra/
 software_n_roms/
 *.rom
 *.ROM
@@ -17,3 +18,4 @@ web/js/diskdb.js
 
 # archive: blank disks are tracked; DOS boot disks (third-party) stay local
 !archive/blank/*.atr
+!roms/altirra/*.rom
