@@ -1422,6 +1422,20 @@
       },
     })));
   }
+  function driveProps(n) {
+    const d = S.disks[n], box = $('fslist');
+    if (!d) { box.textContent = `D${n}: empty`; return; }
+    const b = (S.emu && S.emu.readDisk(n)) || d.bytes;
+    let t = `D${n}: ${d.name}\n${b.length} bytes${S.dirty[n] ? ', changed since loading' : ''}`;
+    if (b[0] === 0x96 && b[1] === 0x02) {
+      const ss = b[4] | (b[5] << 8), par = b[2] | (b[3] << 8) | (b[6] << 16);
+      t += `\nATR, ${ss}-byte sectors, ${Math.round(par * 16 / ss)} sectors`;
+    }
+    const v = AC.DosFs && AC.DosFs.open(b);
+    t += v ? `\nFile system: ${v.kind.toUpperCase()}${v.label ? ' ' + v.label : ''}, ${v.readOnly ? 'read-only here' : 'writable here'}` : '\nFile system: not recognised (boot disk or custom format)';
+    if (S.folders && S.folders[n]) t += `\nMirrors host folder "${S.folders[n].handle.name}"`;
+    box.textContent = t;
+  }
   function drvMenu(n, x, y) {
     const have = S.disks[n];
     const items = [
@@ -1429,9 +1443,23 @@
       { label: have ? 'Eject' : 'Eject (nothing mounted)', run: () => $('de' + n).click() },
       { label: 'Insert blank disk…', run: () => blankMenu(n, x, y) },
     ];
+    const pick = (id, fn) => { $(id).value = String(n); fn(); };
     if (have) items.push(
-      { label: 'Browse files', run: () => viaVal('fsdrv', n, () => $('fsbrowse').click()) },
-      { label: 'Save disk image', run: () => viaVal('savedrv', n, () => $('savedisk').click()) });
+      { label: 'Properties…', run: () => driveProps(n) },
+      { label: 'Browse files', run: () => pick('fsdrv', () => $('fsbrowse').click()) },
+      { label: 'Add files…', run: () => pick('fsdrv', () => {
+        const p = prompt(`Folder on D${n}: for the added files (blank = top level; only used on SDFS / MyDOS disks)`, $('fspath').value);
+        if (p === null) return;
+        $('fspath').value = p; $('fsadd').click();
+      }) },
+      { label: 'Save disk image', run: () => viaVal('savedrv', n, () => $('savedisk').click()) },
+      { label: 'Save all files (.zip)', run: () => pick('fsdrv', () => $('fszip').click()) },
+      { label: 'Sync back to folder', run: () => pick('fsdrv', () => $('fssync').click()) });
+    items.push({ label: 'Mount host folder as SDFS…', run: () => {
+      const mb = prompt('Spare space to leave free on the disk, in MB (0-15)', $('fsfree').value);
+      if (mb === null) return;
+      $('fsfree').value = mb; pick('fsdrv', () => $('fsmount').click());
+    } });
     if (n === 8) items.push({ label: ramOn() ? 'Unmark D8: as a RAM disk' : 'Mark D8: as a RAM disk', run: () => $('ramd8').click() });
     openPick(x, y, `D${n}: ${have ? have.name : 'empty'}`, items);
   }
@@ -1720,7 +1748,23 @@
     for (const e of list.slice(0, 1000)) {
       const row = document.createElement('div');
       row.textContent = (e.dir ? '[' + e.path + ']' : e.path) + (e.dir ? '' : `  ${e.approxSize ? '~' : ''}${e.size} B  `);
-      if (!e.dir) { const b = document.createElement('a'); b.href = '#'; b.textContent = 'download'; b.onclick = (ev) => { ev.preventDefault(); saveBlob(e.name, [v.read(e)]); }; row.append(b); }
+      if (!e.dir) {
+        const b = document.createElement('a'); b.href = '#'; b.textContent = 'download'; b.onclick = (ev) => { ev.preventDefault(); saveBlob(e.name, [v.read(e)]); }; row.append(b);
+        if (!v.readOnly && v.remove) {
+          const r = document.createElement('a'); r.href = '#'; r.textContent = ' remove'; r.onclick = (ev) => {
+            ev.preventDefault();
+            if (!confirm(`Remove ${e.path} from D${n}:?`)) return;
+            try {
+              v.remove(e.path);
+              const name = (S.disks[n] && S.disks[n].name) || `d${n}.atr`;
+              S.emu.mountDisk(n, name, o.bytes); S.disks[n] = { name, bytes: o.bytes }; S.dirty[n] = true;
+              log(`D${n}: removed ${e.path}. Press Reset so the DOS rereads the disk.`);
+            } catch (er) { log('remove: ' + er.message); }
+            fsShow();
+          };
+          row.append(r);
+        }
+      }
       box.append(row);
     }
     if (list.length > 1000) box.append('… ' + (list.length - 1000) + ' more (use Save all .zip)');

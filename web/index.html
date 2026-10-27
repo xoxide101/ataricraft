@@ -287,6 +287,7 @@
       <div class="row"><label class="btn">D8…<input id="f8" type="file"></label><button id="de8">Eject</button><span id="d8" class="dim">empty</span></div>
       <div class="row" title="Many DOSes (SpartaDOS X, DOS XL, MyDOS with a RAM disk driver) claim D8: as a RAM disk, which the emulator cannot see because it never goes through the disk bus. Tick this to mark D8: as your RAM disk so it is identified in the drive pictures."><label><input id="ramd8" type="checkbox"> D8: is a RAM disk (set up by my DOS)</label></div>
       </div>
+      <div id="legacy2" style="display:none">
       <div class="row" title="Download a mounted disk image with any changes made in the emulator. Works for D1: to D8:."><select id="savedrv"></select><button id="savedisk">Save disk</button></div>
       <div class="row" title="Creates an empty ATR with the chosen geometry. Format it with the Atari's own DOS."><select id="blankfmt" style="flex:1"><option value="128,720">SS/SD 90K (128 B)</option><option value="128,1040">SS/ED 130K (128 B)</option><option value="256,720">SS/DD 180K (256 B)</option><option value="128,1440">DS/SD 180K (128 B)</option><option value="256,1440">DS/DD 360K (256 B)</option><option value="256,2880">DS/DD 720K 3.5" (256 B)</option><option value="256,16384">HD 4 MB (256 B)</option><option value="256,40960">HD 10 MB (256 B)</option><option value="256,65535">HD 16 MB (256 B)</option></select><select id="blankslot"></select></div>
       <div class="row"><button id="blankmk">Insert blank disk</button><button id="blankdl">Save blank .atr</button></div>
@@ -295,6 +296,7 @@
       <div class="row" title="Look inside a mounted disk (DOS 2.x, MyDOS, SpartaDOS-family), download its files, or add files to an SDFS disk."><select id="fsdrv"></select><button id="fsbrowse">Browse files</button><label class="btn">Add files…<input id="fsadd" type="file" multiple></label><button id="fszip">Save all .zip</button></div>
       <div class="row" title="Build an SDFS disk from a folder on this computer (up to 16 MB) and mount it. After the Atari writes to it, Sync back copies changed and new files into the folder."><button id="fsmount">Mount folder…</button><label>spare MB <input id="fsfree" type="number" min="0" max="15" value="4" style="width:3.5em"></label><button id="fssync">Sync back</button></div>
       <div class="row"><input id="fspath" placeholder="folder for added files (SDFS), e.g. GAMES" style="flex:1"></div>
+      </div>
       <div id="fslist" class="dim" style="max-height:220px;overflow:auto;white-space:pre"></div>
       <div class="row"><button id="fullreset" title="Forgets everything this page stored: catalog, remembered folders, ROMs, settings, log. Your files on disk are not touched.">Full reset (forget everything)</button></div>
       <div class="dim">Any disk, cartridge, tape or program format is detected from its contents. You can also drop a file on the page.</div>
@@ -348,6 +350,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027f"></script>
+<script src="js/app.js?v=20261027g"></script>
 </body>
 </html>
