@@ -1815,8 +1815,8 @@
         jy.style.minHeight = H + 'px';
       }
       if (!pad.hidden) {
-        const sel = $('padsize').value, cap = sel === 'auto' ? 548 : +sel;
-        fitTo(pad, H, (v) => pad.style.setProperty('--padw', Math.round(v + 92) + 'px'), 120, cap, cap);
+        const sel = $('padsize').value, avail = pad.clientWidth - 128 - 84 - 20, cap = Math.max(120, Math.min(avail, sel === 'auto' ? 900 : +sel));
+        fitTo(pad, H, (v) => pad.style.setProperty('--padw', Math.round(v) + 'px'), 120, cap, cap);
       }
     };
     window.AC_fitPanel = fitPanel;

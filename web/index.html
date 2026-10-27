@@ -168,9 +168,9 @@
   .padsurf { position:relative; width:100%; aspect-ratio:4/3; background:#23262d; border:1px solid #3a4150; border-radius:6px; touch-action:none; cursor:crosshair; }
   .padsurf .paddot { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; border:2px solid #35e06a; pointer-events:none; left:50%; top:50%; }
   .padsurf.dn .paddot { background:#ff4a3d; border-color:#ff4a3d; }
-  #kpad { --padw:calc(min(30.6dvh,381px) + 92px); width:min(100%,var(--padw),640px); margin:0 auto; }
+  #kpad { --padw:300px; display:flex; gap:10px; align-items:flex-start; width:100%; } #kpad[hidden] { display:none; } .padleft { flex:none; width:128px; display:flex; flex-direction:column; gap:6px; } .padleft #padhead { font-size:11px; padding:0 2px; user-select:none; cursor:context-menu; -webkit-touch-callout:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .padmid { flex:1; min-width:0; display:flex; justify-content:center; } .padmid .padsurf { width:var(--padw); flex:none; }
   #padsize { font-size:12px; }
-.padbtns { display:flex; gap:8px; margin-top:8px; } .padbtns button { flex:1; height:clamp(44px,9dvh,72px); transition:transform .05s; } .padbtns button.down { transform:translateY(3px); box-shadow:0 0 12px var(--acc); } .padbtns button { font-size:15px; font-weight:700; touch-action:none; user-select:none; } .padbtns button.down { background:var(--acc); color:#000; }
+.padbtns { display:flex; flex-direction:column; gap:8px; margin-top:4px; } .padbtns small { font-weight:400; font-size:10px; opacity:.8; } .padbtns button { height:46px; line-height:1.15; transition:transform .05s; } .padbtns button.down { transform:translateY(3px); box-shadow:0 0 12px var(--acc); } .padbtns button { font-size:15px; font-weight:700; touch-action:none; user-select:none; } .padbtns button.down { background:var(--acc); color:#000; }
   @media (max-width:900px) { .center { overflow:auto; max-height:calc(100dvh - var(--hh,50px)); } #stage { position:sticky; top:0; z-index:5; } #screen { width:min(calc(100vw - 20px), calc((100dvh - var(--hh,50px) - 20px) * 1.2)); min-width:0; } }
   @media (max-width:900px) and (orientation:landscape) {
     .center { flex-direction:row; flex-wrap:nowrap; align-items:flex-start; gap:8px; overflow:auto; }
@@ -374,11 +374,14 @@
       <div id="kbd"></div>
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
-        <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0">
-        <div style="display:flex;gap:8px;align-items:center"><button id="padmap" type="button" title="Choose the pad / mouse device">🎛 Device…</button><div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-touch-callout:none;flex:1"></div><select id="padsize" title="Pad size: Auto fits the window"><option value="auto">⤢ Auto</option><option value="234">Small</option><option value="270">Small-medium</option><option value="306">Medium</option><option value="387">Large</option><option value="486">Extra large</option></select></div>
-        <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
-        <div class="padbtns"><button data-b="1">Button 1 (left click)</button><button data-b="2">Button 2 (right click)</button></div>
-        </div><div id="padcon" class="jcon"></div></div>
+        <div class="padleft">
+          <button id="padmap" type="button" title="Choose the pad / mouse device">🎛 Device…</button>
+          <div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device"></div>
+          <select id="padsize" title="Pad size: Auto fits the window"><option value="auto">⤢ Auto</option><option value="234">Small</option><option value="270">Small-medium</option><option value="306">Medium</option><option value="387">Large</option><option value="486">Extra large</option></select>
+          <div class="padbtns"><button data-b="1">Button 1<br><small>left click</small></button><button data-b="2">Button 2<br><small>right click</small></button></div>
+        </div>
+        <div class="padmid"><div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div></div>
+        <div id="padcon" class="jcon"></div>
       </div>
       <div id="kjoy" hidden></div>
       <div id="kmini"></div>
@@ -403,6 +406,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zs"></script>
+<script src="js/app.js?v=20261027zt"></script>
 </body>
 </html>
