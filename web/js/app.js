@@ -1323,12 +1323,12 @@
     (MEDS.open || []).forEach((p) => MED.open.add(p));
     const box = $('medbox'), list = $('medlist');
     const setBig = (on) => {
-      box.classList.toggle('medbig', on); $('medbig').textContent = on ? '✕' : '⤢';
+      box.classList.toggle('medbig', on); $('medbig').classList.toggle('on', on); $('medside').classList.toggle('on', !on);
       if (on) { box.classList.remove('collapsed'); document.querySelector('#sidetabs [data-t=fm]').click(); }
       MEDS.big = on; localStorage.setItem('ac.medstate', JSON.stringify(MEDS));
       if (MED.files.length) renderMed();
     };
-    $('medbig').onclick = () => setBig(!box.classList.contains('medbig'));
+    $('medbig').onclick = () => setBig(true); $('medside').onclick = () => setBig(false);
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && box.classList.contains('medbig') && !document.querySelector('#pickmenu, dialog[open]')) setBig(false); });
     let st = null;
     list.addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(() => { if (!MED.files.length) return; MEDS.scroll = list.scrollTop; localStorage.setItem('ac.medstate', JSON.stringify(MEDS)); }, 250); });
