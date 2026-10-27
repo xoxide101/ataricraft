@@ -14,6 +14,8 @@ function folders(dir, out = []) {
   return out;
 }
 const pick = (a, n) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b.slice(0, n); };
+const SEEN = R + 'out/sweep-seen.json';
+const seen = new Set(fs.existsSync(SEEN) ? JSON.parse(fs.readFileSync(SEEN, 'utf8')) : []);
 
 (async () => {
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
@@ -31,17 +33,23 @@ const pick = (a, n) => { const b = a.slice(); for (let i = b.length - 1; i > 0; 
       await p.setInputFiles('#medfolder', f.dir);
       await p.waitForFunction(() => ataricraft.mediaList().length > 0, null, { timeout: 180000 }).catch(() => {});
       await p.waitForTimeout(1500);
-      const list = (await p.evaluate(() => ataricraft.mediaList())).filter((e) => /^(disk|cart|exe|tape)$/.test(e.kind));
+      const list = (await p.evaluate(() => ataricraft.mediaList())).filter((e) => /^(disk|cart|exe|tape)$/.test(e.kind) && !seen.has(e.name));
       let ok = 0;
       for (const e of pick(list, N)) {
-        tried++;
+        tried++; seen.add(e.name);
+        const f0 = await p.evaluate(() => ataricraft.state().frames);
         const r = await Promise.race([
           p.evaluate((n) => ataricraft.loadEntry(n, 1), e.name),
           new Promise((res) => setTimeout(() => res({ ok: false, msg: 'TIMEOUT 30s' }), 30000)),
         ]).catch((x) => ({ ok: false, msg: 'EVAL ' + x.message }));
+        if (r.ok) {
+          await p.waitForTimeout(1200);
+          const st = await p.evaluate(() => ataricraft.state());
+          if (!st.booted || st.frames <= f0) r.ok = false, r.msg = 'emulator stalled after load (' + r.msg.slice(0, 50) + ')';
+        }
         if (r.ok) ok++; else bad.push({ where: rel, entry: e.name, msg: r.msg });
-        await p.waitForTimeout(100);
       }
+      fs.writeFileSync(SEEN, JSON.stringify([...seen]));
       console.log(`${rel}: ${list.length} loadable, sampled ${Math.min(N, list.length)}, ok ${ok}`);
     } catch (x) { bad.push({ where: rel, entry: '(folder)', msg: x.message.split('\n')[0] }); }
     await p.close();
