@@ -157,7 +157,7 @@ window.AC = window.AC || {};
       };
       const btn = (id, cls) => {
         const b = document.createElement('button');
-        b.className = 'key akey ' + (cls || '') + ' a-' + id;
+        b.className = 'key akey ' + (cls || '') + ' a-' + id + (['reset', 'option', 'select', 'start', 'help'].includes(id) ? ' ckey' : '');
         b.textContent = A[id][0];
         b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); h.down('arr:' + id, A[id][1]()); b.classList.add('down'); });
         const up = () => { if (!b.classList.contains('down')) return; b.classList.remove('down'); h.up('arr:' + id); };
@@ -169,7 +169,7 @@ window.AC = window.AC || {};
       const dpad = document.createElement('div');
       dpad.className = 'dpad';
       dpad.append(btn('up'), btn('left'), btn('down'), btn('right'));
-      el.append(dpad, mk('aside', ['ret', 'esc', 'space', 'bksp', 'tab', 'brk', 'ctrlc', 'help']), mk('aside con', ['start', 'select', 'option', 'reset']));
+      el.append(dpad, mk('aside', ['ret', 'esc', 'space', 'bksp', 'tab', 'brk', 'ctrlc']), mk('aside con', ['reset', 'option', 'select', 'start', 'help']));
     },
 
     build(el, h, layout) {

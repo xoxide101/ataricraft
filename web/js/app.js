@@ -1300,6 +1300,7 @@
   const PAD = Object.assign({ on: false, type: 'touch', screen: false, fx: false, fy: false }, JSON.parse(localStorage.getItem('ac.pad') || '{}'));
   const padPos = { x: 0.5, y: 0.5, b: 0, held: 0 };
   function applyPad() {
+    document.querySelectorAll('.padbtns button').forEach((b) => b.classList.toggle('down', !!((padPos.b | padPos.held) & +b.dataset.b)));
     if (!S.emu) return;
     if (!PAD.on) { S.emu.up('pad'); return; }
     const fx = PAD.fx ? 1 - padPos.x : padPos.x;
@@ -1362,7 +1363,7 @@
   const JSAVED = (() => { let o = {}; try { o = JSON.parse(localStorage.getItem('ac.joyx') || '{}'); } catch (e) { /* fresh */ } return o.dev ? { p: [o], con: o.con } : o; })();
   const JSH = { con: JSAVED.con !== false, two: !!JSAVED.two };
   const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ p: players.map((p) => p.save()), two: JSH.two, con: JSH.con }));
-  const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 } };
+  const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 }, help: { keycode: 0x11 } };
   const keyName = (c) => (!c ? '(none)' : ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'Space' })[c] || c.replace(/^Key|^Digit/, ''));
   const JKDIRS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right']];
   function mkPlayer(idx, saved) {
@@ -1416,6 +1417,7 @@
   function showBits() {
     const k = JOY.vis.knob; if (!k) return;
     const b = JOY.ui | JOY.gp | JOY.kd, x = (b & 8 ? 1 : 0) - (b & 4 ? 1 : 0), y = (b & 2 ? 1 : 0) - (b & 1 ? 1 : 0), m = Math.hypot(x, y) || 1;
+    if (JOY.vis.dirs) JOY.vis.dirs.forEach(([mask, d]) => d.classList.toggle('on', (b & 15) === mask));
     k.style.transform = JOY.dragging ? k.style.transform : `translate(${(x / m) * k.parentNode.clientWidth * 0.25}px, ${(y / m) * k.parentNode.clientWidth * 0.25}px)`;
   }
   function joyCtl(id, on) {
@@ -1432,11 +1434,11 @@
   function joyRelease() { for (const id of Object.keys(JOY.down)) joyCtl(id, false); JOY.ui = 0; JOY.gp = 0; JOY.kd = 0; JOY.kdir = 0; showBits(); sendJoy(); }
   const joyFire = () => ((JOY.cnt.fire || 0) + (JOY.cnt.fire2 || 0)) > 0;
   function send() {
+    showBits();
     if (!S.emu) return;
     const mode = jdef().mode;
     let j = (idx ? 0 : S.joy) | JOY.ui | JOY.gp | JOY.kd;
     const fire = (!idx && S.fire) || joyFire();
-    showBits();
     if (mode === 'paddle') { padSend(); S.emu.down(fld, { [fld]: 0, [trg]: 0 }); return; }
     if (mode === 'drive') j = (j & ~3) | GRAY[JOY.step & 3];
     S.emu.down(fld, { [fld]: j, [trg]: fire ? 1 : 0 });
@@ -1473,6 +1475,11 @@
     const stick = document.createElement('div'); stick.className = 'jstick'; stick.title = 'Drag: 8 directions, diagonals are two directions at once';
     stick.innerHTML = '<div class="jknob"></div>';
     const knob = stick.firstChild; JOY.vis.knob = knob;
+    JOY.vis.dirs = [[1, 0, -1], [9, 0.71, -0.71], [8, 1, 0], [10, 0.71, 0.71], [2, 0, 1], [6, -0.71, 0.71], [4, -1, 0], [5, -0.71, -0.71]].map(([m, dx, dy]) => {
+      const d = document.createElement('div'); d.className = 'jdir';
+      d.style.left = 50 + dx * 43 + '%'; d.style.top = 50 + dy * 43 + '%';
+      stick.append(d); return [m, d];
+    });
     const aim = (e) => {
       const r = stick.getBoundingClientRect(), R = r.width / 2;
       const dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R), th = 0.38 * R;
@@ -1623,8 +1630,8 @@
     if (JSH.two) row.append(players[1].render());
     if (JSH.con) {
       const con = document.createElement('div'); con.className = 'jcon';
-      for (const [k, l] of [['reset', 'Reset'], ['option', 'Option'], ['select', 'Select'], ['start', 'Start']]) {
-        const b = document.createElement('button'); b.textContent = l; b.className = 'jb small ck ck-' + k;
+      for (const [k, l] of [['reset', 'Reset'], ['option', 'Option'], ['select', 'Select'], ['start', 'Start'], ['help', 'Help']]) {
+        const b = document.createElement('button'); b.textContent = l; b.className = 'jb ckey';
         b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
         const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
         b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
