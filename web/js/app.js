@@ -2441,7 +2441,13 @@
     $('d1').textContent = 'FujiNet CONFIG';
   };
   $('fnfilter').oninput = renderFn;
-
+  $('tnfsurl').value = FujiNet.bridge;
+  $('tnfsurl').onchange = () => { FujiNet.bridge = $('tnfsurl').value.trim().replace(/\/$/, ''); localStorage.setItem('ac.tnfsbridge', FujiNet.bridge); FujiNet.down = 0; };
+  $('tnfstest').onclick = async () => {
+    $('tnfsmsg').textContent = '…';
+    try { const t = await (await fetch(FujiNet.bridge + '/ping')).text(); $('tnfsmsg').textContent = /tnfs-bridge/.test(t) ? 'relay running' : 'not the relay'; FujiNet.down = 0; }
+    catch (e) { $('tnfsmsg').textContent = 'not running'; }
+  };
   // ---- netplay lobby (public, CORS-open list of hosted Altirra games) ----
   const LOBBY = 'https://lobby.atari.org.pl/v1/public/sessions?include_awaiting=1';
   async function lobbyRefresh() {

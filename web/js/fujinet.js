@@ -204,8 +204,12 @@
         }
         case 0xf9: case 0xe6: return C;                        // mount/unmount host
         case 0xf7: {                                           // open directory
-          const path = this.cstr(this.mem(), data, 256);
-          this.dir = { entries: this.list(path.replace(/[*?].*$/, '')), pos: 0 };
+          const path = this.cstr(this.mem(), data, 256).replace(/[*?].*$/, '');
+          if (this.isRemote(a1)) {
+            const r = this.remoteList(this.hosts[a1], path);
+            if (!r) return E;
+            this.dir = { entries: r, pos: 0 };
+          } else this.dir = { entries: this.list(path), pos: 0 };
           return C;
         }
         case 0xf5: this.dir = null; return C;
@@ -236,7 +240,7 @@
           if (!s) return E;
           const path = this.cstr(this.mem(), data, FNAME);
           s.path = path; s.host = a2 >> 4; s.mode = a2 & 15; s.mounted = false;
-          this.prefetch(path);
+          if (!this.isRemote(s.host)) this.prefetch(path);
           return C;
         }
         case 0xda: {                                           // get device fullpath
@@ -264,11 +268,56 @@
       }
     },
 
+    // Remote (TNFS) hosts go through the local relay in tools/tnfs-bridge. Synchronous XHR keeps them behaving like the SD host.
+    bridge: localStorage.getItem('ac.tnfsbridge') || 'http://127.0.0.1:8765',
+    down: 0,
+    remote: new Map(),
+    isRemote(h) { return h > 0 && h < HOSTS && !!this.hosts[h] && this.hosts[h] !== 'SD'; },
+    xhr(url, binary) {
+      if (Date.now() < this.down) return null;
+      const x = new XMLHttpRequest();
+      try {
+        x.open('GET', url, false);
+        if (binary) x.overrideMimeType('text/plain; charset=x-user-defined');
+        x.send();
+      } catch (e) {
+        this.down = Date.now() + 5000;
+        this.log('FujiNet: TNFS relay not running. Start it with: node tools\\tnfs-bridge\\bridge.cjs');
+        return null;
+      }
+      if (x.status !== 200) { this.log('FujiNet: TNFS ' + (x.responseText || x.status)); return null; }
+      return x;
+    },
+    remoteList(host, path) {
+      const key = host + '|' + path;
+      const hit = this.remote.get(key);
+      if (hit && Date.now() - hit.t < 300000) return hit.v;
+      const x = this.xhr(this.bridge + '/list?host=' + encodeURIComponent(host) + '&path=' + encodeURIComponent(path || '/'));
+      if (!x) return null;
+      const v = JSON.parse(x.responseText);
+      v.sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+      this.remote.set(key, { t: Date.now(), v });
+      return v;
+    },
+    remoteFile(host, path) {
+      const key = host + '|' + path;
+      if (this.cache.has(key)) return this.cache.get(key);
+      this.log('FujiNet: downloading ' + host + path);
+      const x = this.xhr(this.bridge + '/file?host=' + encodeURIComponent(host) + '&path=' + encodeURIComponent(path), true);
+      if (!x) return null;
+      const t = x.responseText, b = new Uint8Array(t.length);
+      for (let i = 0; i < t.length; i++) b[i] = t.charCodeAt(i) & 255;
+      this.cache.set(key, b);
+      return b;
+    },
+
     mountSlot(i, mode) {
       const s = this.slots[i];
       if (!s || !s.path) return E;
-      const bytes = this.cache.get(s.path);
-      if (!bytes) { this.prefetch(s.path); return E; }
+      let bytes;
+      if (this.isRemote(s.host)) bytes = this.remoteFile(this.hosts[s.host], s.path);
+      else { bytes = this.cache.get(s.path); if (!bytes) this.prefetch(s.path); }
+      if (!bytes) return E;
       if (!IMG.test(s.path)) return E;
       const name = s.path.split('/').pop();
       this.defer(() => this.emu.mountDisk(i + 1, name, bytes));
