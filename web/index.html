@@ -327,6 +327,12 @@
       <h3>Drives &amp; cartridges</h3>
       <div id="drvviz"></div>
       <div class="dim" style="margin:-4px 0 8px">Click a drive or cartridge to load a file, or drop one on it. Right-click (long-press on a phone) for eject, blank and pre-formatted disks, browse, save and more.</div>
+      <details id="bkbox"><summary>Backups &amp; revert <span id="bkinfo" class="dim"></span></summary>
+        <div class="dim">Changes you make on a disk are kept in this browser automatically. A backup copy is taken whenever a changed disk is ejected, replaced, reverted or restored.</div>
+        <div class="row"><select id="bkdrv"></select><button id="bknow" title="Take a backup of this drive now">Back up now</button><button id="bkrev" title="Put the disk back as it was when you loaded it (a backup of your changes is kept)">Revert to loaded</button></div>
+        <div class="row"><select id="bklist" style="flex:1;min-width:0"></select></div>
+        <div class="row"><button id="bkrest" title="Mount the chosen backup in the drive selected above">Restore to drive</button><button id="bkdl">Download</button><button id="bkdel">Delete</button></div>
+      </details>
       <div class="row" title="Save every mounted disk and cartridge in one .zip (with their slots), or load several files / a saved set at once. The per-drive actions are in each drive's right-click menu."><button id="saveall">Save all</button><label class="btn">Load all…<input id="loadall" type="file" multiple style="display:none"></label><span id="allinfo" class="dim"></span></div>
       <div class="row" id="ctyperow" style="display:none"><span class="dim">Cart type</span><select id="ctype" style="flex:1;min-width:0"></select><button id="ctypeok">OK</button></div>
       <div id="legacy" style="display:none">
@@ -436,9 +442,9 @@
 <script src="js/memtest.js?v=20261023d"></script>
 <script src="js/diskdb.js?v=20261023d"></script>
 <script src="js/dosfs.js?v=20261023f"></script>
-<script src="js/keyboard.js?v=20261027zzzzzzzzza"></script>
+<script src="js/keyboard.js?v=20261027zzzzzzzzzza"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzzzzzzzzzzzz"></script>
+<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzzzzzzzzzzzzz"></script>
 </body>
 </html>

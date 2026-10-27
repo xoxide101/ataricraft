@@ -1,7 +1,7 @@
 // ataricraft app: UI + agent API (window.ataricraft). Humans and agents drive the same machine.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const S = { emu: null, dirty: {}, roms: { os800: null, osxl: null, basic: null }, running: false, speed: 1, acc: 0, last: 0, typeQ: [], typeWait: 0, joyMode: false, joy: 0, fire: false };
+  const S = { emu: null, dirty: {}, pend: {}, io: {}, roms: { os800: null, osxl: null, basic: null }, running: false, speed: 1, acc: 0, last: 0, typeQ: [], typeWait: 0, joyMode: false, joy: 0, fire: false };
   const pal = new Uint32Array(256);
   const cv = $('screen');
   const ctx = cv.getContext('2d');
@@ -263,7 +263,7 @@
     const os = chosenOs();
     if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
     log('booting…');
-    if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
+    if (S.emu) { syncDisks(true); S.host = Object.assign(S.host || {}, S.emu.hostFiles()); }
     try {
       S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
@@ -2193,11 +2193,16 @@
   }  function hookDevices() {
     const m = S.emu.m, inner = m.acSio;
     hookHost(S.emu);
-    S.emu.onActivity = (id, kind) => devFlash(id, kind);
+    S.emu.onActivity = (id, kind) => {
+      devFlash(id, kind);
+      const n = /^D[1-8]$/.test(id) ? +id[1] : 0;
+      if (n) { S.io[n] = performance.now(); if (kind === 'wr') S.dirty[n] = S.pend[n] = true; else if (S.emu.aw) S.pend[n] = true; }
+    };
     m.acSio = (dev, cmd, dstats, aux, data, len) => {
       const id = devId(dev);
       if (id) devFlash(id, cmd === 0x52 ? 'rd' : cmd === 0x57 || cmd === 0x50 ? 'wr' : 'ot');
-      if (dev >= 0x31 && dev <= 0x38 && (cmd === 0x57 || cmd === 0x50 || cmd === 0x21 || cmd === 0x22 || cmd === 0x23)) S.dirty[dev - 0x30] = true;
+      if (dev >= 0x31 && dev <= 0x38) S.io[dev - 0x30] = performance.now();
+      if (dev >= 0x31 && dev <= 0x38 && (cmd === 0x57 || cmd === 0x50 || cmd === 0x21 || cmd === 0x22 || cmd === 0x23)) { S.dirty[dev - 0x30] = true; S.pend[dev - 0x30] = true; }
       return inner ? inner(dev, cmd, dstats, aux, data, len) : 0;
     };
   }
@@ -2984,7 +2989,7 @@
       log(`loaded ${nd} disk(s) and ${nc} cartridge(s)`);
     } catch (err) { log('Load all failed: ' + (err && err.message || err)); }
   };  window.addEventListener('beforeunload', (e) => {
-    if (Object.keys(S.dirty).some((n) => S.dirty[n] && S.emu && S.emu.diskPaths && S.emu.diskPaths[n])) { e.preventDefault(); e.returnValue = ''; }
+    if (Object.keys(S.pend).some((n) => S.pend[n]) || (lastSig !== null && lastMediaSig() !== lastSig)) { e.preventDefault(); e.returnValue = ''; }
   });
   $('ctypeok').onclick = () => {
     if (!S.emu || !S.pendingCart) return;
@@ -3158,14 +3163,99 @@
     put('speed', 'input'); put('blankfmt'); put('blanksdfs'); put('blankmydos');
   }
 
+  // ---- edited disks: pull the emulated image back into S.disks so reboots, reloads and sets keep your changes ----
+  const sameBytes = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  function syncDisks(force) {
+    if (!S.emu || (S.off && !force)) return;
+    const now = performance.now();
+    for (let n = 1; n <= 8; n++) {
+      const d = S.disks[n];
+      if (!d || !S.pend[n] || !S.emu.diskPaths || !S.emu.diskPaths[n]) continue;
+      if (!force && now - (S.io[n] || 0) < 1500) continue; // reading the image can interrupt the drive, so wait for it to go quiet
+      S.pend[n] = false;
+      const b = S.emu.readDisk(n);
+      if (!b || sameBytes(b, d.bytes)) continue;
+      if (!d.orig) d.orig = d.bytes;
+      d.bytes = new Uint8Array(b); d.rev = (d.rev || 0) + 1; S.dirty[n] = true;
+    }
+  }
+  const BK = { list: [] };
+  const bkSave = () => idbSet('bk:index', BK.list);
+  async function snapDisk(d, n, why) {
+    if (!d || !d.rev) return;
+    const id = Date.now() + '_' + n;
+    await idbSet('bk:' + id, d.bytes);
+    BK.list.unshift({ id, n, name: d.name, size: d.bytes.length, ts: Date.now(), why });
+    while (BK.list.length > 12) { const o = BK.list.pop(); idbSet('bk:' + o.id, null); }
+    await bkSave(); bkRender();
+  }
+  function bkRender() {
+    const sel = $('bklist'); sel.innerHTML = '';
+    for (const b of BK.list) { const o = document.createElement('option'); o.value = b.id; o.textContent = `${new Date(b.ts).toLocaleString()} - ${b.name} (D${b.n}, ${b.why})`; sel.append(o); }
+    if (!BK.list.length) { const o = document.createElement('option'); o.textContent = 'no backups yet'; o.value = ''; sel.append(o); }
+    $('bkinfo').textContent = BK.list.length ? '(' + BK.list.length + ')' : '';
+  }
+  const bkDrv = () => $('bkdrv');
+  for (let n = 1; n <= 8; n++) { const o = document.createElement('option'); o.value = n; o.textContent = 'D' + n + ':'; bkDrv().append(o); }
+  idbGet('bk:index').then((l) => { BK.list = l || []; bkRender(); });
+  const shadow = {};
+  setInterval(async () => {
+    syncDisks();
+    for (let n = 1; n <= 8; n++) {
+      if (shadow[n] && shadow[n] !== S.disks[n] && shadow[n].rev && !shadow[n].snapped) { shadow[n].snapped = true; await snapDisk(shadow[n], n, 'replaced or ejected'); }
+      shadow[n] = S.disks[n];
+    }
+  }, 1000);
+  $('bknow').onclick = async () => {
+    const n = +bkDrv().value; syncDisks(true);
+    const d = S.disks[n];
+    if (!d) return log(`D${n}: no disk mounted`);
+    if (!d.rev) { d.rev = 1; d.orig = d.orig || d.bytes; if (S.emu && S.emu.diskPaths && S.emu.diskPaths[n]) { const b = S.emu.readDisk(n); if (b) d.bytes = new Uint8Array(b); } }
+    await snapDisk(d, n, 'manual'); log(`D${n}: backed up ${d.name}`);
+  };
+  async function putDisk(n, name, bytes, orig) {
+    if (S.emu) S.emu.mountDisk(n, name, bytes);
+    S.disks[n] = { name, bytes, orig, rev: orig ? 1 : 0 }; S.dirty[n] = !!orig; S.pend[n] = false;
+    shadow[n] = S.disks[n];
+    $('d' + n).textContent = name;
+    if (S.emu && !S.off) S.emu.coldStart();
+  }
+  $('bkrev').onclick = async () => {
+    const n = +bkDrv().value; syncDisks(true);
+    const d = S.disks[n];
+    if (!d || !d.orig) return log(`D${n}: nothing to revert (no changes since loading)`);
+    const orig = d.orig; await snapDisk(d, n, 'before revert'); shadow[n] = null;
+    await putDisk(n, d.name, orig, null); log(`D${n}: reverted to ${d.name} as loaded`);
+  };
+  $('bkrest').onclick = async () => {
+    const b = BK.list.find((x) => x.id === $('bklist').value);
+    if (!b) return;
+    const n = +bkDrv().value; syncDisks(true);
+    if (S.disks[n] && S.disks[n].rev) { await snapDisk(S.disks[n], n, 'before restore'); }
+    const bytes = await idbGet('bk:' + b.id);
+    if (!bytes) return log('backup data is missing');
+    shadow[n] = null;
+    await putDisk(n, b.name, new Uint8Array(bytes), new Uint8Array(bytes)); log(`D${n}: restored backup of ${b.name}`);
+  };
+  $('bkdl').onclick = async () => {
+    const b = BK.list.find((x) => x.id === $('bklist').value);
+    if (!b) return;
+    const bytes = await idbGet('bk:' + b.id);
+    if (bytes) saveBlob(b.name, [bytes], 'application/octet-stream');
+  };
+  $('bkdel').onclick = async () => {
+    const i = BK.list.findIndex((x) => x.id === $('bklist').value);
+    if (i < 0) return;
+    await idbSet('bk:' + BK.list[i].id, null); BK.list.splice(i, 1); await bkSave(); bkRender();
+  };
   // Last disks and cartridges are kept in IndexedDB and re-inserted at startup (read when you press Boot).
-  const lastMediaSig = () => JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => S.disks[n] && [S.disks[n].name, S.disks[n].bytes.length]).concat([1, 2].map((n) => S.carts[n] && [S.carts[n].name, S.carts[n].bytes.length,   S.carts[n].type]))).concat([S.tape && [S.tape.name, S.tape.bytes.length]]);
+  const lastMediaSig = () => JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => S.disks[n] && [S.disks[n].name, S.disks[n].bytes.length, S.disks[n].rev || 0]).concat([1, 2].map((n) => S.carts[n] && [S.carts[n].name, S.carts[n].bytes.length,   S.carts[n].type]))).concat([S.tape && [S.tape.name, S.tape.bytes.length]]);
   let lastSig = null;
   (async () => {
     try {
       const m = await idbGet('lastmedia');
       if (m && !S.emu && !Object.keys(S.disks).length && !Object.keys(S.carts).length) {
-        for (const [n, d] of Object.entries(m.disks || {})) { S.disks[n] = { name: d.name, bytes: d.bytes }; S.dirty[n] = false; $('d' + n).textContent = d.name; }
+        for (const [n, d] of Object.entries(m.disks || {})) { S.disks[n] = { name: d.name, bytes: d.bytes, orig: d.orig, rev: d.rev || 0 }; S.dirty[n] = !!d.rev; $('d' + n).textContent = d.name; }
         for (const [s, c] of Object.entries(m.carts || {})) { S.carts[s] = { name: c.name, bytes: c.bytes, type: c.type }; $('cn' + s).textContent = (s === '1' ? '1 (main, right): ' : '2 (left): ') + c.name; }
         if (m.tape && !S.tape) { S.tape = { name: m.tape.name, bytes: m.tape.bytes }; $('tn').textContent = m.tape.name; }
         if (Object.keys(m.disks || {}).length + Object.keys(m.carts || {}).length || m.tape) log('restored last disks, cartridges and tape');
@@ -3176,7 +3266,7 @@
       const sig = lastMediaSig();
       if (sig === lastSig) return;
       lastSig = sig;
-      idbSet('lastmedia', { disks: Object.fromEntries(Object.entries(S.disks).map(([n, d]) => [n, { name: d.name, bytes: d.bytes }])), carts: Object.fromEntries(Object.entries(S.carts).map(([n, c]) => [n,       { name: c.name, bytes: c.bytes, type: c.type }])), tape: S.tape ? { name: S.tape.name, bytes: S.tape.bytes } : null });
+      idbSet('lastmedia', { disks: Object.fromEntries(Object.entries(S.disks).map(([n, d]) => [n, { name: d.name, bytes: d.bytes, orig: d.orig, rev: d.rev || 0 }])), carts: Object.fromEntries(Object.entries(S.carts).map(([n, c]) => [n,       { name: c.name, bytes: c.bytes, type: c.type }])), tape: S.tape ? { name: S.tape.name, bytes: S.tape.bytes } : null });
     }, 1000);
   })();
   $('profile').value = S.profile;
@@ -3266,6 +3356,7 @@
   }
 
   window.ataricraft = {
+    diskState: () => Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].filter((n) => S.disks[n]).map((n) => [n, { rev: S.disks[n].rev || 0, orig: !!S.disks[n].orig, pend: !!S.pend[n], idle: Math.round(performance.now() - (S.io[n] || 0)) }])),
     describe: () => ({
       name: 'ataricraft', core: S.emu && S.emu.core === 'altirra' ? 'AltirraSDL (WASM)' : 'libatari800 (WASM reference)',
       calls: ['loadRoms(files)', 'boot({model,tv,basic})', 'screenshot({scale}) -> PNG data URL', 'screenText()', 'type(text)', 'press(fields,frames)',
