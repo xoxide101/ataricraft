@@ -1351,8 +1351,40 @@
     devEl[id] = s;
   });
   const devId = (dev) => (dev >= 0x31 && dev <= 0x38 ? 'D' + (dev - 0x30) : dev === 0x60 ? 'C' : dev >= 0x40 && dev <= 0x43 ? 'P' : dev >= 0x50 && dev <= 0x53 ? 'R' : dev >= 0x70 && dev <= 0x7f ? 'N' : null);
+  // XF551-style drive pictures (front view) for D1-D4: LED follows SIO activity, the sleeve shows when a disk is mounted.
+  const xfEl = {};
+  for (let n = 1; n <= 4; n++) {
+    const d = document.createElement('div');
+    d.className = 'xf';
+    d.innerHTML = `<svg viewBox="0 0 220 64" aria-hidden="true">
+      <rect x="2" y="2" width="216" height="60" rx="5" fill="#b9b5ab" stroke="#6d6a62"/>
+      <rect x="2" y="2" width="216" height="9" rx="4" fill="#cbc7bd"/>
+      <rect x="14" y="20" width="150" height="24" rx="2" fill="#1d1d1f" stroke="#55524b"/>
+      <rect class="disk" x="22" y="29" width="134" height="6" fill="#2b2b2e" stroke="#777"/>
+      <rect x="22" y="31.5" width="140" height="1.6" fill="#000"/>
+      <rect x="68" y="46" width="50" height="7" rx="2" fill="#55524b"/>
+      <circle class="led" cx="186" cy="32" r="4"/>
+      <rect x="178" y="43" width="16" height="9" rx="1.5" fill="#403e39"/>
+      <text x="199" y="55" font-size="10" fill="#403e39" font-family="Consolas,monospace">D${n}</text>
+    </svg><div class="nm">D${n}: empty</div>`;
+    $('drvviz').append(d);
+    xfEl[n] = d;
+    const span = $('d' + n);
+    const sync = () => {
+      const t = span.textContent.trim();
+      d.classList.toggle('has', t && t !== 'empty');
+      d.querySelector('.nm').textContent = 'D' + n + ': ' + (t || 'empty');
+    };
+    new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
+    sync();
+  }
   const devTimer = {};
   function devFlash(id, cls) {
+    const xf = xfEl[id && id[0] === 'D' ? +id.slice(1) : 0];
+    if (xf) {
+      xf.classList.remove('rd', 'wr', 'ot'); xf.classList.add(cls);
+      clearTimeout(xf._t); xf._t = setTimeout(() => xf.classList.remove('rd', 'wr', 'ot'), 140);
+    }
     const el = devEl[id];
     if (!el) return;
     el.classList.remove('rd', 'wr', 'ot');

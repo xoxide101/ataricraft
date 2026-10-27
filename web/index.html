@@ -160,6 +160,17 @@
   #devbar .dv.rd i { background:#35e06a; box-shadow:0 0 6px #35e06a; transition:none; }
   #devbar .dv.wr i { background:#ff4a3d; box-shadow:0 0 6px #ff4a3d; transition:none; }
   #devbar .dv.ot i { background:#ffc233; box-shadow:0 0 6px #ffc233; transition:none; }
+  #drvviz { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:6px 0 10px; }
+  #drvviz .xf { text-align:center; font:11px ui-monospace,Consolas,monospace; color:#9a9486; }
+  #drvviz svg { width:100%; height:auto; display:block; }
+  #drvviz .xf.has { color:#d8cdb8; }
+  #drvviz .led { fill:#4a2218; transition:fill .25s; }
+  #drvviz .xf.rd .led { fill:#35e06a; filter:drop-shadow(0 0 3px #35e06a); transition:none; }
+  #drvviz .xf.wr .led { fill:#ff4a3d; filter:drop-shadow(0 0 3px #ff4a3d); transition:none; }
+  #drvviz .xf.ot .led { fill:#ffc233; filter:drop-shadow(0 0 3px #ffc233); transition:none; }
+  #drvviz .disk { opacity:0; transition:opacity .2s; }
+  #drvviz .xf.has .disk { opacity:1; }
+  #drvviz .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #devbar .dv.unsaved { color:#ffc233; }
   #devbar .dv.unsaved::after { content:"*"; }
   #kbdwrap.hide-base .key .g.base, #kbdwrap.hide-shift .key .g.shift, #kbdwrap.hide-ctrl .key .g.ctrl { display:none; }
@@ -258,6 +269,7 @@
     </div>
     <div class="box">
       <h3>Drives</h3>
+      <div id="drvviz"></div>
       <div class="row"><label class="btn">D1…<input id="f1" type="file"></label><button id="de1">Eject</button><span id="d1" class="dim">empty</span></div>
       <div class="row"><label class="btn">D2…<input id="f2" type="file"></label><button id="de2">Eject</button><span id="d2" class="dim">empty</span></div>
       <div class="row"><label class="btn">D3…<input id="f3" type="file"></label><button id="de3">Eject</button><span id="d3" class="dim">empty</span></div>
@@ -323,6 +335,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261023f"></script>
+<script src="js/app.js?v=20261027b"></script>
 </body>
 </html>
