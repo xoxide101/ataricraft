@@ -2069,6 +2069,21 @@
     box.textContent = t;
     return t;
   }
+  function moveDisk(from, to) {
+    if (from === to || !S.disks[from]) return;
+    if (S.emu) syncDisks(true);
+    const a = S.disks[from], b = S.disks[to];
+    const place = (n, d, dirty) => {
+      if (S.emu) { S.emu.ejectDisk(n); if (S.emu.diskPaths) delete S.emu.diskPaths[n]; }
+      if (!d) { delete S.disks[n]; delete S.dirty[n]; delete S.pend[n]; $('d' + n).textContent = 'empty'; $('f' + n).value = ''; return; }
+      if (S.emu && !S.emu.mountDisk(n, d.name, d.bytes)) log(`could not mount ${d.name} in D${n}`);
+      S.disks[n] = d; S.dirty[n] = dirty; S.pend[n] = false; $('d' + n).textContent = d.name;
+    };
+    const da = !!S.dirty[from], db = !!S.dirty[to];
+    place(from, b, db); place(to, a, da);
+    if (typeof shadow !== 'undefined') { shadow[from] = S.disks[from]; shadow[to] = S.disks[to]; }
+    log(b ? `D${from}: and D${to}: swapped` : `D${from}: moved to D${to}:`);
+  }
   function drvMenu(n, x, y) { openPick(x, y, `D${n}: ${S.disks[n] ? S.disks[n].name : 'empty'}`, drvItems(n, x, y)); }
   function drvItems(n, x, y) {
     const have = S.disks[n];
@@ -2077,6 +2092,7 @@
       { label: have ? 'Eject' : 'Eject (nothing mounted)', run: () => $('de' + n).click() },
       { label: 'Insert blank disk…', run: () => blankMenu(n, x, y) },
     ];
+    if (have) for (let t = 1; t <= 8; t++) if (t !== n) items.push({ label: `Move to D${t}:${S.disks[t] ? ' (swap with ' + S.disks[t].name + ')' : ''}`, run: () => moveDisk(n, t) });
     const pick = (id, fn) => { $(id).value = String(n); fn(); };
     if (have) items.push(
       { label: 'Properties…', run: () => driveProps(n) },
