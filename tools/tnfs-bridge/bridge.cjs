@@ -5,7 +5,7 @@
 const dgram = require('dgram');
 const http = require('http');
 
-const TIMEOUT = 2500, RETRIES = 3;
+const TIMEOUT = 2000, RETRIES = 2;
 
 class Conn {
   constructor(host, port) {
