@@ -1835,7 +1835,7 @@
   }
   syncPadUi();
   // ---- device activity lights (keyboard panel, top right) ----
-  const DEVLIST = [...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']).concat([['H', 'H:'], ['K1', 'CART1'], ['K2', 'CART2'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
+  const DEVLIST = [['K1', 'CART1'], ['K2', 'CART2']].concat([...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']), [['H', 'H:'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
   const devEl = {};
   DEVLIST.forEach(([id, label]) => {
     const s = document.createElement('span');
