@@ -1362,7 +1362,8 @@
   const keyName = (c) => (!c ? '(none)' : ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'Space' })[c] || c.replace(/^Key|^Digit/, ''));
   const JKDIRS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right']];
   function mkPlayer(idx, saved) {
-  const JOY = Object.assign({ dev: 'cx40', act: {}, gpb: {}, kb: {}, kbon: false, usb: true }, saved || {});
+  const JOY = Object.assign({ dev: 'cx40', act: {}, gpb: {}, kb: {}, kbon: true, usb: true }, saved || {});
+  JOY.kbon = saved && saved.kbx !== undefined ? saved.kbx : true;
   Object.assign(JOY, { ui: 0, gp: 0, kd: 0, kdir: 0, cnt: {}, learn: null, down: {}, pot: 0.5, ang: 0, step: 0, gpAng: null, vis: {} });
   const fld = idx ? 'joy1' : 'joy0', trg = idx ? 'trig1' : 'trig0';
   function joyPaddleEl() {
@@ -1379,7 +1380,7 @@
   }
   function joyDriveEl() {
     const el = document.createElement('div'); el.className = 'jstick'; el.title = 'Drag around the knob to turn it, or use the mouse wheel'; JOY.vis.drive = el;
-    el.innerHTML = '<div class="jknob" style="width:20px;height:20px;margin:-81px 0 0 -10px;background:#c63b22;border-color:#7a2415"></div>';
+    el.innerHTML = '<div class="jknob" style="width:12%;height:12%;left:50%;top:2%;margin:0 0 0 -6%;background:#c63b22;border-color:#7a2415"></div>';
     const knob = el.firstChild;
     const turn = (d) => { JOY.ang += d; JOY.step = Math.floor(JOY.ang / (Math.PI / 8)); knob.style.transform = ''; el.style.transform = `rotate(${JOY.ang}rad)`; sendJoy(); };
     let last = null;
@@ -1393,7 +1394,7 @@
     const end = () => { last = null; };
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
     el.addEventListener('wheel', (e) => { e.preventDefault(); turn(e.deltaY > 0 ? Math.PI / 8 : -Math.PI / 8); }, { passive: false });
-    const wrap = document.createElement('div'); wrap.style.cssText = 'width:170px;height:170px;flex:none;position:relative'; wrap.append(el);
+    const wrap = document.createElement('div'); wrap.style.cssText = 'width:var(--js);height:var(--js);flex:none;position:relative'; wrap.append(el);
     el.style.transform = `rotate(${JOY.ang}rad)`;
     return wrap;
   }
@@ -1411,7 +1412,7 @@
   function showBits() {
     const k = JOY.vis.knob; if (!k) return;
     const b = JOY.ui | JOY.gp | JOY.kd, x = (b & 8 ? 1 : 0) - (b & 4 ? 1 : 0), y = (b & 2 ? 1 : 0) - (b & 1 ? 1 : 0), m = Math.hypot(x, y) || 1;
-    k.style.transform = JOY.dragging ? k.style.transform : `translate(${(x / m) * 42}px, ${(y / m) * 42}px)`;
+    k.style.transform = JOY.dragging ? k.style.transform : `translate(${(x / m) * k.parentNode.clientWidth * 0.25}px, ${(y / m) * k.parentNode.clientWidth * 0.25}px)`;
   }
   function joyCtl(id, on) {
     const c = jdef().ctl.find((x) => x[0] === id); if (!c) return;
@@ -1594,7 +1595,7 @@
     if (bits !== JOY.gp) { JOY.gp = bits; sendJoy(); }
   }
   return { JOY, send, render: joyRender, release: joyRelease, tick, onKey, jdef, padState: () => (jdef().mode === 'paddle' ? { pot: JOY.pot, btn: joyFire() } : null),
-    save: () => ({ dev: JOY.dev, act: JOY.act, gpb: JOY.gpb, kb: JOY.kb, kbon: JOY.kbon, usb: JOY.usb }) };
+    save: () => ({ dev: JOY.dev, act: JOY.act, gpb: JOY.gpb, kb: JOY.kb, kbx: JOY.kbon, usb: JOY.usb }) };
   }
   const players = [mkPlayer(0, (JSAVED.p || [])[0]), mkPlayer(1, (JSAVED.p || [])[1])];
   function padSend() {
