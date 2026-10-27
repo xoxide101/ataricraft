@@ -22,6 +22,7 @@ const fs = require('fs');
   await p.fill('#medfilter', 'XFTOOLS'); await p.waitForTimeout(400);
   console.log('rows:', await p.evaluate(() => [...document.querySelectorAll('#medlist div')].map((d) => d.textContent).join(' | ')));
   await p.locator('#medlist div', { hasText: /XFTOOLS.*\.(atr|xex|xfd|com|dcm)/i }).first().click();
+  await p.waitForTimeout(500); await p.click('#cold');
   await p.waitForTimeout(6000);
   console.log('status:', await p.textContent('#status'), '| d1:', await p.textContent('#d1'));
   console.log('$700:', await p.evaluate(() => [...ataricraft.peek(0x700, 9)].map((x) => x.toString(16)).join(' ')));

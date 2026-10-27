@@ -630,9 +630,8 @@
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
       S.disks[n] = { name: file.name, bytes }; S.dirty[n] = false;
       $('d' + n).textContent = file.name;
-      if (n > 2 || S.off) noBoot = true;
-      S.emu.coldStart && !noBoot && S.emu.coldStart();
-      log(`D${n}: ${file.name}${noBoot ? ' (no reboot)' : ''}`);
+      if (S.dirty) S.dirty[n] = false;
+      log(`D${n}: ${file.name} inserted. Power on or press Cold start to boot from it.`);
       if (AC.DISK_DB) {
         const body = bytes.length > 16 && bytes[0] === 0x96 && bytes[1] === 0x02 ? bytes.subarray(16) : bytes;
         const nm = AC.DISK_DB[crc32(body)];
@@ -1351,7 +1350,31 @@
     document.querySelectorAll('#kbmode button').forEach((b) => { b.onclick = () => setMode(b.dataset.m); });
     window.AC_setKbMode = setMode;
   }
+  // Controllers that can sit in the Pad tab. Add new devices here; each one needs only a name and what its two buttons mean.
+  const PADTYPES = {
+    touch: { name: 'Atari Touch Tablet (CX77)', info: ['Position: paddle 0 (X) and paddle 1 (Y) on port 1', 'Button 1 = left click / touch (stylus switch)', 'Button 2 = right click (second button)'] },
+    koala: { name: 'Koala Pad', info: ['Position: paddle 0 (X) and paddle 1 (Y) on port 1', 'Button 1 = left click / touch', 'Button 2 = right click', 'Y runs the opposite way to the Touch Tablet'] },
+  };
+  function padHeadSync() {
+    const t = PADTYPES[PAD.type] || PADTYPES.touch;
+    $('padhead').textContent = `🖱 ${t.name} ▾  (right-click for details)`;
+  }
+  function padMenu(x, y) {
+    const t = PADTYPES[PAD.type] || PADTYPES.touch;
+    const items = t.info.map((l) => ({ label: l, run: () => {} }));
+    for (const [k, v] of Object.entries(PADTYPES)) if (k !== PAD.type) items.push({ label: 'Switch to ' + v.name, run: () => { $('padtype').value = k; $('padtype').onchange({ target: $('padtype') }); } });
+    openPick(x, y, 'Emulating: ' + t.name, items);
+  }
+  {
+    const hd = $('padhead');
+    hd.addEventListener('contextmenu', (e) => { e.preventDefault(); padMenu(e.clientX, e.clientY); });
+    hd.addEventListener('click', (e) => padMenu(e.clientX, e.clientY));
+    let t0 = null;
+    hd.addEventListener('touchstart', (e) => { const q = e.touches[0]; t0 = setTimeout(() => { t0 = null; padMenu(q.clientX, q.clientY); }, 450); }, { passive: true });
+    ['touchend', 'touchmove', 'touchcancel'].forEach((ev) => hd.addEventListener(ev, () => { clearTimeout(t0); t0 = null; }, { passive: true }));
+  }
   const syncPadUi = () => {
+    padHeadSync();
     $('padon').checked = PAD.on; $('padtype').value = PAD.type; $('padscreen').checked = PAD.screen; $('padfx').checked = PAD.fx; $('padfy').checked = PAD.fy;
     $('padarea').classList.toggle('off', !PAD.on);
     cv.style.cursor = PAD.on && PAD.screen ? 'crosshair' : '';
@@ -1997,6 +2020,10 @@
     localStorage.setItem('ac.sidebar', hide ? '0' : '1');
   };
   $('sbclose').onclick = () => document.body.classList.add('nosb');
+  // On a phone the open panel covers the ☰ button: tapping the dimmed page outside it closes the panel.
+  document.addEventListener('pointerdown', (e) => {
+    if (phone() && !document.body.classList.contains('nosb') && !e.target.closest('.side, #sbtoggle, .pickmenu, dialog')) document.body.classList.add('nosb');
+  });
   $('boot').addEventListener('click', () => { if (phone()) document.body.classList.add('nosb'); });
 
   fillRomSelects();

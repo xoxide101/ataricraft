@@ -45,6 +45,9 @@
     .key .t.shift { display:none; }
   }
   #sbclose { display:none; width:100%; }
+  @media (max-width:900px) {
+    #sbclose { display:block; position:sticky; top:0; z-index:2; }
+  }
   @media (max-width:600px) {
     #kbd { flex-direction:column; gap:4px; }
     #kbd .kside { width:100%; flex-direction:row; justify-content:stretch; gap:3px; }
@@ -325,8 +328,9 @@
       <div id="kbd"></div>
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
+        <div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none"></div>
         <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
-        <div class="padbtns"><button data-b="1">Button 1</button><button data-b="2">Button 2</button></div>
+        <div class="padbtns"><button data-b="1">Button 1 (left click)</button><button data-b="2">Button 2 (right click)</button></div>
       </div>
       <div id="kmini"></div>
       <div class="legend">Legends come from the Atari's character set. <b class="s">Orange</b> = Shift, <b class="c">teal</b> = Control. Click Shift or Control, then a key.</div>
@@ -350,6 +354,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027j"></script>
+<script src="js/app.js?v=20261027m"></script>
 </body>
 </html>
