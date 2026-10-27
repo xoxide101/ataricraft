@@ -6,7 +6,7 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   await p.goto('file:///' + R + 'web/index.html');
   await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
   await p.waitForTimeout(800);
-  await p.click('text=Boot');
+  await p.click('#boot');
   await p.waitForTimeout(2500);
   await p.setInputFiles('#c1', R + 'software_n_roms/SpartaDosXv420.bin');
   await p.waitForTimeout(800);

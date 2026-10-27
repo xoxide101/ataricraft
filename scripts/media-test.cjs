@@ -29,7 +29,7 @@ const zlib = require('zlib');
   await p.goto('file:///' + R + 'web/index.html');
   await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
   await p.waitForTimeout(800);
-  await p.click('text=Boot');
+  await p.click('#boot');
   await p.waitForTimeout(2500);
   await p.setInputFiles('#medfolder', D);
   await p.waitForTimeout(500);

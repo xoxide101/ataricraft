@@ -100,9 +100,20 @@
   #kbd[data-layer=shift] .key .g.shift, #kbd[data-layer=ctrl] .key .g.ctrl { width:var(--gb); height:var(--gb); }
   #kbd[data-layer=shift] .key .g.shift { right:50%; top:50%; margin:calc(var(--gb) / -2) calc(var(--gb) / -2) 0 0; }
   #kbd[data-layer=ctrl] .key .g.ctrl { left:50%; bottom:50%; margin:0 0 calc(var(--gb) / -2) calc(var(--gb) / -2); }
-  .tgl { display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:26px; padding:0 6px; border:1px solid #4a5160; border-radius:6px; background:#1b1e24; color:#7d8594; cursor:pointer; user-select:none; font-size:12px; }
+  #progstrip { position:relative; height:24px; background:#14161a; border-bottom:1px solid var(--line); overflow:hidden; font-size:12px; color:#fff; }
+  #progstrip .pfill { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--acc); opacity:.55; transition:width .12s linear; }
+  #progstrip.indet .pfill { width:30%; animation:progslide 1.1s ease-in-out infinite alternate; }
+  @keyframes progslide { from { left:0; } to { left:70%; } }
+  #progstrip .plab, #progstrip .ppct { position:absolute; top:0; line-height:24px; padding:0 12px; white-space:nowrap; text-shadow:0 1px 2px #000; }
+  #progstrip .plab { left:0; max-width:70%; overflow:hidden; text-overflow:ellipsis; }
+  #progstrip .ppct { right:0; font-variant-numeric:tabular-nums; }
+  .tgl { display:inline-flex; align-items:center; justify-content:center; min-width:38px; height:32px; padding:0 8px; border:2px solid #333; border-radius:7px; background:#000; color:#fff; cursor:pointer; user-select:none; font-size:16px; font-weight:700; line-height:1; }
+  .tgl b { font-size:14px; letter-spacing:.5px; }
   .tgl input { display:none; }
-  .tgl:has(input:checked), .tgl.on { color:#111; background:var(--acc); border-color:var(--acc); }
+  .tgl .emo { filter:grayscale(1) brightness(0) invert(1); }
+  .tgl:has(input:checked) .emo, .tgl.on .emo { filter:grayscale(1) brightness(0); }
+  .tgl:has(input:checked), .tgl.on { background:var(--acc); color:#000; border-color:var(--acc); box-shadow:none; }
+  .tgl:not(.on):not(:has(input:checked)) { text-decoration:none; }
   .tgl:hover { filter:brightness(1.15); }
   #medchips button { padding:2px 8px; font-size:12px; } #medchips select { font-size:12px; max-width:48%; }
   #kbview { display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px; color:var(--dim); }
@@ -170,13 +181,14 @@
   <select id="tv"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select>
   <label class="tgl" title="BASIC ROM on/off. Applies immediately (reboots). Turn off for SpartaDOS X."><input id="basic" type="checkbox" checked><b>BAS</b></label>
   <label class="tgl" title="XEP80 80-column interface on joystick port 1. Applies on Boot (load an XEP80 handler such as XEP80.SYS)."><input id="xep80" type="checkbox"><b>80</b></label>
-  <label class="tgl" title="Fast disk access (SIO patch). Disks load almost instantly. Turn OFF for copy-protected disks or programs with their own serial code. Applies immediately (reboots)."><input id="fastsio" type="checkbox" checked><b>⚡</b></label>
-  <button id="boot">Boot</button>
-  <button id="mapbtn">Keyboard mapping…</button>
+  <label class="tgl" title="Fast disk access (SIO patch). Disks load almost instantly. Turn OFF for copy-protected disks or programs with their own serial code. Applies immediately (reboots)."><input id="fastsio" type="checkbox" checked><b class="emo">⚡</b></label>
+  <button id="boot" class="tgl" title="Power on / Boot"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 2v10"/><path d="M6.3 5.8a9 9 0 1 0 11.4 0"/></svg></button>
+  <button id="mapbtn" class="tgl" title="Keyboard mapping…"><svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="20" height="14" rx="2.5"/><path d="M4.5 5h1.5M8.5 5h1.5M12 5h1.5M15.5 5h2M4.5 8.5h2M8.5 8.5h1.5M12 8.5h1.5M15.5 8.5h2M6 12h10" stroke-linecap="round"/></svg></button>
   <button id="sndbtn" class="tgl" title="Sound on/off">🔊</button><button id="fnbtn" class="tgl" title="Virtual FujiNet (SIO device $70) on/off">FN</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
   <div id="infobar"><span id="status" class="dim">choose ROMs, then Boot</span>
   <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span></span></div>
 </header>
+<div id="progstrip" style="display:none"><div class="pfill"></div><span class="plab"></span><span class="ppct"></span></div>
 <main>
   <div class="side">
     <button id="sbclose">✕ Close panel</button>    <div class="box">
@@ -219,7 +231,7 @@
       <h3>Media library</h3>
       <div class="row"><button id="medpick" style="display:none" title="Pick folder: choose a folder; it is remembered across page reloads">📁</button><button id="medsel" style="display:none" title="Folders: choose which sub-folders to include in the scan">🗂</button><button id="medrefresh" title="Rescan: scan the folder again and rebuild the saved catalog">🔄</button><button id="medexp" title="Export DB: save the catalog as a .sqlite file">📤</button><label class="btn" title="Import DB: load a catalog .sqlite file">📥<input id="medimp" type="file" accept=".sqlite,.db,.sql" style="display:none"></label><button id="medstop" style="display:none" title="Stop the scan">⛔</button><label class="btn" title="Scan once: one-off scan (not remembered)">🔍<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="Titles XML: MAME software list XML (a800.xml, a5200.xml…) to show real game titles">🏷<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
       <div id="medtitles" class="dim" style="font-size:11px"></div>
-      <div class="row" id="medchips"><input id="medfilter" title="Ctrl+L: show short (8.3) and long names" placeholder="search disks, carts, tapes, programs" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><select id="medkind" title="Category"><option value="all">📚 All types</option><option value="disk">💾 Disk</option><option value="cart">🎮 Cart</option><option value="tape">📼 Tape</option><option value="exe">⚙️ Program</option></select></div>
+      <div class="row" id="medchips"><input id="medfilter" title="Wildcards: * any text, ? one character. Several words must all match. Ctrl+L: show short (8.3) and long names" placeholder="search (wildcards * ?)" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><select id="medkind" title="Category"><option value="all">📚 All types</option><option value="disk">💾 Disk</option><option value="cart">🎮 Cart</option><option value="tape">📼 Tape</option><option value="exe">⚙️ Program</option></select></div>
       <div class="row"><select id="medtypesel" title="Media type (first part of the long name)"></select><select id="medvendsel" title="Vendor (third part of the long name)"></select></div>
       <div class="row"><select id="medextsel" title="File extension"></select> <button id="medview" title="Switch view">☰</button><button id="medexpand" title="Open every folder">⊞</button><button id="medcollapse" title="Close every folder">⊟</button></div>
       <div id="medlist" style="max-height:200px;overflow:auto"></div>
@@ -265,7 +277,7 @@
     <div class="box">
       <h3>Virtual FujiNet node</h3>
       <div class="row"><label class="btn">Point at folder…<input id="fnfolder" type="file" webkitdirectory multiple></label><span id="fncount" class="dim">no host folder</span></div>
-      <div class="row"><input id="fnfilter" placeholder="filter" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
+      <div class="row"><input id="fnfilter" title="Wildcards: * any text, ? one character" placeholder="filter (wildcards * ?)" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
       <div id="fnlist" style="max-height:170px;overflow:auto"></div>
       <div class="row"><button id="fnboot" title="Mounts the FujiNet CONFIG disk on D1 and cold-starts">Boot FujiNet CONFIG</button><button id="fnreset" title="Clear saved FujiNet hosts and drive slots">Reset config</button></div>
       <div class="dim">Click an image to mount it. Mounts to D1; Shift-click for D2. CONFIG sees this folder as host "SD". Network devices (N:) are not emulated yet.</div>
@@ -296,6 +308,7 @@
 </main>
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
+<script src="js/progress.js"></script>
 <script src="js/emu.js?v=20261023d"></script>
 <script src="js/titles-data.js?v=20261023d"></script>
 <script src="js/zip.js?v=20261023d"></script>

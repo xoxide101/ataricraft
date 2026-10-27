@@ -82,19 +82,25 @@
 
   // MAME-style .zip files are expanded into virtual files (extracted only when used).
   async function expandZips(files) {
+    files = Array.from(files);
     const out = [];
     let zips = 0;
+    const nz = files.filter((f) => /\.(zip|7z)$/i.test(f.name)).length;
+    const prog = nz ? AC.Progress.begin('Reading archives', nz) : null;
     for (const f of files) {
       if (!/\.(zip|7z)$/i.test(f.name)) { out.push(f); continue; }
+      if (prog) { prog.text('Reading archive ' + f.name); prog.set(zips); }
       try {
         const base = f.webkitRelativePath || f.name;
         const Z = /\.7z$/i.test(f.name) ? AC.SevenZip : AC.Zip;
         for (const ent of await Z.list(f)) {
           out.push({ name: ent.name.split('/').pop(), webkitRelativePath: base + '/' + ent.name, size: ent.size, arrayBuffer: () => Z.extract(f, ent) });
         }
-        zips++;
       } catch (e) { out.push(f); }
+      zips++;
+      if (prog && zips % 5 === 0) await AC.Progress.yieldUI();
     }
+    if (prog) prog.end();
     if (zips) log(`read ${zips} archive${zips > 1 ? 's' : ''}`);
     return out;
   }
@@ -204,7 +210,7 @@
     SND.next += buf.duration;
   }
   const hookAudio = () => { if (S.emu) S.emu.onAudio = pushAudio; };
-  const syncSndUi = () => { $('sndbtn').textContent = SND.on ? '🔊' : '🔇'; $('sndbtn').classList.toggle('on', SND.on); $('vol').value = SND.vol; };
+  const syncSndUi = () => { $('sndbtn').innerHTML = '<span class="emo">' + (SND.on ? '🔊' : '🔇') + '</span>'; $('sndbtn').classList.toggle('on', SND.on); $('vol').value = SND.vol; };
 
   const handle = {
     down: (id, f) => S.emu && S.emu.down(id, f),
@@ -245,6 +251,8 @@
     hookAudio();
     sndCtx();
     S.running = true;
+    S.off = false;
+    syncPower();
     draw();
     renderHost();
     log('running ' + AC.MODELS[model].label);
@@ -580,7 +588,7 @@
   async function loadAny(file, alt, hint, noBoot) {
     if (!S.emu) { log('boot first (press Boot, then load ' + file.name + ')'); return; }
     log('loading ' + file.name + '…');
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const bytes = await AC.Progress.read(file, 'Loading ' + file.name);
     const t = S.emu.detect(file.name, bytes);
     const k = typeKind(t) || hint || extKind(file.name);
     diag(`load "${file.name}" ${bytes.length} bytes, detect=${t}, kind=${k}, first bytes=${[...bytes.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
@@ -849,8 +857,14 @@
     s.value = MED[key] in counts ? MED[key] : 'all'; MED[key] = s.value;
     s.onchange = () => { MED[key] = s.value; renderMed(); };
   }
+  // Space-separated terms must all match; * = any run of characters, ? = one character.
+  function textMatcher(q) {
+    const res = q.split(/\s+/).filter(Boolean).map((t) => new RegExp(t.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.'), 'i'));
+    return (s) => res.every((r) => r.test(s));
+  }
   function renderMed() {
     const q = $('medfilter').value.toLowerCase();
+    const qm = textMatcher(q);
     const box = $('medlist');
     box.innerHTML = '';
     $('medview').textContent = MED.tree ? '☰' : '🗂';
@@ -887,7 +901,7 @@
         const l = parseLongName(f.name);
         if (!l || (MED.ltype !== 'all' && l.type !== MED.ltype) || (MED.lvendor !== 'all' && l.vendor !== MED.lvendor)) return false;
       }
-      return (f.name + ' ' + (f.title || '')).toLowerCase().includes(q);
+      return qm(f.name + ' ' + (f.title || ''));
     });
     if (q) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
     if (MED.tree) {
@@ -1031,7 +1045,7 @@
           Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
           out.push(f);
         } catch (err) { scanSt.errs++; diag(`scan skipped file "${path + name}": ${err.name} ${err.message}`, 'warn'); continue; }
-        if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; await new Promise((r) => setTimeout(r)); }
+        if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; if (scanSt.prog) scanSt.prog.note(`${out.length} found, ${scanSt.seen} checked`); await new Promise((r) => setTimeout(r)); }
       }
     } catch (err) { scanSt.errs++; diag(`scan skipped folder "${path}": ${err.name} ${err.message}`, 'warn'); }
   }  async function scanHandle(h, interactive) {
@@ -1042,7 +1056,9 @@
     scanSt.stop = false; scanSt.seen = 0; scanSt.errs = 0;
     $('medstop').style.display = '';
     const out = [];
-    try { await walkDir(h, h.name + '/', out, medRules); } finally { $('medstop').style.display = 'none'; }
+    const sp = AC.Progress.begin('Scanning "' + h.name + '"…');
+    scanSt.prog = sp;
+    try { await walkDir(h, h.name + '/', out, medRules); } finally { sp.end(); scanSt.prog = null; $('medstop').style.display = 'none'; }
     if (scanSt.stop) log(`scan stopped: ${out.length} files kept`);
     else if (out.length >= SCAN_CAP) log(`scan capped at ${SCAN_CAP} files: pick a smaller folder for the rest`);
     diag(`scan "${h.name}": ${scanSt.seen} files checked, ${out.length} media candidates, ${scanSt.errs} unreadable skipped`);
@@ -1207,7 +1223,7 @@
     const f = e.target.files[0]; e.target.value = '';
     if (!f) return;
     try {
-      const bytes = new Uint8Array(await f.arrayBuffer());
+      const bytes = await AC.Progress.read(f, 'Importing catalog ' + f.name);
       await AC.Catalog.open(bytes);
       if (!(await useCatalog())) { log('that catalog is empty'); return; }
       await idbSet('catalogDb', bytes);
@@ -1425,7 +1441,8 @@
     const q = $('fnfilter').value.toLowerCase();
     const box = $('fnlist');
     box.innerHTML = '';
-    FN.files.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 300).forEach((f) => {
+    const fqm = textMatcher(q);
+    FN.files.filter((f) => fqm(f.name)).slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
       d.textContent = f.name;
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b';
@@ -1673,7 +1690,7 @@
   };
   async function insertCart(slot, file, bytes) {
     if (!S.emu) { log('boot first'); return; }
-    bytes = bytes || new Uint8Array(await file.arrayBuffer());
+    bytes = bytes || await AC.Progress.read(file, 'Loading ' + file.name);
     const r = S.emu.insertCart(slot, file.name, bytes);
     diag(`insertCart slot ${slot} "${file.name}" -> ${JSON.stringify(r)}`);
     if (!r.ok) { log('cartridge: ' + r.error); return; }
@@ -1807,7 +1824,21 @@
   $('osrom').onchange = () => { updateCharset(); saveRomSel(); };
   $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); };
   $('romfolder').onchange = (e) => addRoms(e.target.files);
-  $('boot').onclick = boot;
+  function syncPower() { $('boot').classList.toggle('on', !!S.emu && !S.off); $('boot').title = S.emu && !S.off ? 'Power off (Shift+click: reboot)' : 'Power on / Boot'; }
+  function powerOff() {
+    S.running = false; S.off = true;
+    sctx.fillStyle = '#000'; sctx.fillRect(0, 0, src.width, src.height);
+    present();
+    if (SND.ctx && SND.ctx.state === 'running') SND.ctx.suspend().catch(() => {});
+    $('pause').textContent = 'Run';
+    log('power off');
+    syncPower();
+  }
+  $('boot').onclick = async (e) => {
+    if (S.emu && !S.off && !e.shiftKey) return powerOff();
+    S.off = false;
+    await boot();
+  };
   $('reset').onclick = () => S.emu && S.emu.warmStart();
   function coldOrExe() { if (S.lastExe) S.emu.bootFile(S.lastExe.name, S.lastExe.bytes); else S.emu.coldStart(); }
   $('cold').onclick = () => S.emu && coldOrExe();

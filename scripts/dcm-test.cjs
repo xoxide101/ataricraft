@@ -8,7 +8,7 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
   await p.waitForTimeout(800);
   for (const basic of [true, false]) {
-    if (!basic) await p.uncheck('#basic');
+    if (!basic) await p.evaluate(() => document.getElementById('basic').click());
     await p.click('#boot');
     await p.waitForTimeout(2000);
     await p.setInputFiles('#f1', R + 'out/fmt/XFTOOLS.DCM');

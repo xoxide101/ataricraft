@@ -44,7 +44,7 @@
     if (!cached || cached.file !== file) {
       if (cached) { try { sz.FS.unlink(cached.path); } catch (e) { /* ignore */ } cached = null; }
       const path = '/a' + (++seq) + '.7z';
-      const data = new Uint8Array(await file.arrayBuffer());
+      const data = AC.Progress ? await AC.Progress.read(file, 'Reading archive ' + (file.name || '')) : new Uint8Array(await file.arrayBuffer());
       const st = sz.FS.open(path, 'w+');
       sz.FS.write(st, data, 0, data.length);
       sz.FS.close(st);
@@ -75,19 +75,25 @@
   }
 
   function extract(file, ent) {
-    return exclusive(() => withMount(file, (sz, path) => {
-      const od = '/o' + (++seq);
-      sz.FS.mkdir(od);
+    return exclusive(async () => {
+      const p = AC.Progress ? AC.Progress.begin('Extracting ' + ent.name.split('/').pop() + (ent.size ? ' (' + AC.Progress.fmtMB(ent.size) + ')' : '')) : null;
       try {
-        const lines = run(sz, ['x', path, '-o' + od, '-y', '-spd', ent.name]);
-        let data;
-        try { data = sz.FS.readFile(od + '/' + ent.name); }
-        catch (e) { throw new Error('7z extract failed: ' + lines.slice(-3).join(' | ')); }
-        const copy = new Uint8Array(data);
-        try { sz.FS.unlink(od + '/' + ent.name); } catch (e) { /* ignore */ }
-        return copy.buffer;
-      } finally { cleanup(sz, od); }
-    }));
+        if (p) await AC.Progress.yieldUI();
+        return await withMount(file, (sz, path) => {
+          const od = '/o' + (++seq);
+          sz.FS.mkdir(od);
+          try {
+            const lines = run(sz, ['x', path, '-o' + od, '-y', '-spd', ent.name]);
+            let data;
+            try { data = sz.FS.readFile(od + '/' + ent.name); }
+            catch (e) { throw new Error('7z extract failed: ' + lines.slice(-3).join(' | ')); }
+            const copy = new Uint8Array(data);
+            try { sz.FS.unlink(od + '/' + ent.name); } catch (e) { /* ignore */ }
+            return copy.buffer;
+          } finally { cleanup(sz, od); }
+        });
+      } finally { if (p) p.end(); }
+    });
   }
 
   function cleanup(sz, dir) {

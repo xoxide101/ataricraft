@@ -31,10 +31,17 @@
     if (u32(lh, 0) !== 0x04034b50) throw new Error('bad zip entry');
     const start = ent.offset + 30 + u16(lh, 26) + u16(lh, 28);
     const raw = file.slice(start, start + ent.csize);
-    if (ent.method === 0) return new Uint8Array(await raw.arrayBuffer());
+    const P = window.AC && AC.Progress;
+    const label = 'Extracting ' + (ent.name || 'file').split('/').pop();
+    if (ent.method === 0) return P ? P.read(raw, label) : new Uint8Array(await raw.arrayBuffer());
     if (ent.method !== 8) throw new Error('unsupported zip method ' + ent.method);
-    const stream = raw.stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+    const prog = P && ent.csize >= (2 << 20) ? P.begin(label, ent.csize, true) : null;
+    try {
+      let n = 0;
+      const counter = new TransformStream({ transform(chunk, c) { n += chunk.length; if (prog) prog.set(n); c.enqueue(chunk); } });
+      const stream = raw.stream().pipeThrough(counter).pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    } finally { if (prog) prog.end(); }
   }
 
   window.AC = window.AC || {};
