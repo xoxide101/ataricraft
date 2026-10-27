@@ -2442,6 +2442,44 @@
   };
   $('fnfilter').oninput = renderFn;
 
+  // ---- netplay lobby (public, CORS-open list of hosted Altirra games) ----
+  const LOBBY = 'https://lobby.atari.org.pl/v1/public/sessions?include_awaiting=1';
+  async function lobbyRefresh() {
+    const msg = $('lobmsg'), box = $('loblist');
+    msg.textContent = 'loading…';
+    try {
+      const r = await fetch(LOBBY, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const list = await r.json();
+      box.textContent = '';
+      for (const s of list) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0';
+        const t = document.createElement('span');
+        t.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        t.textContent = `${s.cartName} · ${s.hostHandle} · ${s.hardwareMode} ${s.videoStandard} ${s.memoryMode} · ${s.playerCount}/${s.maxPlayers}`;
+        t.title = t.textContent;
+        row.append(t);
+        if (s.requiresCode) row.append(Object.assign(document.createElement('span'), { textContent: '🔒 private' }));
+        else if (s.state === 'playing') row.append(Object.assign(document.createElement('span'), { textContent: 'playing', className: 'dim' }));
+        else if (/^https:\/\/lobby\.atari\.org\.pl\//.test(s.joinUrl)) {
+          const a = document.createElement('a');
+          a.href = s.joinUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Join';
+          row.append(a);
+        }
+        box.append(row);
+      }
+      if (!list.length) box.textContent = 'No one is hosting a game right now.';
+      msg.textContent = list.length + ' session' + (list.length === 1 ? '' : 's');
+    } catch (e) {
+      msg.textContent = 'could not reach the lobby';
+    }
+  }
+  $('lobrefresh').onclick = lobbyRefresh;
+  setInterval(() => {
+    if ($('lobauto').checked && !document.hidden && document.querySelector('#sidetabs button.on')?.dataset.t === 'net') lobbyRefresh();
+  }, 15000);
+  document.querySelector('#sidetabs button[data-t="net"]').addEventListener('click', lobbyRefresh);
   // ---- cartridges and eject ----
   S.pendingCart = null;
   const crc32 = (b) => {

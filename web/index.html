@@ -364,6 +364,9 @@
       <div class="dim">In BASIC: <code>LIST "H:PROG.LST"</code> saves your program as text here; <code>ENTER "H:PROG.LST"</code> loads it back with the same line numbers. Copy puts it on your clipboard.</div>
     </div>
     <div class="box" data-tab="net">
+      <h3>Netplay lobby</h3>
+      <div class="row"><button id="lobrefresh" title="Fetch the live list of hosted Altirra netplay games (lobby.atari.org.pl)">Refresh</button><label class="dim"><input type="checkbox" id="lobauto" checked> auto (15 s)</label><span id="lobmsg" class="dim"></span></div>
+      <div id="loblist" style="max-height:170px;overflow:auto"></div>
       <h3>Virtual FujiNet node</h3>
       <div class="row"><button id="fnpick" style="display:none" title="Pick folder: choose the SD folder; it is remembered across page reloads">📁</button><button id="fnrescan" style="display:none" title="Rescan: scan the remembered folder again">🔄</button><label class="btn" title="Scan once: one-off folder (not remembered)">🔍<input id="fnfolder" type="file" webkitdirectory multiple></label><button id="fnview" title="Switch view">☰</button><button id="fnexpand" title="Open every folder">⊞</button><button id="fncollapse" title="Close every folder">⊟</button><span id="fncount" class="dim">no host folder</span></div>
       <div class="row"><input id="fnfilter" title="Wildcards: * any text, ? one character" placeholder="filter (wildcards * ?)" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
@@ -424,9 +427,9 @@
 <script src="js/memtest.js?v=20261023d"></script>
 <script src="js/diskdb.js?v=20261023d"></script>
 <script src="js/dosfs.js?v=20261023f"></script>
-<script src="js/keyboard.js?v=20261027zza"></script>
+<script src="js/keyboard.js?v=20261027zzza"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzzzzz"></script>
+<script src="js/app.js?v=20261027zzzzzzzzzzzzzzzzzzzz"></script>
 </body>
 </html>
