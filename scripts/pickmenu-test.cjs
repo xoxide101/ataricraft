@@ -12,6 +12,7 @@ const R = 'C:/Users/raver/ataricraft/';
   await p.goto('file:///' + R + 'web/index.html');
   await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
   await p.click('#boot'); await p.waitForTimeout(2500);
+  await p.click('#sidetabs button[data-t=fm]');
   await p.setInputFiles('#medfolder', R + 'out/pick'); await p.waitForTimeout(800);
   await p.fill('#medfilter', 'Game - Test'); await p.waitForTimeout(500);
   const row = p.locator('#medlist div', { hasText: 'Game - Test' }).first();
