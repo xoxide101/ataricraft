@@ -621,6 +621,11 @@
     tape: ['cas'],
     exe: ['xex', 'com', 'exe', 'axe', 'obx', 'bas', 'lst', 'obj'],
   };
+  // The file explorer dialogs only offer what each slot can use (plus archives, which are opened for you).
+  const acceptOf = (k) => MEDIA_EXT[k].concat(['zip', '7z']).map((e) => '.' + e).join(',');
+  for (let n = 1; n <= 8; n++) if ($('f' + n)) $('f' + n).accept = acceptOf('disk');
+  for (const n of [1, 2]) if ($('c' + n)) $('c' + n).accept = acceptOf('cart');
+  if ($('tape')) $('tape').accept = acceptOf('tape');
   // File types by extension, from Atadim's config; for labelling files on a mounted disk.
   const FILE_TYPES = {
     run: 'exe com xex axe', obj: 'run ini obj bin dat raw obx hyp', font: 'fnt chr sxs', sys: 'sys bat',
@@ -952,16 +957,22 @@
     localStorage.setItem('ac.medstate', JSON.stringify(MEDS));
   };
   const histGet = () => { try { return JSON.parse(localStorage.getItem('ac.medhist') || '[]'); } catch (e) { return []; } };
+  const freqGet = () => { try { return JSON.parse(localStorage.getItem('ac.medfreq') || '{}'); } catch (e) { return {}; } };
+  const isHistView = () => MED.view === 'hist' || MED.view === 'freq';
   function histAdd(f) {
     if (!f || !f.name) return;
     const h = histGet().filter((x) => x.name !== f.name);
     h.unshift({ name: f.name, kind: f.kind, title: f.title || '' });
     localStorage.setItem('ac.medhist', JSON.stringify(h.slice(0, 100)));
-    renderHist(); if (MED.view === 'hist') renderMed();
+    const fq = freqGet();
+    fq[f.name] = { n: ((fq[f.name] && fq[f.name].n) || 0) + 1, kind: f.kind, title: f.title || '' };
+    const keep = Object.entries(fq).sort((a, b) => b[1].n - a[1].n).slice(0, 300);
+    localStorage.setItem('ac.medfreq', JSON.stringify(Object.fromEntries(keep)));
+    renderHist(); if (isHistView()) renderMed();
   }
-  // All / History switch above the list: History is the same list (filters, tree/flat) limited to what you loaded, newest first.
+  // All / History / Frequent switch above the list: History and Frequent are the same list (filters, tree/flat) limited to what you loaded.
   function renderHist() {
-    const box = $('medhist'), n = histGet().length;
+    const box = $('medhist'), n = histGet().length, nf = Object.keys(freqGet()).length;
     box.innerHTML = '';
     const mk = (v, label) => {
       const b = document.createElement('button');
@@ -969,18 +980,24 @@
       b.onclick = () => { MED.view = v; renderHist(); renderMed(); };
       return b;
     };
-    box.append(mk('all', 'ALL'), mk('hist', `HISTORY (${n})`));
-    if (MED.view === 'hist' && n) {
-      const clr = document.createElement('button'); clr.textContent = 'Clear history';
-      clr.onclick = () => { localStorage.removeItem('ac.medhist'); renderHist(); renderMed(); };
+    box.append(mk('all', 'ALL'), mk('hist', `HISTORY (${n})`), mk('freq', `FREQUENT (${nf})`));
+    if (isHistView() && (n || nf)) {
+      const clr = document.createElement('button'); clr.textContent = MED.view === 'freq' ? 'Clear counts' : 'Clear history';
+      clr.onclick = () => { localStorage.removeItem(MED.view === 'freq' ? 'ac.medfreq' : 'ac.medhist'); renderHist(); renderMed(); };
       box.append(clr);
     }
   }
-  const histFiles = () => histGet().map((x) => MED.files.find((m) => m.name === x.name) || { name: x.name, kind: x.kind, title: x.title, file: null });  function renderMed() { renderMed0(); medSave(); }
+  const histFiles = () => {
+    let h = histGet();
+    const fq = freqGet();
+    if (MED.view === 'freq') h = Object.entries(fq).sort((a, b) => b[1].n - a[1].n).map(([name, v]) => ({ name, kind: v.kind, title: v.title }));
+    return h.map((x) => { const m = MED.files.find((f) => f.name === x.name) || { name: x.name, kind: x.kind, title: x.title, file: null }; return MED.view === 'freq' && fq[x.name] ? Object.assign({}, m, { title: `×${fq[x.name].n}${(m.title || x.title) ? ' ' + (m.title || x.title) : ''}` }) : m; });
+  };
+  function renderMed() { renderMed0(); medSave(); }
   function renderMed0() {
     const q = $('medfilter').value.toLowerCase();
-    if (!MED.files.length && MED.view !== 'hist') { $('medlist').innerHTML = ''; $('medcount').textContent = 'no folder'; return; }
-    const base = MED.view === 'hist' ? histFiles() : MED.files;
+    if (!MED.files.length && !isHistView()) { $('medlist').innerHTML = ''; $('medcount').textContent = 'no folder'; return; }
+    const base = isHistView() ? histFiles() : MED.files;
     const qm = textMatcher(q);
     const box = $('medlist');
     box.innerHTML = '';
@@ -1020,7 +1037,7 @@
       }
       return qm(f.name + ' ' + (f.title || ''));
     });
-    if (q && MED.view !== 'hist') hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
+    if (q && !isHistView()) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
     if (MED.tree) {
       drawTree(box, hits, !!q && hits.length <= 600);
       $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${base.length}` : 'no folder';
@@ -1368,7 +1385,7 @@
   $('medcollapse').onclick = () => { MED.open.clear(); renderMed(); };
   {
     if (MEDS.q) $('medfilter').value = MEDS.q;
-    if (MEDS.view === 'hist') MED.view = 'hist';
+    if (MEDS.view === 'hist' || MEDS.view === 'freq') MED.view = MEDS.view;
     for (const k of ['kind', 'ext', 'ltype', 'lvendor']) if (MEDS[k]) MED[k] = MEDS[k];
     (MEDS.open || []).forEach((p) => MED.open.add(p));
     const box = $('medbox'), list = $('medlist');
@@ -2036,7 +2053,7 @@
   function drvItems(n, x, y) {
     const have = S.disks[n];
     const items = [
-      { label: 'Load disk image…', run: () => $('f' + n).click() },
+      { label: 'Load from file explorer…', run: () => $('f' + n).click() },
       { label: have ? 'Eject' : 'Eject (nothing mounted)', run: () => $('de' + n).click() },
       { label: 'Insert blank disk…', run: () => blankMenu(n, x, y) },
     ];
@@ -2061,7 +2078,7 @@
     return items;
   }
   const cartItems = (n) => [
-    { label: 'Load cartridge…', run: () => $('c' + n).click() },
+    { label: 'Load from file explorer…', run: () => $('c' + n).click() },
     { label: 'Eject', run: () => $('ce' + n).click() },
   ];
   for (const [host, n] of [['drvviz', 1], ['drvviz', 2]]) {
@@ -2089,7 +2106,7 @@
     bindPic(d, () => $('c' + n).click(), (x, y) => openPick(x, y,     `Cart ${n}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, cartItems(n)), (files) => insertCart(n, files[0]));
   }
   const tapeItems = () => [
-    { label: 'Load tape…', run: () => $('tape').click() },
+    { label: 'Load from file explorer…', run: () => $('tape').click() },
     { label: 'Eject', run: () => $('te').click() },
     { label: 'Boot tape (Start held)', run: () => $('tboot').click() },
     { label: 'Rewind', run: () => $('trew').click() },
@@ -2849,6 +2866,53 @@
   $('cold').onclick = () => S.emu && coldOrExe();
   $('pause').onclick = () => { S.running = !S.running; $('pause').textContent = S.running ? 'Pause' : 'Run'; };
   $('speed').oninput = (e) => { S.speed = Math.pow(2, +e.target.value); const s = S.speed.toFixed(S.speed < 1 ? 2 : 1); $('speedv').textContent = s + '×'; $('spd').textContent = s; };
+
+  // ---- remembered settings and last-used media (survive reloads) ----
+  const CTL = ['model', 'ram', 'tv', 'xep80', 'kblayout', 'speed', 'blankfmt', 'blanksdfs', 'blankmydos'];
+  const ctlRead = () => { try { return JSON.parse(localStorage.getItem('ac.ctl') || '{}'); } catch (e) { return {}; } };
+  const ctlVal = (el) => (el.type === 'checkbox' ? el.checked : el.value);
+  for (const id of CTL) {
+    const el = $(id);
+    if (!el) continue;
+    const save = () => { const c = ctlRead(); c[id] = ctlVal(el); localStorage.setItem('ac.ctl', JSON.stringify(c)); };
+    el.addEventListener('change', save);
+    el.addEventListener('input', save);
+  }
+  {
+    const c = ctlRead();
+    const put = (id, ev) => {
+      const el = $(id);
+      if (!el || !(id in c)) return;
+      if (el.type === 'checkbox') el.checked = !!c[id];
+      else if (el.type === 'range' || [...el.options].some((o) => o.value === String(c[id]))) el.value = c[id];
+      else return;
+      if (ev) el.dispatchEvent(new Event(ev));
+    };
+    // The model rebuilds the RAM list and keyboard layout, so it goes first.
+    put('model', 'change'); put('ram'); put('kblayout', 'change'); put('tv'); put('xep80');
+    put('speed', 'input'); put('blankfmt'); put('blanksdfs'); put('blankmydos');
+  }
+
+  // Last disks and cartridges are kept in IndexedDB and re-inserted at startup (read when you press Boot).
+  const lastMediaSig = () => JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => S.disks[n] && [S.disks[n].name, S.disks[n].bytes.length]).concat([1, 2].map((n) => S.carts[n] && [S.carts[n].name, S.carts[n].bytes.length, S.carts[n].type])));
+  let lastSig = null;
+  (async () => {
+    try {
+      const m = await idbGet('lastmedia');
+      if (m && !S.emu && !Object.keys(S.disks).length && !Object.keys(S.carts).length) {
+        for (const [n, d] of Object.entries(m.disks || {})) { S.disks[n] = { name: d.name, bytes: d.bytes }; S.dirty[n] = false; $('d' + n).textContent = d.name; }
+        for (const [s, c] of Object.entries(m.carts || {})) { S.carts[s] = { name: c.name, bytes: c.bytes, type: c.type }; $('cn' + s).textContent = (s === '1' ? '1 (main, right): ' : '2 (left): ') + c.name; }
+        if (Object.keys(m.disks || {}).length + Object.keys(m.carts || {}).length) log('restored last disks and cartridges');
+      }
+    } catch (e) { /* no saved media */ }
+    lastSig = lastMediaSig();
+    setInterval(() => {
+      const sig = lastMediaSig();
+      if (sig === lastSig) return;
+      lastSig = sig;
+      idbSet('lastmedia', { disks: Object.fromEntries(Object.entries(S.disks).map(([n, d]) => [n, { name: d.name, bytes: d.bytes }])), carts: Object.fromEntries(Object.entries(S.carts).map(([n, c]) => [n, { name: c.name, bytes: c.bytes, type: c.type }])) });
+    }, 1000);
+  })();
   $('profile').value = S.profile;
   $('profile').onchange = (e) => { S.profile = e.target.value; localStorage.setItem('ac.profile', S.profile); renderMap(); };
   $('mapreset').onclick = () => { S.overrides = {}; localStorage.removeItem('ac.keymap'); renderMap(); };
