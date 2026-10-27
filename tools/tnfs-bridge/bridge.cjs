@@ -103,18 +103,18 @@ class Conn {
     this.id = r[0] | (r[1] << 8);
     this.seq = 0;
   }
-  // Some hosts answer TCP but drop UDP, so fall back to TCP and remember it.
+  // Some hosts answer TCP but drop UDP. A "tcp:" or "udp:" prefix forces one; otherwise try UDP, then TCP.
   async mount() {
-    if (!tcpHosts.has(this.host)) {
+    if (this.force !== 'tcp' && !(this.force !== 'udp' && tcpHosts.has(this.host))) {
       this.openUdp();
       try { return await this.mountOnce(); } catch (e) {
         this.sock.close();
-        if (!/timeout/.test(e.message)) throw e;
+        if (this.force === 'udp' || !/timeout/.test(e.message)) throw e;
       }
     }
     await this.openTcp();
     await this.mountOnce();
-    tcpHosts.add(this.host);
+    if (!this.force) tcpHosts.add(this.host);
   }
   close() {
     try { this.req(0x01, Buffer.alloc(0)).catch(() => {}); } catch (e) {}
@@ -124,12 +124,15 @@ class Conn {
 
 const conns = new Map();
 async function conn(hostSpec) {
-  const key = hostSpec.toLowerCase();
+  const m = /^(tcp|udp):(?:\/\/)?/i.exec(hostSpec.trim());
+  const force = m ? m[1].toLowerCase() : null;
+  const key = (force ? force + ':' : '') + hostSpec.trim().slice(m ? m[0].length : 0).toLowerCase();
   let c = conns.get(key);
   if (c && c.dead) { conns.delete(key); c = null; }
   if (!c) {
-    const [h, p] = key.split(':');
+    const [h, p] = key.replace(/^(tcp|udp):/, '').split(':');
     c = new Conn(h, +p || 16384);
+    c.force = force;
     c.ready = c.mount();
     conns.set(key, c);
     c.ready.catch(() => conns.delete(key));
@@ -247,7 +250,7 @@ const server = http.createServer(async (rq, rs) => {
     return;
   }
   const host = u.searchParams.get('host') || '', path = u.searchParams.get('path') || '/';
-  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) { rs.writeHead(400); rs.end('bad host'); return; }
+  if (!/^((tcp|udp):(\/\/)?)?[a-z0-9.-]+(:\d+)?$/i.test(host)) { rs.writeHead(400); rs.end('bad host'); return; }
   try {
     if (u.pathname === '/list') { rs.setHeader('Content-Type', 'application/json'); rs.end(JSON.stringify(await list(host, path))); }
     else if (u.pathname === '/file') { rs.setHeader('Content-Type', 'application/octet-stream'); rs.end(await file(host, path)); }

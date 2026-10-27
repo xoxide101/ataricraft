@@ -7,4 +7,7 @@ Browsers cannot send UDP, so this small dependency-free Node program (Node 18+) 
 
 It listens on 127.0.0.1:8765 only. In the page: Online & networking > TNFS relay > Test.
 Then, with FujiNet on, press RETURN on a host in CONFIG to browse it and pick a disk image.
+
+Transport: the relay tries UDP first and falls back to TCP for hosts that drop UDP. To force one, put a prefix on the host name,
+e.g. `tcp://tnfs.fujinet.online` or `udp://fujinet.diller.org` (a `:port` suffix still works).
 Works on both cores.
