@@ -1345,7 +1345,7 @@
       ctl: [['fire', 'Fire', 'big', 'fire'], ['s1', 'Side 1', 'small', 'select'], ['s2', 'Side 2', 'small', 'option']] },
     cxstick: { name: 'Atari CXSTICK (newest)', info: ['One red fire button and an 8-way stick', '4 buttons around the ring under the top: mappable, no fixed use', '2 side buttons: default Select and Option (mappable)'],
       ctl: [['fire', 'Fire', 'big', 'fire'], ['r1', 'Ring 1', 'small', 'none'], ['r2', 'Ring 2', 'small', 'none'], ['r3', 'Ring 3', 'small', 'none'], ['r4', 'Ring 4', 'small', 'none'], ['s1', 'Side 1', 'small', 'select'], ['s2', 'Side 2', 'small', 'option']] },
-    atari2: { name: 'Atari 2-button joystick', info: ['8-way stick: diagonals are two directions at once', 'Left button = standard trigger (Fire)', 'Right button = second button (the core has one trigger line, so it also fires)'],
+    atari2: { name: 'Atari CX78+ (2-button)', info: ['8-way stick: diagonals are two directions at once', 'Left button = standard trigger (Fire)', 'Right button = second button (the core has one trigger line, so it also fires)'],
       ctl: [['fire', 'Left (Fire)', 'big', 'fire'], ['fire2', 'Right (Fire 2)', 'big', 'fire2']] },
     c64: { name: 'C64-style joystick', info: ['8-way stick, two red buttons on top left and right', 'Top left = Fire, top right = Fire 2', '4 small buttons along the front: default Start, Select, Option, Reset (mappable)'],
       ctl: [['t1', 'Top left (Fire)', 'big', 'fire'], ['t2', 'Top right (Fire 2)', 'big', 'fire2'], ['b1', 'Front 1', 'small', 'start'], ['b2', 'Front 2', 'small', 'select'], ['b3', 'Front 3', 'small', 'option'], ['b4', 'Front 4', 'small', 'reset']] },
