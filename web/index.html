@@ -168,6 +168,9 @@
   #drvviz .xf.rd .led { fill:#35e06a; filter:drop-shadow(0 0 3px #35e06a); transition:none; }
   #drvviz .xf.wr .led { fill:#ff4a3d; filter:drop-shadow(0 0 3px #ff4a3d); transition:none; }
   #drvviz .xf.ot .led { fill:#ffc233; filter:drop-shadow(0 0 3px #ffc233); transition:none; }
+  #drvviz .ramtag { display:none; }
+  #drvviz .xf.ram .ramtag { display:inline; }
+  #drvviz .xf.ram .disk { opacity:0; }
   #drvviz .disk { opacity:0; transition:opacity .2s; }
   #drvviz .xf.has .disk { opacity:1; }
   #drvviz .nm { flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.3; }
@@ -274,6 +277,11 @@
       <div class="row"><label class="btn">D2…<input id="f2" type="file"></label><button id="de2">Eject</button><span id="d2" class="dim">empty</span></div>
       <div class="row"><label class="btn">D3…<input id="f3" type="file"></label><button id="de3">Eject</button><span id="d3" class="dim">empty</span></div>
       <div class="row"><label class="btn">D4…<input id="f4" type="file"></label><button id="de4">Eject</button><span id="d4" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D5…<input id="f5" type="file"></label><button id="de5">Eject</button><span id="d5" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D6…<input id="f6" type="file"></label><button id="de6">Eject</button><span id="d6" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D7…<input id="f7" type="file"></label><button id="de7">Eject</button><span id="d7" class="dim">empty</span></div>
+      <div class="row"><label class="btn">D8…<input id="f8" type="file"></label><button id="de8">Eject</button><span id="d8" class="dim">empty</span></div>
+      <div class="row" title="Many DOSes (SpartaDOS X, DOS XL, MyDOS with a RAM disk driver) claim D8: as a RAM disk, which the emulator cannot see because it never goes through the disk bus. Tick this to mark D8: as your RAM disk so it is identified in the drive pictures."><label><input id="ramd8" type="checkbox"> D8: is a RAM disk (set up by my DOS)</label></div>
       <div class="row" title="Download a mounted disk image with any changes made in the emulator. Works for D1: to D8:."><select id="savedrv"></select><button id="savedisk">Save disk</button></div>
       <div class="row" title="Creates an empty ATR with the chosen geometry. Format it with the Atari's own DOS."><select id="blankfmt" style="flex:1"><option value="128,720">SS/SD 90K (128 B)</option><option value="128,1040">SS/ED 130K (128 B)</option><option value="256,720">SS/DD 180K (256 B)</option><option value="128,1440">DS/SD 180K (128 B)</option><option value="256,1440">DS/DD 360K (256 B)</option><option value="256,2880">DS/DD 720K 3.5" (256 B)</option><option value="256,16384">HD 4 MB (256 B)</option><option value="256,40960">HD 10 MB (256 B)</option><option value="256,65535">HD 16 MB (256 B)</option></select><select id="blankslot"></select></div>
       <div class="row"><button id="blankmk">Insert blank disk</button><button id="blankdl">Save blank .atr</button></div>
@@ -335,6 +343,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027c"></script>
+<script src="js/app.js?v=20261027d"></script>
 </body>
 </html>

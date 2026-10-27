@@ -1351,9 +1351,11 @@
     devEl[id] = s;
   });
   const devId = (dev) => (dev >= 0x31 && dev <= 0x38 ? 'D' + (dev - 0x30) : dev === 0x60 ? 'C' : dev >= 0x40 && dev <= 0x43 ? 'P' : dev >= 0x50 && dev <= 0x53 ? 'R' : dev >= 0x70 && dev <= 0x7f ? 'N' : null);
-  // XF551-style drive pictures (front view) for D1-D4: LED follows SIO activity, the sleeve shows when a disk is mounted.
+  // XF551-style drive pictures (front view) for D1-D8: LED follows SIO activity, the sleeve shows when a disk is mounted.
   const xfEl = {};
-  for (let n = 1; n <= 4; n++) {
+  const ramOn = () => $('ramd8').checked;
+  const xfSync = {};
+  for (let n = 1; n <= 8; n++) {
     const d = document.createElement('div');
     d.className = 'xf';
     d.innerHTML = `<svg viewBox="0 0 220 64" aria-hidden="true">
@@ -1362,6 +1364,7 @@
       <rect x="14" y="20" width="150" height="24" rx="2" fill="#1d1d1f" stroke="#55524b"/>
       <rect class="disk" x="22" y="26" width="134" height="12" rx="1" fill="#fbfaf6" stroke="#d0cdc4"/><rect class="disk" x="30" y="29" width="30" height="6" fill="#d9362c"/>
       <rect x="22" y="31.5" width="140" height="1.6" fill="#000"/>
+      <g class="ramtag"><rect x="22" y="24" width="134" height="16" rx="2" fill="#2f7d4f" stroke="#9fd8b4"/><text x="89" y="36" text-anchor="middle" font-size="11" font-weight="bold" fill="#e8fff0" font-family="Consolas,monospace">RAM DISK</text></g>
       <rect x="68" y="46" width="50" height="7" rx="2" fill="#a8a49a"/>
       <circle class="led" cx="196" cy="50" r="4"/>
       <text x="210" y="32" text-anchor="end" font-size="14" font-weight="bold" fill="#5f5b52" font-family="Consolas,monospace">D${n}:</text>
@@ -1371,15 +1374,20 @@
     const span = $('d' + n);
     const sync = () => {
       const t = span.textContent.trim();
-      d.classList.toggle('has', t && t !== 'empty');
-      d.querySelector('.nm').textContent = t || 'empty';
+      const ram = n === 8 && ramOn();
+      d.classList.toggle('ram', ram);
+      d.classList.toggle('has', !!t && t !== 'empty');
+      d.querySelector('.nm').textContent = ram ? 'RAM disk' + (t && t !== 'empty' ? ' (a disk image is also mounted here: ' + t + ')' : ' (not a disk image)') : t || 'empty';
     };
+    xfSync[n] = sync;
     new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
     sync();
   }
   const devTimer = {};
-  function devFlash(id, cls) {
-    const xf = xfEl[id && id[0] === 'D' ? +id.slice(1) : 0];
+  $('ramd8').checked = localStorage.getItem('ac.ramd8') === '1';
+  $('ramd8').onchange = () => { localStorage.setItem('ac.ramd8', $('ramd8').checked ? '1' : '0'); xfSync[8](); };
+  xfSync[8]();
+  function devFlash(id, cls) {    const xf = xfEl[id && id[0] === 'D' ? +id.slice(1) : 0];
     if (xf) {
       xf.classList.remove('rd', 'wr', 'ot'); xf.classList.add(cls);
       clearTimeout(xf._t); xf._t = setTimeout(() => xf.classList.remove('rd', 'wr', 'ot'), 140);
@@ -1769,7 +1777,7 @@
       }
     } else if (slot === 2) S.emu.coldStart();
   }
-  for (const n of [1, 2, 3, 4]) {
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
     $('de' + n).onclick = () => {
       if (!S.emu) return;
       S.emu.ejectDisk(n);
@@ -1909,7 +1917,7 @@
     b.onpointerdown = () => S.emu && S.emu.down('btn:' + id, fields);
     b.onpointerup = b.onpointerleave = () => S.emu && S.emu.up('btn:' + id);
   }
-  for (const n of [1, 2, 3, 4]) {
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
     $('f' + n).onchange = (e) => loadMedia(e.target.files, n);
   }
   document.body.addEventListener('dragover', (e) => e.preventDefault());
