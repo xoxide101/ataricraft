@@ -193,9 +193,9 @@
   #drvviz .xf.cart { order:-2; } #drvviz .xf.cart:nth-last-child(2) { margin-bottom:14px; } #drvviz .xf.tape { order:2; margin-top:14px; }
   #sidetabs { display:flex; flex-wrap:wrap; gap:4px; } #sidetabs button { flex:1 1 auto; padding:5px 7px; font-size:12px; opacity:.6; } #sidetabs button.on { opacity:1; border-color:var(--acc); }
   .box[data-tab="none"] { display:none; }
-  #medhist { border:1px solid #2c313b; border-radius:5px; margin:4px 0; max-height:110px; overflow:auto; } .medhh { display:flex; justify-content:space-between; align-items:center; padding:2px 6px; font-size:11px; color:var(--dim); position:sticky; top:0; background:var(--panel); } .medhh button { padding:0 6px; font-size:11px; } .medhi { padding:3px 6px; font-size:12px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-top:1px solid #2c313b; } .medhi:hover { background:#2a2f39; }
+  #medhist { display:flex; gap:4px; margin:4px 0; } #medhist button { padding:2px 10px; font-size:11px; letter-spacing:.5px; } #medhist button.on { background:var(--accent,#e8a33d); color:#111; } #medhist button:last-child:not(:nth-child(2)) { margin-left:auto; }
   #medside.on, #medbig.on { background:var(--accent,#e8a33d); color:#111; }
-  #medbox.medbig { position:fixed; inset:4vh 4vw; z-index:60; overflow:auto; display:flex; flex-direction:column; box-shadow:0 0 0 100vmax #000b; } #medbox.medbig #medlist { max-height:none !important; flex:1; min-height:200px; } #medbox.medbig #medhist { max-height:160px; } #medbox.medbig #medlist > div, #medbox.medbig .medhi { font-size:14px !important; }
+  #medbox.medbig { position:fixed; inset:4vh 4vw; z-index:60; overflow:auto; display:flex; flex-direction:column; box-shadow:0 0 0 100vmax #000b; } #medbox.medbig #medlist { max-height:none !important; flex:1; min-height:200px; } #medbox.medbig #medlist > div, #medbox.medbig .medhi { font-size:14px !important; }
   :is(#drvviz,#cartbar) .xf { display:flex; align-items:center; gap:8px; text-align:left; font:11px ui-monospace,Consolas,monospace; color:#9a9486; }
   :is(#drvviz,#cartbar) svg { flex:0 0 130px; width:130px; height:auto; display:block; }
   :is(#drvviz,#cartbar) .xf.has { color:#d8cdb8; }
@@ -307,13 +307,6 @@
       <div class="row"><button id="diagsave" title="Save everything logged (status messages, loads, errors) to a text file">Save log…</button><button id="diagclear">Clear</button><span id="diagcount" class="dim"></span></div>
       <div class="dim">Hit a problem? Click Save log and put the file in the project's <code>diag</code> folder.</div>
     </div>
-    <div class="box" data-tab="fm" id="medbox">
-      <h3>Host drive (H:)</h3>
-      <div class="row"><input id="hostname" value="PASTE.LST" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><button id="hostpaste" title="Clipboard text becomes this file">Paste→file</button></div>
-      <div class="row"><label class="btn">Import…<input id="hostimport" type="file" multiple></label><span id="hostcount" class="dim">empty</span></div>
-      <div id="hostlist"></div>
-      <div class="dim">In BASIC: <code>LIST "H:PROG.LST"</code> saves your program as text here; <code>ENTER "H:PROG.LST"</code> loads it back with the same line numbers. Copy puts it on your clipboard.</div>
-    </div>
     <div class="box" data-tab="drv">
       <h3>Drives &amp; cartridges</h3>
       <div id="drvviz"></div>
@@ -345,6 +338,13 @@
       <div id="fslist" class="dim" style="max-height:220px;overflow:auto;white-space:pre"></div>
       <div class="row"><button id="fullreset" title="Forgets everything this page stored: catalog, remembered folders, ROMs, settings, log. Your files on disk are not touched.">Full reset (forget everything)</button></div>
       <div class="dim">Any disk, cartridge, tape or program format is detected from its contents. You can also drop a file on the page.</div>
+    </div>
+    <div class="box" data-tab="drv">
+      <h3>Host drive (H:)</h3>
+      <div class="row"><input id="hostname" value="PASTE.LST" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><button id="hostpaste" title="Clipboard text becomes this file">Paste→file</button></div>
+      <div class="row"><label class="btn">Import…<input id="hostimport" type="file" multiple></label><span id="hostcount" class="dim">empty</span></div>
+      <div id="hostlist"></div>
+      <div class="dim">In BASIC: <code>LIST "H:PROG.LST"</code> saves your program as text here; <code>ENTER "H:PROG.LST"</code> loads it back with the same line numbers. Copy puts it on your clipboard.</div>
     </div>
     <div class="box" data-tab="net">
       <h3>Virtual FujiNet node</h3>
@@ -400,6 +400,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zk"></script>
+<script src="js/app.js?v=20261027zl"></script>
 </body>
 </html>

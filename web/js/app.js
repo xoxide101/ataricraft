@@ -726,7 +726,7 @@
   ['blankslot', 'fsdrv', 'savedrv'].forEach(drivePicker);
 
   // ---- media library (scan a folder, filter by text and type) ----
-  const MED = { files: [], kind: 'all', ext: 'all', ltype: 'all', lvendor: 'all', showShort: localStorage.getItem('ac.showShort') === '1' };
+  const MED = { files: [], kind: 'all', ext: 'all', ltype: 'all', lvendor: 'all', view: 'all', showShort: localStorage.getItem('ac.showShort') === '1' };
   // MAME software list titles: short zip/set name -> "Title (year, publisher)"
   let TITLES = {};
   try { TITLES = JSON.parse(localStorage.getItem('ac.titles') || '{}'); } catch (e) { TITLES = {}; }
@@ -899,7 +899,7 @@
   const MEDS = (() => { try { return JSON.parse(localStorage.getItem('ac.medstate') || '{}'); } catch (e) { return {}; } })();
   const medSave = () => {
     if (!MED.files.length) return;
-    MEDS.q = $('medfilter').value; MEDS.kind = MED.kind; MEDS.ext = MED.ext; MEDS.ltype = MED.ltype; MEDS.lvendor = MED.lvendor; MEDS.open = [...MED.open];
+    MEDS.view = MED.view; MEDS.q = $('medfilter').value; MEDS.kind = MED.kind; MEDS.ext = MED.ext; MEDS.ltype = MED.ltype; MEDS.lvendor = MED.lvendor; MEDS.open = [...MED.open];
     localStorage.setItem('ac.medstate', JSON.stringify(MEDS));
   };
   const histGet = () => { try { return JSON.parse(localStorage.getItem('ac.medhist') || '[]'); } catch (e) { return []; } };
@@ -907,31 +907,31 @@
     if (!f || !f.name) return;
     const h = histGet().filter((x) => x.name !== f.name);
     h.unshift({ name: f.name, kind: f.kind, title: f.title || '' });
-    localStorage.setItem('ac.medhist', JSON.stringify(h.slice(0, 40)));
-    renderHist();
+    localStorage.setItem('ac.medhist', JSON.stringify(h.slice(0, 100)));
+    renderHist(); if (MED.view === 'hist') renderMed();
   }
+  // All / History switch above the list: History is the same list (filters, tree/flat) limited to what you loaded, newest first.
   function renderHist() {
-    const box = $('medhist'), h = histGet();
+    const box = $('medhist'), n = histGet().length;
     box.innerHTML = '';
-    if (!h.length) { box.style.display = 'none'; return; }
-    box.style.display = '';
-    const head = document.createElement('div');
-    head.className = 'medhh'; head.innerHTML = '<b>Recently used</b>';
-    const clr = document.createElement('button'); clr.textContent = 'Clear'; clr.onclick = () => { localStorage.removeItem('ac.medhist'); renderHist(); };
-    head.append(clr); box.append(head);
-    h.forEach((x) => {
-      const f = MED.files.find((m) => m.name === x.name) || { name: x.name, kind: x.kind, title: x.title, file: null };
-      const ico = { disk: '💾', cart: '🎮', tape: '📼', exe: '⚙️' }[f.kind] || '📄';
-      const d = document.createElement('div');
-      d.className = 'medhi'; d.textContent = `${ico} ${x.title ? x.title + ' — ' : ''}${x.name.split('/').pop()}`; d.title = x.name;
-      attachLoad(d, f, f.kind, () => fileOf(f));
-      box.append(d);
-    });
+    const mk = (v, label) => {
+      const b = document.createElement('button');
+      b.textContent = label; b.className = MED.view === v ? 'on' : '';
+      b.onclick = () => { MED.view = v; renderHist(); renderMed(); };
+      return b;
+    };
+    box.append(mk('all', 'ALL'), mk('hist', `HISTORY (${n})`));
+    if (MED.view === 'hist' && n) {
+      const clr = document.createElement('button'); clr.textContent = 'Clear history';
+      clr.onclick = () => { localStorage.removeItem('ac.medhist'); renderHist(); renderMed(); };
+      box.append(clr);
+    }
   }
-  function renderMed() { renderMed0(); medSave(); }
+  const histFiles = () => histGet().map((x) => MED.files.find((m) => m.name === x.name) || { name: x.name, kind: x.kind, title: x.title, file: null });  function renderMed() { renderMed0(); medSave(); }
   function renderMed0() {
     const q = $('medfilter').value.toLowerCase();
-    if (!MED.files.length) { $('medlist').innerHTML = ''; $('medcount').textContent = 'no folder'; return; }
+    if (!MED.files.length && MED.view !== 'hist') { $('medlist').innerHTML = ''; $('medcount').textContent = 'no folder'; return; }
+    const base = MED.view === 'hist' ? histFiles() : MED.files;
     const qm = textMatcher(q);
     const box = $('medlist');
     box.innerHTML = '';
@@ -940,7 +940,7 @@
     ['medexpand', 'medcollapse'].forEach((id) => ($(id).style.display = MED.tree ? '' : 'none'));
     box.style.maxHeight = MED.tree ? '360px' : '200px';
     const extOf = (f) => (f.name.split('.').pop() || '').toLowerCase();
-    const ofKind = MED.files.filter((f) => MED.kind === 'all' || f.kind === MED.kind);
+    const ofKind = base.filter((f) => MED.kind === 'all' || f.kind === MED.kind);
     const counts = {};
     ofKind.forEach((f) => { const e = extOf(f); counts[e] = (counts[e] || 0) + 1; });
     if (MED.ext !== 'all' && !counts[MED.ext]) MED.ext = 'all';
@@ -971,10 +971,10 @@
       }
       return qm(f.name + ' ' + (f.title || ''));
     });
-    if (q) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
+    if (q && MED.view !== 'hist') hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
     if (MED.tree) {
       drawTree(box, hits, !!q && hits.length <= 600);
-      $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${MED.files.length}` : 'no folder';
+      $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${base.length}` : 'no folder';
       return;
     }
     const usedByDir = new Map();
@@ -991,7 +991,7 @@
       attachLoad(d, f, f.kind, () => fileOf(f), () => showRelated(f));
       box.append(d);
     });
-    $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
+    $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${base.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
   }
   // Remembered folder: the directory handle lives in IndexedDB (needs the File System Access API).
   const idb = () => new Promise((res, rej) => { const r = indexedDB.open('ataricraft-media', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
@@ -1319,6 +1319,7 @@
   $('medcollapse').onclick = () => { MED.open.clear(); renderMed(); };
   {
     if (MEDS.q) $('medfilter').value = MEDS.q;
+    if (MEDS.view === 'hist') MED.view = 'hist';
     for (const k of ['kind', 'ext', 'ltype', 'lvendor']) if (MEDS[k]) MED[k] = MEDS[k];
     (MEDS.open || []).forEach((p) => MED.open.add(p));
     const box = $('medbox'), list = $('medlist');
