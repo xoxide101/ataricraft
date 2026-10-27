@@ -17,6 +17,8 @@
     cache: new Map(),       // path -> Uint8Array
     hosts: defaultHosts(),
     publicHosts: PUBLIC_HOSTS.slice(),
+    off: new Set(),         // master-list hosts the user unticked
+    gone: new Set(),        // built-in hosts the user removed
     slots: Array.from({ length: SLOTS }, () => ({ host: 0xff, mode: 0, path: '', mounted: false })),
     dir: null,              // {entries, pos}
     onMount: null,          // (slot, path) UI hook
@@ -67,9 +69,55 @@
 
     mem() { return this.emu.fnMem ? this.emu.fnMem() : this.emu.mem(); },
 
-    fillPublic() {
-      this.hosts = ['SD', ...this.publicHosts.slice(0, HOSTS - 1)];
+    fillPublic() { this.fillPage(0); },
+
+    // Master list of servers: the user can tick which ones are usable and page them 7 at a time into slots 2-8.
+    saveMaster() { localStorage.setItem('ac.fujinet.master', JSON.stringify({ list: this.publicHosts, off: [...this.off], gone: [...this.gone] })); },
+    loadMaster() {
+      try {
+        const m = JSON.parse(localStorage.getItem('ac.fujinet.master') || 'null');
+        if (!m) return;
+        this.gone = new Set(m.gone || []);
+        const extra = PUBLIC_HOSTS.filter((h) => !m.list.includes(h) && !this.gone.has(h));
+        this.publicHosts = [...m.list, ...extra];
+        this.off = new Set(m.off);
+      } catch (e) { /* ignore corrupt list */ }
+    },
+    selected() { return this.publicHosts.filter((h) => !this.off.has(h)); },
+    pageCount() { return Math.max(1, Math.ceil(this.selected().length / (HOSTS - 1))); },
+    fillPage(n) {
+      const per = HOSTS - 1, sel = this.selected().slice(n * per, (n + 1) * per);
+      this.hosts = ['SD', ...sel, ...Array(per - sel.length).fill('')];
       this.save();
+    },
+    addHost(h) {
+      h = h.trim().slice(0, 31);
+      if (!h) return false;
+      if (!this.publicHosts.includes(h)) this.publicHosts.push(h);
+      this.off.delete(h);
+      this.gone.delete(h);
+      this.saveMaster();
+      return true;
+    },
+    removeHost(h) {
+      this.publicHosts = this.publicHosts.filter((x) => x !== h);
+      this.off.delete(h);
+      this.gone.add(h);
+      this.saveMaster();
+    },
+    resetMaster() {
+      localStorage.removeItem('ac.fujinet.master');
+      this.publicHosts = PUBLIC_HOSTS.slice();
+      this.off = new Set();
+      this.gone = new Set();
+    },
+    // Asks the relay (async, so the page stays responsive) whether a host answers.
+    async probe(h) {
+      const t = performance.now();
+      try {
+        const r = await fetch(this.bridge + '/list?host=' + encodeURIComponent(h) + '&path=/');
+        return r.ok ? Math.round(performance.now() - t) : -1;
+      } catch (e) { return -2; }
     },
     // Best effort: the status page may be unreachable (offline, or blocked by CORS); the built-in list is kept then.
     async refreshPublic() {
@@ -82,8 +130,10 @@
         if (h && /up\.svg/.test(row) && !/down\.svg/.test(row)) up.push(h[1].toLowerCase());
       }
       if (!up.length) throw new Error('no servers found in the status page');
-      this.publicHosts = up;
-      return up.length;
+      const fresh = up.filter((h) => !this.publicHosts.includes(h));
+      this.publicHosts.push(...fresh);
+      this.saveMaster();
+      return { up: up.length, fresh: fresh.length };
     },
 
     setFiles(list) {
@@ -345,5 +395,6 @@
     },
   };
   window.FujiNet = FujiNet;
+  FujiNet.loadMaster();
   FujiNet.load();
 })();

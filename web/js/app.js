@@ -2423,15 +2423,77 @@
     });
   }
   renderHosts();
-  $('fnhostfill').onclick = () => { FujiNet.fillPublic(); renderHosts(); $('fnhostmsg').textContent = 'filled'; };
+  const probed = new Map(); // host -> ms, or <0 for no answer
+  function renderMaster() {
+    const box = $('fnmlist');
+    box.innerHTML = '';
+    FujiNet.publicHosts.forEach((h) => {
+      const r = document.createElement('div');
+      r.style.cssText = 'display:flex;gap:6px;align-items:center;margin:1px 0';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = !FujiNet.off.has(h);
+      cb.onchange = () => { if (cb.checked) FujiNet.off.delete(h); else FujiNet.off.add(h); FujiNet.saveMaster(); renderMaster(); };
+      const dot = document.createElement('span');
+      const p = probed.get(h);
+      dot.textContent = '●';
+      dot.style.color = p === undefined ? '#555' : p >= 0 ? '#4c4' : '#d44';
+      dot.title = p === undefined ? 'not checked' : p >= 0 ? 'answered in ' + p + ' ms' : 'no answer';
+      const nm = document.createElement('span');
+      nm.textContent = h; nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis';
+      const x = document.createElement('button');
+      x.textContent = '✕'; x.title = 'Remove from the list';
+      x.onclick = () => { FujiNet.removeHost(h); renderMaster(); };
+      r.append(cb, dot, nm, x);
+      box.append(r);
+    });
+    const sel = FujiNet.selected().length, per = 7;
+    $('fnmcount').textContent = '(' + sel + ' of ' + FujiNet.publicHosts.length + ' ticked)';
+    const pg = $('fnmpages');
+    pg.innerHTML = '';
+    for (let i = 0; i < FujiNet.pageCount(); i++) {
+      const b = document.createElement('button');
+      const a = i * per + 1, z = Math.min(sel, (i + 1) * per);
+      b.textContent = sel ? a + '-' + z : '-';
+      b.title = 'Put ticked servers ' + a + '-' + z + ' into host slots 2-8';
+      b.onclick = () => { FujiNet.fillPage(i); renderHosts(); $('fnhostmsg').textContent = 'loaded servers ' + a + '-' + z + ' (reboot FujiNet CONFIG to see them)'; };
+      pg.append(b);
+    }
+  }
+  renderMaster();
+  const addMaster = () => { if (FujiNet.addHost($('fnmadd').value)) { $('fnmadd').value = ''; renderMaster(); renderHosts(); } };
+  $('fnmaddbtn').onclick = addMaster;
+  $('fnmadd').onkeydown = (e) => { if (e.key === 'Enter') addMaster(); };
+  $('fnmall').onclick = () => { FujiNet.off.clear(); FujiNet.saveMaster(); renderMaster(); };
+  $('fnmnone').onclick = () => { FujiNet.publicHosts.forEach((h) => FujiNet.off.add(h)); FujiNet.saveMaster(); renderMaster(); };
+  $('fnmreset').onclick = () => { FujiNet.resetMaster(); probed.clear(); renderMaster(); renderHosts(); };
+  $('fnmcheck').onclick = async () => {
+    const b = $('fnmcheck');
+    b.disabled = true;
+    $('fnhostmsg').textContent = 'checking…';
+    const q = FujiNet.publicHosts.slice();
+    let ok = 0;
+    const worker = async () => {
+      for (let h; (h = q.shift());) {
+        const ms = await FujiNet.probe(h);
+        probed.set(h, ms);
+        if (ms >= 0) ok++;
+        renderMaster();
+        if (ms === -2) { q.length = 0; $('fnhostmsg').textContent = 'relay not reachable - start it (see below)'; return; }
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    b.disabled = false;
+    if (!/relay not/.test($('fnhostmsg').textContent)) $('fnhostmsg').textContent = ok + ' of ' + FujiNet.publicHosts.length + ' answered';
+  };
+  $('fnhostfill').onclick = () => { FujiNet.fillPage(0); renderHosts(); $('fnhostmsg').textContent = 'filled'; };
   $('fnhostrefresh').onclick = async () => {
     $('fnhostmsg').textContent = 'checking…';
     try {
       const n = await FujiNet.refreshPublic();
-      FujiNet.fillPublic(); renderHosts();
-      $('fnhostmsg').textContent = n + ' servers online';
+      renderMaster(); renderHosts();
+      $('fnhostmsg').textContent = n.up + ' servers online, ' + n.fresh + ' new added to the list';
     } catch (e) {
-      $('fnhostmsg').textContent = 'could not reach fujinet.online (start the TNFS relay to fetch it); using the built-in list';
+      $('fnhostmsg').textContent = 'could not reach fujinet.online (start the TNFS relay to fetch it); list unchanged';
     }
   };
   $('fnboot').onclick = () => {
