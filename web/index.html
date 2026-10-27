@@ -164,25 +164,28 @@
   #devbar .dv.wr i { background:#ff4a3d; box-shadow:0 0 6px #ff4a3d; transition:none; }
   #devbar .dv.ot i { background:#ffc233; box-shadow:0 0 6px #ffc233; transition:none; }
   #drvviz { display:flex; flex-direction:column; gap:6px; margin:6px 0 10px; }
-  #drvviz .xf { display:flex; align-items:center; gap:8px; text-align:left; font:11px ui-monospace,Consolas,monospace; color:#9a9486; }
-  #drvviz svg { flex:0 0 130px; width:130px; height:auto; display:block; }
-  #drvviz .xf.has { color:#d8cdb8; }
-  #drvviz .led { fill:#4a2218; transition:fill .25s; }
-  #drvviz .xf.rd .led { fill:#35e06a; filter:drop-shadow(0 0 3px #35e06a); transition:none; }
-  #drvviz .xf.wr .led { fill:#ff4a3d; filter:drop-shadow(0 0 3px #ff4a3d); transition:none; }
-  #drvviz .xf.ot .led { fill:#ffc233; filter:drop-shadow(0 0 3px #ffc233); transition:none; }
-  #drvviz .xf.drop { outline:2px dashed #35e06a; outline-offset:2px; }
-  #drvviz .xf.cart .cartimg { opacity:0; transition:opacity .2s; }
-  #drvviz .xf.cart.has .cartimg { opacity:1; }
-  #drvviz .xf.cart .ct { fill:#5f5b52; }
-  #drvviz .xf.cart.has .ribs { opacity:0; }
-  #drvviz .ramtag { display:none; }
-  #drvviz .xf.ram .ramtag { display:inline; }
-  #drvviz .xf.ram .disk { opacity:0; }
-  #drvviz .disk { opacity:0; transition:opacity .2s; }
-  #drvviz .xf.has .disk { opacity:1; }
-  #drvviz .nm { flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.3; }
+  :is(#drvviz,#cartbar) .xf { display:flex; align-items:center; gap:8px; text-align:left; font:11px ui-monospace,Consolas,monospace; color:#9a9486; }
+  :is(#drvviz,#cartbar) svg { flex:0 0 130px; width:130px; height:auto; display:block; }
+  :is(#drvviz,#cartbar) .xf.has { color:#d8cdb8; }
+  :is(#drvviz,#cartbar) .led { fill:#4a2218; transition:fill .25s; }
+  :is(#drvviz,#cartbar) .xf.rd .led { fill:#35e06a; filter:drop-shadow(0 0 3px #35e06a); transition:none; }
+  :is(#drvviz,#cartbar) .xf.wr .led { fill:#ff4a3d; filter:drop-shadow(0 0 3px #ff4a3d); transition:none; }
+  :is(#drvviz,#cartbar) .xf.ot .led { fill:#ffc233; filter:drop-shadow(0 0 3px #ffc233); transition:none; }
+  :is(#drvviz,#cartbar) .xf.drop { outline:2px dashed #35e06a; outline-offset:2px; }
+  :is(#drvviz,#cartbar) .xf.cart .cartimg { opacity:0; transition:opacity .2s; }
+  :is(#drvviz,#cartbar) .xf.cart.has .cartimg { opacity:1; }
+  :is(#drvviz,#cartbar) .xf.cart .ct { fill:#5f5b52; }
+  :is(#drvviz,#cartbar) .xf.cart.has .ribs { opacity:0; }
+  :is(#drvviz,#cartbar) .ramtag { display:none; }
+  :is(#drvviz,#cartbar) .xf.ram .ramtag { display:inline; }
+  :is(#drvviz,#cartbar) .xf.ram .disk { opacity:0; }
+  :is(#drvviz,#cartbar) .disk { opacity:0; transition:opacity .2s; }
+  :is(#drvviz,#cartbar) .xf.has .disk { opacity:1; }
+  :is(#drvviz,#cartbar) .nm { flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.3; }
+  #cartbar { display:flex; flex-wrap:wrap; justify-content:center; gap:6px 18px; margin:0; width:100%; }
+  #cartbar .xf { max-width:320px; }
   #devbar .dv.unsaved { color:#ffc233; }
+  #devbar .dv small { max-width:11ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:.8; }
   #devbar .dv.unsaved::after { content:"*"; }
   #kbdwrap.hide-base .key .g.base, #kbdwrap.hide-shift .key .g.shift, #kbdwrap.hide-ctrl .key .g.ctrl { display:none; }
   #kbdwrap.hide-base:not(.hide-shift) #kbd[data-layer=base] .key .g.shift { width:var(--gb); height:var(--gb); right:50%; top:50%; margin:calc(var(--gb) / -2) calc(var(--gb) / -2) 0 0; }
@@ -322,6 +325,7 @@
   </dialog>
   <div class="center">
     <div id="stage"><canvas id="screen"></canvas><div id="toast"></div></div>
+        <div id="cartbar"></div>
     <div id="kbdwrap">
       <div id="kbview"><span>Show:</span><button data-v="base" title="Lower-case glyphs">a Lower</button><button data-v="shift" title="Capital glyphs">A Caps</button><button data-v="ctrl" title="Control/special graphics">♥ Special</button><div id="devbar" title="Device activity: green = read, red = write, yellow = other command. A ring means media is mounted."></div></div>
       <div id="kbmode"><button data-m="keys" class="on">⌨ Keys</button><button data-m="arrows">✥ Arrows</button><button data-m="pad">🖱 Pad</button></div>
@@ -354,6 +358,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027m"></script>
+<script src="js/app.js?v=20261027o"></script>
 </body>
 </html>

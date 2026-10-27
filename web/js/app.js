@@ -1390,7 +1390,12 @@
   const devEl = {};
   DEVLIST.forEach(([id, label]) => {
     const s = document.createElement('span');
-    s.className = 'dv'; s.innerHTML = '<i></i>' + label;
+    s.className = 'dv'; s.innerHTML = '<i></i>' + label + '<small></small>';
+    s.tabIndex = 0; s.style.cursor = 'pointer';
+    s.addEventListener('mouseenter', () => { s.title = devInfo(id).lines.join('\n'); });
+    s.addEventListener('click', () => devDialog(id));
+    s.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); devDialog(id); } });
+    s.addEventListener('contextmenu', (e) => { e.preventDefault(); devDialog(id); });
     $('devbar').append(s);
     devEl[id] = s;
   });
@@ -1468,7 +1473,7 @@
   }
   function driveProps(n) {
     const d = S.disks[n], box = $('fslist');
-    if (!d) { box.textContent = `D${n}: empty`; return; }
+    if (!d) { box.textContent = `D${n}: empty`; return box.textContent; }
     const b = (S.emu && S.emu.readDisk(n)) || d.bytes;
     let t = `D${n}: ${d.name}\n${b.length} bytes${S.dirty[n] ? ', changed since loading' : ''}`;
     if (b[0] === 0x96 && b[1] === 0x02) {
@@ -1479,8 +1484,10 @@
     t += v ? `\nFile system: ${v.kind.toUpperCase()}${v.label ? ' ' + v.label : ''}, ${v.readOnly ? 'read-only here' : 'writable here'}` : '\nFile system: not recognised (boot disk or custom format)';
     if (S.folders && S.folders[n]) t += `\nMirrors host folder "${S.folders[n].handle.name}"`;
     box.textContent = t;
+    return t;
   }
-  function drvMenu(n, x, y) {
+  function drvMenu(n, x, y) { openPick(x, y, `D${n}: ${S.disks[n] ? S.disks[n].name : 'empty'}`, drvItems(n, x, y)); }
+  function drvItems(n, x, y) {
     const have = S.disks[n];
     const items = [
       { label: 'Load disk image…', run: () => $('f' + n).click() },
@@ -1505,9 +1512,13 @@
       $('fsfree').value = mb; pick('fsdrv', () => $('fsmount').click());
     } });
     if (n === 8) items.push({ label: ramOn() ? 'Unmark D8: as a RAM disk' : 'Mark D8: as a RAM disk', run: () => $('ramd8').click() });
-    openPick(x, y, `D${n}: ${have ? have.name : 'empty'}`, items);
+    return items;
   }
-  for (const n of [1, 2]) {
+  const cartItems = (n) => [
+    { label: 'Load cartridge…', run: () => $('c' + n).click() },
+    { label: 'Eject', run: () => $('ce' + n).click() },
+  ];
+  for (const [host, n] of [['drvviz', 1], ['drvviz', 2]]) {
     const d = document.createElement('div');
     d.className = 'xf cart';
     d.title = n === 1 ? 'Cartridge 1 (main, right slot)' : 'Cartridge 2 (left slot)';
@@ -1520,7 +1531,7 @@
       <g class="mt"><rect x="14" y="14" width="9" height="46" rx="2" fill="#c9ccd1" stroke="#7c8088"/><rect x="16" y="18" width="2.5" height="38" fill="#f4f6f8"/><rect x="197" y="14" width="9" height="46" rx="2" fill="#c9ccd1" stroke="#7c8088"/><rect x="199" y="18" width="2.5" height="38" fill="#f4f6f8"/></g>
       <text class="ct" x="210" y="9.5" text-anchor="end" font-size="8" font-weight="bold" font-family="Consolas,monospace">CART ${n}:</text>
     </svg><div class="nm">empty</div>`;
-    $('drvviz').append(d);
+    $(host).append(d);
     const span = $('cn' + n);
     const sync = () => {
       const t = span.textContent.replace(/^[^:]*:\s*/, '').trim();
@@ -1529,10 +1540,7 @@
     };
     new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
     sync();
-    bindPic(d, () => $('c' + n).click(), (x, y) => openPick(x, y, `Cart ${n}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, [
-      { label: 'Load cartridge…', run: () => $('c' + n).click() },
-      { label: 'Eject', run: () => $('ce' + n).click() },
-    ]), (files) => insertCart(n, files[0]));
+    bindPic(d, () => $('c' + n).click(), (x, y) => openPick(x, y,     `Cart ${n}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, cartItems(n)), (files) => insertCart(n, files[0]));
   }
   const devTimer = {};
   $('ramd8').checked = localStorage.getItem('ac.ramd8') === '1';
@@ -1594,7 +1602,71 @@
     devEl.K2.classList.toggle('has', !!S.carts[2]);
     devEl.C.classList.toggle('has', $('tn').textContent !== 'empty');
     devEl.N.classList.toggle('has', !!FujiNet.enabled);
+    for (const id of Object.keys(devEl)) { const sm = devEl[id].querySelector('small'), t = devShort(id); if (sm.textContent !== t) sm.textContent = t; }
   }, 400);
+
+  // ---- device bar: short state in the bar, details on hover, a dialog for just that device on click ----
+  function devShort(id) {
+    if (id[0] === 'D' && id.length === 2) { const n = +id[1]; return S.disks[n] ? S.disks[n].name.replace(/\.[^.]*$/, '') : (n === 8 && ramOn() ? 'RAM' : ''); }
+    if (id[0] === 'K') { const c = S.carts[+id[1]]; return c ? c.name.replace(/\.[^.]*$/, '') : ''; }
+    if (id === 'C') { const t = $('tn').textContent; return t === 'empty' ? '' : t.replace(/\.[^.]*$/, ''); }
+    if (id === 'N') return FujiNet.enabled ? 'on' : '';
+    return '';
+  }
+  function devInfo(id) {
+    const st = devEl[id].classList.contains('rd') ? 'reading' : devEl[id].classList.contains('wr') ? 'writing' : devEl[id].classList.contains('ot') ? 'busy' : 'idle';
+    const L = [];
+    let title = id, acts = [];
+    if (id[0] === 'D' && id.length === 2) {
+      const n = +id[1], d = S.disks[n];
+      title = `Drive D${n}:`;
+      L.push(d ? `Disk: ${d.name}` : 'Empty - no disk inserted');
+      if (d) { L.push(`Size: ${d.bytes.length} bytes`); if (S.dirty[n]) L.push('Changed since loading (not saved)'); }
+      if (n === 8 && ramOn()) L.push('Marked as a RAM disk');
+      if (d) L.push('', ...driveProps(n).split('\n').slice(2));
+      acts = drvItems(n, innerWidth / 2, innerHeight / 3);
+    } else if (id[0] === 'K') {
+      const n = +id[1], c = S.carts[n];
+      title = `Cartridge ${n} (${n === 1 ? 'main, right slot' : 'left slot'})`;
+      L.push(c ? `Cartridge: ${c.name}` : 'Empty - no cartridge inserted');
+      if (c) { L.push(`Size: ${c.bytes.length} bytes`); if (c.type != null) L.push(`Cartridge type: ${c.type}`); }
+      acts = cartItems(n);
+    } else if (id === 'H') {
+      title = 'H: host files';
+      let n = 0; try { n = S.emu.m.FS.readdir('/host').length - 2; } catch (e) { /* not booted */ }
+      L.push(n > 0 ? `${n} file(s) shared with the emulator` : 'No host files shared');
+    } else if (id === 'C') {
+      title = 'C: cassette';
+      L.push($('tn').textContent === 'empty' ? 'Empty - no tape loaded' : 'Tape: ' + $('tn').textContent);
+    } else if (id === 'N') {
+      title = 'N: FujiNet';
+      L.push(FujiNet.enabled ? 'FujiNet emulation is on' : 'FujiNet emulation is off');
+    } else {
+      title = id + ':';
+      L.push(id === 'P' ? 'Printer device (output is captured)' : id === 'R' ? 'RS-232 serial (R:) device' : '');
+    }
+    L.push('', 'Activity: ' + st + ' (green read, red write, yellow other)');
+    return { title, lines: [title, ...L], body: L, acts };
+  }
+  function devDialog(id) {
+    const info = devInfo(id);
+    let dlg = $('devdlg');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'devdlg'; document.body.append(dlg); }
+    dlg.innerHTML = '';
+    dlg.style.cssText = 'background:#1b1e24;color:#e6e0d4;border:1px solid #4a5160;border-radius:10px;min-width:260px;max-width:min(92vw,420px)';
+    const h = document.createElement('h3'); h.textContent = info.title; h.style.margin = '0 0 8px';
+    const p = document.createElement('pre'); p.textContent = info.body.join('\n'); p.style.cssText = 'white-space:pre-wrap;margin:0 0 10px;font:12px ui-monospace,Consolas,monospace';
+    dlg.append(h, p);
+    for (const it of info.acts) {
+      const b = document.createElement('button'); b.textContent = it.label; b.style.cssText = 'display:block;width:100%;margin:4px 0;text-align:left';
+      b.onclick = () => { dlg.close(); it.run(); };
+      dlg.append(b);
+    }
+    const c = document.createElement('button'); c.textContent = 'Close'; c.style.cssText = 'display:block;width:100%;margin-top:8px'; c.onclick = () => dlg.close();
+    dlg.append(c);
+    dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+    dlg.showModal();
+  }
 
   // ---- diagnostics log ----
   const diagText = () => {
