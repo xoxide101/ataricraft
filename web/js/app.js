@@ -592,7 +592,11 @@
     }
   }
   async function loadAny0(file, alt, hint, noBoot) {
-    if (!S.emu) { log('boot first (press Boot, then load ' + file.name + ')'); return; }
+    if (!S.emu) {
+      S.pending = { file, alt, hint, noBoot };
+      log(`${file.name} is queued; it loads when you press Boot`);
+      return;
+    }
     log('loading ' + file.name + '…');
     const bytes = await AC.Progress.read(file, 'Loading ' + file.name);
     const t = S.emu.detect(file.name, bytes);
@@ -2008,6 +2012,7 @@
     if (S.emu && !S.off && !e.shiftKey) return powerOff();
     S.off = false;
     await boot();
+    if (S.emu && S.pending) { const p = S.pending; S.pending = null; await loadAny(p.file, p.alt, p.hint, p.noBoot); }
   };
   $('reset').onclick = () => S.emu && S.emu.warmStart();
   function coldOrExe() { if (S.lastExe) S.emu.bootFile(S.lastExe.name, S.lastExe.bytes); else S.emu.coldStart(); }
