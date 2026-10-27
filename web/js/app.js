@@ -2587,6 +2587,72 @@
     } else if (slot === 2) S.emu.coldStart();
   }
   // Cartridges are only changed with the power off: warn, then switch the computer off.
+  // ---- File-menu equivalents: boot image, state save/load, detach/rotate disks, save cartridge, full screen ----
+  async function saveBytes(name, bytes) {
+    const blob = new Blob([bytes]);
+    if (window.showSaveFilePicker) {
+      try { const fh = await showSaveFilePicker({ suggestedName: name }); const w = await fh.createWritable(); await w.write(blob); await w.close(); return fh.name; } catch (e) { if (e.name === 'AbortError') return null; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    return name;
+  }
+  const running = () => { if (S.emu && !S.off) return true; log('Power on first (press Boot)'); return false; };
+  function stateBytes() {
+    const hdr = new TextEncoder().encode('ACST1' + JSON.stringify({ model: $('model').value, ram: $('ram').value, tv: $('tv').value }) + '\n');
+    const snap = S.emu.snapshot();
+    const out = new Uint8Array(hdr.length + snap.length);
+    out.set(hdr); out.set(snap, hdr.length);
+    return out;
+  }
+  function applyState(bytes) {
+    const nl = bytes.indexOf(10);
+    if (nl < 0 || new TextDecoder().decode(bytes.subarray(0, 5)) !== 'ACST1') throw new Error('not an Ataricraft state file');
+    const h = JSON.parse(new TextDecoder().decode(bytes.subarray(5, nl)));
+    if (h.model !== $('model').value || h.ram !== $('ram').value || h.tv !== $('tv').value) throw new Error(`state is for ${h.model} / ${h.ram} / ${h.tv}: pick that machine and Boot first`);
+    S.emu.restore(bytes.subarray(nl + 1));
+  }
+  $('qsave').onclick = () => { if (running()) { S.quick = stateBytes(); log('quick saved'); } };
+  $('qload').onclick = () => { if (!S.quick) return log('Nothing quick-saved yet'); if (!running()) return; try { applyState(S.quick); log('quick loaded'); } catch (e) { log(e.message); } };
+  $('savestate').onclick = async () => { if (!running()) return; const n = await saveBytes('ataricraft-' + $('model').value + '.acstate', stateBytes()); if (n) log('state saved: ' + n); };
+  $('loadstate').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f || !running()) return;
+    try { applyState(new Uint8Array(await f.arrayBuffer())); log('state loaded: ' + f.name); } catch (err) { log('Could not load state: ' + err.message); }
+  };
+  $('detachall').onclick = () => { for (let n = 1; n <= 8; n++) $('de' + n).click(); log('all disks detached'); };
+  function rotateDisks(dir) {
+    const used = [1, 2, 3, 4, 5, 6, 7, 8].filter((n) => S.disks[n]);
+    if (used.length < 2) return log('Rotate needs at least two mounted disks');
+    if (!running()) return;
+    const imgs = used.map((n) => ({ disk: { name: S.disks[n].name, bytes: S.emu.readDisk(n) || S.disks[n].bytes }, dirty: S.dirty[n] }));
+    used.forEach((n) => S.emu.ejectDisk(n));
+    imgs.forEach((im, i) => {
+      const n = used[(i + dir + used.length) % used.length];
+      S.emu.mountDisk(n, im.disk.name, im.disk.bytes);
+      S.disks[n] = im.disk; S.dirty[n] = im.dirty;
+      $('d' + n).textContent = im.disk.name;
+    });
+    log('disks rotated');
+  }
+  $('rotdn').onclick = () => rotateDisks(1);
+  $('rotup').onclick = () => rotateDisks(-1);
+  for (const n of [1, 2]) {
+    $('savecart' + n).onclick = async () => {
+      const c = S.carts[n];
+      if (!c) return log(`No cartridge in slot ${n}`);
+      const nm = await saveBytes(c.name, c.bytes);
+      if (nm) log('cartridge saved: ' + nm);
+    };
+  }
+  $('bootimg').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (!S.emu || S.off) { await loadAny(f, false, null); await boot(); return; }
+    await loadAny(f, false, null);
+    if (S.disks[1] && S.disks[1].name === f.name && S.emu) S.emu.coldStart();
+  };
+  $('fullscr').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => log('Full screen was blocked by the browser')); };
+
   function confirmCartPower(what) {
     if (!S.emu || S.off) return true;
     if (!confirm(`Cartridges should only be changed with the power off.\n\nPower off now and ${what} the cartridge? Press Boot afterwards to start again.`)) return false;

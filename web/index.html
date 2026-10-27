@@ -262,7 +262,13 @@
     <button id="sbclose">✕ Close panel</button>
     <div id="sidetabs"><button data-t="sys">System</button><button data-t="drv">Cartridges &amp; drives</button><button data-t="fm">File manager</button><button data-t="net">Online &amp; networking</button><button data-t="dbg">Debugging</button></div>
     <div class="box" data-tab="sys">
-      <h3>Machine</h3>
+      <h3>File</h3>
+<div class="row"><label class="btn" title="Detects the file type and boots it (disk, program, cartridge, tape)">Boot image…<input id="bootimg" type="file"></label><button id="detachall" title="Remove every disk from D1: to D8:">Detach all disks</button></div>
+<div class="row"><button id="rotdn" title="Move each mounted disk to the next occupied drive">Rotate disks ▼</button><button id="rotup" title="Move each mounted disk to the previous occupied drive">Rotate disks ▲</button></div>
+<div class="row"><button id="qsave" title="Keep the machine state in memory">Quick save</button><button id="qload" title="Return to the quick-saved state">Quick load</button></div>
+<div class="row"><button id="savestate" title="Download the whole machine state to a file">Save state…</button><label class="btn" title="Restore a state file saved for the same machine setup">Load state…<input id="loadstate" type="file"></label></div>
+<div class="row"><button id="savecart1" title="Download the cartridge in slot 1">Save cart 1…</button><button id="savecart2" title="Download the cartridge in slot 2">Save cart 2…</button><button id="fullscr">Full screen</button></div>
+<h3>Machine</h3>
       <div class="row"><button id="reset">Reset</button><button id="cold">Cold start</button><button id="pause">Pause</button></div>
       <div class="row"><button id="pastebtn" title="Ctrl+V">Paste</button><button id="copytxt" title="Ctrl+C">Copy text</button><button id="copyimg">Copy image</button><button id="stoptype">Stop</button></div>
       <div class="row"><span class="dim">Speed</span><input id="speed" type="range" min="-3" max="4" step="0.25" value="0"><span id="speedv">1.0×</span></div>
@@ -408,13 +414,13 @@
 <script src="js/catalog.js?v=20261023d"></script>
 <script src="js/romdb.js?v=20261023d"></script>
 <script src="js/xep80chr.js?v=20261023d"></script>
-<script src="js/altirra.js?v=zx"></script>
+<script src="js/altirra.js?v=zy"></script>
 <script src="js/memtest.js?v=20261023d"></script>
 <script src="js/diskdb.js?v=20261023d"></script>
 <script src="js/dosfs.js?v=20261023f"></script>
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zx"></script>
+<script src="js/app.js?v=20261027zy"></script>
 </body>
 </html>
