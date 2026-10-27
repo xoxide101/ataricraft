@@ -4,6 +4,9 @@
 #include "cassette.h"
 #include <map>
 #include <sys/stat.h>
+#include <at/atcore/devicevideo.h>
+#include <vd2/system/VDString.h>
+#include <vd2/Kasumi/pixmap.h>
 
 namespace {
 
@@ -99,9 +102,113 @@ ATMediaWriteMode WebWriteMode(int m) {
 	}
 }
 
+std::vector<uint32_t> g_xepFrame;
+unsigned g_xepW = 0, g_xepH = 0;
+
+IATDeviceVideoOutput *WebXepOutput() {
+	ATDeviceManager *dm = g_sim.GetDeviceManager();
+	IATDeviceVideoManager *vm = dm ? dm->GetService<IATDeviceVideoManager>() : nullptr;
+	return vm ? vm->GetOutputByName("xep80") : nullptr;
+}
+
 }
 
 extern "C" {
+
+// H: host drive mapped to the Emscripten folder /host (read/write).
+EMSCRIPTEN_KEEPALIVE int aw_host(int on) {
+	if (!g_core.simulatorInitialized)
+		return 0;
+	ATDeviceManager *dm = g_sim.GetDeviceManager();
+	IATDevice *ex = dm->GetDeviceByTag("hostfs");
+	if (ex)
+		dm->RemoveDevice(ex);
+	if (!on)
+		return 1;
+	mkdir("/host", 0777);
+	ATPropertySet ps;
+	ps.SetBool("readonly", false);
+	ps.SetBool("lowercase", false);
+	ps.SetString("path1", L"/host");
+	try {
+		return dm->AddDevice("hostfs", ps, false) ? 1 : 0;
+	} catch (...) {
+		return 0;
+	}
+}
+
+// XEP80 80-column adapter on joystick port 1.
+EMSCRIPTEN_KEEPALIVE int aw_xep(int on) {
+	if (!g_core.simulatorInitialized)
+		return 0;
+	ATDeviceManager *dm = g_sim.GetDeviceManager();
+	IATDevice *ex = dm->GetDeviceByTag("xep80");
+	if (ex)
+		dm->RemoveDevice(ex);
+	g_xepW = g_xepH = 0;
+	if (!on)
+		return 1;
+	ATPropertySet ps;
+	ps.SetUint32("port", 1);
+	try {
+		return dm->AddDevice("xep80", ps, false) ? 1 : 0;
+	} catch (...) {
+		return 0;
+	}
+}
+
+// Refreshes the XEP80 frame; returns 1 when the adapter is present and sending a valid signal.
+EMSCRIPTEN_KEEPALIVE int aw_xep_update() {
+	IATDeviceVideoOutput *o = WebXepOutput();
+	if (!o)
+		return 0;
+	o->UpdateFrame();
+	const ATDeviceVideoInfo& vi = o->GetVideoInfo();
+	if (!vi.mbSignalValid)
+		return 0;
+	const VDPixmap& pm = o->GetFrameBuffer();
+	if (!pm.data || pm.format != nsVDPixmap::kPixFormat_Pal1)
+		return 0;
+	const unsigned w = pm.w, h = pm.h;
+	g_xepW = w;
+	g_xepH = h;
+	g_xepFrame.resize((size_t)w * h);
+	const uint32 fg = pm.palette ? (pm.palette[1] | 0xFF000000u) : 0xFFFFFFFFu;
+	const uint32 bg = pm.palette ? (pm.palette[0] | 0xFF000000u) : 0xFF000000u;
+	for (unsigned y = 0; y < h; ++y) {
+		const uint8 *row = (const uint8 *)pm.data + (ptrdiff_t)y * pm.pitch;
+		uint32_t *d = &g_xepFrame[(size_t)y * w];
+		for (unsigned x = 0; x < w; ++x)
+			d[x] = (row[x >> 3] & (0x80 >> (x & 7))) ? fg : bg;
+	}
+	return 1;
+}
+EMSCRIPTEN_KEEPALIVE const uint32_t *aw_xep_frame() { return g_xepFrame.data(); }
+EMSCRIPTEN_KEEPALIVE int aw_xep_w() { return (int)g_xepW; }
+EMSCRIPTEN_KEEPALIVE int aw_xep_h() { return (int)g_xepH; }
+
+// Dumps one of Altirra's built-in firmware images (kernel, kernelxl, kernel816, 5200, basic); returns its size, 0 if unknown.
+std::vector<uint8> g_fwDump;
+EMSCRIPTEN_KEEPALIVE int aw_fw(const char *name) {
+	static const struct { const char *n; uint64 id; } T[] = {
+		{ "kernel", kATFirmwareId_Kernel_LLE }, { "kernelxl", kATFirmwareId_Kernel_LLEXL },
+		{ "kernel816", kATFirmwareId_Kernel_816 }, { "5200", kATFirmwareId_5200_LLE },
+		{ "basic", kATFirmwareId_Basic_ATBasic },
+	};
+	for (auto& e : T) {
+		if (strcmp(e.n, name))
+			continue;
+		vdfastvector<uint8> buf;
+		bool usable = false;
+		uint32 len = 0;
+		if (!ATLoadInternalFirmware(e.id, nullptr, 0, 0, nullptr, &len, &buf, &usable))
+			return 0;
+		g_fwDump.assign(buf.begin(), buf.end());
+		return (int)g_fwDump.size();
+	}
+	return 0;
+}
+EMSCRIPTEN_KEEPALIVE const uint8_t *aw_fw_data() { return g_fwDump.data(); }
 
 EMSCRIPTEN_KEEPALIVE int aw_init() {
 	mkdir("/system", 0777);

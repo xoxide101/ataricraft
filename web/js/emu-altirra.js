@@ -22,8 +22,8 @@ window.AC = window.AC || {};
   function loadModule() {
     if (!modPromise) {
       modPromise = (async () => {
-        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=1');
-        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=1');
+        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=3');
+        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=3');
         return AltirraWeb({ locateFile: (p) => (p.endsWith('.wasm') ? 'data:application/wasm;base64,' + window.ALTIRRA_WASM_B64 : p), print: () => {}, printErr: () => {} });
       })();
       modPromise.catch(() => { modPromise = null; });
@@ -50,6 +50,8 @@ window.AC = window.AC || {};
         tapePlay: cw('aw_tape_play', null, ['number']), tapePos: cw('aw_tape_pos', 'number'), tapeLen: cw('aw_tape_len', 'number'),
         stSize: cw('aw_state_size', 'number'), stSave: cw('aw_state_save', 'number', ['number', 'number']), stLoad: cw('aw_state_load', 'number', ['number', 'number']),
         ram: cw('aw_ram', 'number'), ramSize: cw('aw_ram_size', 'number'), alloc: cw('aw_alloc', 'number', ['number']), free: cw('aw_free', null, ['number']),
+        host: cw('aw_host', 'number', ['number']), xep: cw('aw_xep', 'number', ['number']), xepUpdate: cw('aw_xep_update', 'number'),
+        xepFrame: cw('aw_xep_frame', 'number'), xepW: cw('aw_xep_w', 'number'), xepH: cw('aw_xep_h', 'number'),
       };
       this.prev = { special: 0, start: 0, select: 0, option: 0 };
       this.resPos = 0;
@@ -72,12 +74,21 @@ window.AC = window.AC || {};
       o('sio_patch', opt.fastSio === false ? 'disabled' : 'enabled');
       for (const [k, v] of Object.entries(opt.altirra || {})) o(k, v);
       if (!a.boot()) throw new Error('Altirra boot failed');
+      try { m.FS.mkdir('/host'); } catch (e) { /* exists */ }
+      for (const [n, b] of Object.entries(opt.host || {})) m.FS.writeFile('/host/' + n, b);
+      a.host(1);
+      if (opt.xep80) a.xep(1);
+      a.reset(1);
       return emu;
     }
 
-    hostFiles() { return {}; }
-    hostWrite() {}
-    hostDelete() {}
+    hostFiles() {
+      const out = {};
+      for (const n of this.m.FS.readdir('/host')) if (n !== '.' && n !== '..') out[n] = this.m.FS.readFile('/host/' + n);
+      return out;
+    }
+    hostWrite(name, bytes) { this.m.FS.writeFile('/host/' + name, bytes); }
+    hostDelete(name) { this.m.FS.unlink('/host/' + name); }
 
     clearInput() {}
 
@@ -172,7 +183,21 @@ window.AC = window.AC || {};
       return x;
     }
 
-    xepHeight() { return 0; }
+    // XEP80 80-column output (560 px wide), shared with the Atari800 core's interface. Returns 0 until the adapter has a valid signal.
+    xepHeight() {
+      if (!this.opt.xep80) return 0;
+      this.xepOk = !!this.aw.xepUpdate();
+      return this.xepOk ? this.aw.xepH() : 0;
+    }
+
+    xepRender(img32, _palette, _phase) {
+      const w = this.aw.xepW(), h = this.aw.xepH();
+      if (!this.xepOk || !w || !h) return 0;
+      const src = new Uint32Array(this.m.HEAPU8.buffer, this.aw.xepFrame(), w * h);
+      const cw = Math.min(w, 560);
+      for (let y = 0; y < h; y++) img32.set(src.subarray(y * w, y * w + cw), y * 560);
+      return h;
+    }
 
     render(img32, _palette) {
       const a = this.aw, w = Math.min(a.fw(), W), h = Math.min(a.fh(), H), pitch = a.pitch();

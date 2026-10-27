@@ -127,13 +127,14 @@
   }
 
   // Open-licence Altirra firmware shipped with the app; always listed after any ROMs the user supplies.
-  const BUILTIN = { os800: 'Altirra OS 3.44 (800, built-in)', osxl: 'Altirra OS 3.44 (XL/XE, built-in)', basic: 'Altirra BASIC 1.59 (built-in)' };
+  const BUILTIN = [['os800', 'os800', 'Altirra OS 3.44 (800, built-in)'], ['osxl', 'osxl', 'Altirra OS 3.44 (XL/XE, built-in)'], ['basic', 'basic', 'Altirra BASIC 1.59 (built-in)'],
+    ['os800', 'os800b', 'Altirra OS AltirraSDL (800, built-in)'], ['osxl', 'osxlb', 'Altirra OS AltirraSDL (XL/XE, built-in)']];
   function ensureBuiltinRoms() {
-    for (const k of Object.keys(BUILTIN)) {
-      let e = S.lib[k].find((x) => x.builtin);
-      if (e) S.lib[k].splice(S.lib[k].indexOf(e), 1);
-      else e = { name: BUILTIN[k], builtin: true, label: BUILTIN[k], bytes: Uint8Array.from(atob(AC.ALTIRRA[k]), (c) => c.charCodeAt(0)) };
-      S.lib[k].push(e);
+    for (const [lib, key, label] of BUILTIN) {
+      let e = S.lib[lib].find((x) => x.builtin && x.key === key);
+      if (e) S.lib[lib].splice(S.lib[lib].indexOf(e), 1);
+      else e = { name: label, key, builtin: true, label, bytes: Uint8Array.from(atob(AC.ALTIRRA[key]), (c) => c.charCodeAt(0)) };
+      S.lib[lib].push(e);
     }
   }
 
@@ -257,7 +258,7 @@
     log('booting…');
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
     try {
-      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: alt ? null : chosenBasic(), basicOn: $('basic').checked, xep80: !alt && $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
+      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: alt ? null : chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     hookDevices();
