@@ -158,7 +158,8 @@
   .dpad { display:grid; grid-template-columns:repeat(3,76px); grid-template-rows:repeat(2,64px); gap:6px; }
   .dpad .akey { height:100%; font-size:24px; } .dpad .a-up { grid-column:2; grid-row:1; } .dpad .a-left { grid-column:1; grid-row:2; } .dpad .a-down { grid-column:2; grid-row:2; } .dpad .a-right { grid-column:3; grid-row:2; }
   .aside { display:flex; flex-wrap:wrap; gap:6px; max-width:320px; } .aside.con .akey { background:#4a4035; color:#e8e0d0; }
-  .amini { display:flex; gap:4px; margin-top:6px; } .amini .akey { flex:1; min-width:0; height:44px; padding:0 2px; font-size:13px; }
+  .akey.down, .aside.con .akey.down { background:var(--acc); color:#000; transform:translateY(3px); box-shadow:0 0 0 #000, 0 0 12px var(--acc); }
+.amini { display:flex; gap:4px; margin-top:6px; } .amini .akey { flex:1; min-width:0; height:44px; padding:0 2px; font-size:13px; }
   .amini .a-left, .amini .a-down, .amini .a-up, .amini .a-right { flex:1.2; font-size:18px; }
   #kmini { display:none; } #kmini[hidden] { display:none; }
   @media (max-width:900px), (pointer:coarse) { #kmini:not([hidden]) { display:block; } }
@@ -380,6 +381,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027x"></script>
+<script src="js/app.js?v=20261027y"></script>
 </body>
 </html>
