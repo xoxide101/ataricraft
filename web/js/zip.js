@@ -34,7 +34,13 @@
     const P = window.AC && AC.Progress;
     const label = 'Extracting ' + (ent.name || 'file').split('/').pop();
     if (ent.method === 0) return P ? P.read(raw, label) : new Uint8Array(await raw.arrayBuffer());
-    if (ent.method !== 8) throw new Error('unsupported zip method ' + ent.method);
+    if (ent.method === 93) {
+      if (!window.fzstd) throw new Error('zstd decoder missing (js/fzstd.js)');
+      const comp = P ? await P.read(raw, label) : new Uint8Array(await raw.arrayBuffer());
+      if (P) await P.yieldUI();
+      return fzstd.decompress(comp);
+    }
+    if (ent.method !== 8) throw new Error('unsupported zip method ' + ent.method + ' (supported: stored, deflate, zstd)');
     const prog = P && ent.csize >= (2 << 20) ? P.begin(label, ent.csize, true) : null;
     try {
       let n = 0;

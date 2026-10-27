@@ -586,6 +586,12 @@
 
   // Detects the format from the file contents (extensions are only a hint), then routes it to the right device.
   async function loadAny(file, alt, hint, noBoot) {
+    try { await loadAny0(file, alt, hint, noBoot); } catch (e) {
+      diag('LOAD FAILED ' + file.name + ': ' + (e && e.stack || e), 'error');
+      log('Could not load ' + file.name + ': ' + (e && e.message || e));
+    }
+  }
+  async function loadAny0(file, alt, hint, noBoot) {
     if (!S.emu) { log('boot first (press Boot, then load ' + file.name + ')'); return; }
     log('loading ' + file.name + '…');
     const bytes = await AC.Progress.read(file, 'Loading ' + file.name);
