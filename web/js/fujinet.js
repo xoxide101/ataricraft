@@ -7,7 +7,7 @@
   const C = 0x43, N = 0x4e, E = 0x45;
   const IMG = /\.(atr|xfd|dcm|atx|pro)$/i;
   // Public TNFS servers (fujinet.online/tnfs-server-status). Host slot 1 is always the local SD folder.
-  const PUBLIC_HOSTS = ['tnfs.fujinet.online', 'apps.irata.online', 'fujinet.abbuc.de', 'fujinet.diller.org', 'fujinet.pl', 'ec.tnfs.io', 'atarionline.eu', 'fujinet.skdev.org', '13leader.net', 'tnfs.scatarians.org', 'alcatrazbbs.ddns.net', 'atari8.us', 'fujinet.sideburn.com', 'tnfs.adamarchive.org', 'coconet.ddns.net', 'tnfs.8bitatari.com', 'tnfs.calaluis.cl', 'fujinet.buriedbits.org'];
+  const PUBLIC_HOSTS = ['fujinet.diller.org', 'apps.irata.online', 'fujinet.abbuc.de', 'ec.tnfs.io', 'fujinet.pl', '13leader.net', 'atari8.us', 'calaro.cl', 'fujinet.us.to', 'atari-apps.irata.online', 'tnfs.fujinet.online', 'atarionline.eu', 'fujinet.skdev.org', 'tnfs.scatarians.org', 'alcatrazbbs.ddns.net', 'fujinet.sideburn.com', 'tnfs.adamarchive.org', 'coconet.ddns.net', 'tnfs.8bitatari.com', 'tnfs.calaluis.cl', 'fujinet.buriedbits.org'];
   const defaultHosts = () => ['SD', ...PUBLIC_HOSTS.slice(0, HOSTS - 1)];
 
   const FujiNet = {
