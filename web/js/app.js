@@ -2541,7 +2541,67 @@
     S.dirty[n] = false;
     log(`D${n}: saved ${name} (${bytes.length} bytes) to your Downloads`);
   };
-  window.addEventListener('beforeunload', (e) => {
+  // Save all / Load all: every mounted disk and cartridge as one .zip (with a slot manifest), or many files at once.
+  const SETMAN = 'ataricraft-set.json';
+  $('saveall').onclick = () => {
+    const files = [], man = { disks: {}, carts: {} };
+    for (let n = 1; n <= 8; n++) {
+      const path = S.emu && S.emu.diskPaths && S.emu.diskPaths[n];
+      const bytes = path ? S.emu.readDisk(n) : (S.disks[n] && S.disks[n].bytes);
+      if (!bytes) continue;
+      const nm = (S.disks[n] && S.disks[n].name) || (path || '').replace(/^\/d\d_/, '') || `d${n}.atr`;
+      files.push({ name: `D${n}_${nm}`, data: bytes }); man.disks[n] = `D${n}_${nm}`;
+      if (S.dirty) S.dirty[n] = false;
+    }
+    for (const n of [1, 2]) {
+      const c = S.carts[n]; if (!c || !c.bytes) continue;
+      files.push({ name: `CART${n}_${c.name}`, data: c.bytes }); man.carts[n] = `CART${n}_${c.name}`;
+    }
+    if (!files.length) { log('nothing mounted to save'); return; }
+    files.push({ name: SETMAN, data: new TextEncoder().encode(JSON.stringify(man)) });
+    saveBlob('ataricraft-drives.zip', storedZip(files), 'application/zip');
+    log(`saved ${files.length - 1} disk/cartridge images as ataricraft-drives.zip`);
+  };
+  const putCart = (slot, f) => (S.emu ? insertCart(slot, f) : loadAny(f, slot === 2, 'cart'));
+  $('loadall').onchange = async (e) => {
+    const picked = [...e.target.files]; e.target.value = '';
+    if (!picked.length) return;
+    let nd = 0, nc = 0;
+    try {
+      let items = [];
+      for (const f of picked) {
+        if (/\.zip$/i.test(f.name)) {
+          const ents = await AC.Zip.list(f);
+          const mi = ents.find((x) => x.name === SETMAN);
+          const man = mi ? JSON.parse(new TextDecoder().decode(await AC.Zip.extract(f, mi))) : null;
+          for (const en of ents) {
+            if (en === mi) continue;
+            const base = en.name.split('/').pop();
+            let slot = null;
+            if (man) {
+              for (const [n, v] of Object.entries(man.disks || {})) if (v === en.name) slot = { disk: +n };
+              for (const [n, v] of Object.entries(man.carts || {})) if (v === en.name) slot = { cart: +n };
+              if (!slot) continue;
+            }
+            items.push({ name: man ? base.replace(/^(D\d|CART\d)_/, '') : base, slot, get: async () => new File([await AC.Zip.extract(f, en)], man ? base.replace(/^(D\d|CART\d)_/, '') : base) });
+          }
+        } else items.push({ name: f.name, slot: null, get: async () => f });
+      }
+      let nextD = 1, nextC = 1;
+      const usedD = new Set(items.filter((i) => i.slot && i.slot.disk).map((i) => i.slot.disk));
+      for (const it of items) {
+        const fl = await it.get();
+        const kind = extKind(fl.name);
+        if (it.slot && it.slot.disk) { await loadAny(fl, it.slot.disk, 'disk', true); nd++; }
+        else if (it.slot && it.slot.cart) { await putCart(it.slot.cart, fl); nc++; }
+        else if (kind === 'cart') { if (nextC <= 2) { await putCart(nextC++, fl); nc++; } else log(`no free cartridge slot for ${fl.name}`); }
+        else if (kind === 'disk' || !kind) { while (usedD.has(nextD)) nextD++; if (nextD <= 8) { usedD.add(nextD); await loadAny(fl, nextD, 'disk', true); nd++; } else log(`no free drive for ${fl.name}`); }
+        else await loadAny(fl, false, kind);
+      }
+      $('allinfo').textContent = `${nd} disk${nd === 1 ? '' : 's'}, ${nc} cart${nc === 1 ? '' : 's'}`;
+      log(`loaded ${nd} disk(s) and ${nc} cartridge(s)`);
+    } catch (err) { log('Load all failed: ' + (err && err.message || err)); }
+  };  window.addEventListener('beforeunload', (e) => {
     if (Object.keys(S.dirty).some((n) => S.dirty[n] && S.emu && S.emu.diskPaths && S.emu.diskPaths[n])) { e.preventDefault(); e.returnValue = ''; }
   });
   $('ctypeok').onclick = () => {
