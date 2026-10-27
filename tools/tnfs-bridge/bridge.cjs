@@ -57,8 +57,46 @@ async function conn(hostSpec) {
 const cs = (b, off) => { const e = b.indexOf(0, off); return [b.toString('latin1', off, e < 0 ? b.length : e), (e < 0 ? b.length : e) + 1]; };
 const path0 = (p) => Buffer.from(p + '\0', 'latin1');
 
+// TNFS 1.2 extended listing: entries with flags and size, many per packet.
+async function listX(c, path) {
+  let r = await c.req(0x17, Buffer.concat([Buffer.from([0, 0, 0, 0]), Buffer.from('\0'), path0(path)]));
+  if (r[4] !== 0) return null;
+  const h = r[5], out = [];
+  for (let guard = 0; guard < 200; guard++) {
+    r = await c.req(0x18, Buffer.from([h, 0]));
+    if (r[4] !== 0 && r[4] !== 0x21) break;
+    const n = r[5];
+    let o = 9;
+    for (let i = 0; i < n && o < r.length; i++) {
+      const flags = r[o], size = r.readUInt32LE(o + 1);
+      const [name, next] = cs(r, o + 13);
+      o = next;
+      if (name && name !== '.' && name !== '..') out.push({ name, dir: !!(flags & 1), size });
+    }
+    if (r[4] === 0x21) break;
+  }
+  c.req(0x12, Buffer.from([h])).catch(() => {});
+  return out;
+}
+
+const listCache = new Map();
 async function list(hostSpec, path) {
+  const key = hostSpec.toLowerCase() + '|' + path, hit = listCache.get(key);
+  if (hit && Date.now() - hit.t < 120000) return hit.v;
+  const v = await listFresh(hostSpec, path);
+  listCache.set(key, { t: Date.now(), v });
+  return v;
+}
+
+async function listFresh(hostSpec, path) {
   const c = await conn(hostSpec);
+  if (!c.noX) {
+    try {
+      const x = await listX(c, path);
+      if (x && x.length) return x;
+      if (x === null) c.noX = true;
+    } catch (e) { c.noX = true; }
+  }
   let r = await c.req(0x10, path0(path));
   if (r[4] !== 0) throw new Error('opendir failed (status ' + r[4] + ')');
   const h = r[5], out = [];
