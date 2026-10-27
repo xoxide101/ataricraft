@@ -71,13 +71,17 @@
     for (const e of all) if (S.lib[e.kind] && !S.lib[e.kind].some((x) => x.name === e.name)) S.lib[e.kind].push({ name: e.name, bytes: e.bytes });
     if (all.length) { fillRomSelects(); log(`restored ${all.length} saved ROMs`); }
   }
-  $('romforget').onclick = async () => {
-    const db = await romDb;
-    if (db) db.transaction('roms', 'readwrite').objectStore('roms').clear();
+  // Reset ROMs puts the selection back to defaults and keeps every scanned ROM listed; Shift-click also forgets the stored ROMs.
+  $('romforget').onclick = async (ev) => {
     localStorage.removeItem('ac.romsel');
-    S.lib = { os800: [], osxl: [], basic: [] };
+    S.basicTouched = false;
+    if (ev && ev.shiftKey) {
+      const db = await romDb;
+      if (db) db.transaction('roms', 'readwrite').objectStore('roms').clear();
+      S.lib = { os800: [], osxl: [], basic: [] };
+      log('saved ROMs cleared');
+    } else log('ROM selection reset; all ROMs stay listed (Shift-click to forget stored ROMs)');
     fillRomSelects();
-    log('saved ROMs cleared');
   };
 
   // MAME-style .zip files are expanded into virtual files (extracted only when used).
