@@ -267,6 +267,8 @@
       <div class="row"><button id="pastebtn" title="Ctrl+V">Paste</button><button id="copytxt" title="Ctrl+C">Copy text</button><button id="copyimg">Copy image</button><button id="stoptype">Stop</button></div>
       <div class="row"><span class="dim">Speed</span><input id="speed" type="range" min="-3" max="4" step="0.25" value="0"><span id="speedv">1.0×</span></div>
       <div class="row"><span class="dim">Display</span><select id="scalemode" title="How the picture is scaled up"><option value="sharp">Original (blocky pixels)</option><option value="sharpbi">Sharp smooth</option><option value="epx">Smooth edges (EPX)</option><option value="smooth">Soft (bilinear)</option></select><label class="dim" title="Optional darker lines between scanlines"><input id="scanlines" type="checkbox" style="display:inline"> Scanlines</label></div>
+      <div class="row"><span class="dim">Colour</span><select id="palstyle" title="Palette preset (follows the NTSC/PAL setting)"></select><select id="palgamut" title="Phosphor primaries correction: None = raw decode"></select></div>
+      <details><summary class="dim" style="cursor:pointer">Adjust colour</summary><div id="palsl"></div></details>
       <div class="row"><button id="start">Start</button><button id="select">Select</button><button id="option">Option</button><button id="brk">Break</button></div>
       <div class="row"><label class="dim" title="WASD and arrow keys move, Space fires. W, A, S, D and Space stop typing while on."><input id="joy" type="checkbox" style="display:inline"> GAME MODE (WASD / arrows + Space fire)</label></div>
     </div>
@@ -396,7 +398,7 @@
   </div>
 </main>
 <script src="ref/atari-ref.js"></script>
-<script src="js/palette.js"></script>
+<script src="js/palette.js?v=zw"></script>
 <script src="js/progress.js"></script>
 <script src="js/emu.js?v=20261027b"></script>
 <script src="js/titles-data.js?v=20261023d"></script>
@@ -412,6 +414,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zv"></script>
+<script src="js/app.js?v=20261027zw"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const S = { emu: null, dirty: {}, roms: { os800: null, osxl: null, basic: null }, running: false, speed: 1, acc: 0, last: 0, typeQ: [], typeWait: 0, joyMode: false, joy: 0, fire: false };
-  const pal = AC.makePalette();
+  const pal = new Uint32Array(256);
   const cv = $('screen');
   const ctx = cv.getContext('2d');
   const img = ctx.createImageData(AC.SCREEN.w, AC.SCREEN.h);
@@ -390,7 +390,33 @@
       for (let i = 0; i < 240; i++) ctx.fillRect(0, i * line + line * 0.6, W, line * 0.4);
     }
   }
-  $('scalemode').value = scaleMode;
+  // Palette: per TV standard, a preset plus adjustable parameters (see palette.js); only the parameters persist.
+  const PALSL = [['hue1Angle', 'Tint', 0, 360, 1, 0], ['hueStep', 'Hue step', 0, 35, 0.1, 1], ['saturation', 'Saturation', 0, 0.5, 0.005, 2], ['brightness', 'Brightness', -0.5, 0.5, 0.005, 2], ['contrast', 'Contrast', 0.5, 1.5, 0.01, 2], ['gamma', 'Gamma', 0.5, 2, 0.01, 2]];
+  let palSaved = {}; try { palSaved = JSON.parse(localStorage.getItem('ac.pal2') || '{}'); } catch (e) { /* defaults */ }
+  const palTv = () => ($('tv').value === 'pal' ? 'pal' : 'ntsc');
+  const palCur = () => palSaved[palTv()] || (palSaved[palTv()] = { ...AC.PALETTE_PRESETS[palTv()][0][2] });
+  function palApply() { AC.buildPalette(palTv(), palCur(), pal); }
+  function palUI() {
+    const tv = palTv(), cur = palCur(), ps = $('palstyle');
+    ps.innerHTML = '';
+    let hit = '';
+    for (const [id, name, p] of AC.PALETTE_PRESETS[tv]) { ps.append(new Option(name, id)); if (Object.keys(p).every((k) => Math.abs(p[k] - cur[k]) < 1e-6 || p[k] === cur[k])) hit = id; }
+    if (!hit) ps.append(new Option('Custom', 'custom')); ps.value = hit || 'custom';
+    $('palgamut').value = cur.primaries;
+    PALSL.forEach(([k, , , , , d], i) => { const r = $('palsl').children[i]; r.querySelector('input').value = cur[k]; r.querySelector('b').textContent = (+cur[k]).toFixed(d); });
+  }
+  const palChange = (patch) => { Object.assign(palCur(), patch); localStorage.setItem('ac.pal2', JSON.stringify(palSaved)); palApply(); palUI(); };
+  for (const [v, n] of AC.PALETTE_PRIMARIES) $('palgamut').append(new Option(n, v));
+  PALSL.forEach(([k, label, mn, mx, st]) => {
+    const r = document.createElement('div'); r.className = 'row';
+    r.innerHTML = `<span class="dim" style="width:70px">${label}</span><input type="range" min="${mn}" max="${mx}" step="${st}" style="flex:1"><b style="width:44px;text-align:right;font-weight:400"></b>`;
+    r.querySelector('input').oninput = (e) => palChange({ [k]: +e.target.value });
+    $('palsl').append(r);
+  });
+  $('palstyle').onchange = (e) => { const p = AC.PALETTE_PRESETS[palTv()].find((x) => x[0] === e.target.value); if (p) palChange({ ...p[2] }); e.target.blur(); };
+  $('palgamut').onchange = (e) => { palChange({ primaries: e.target.value }); e.target.blur(); };
+  $('tv').addEventListener('change', () => { palApply(); palUI(); });
+  palApply(); palUI();  $('scalemode').value = scaleMode;
   $('scalemode').onchange = (e) => { scaleMode = e.target.value; localStorage.setItem('ac.scale', scaleMode); e.target.blur(); applyScale(); };
   $('scanlines').checked = scanOn;
   $('scanlines').onchange = (e) => { scanOn = e.target.checked; localStorage.setItem('ac.scan', scanOn ? '1' : '0'); e.target.blur(); applyScale(); };
