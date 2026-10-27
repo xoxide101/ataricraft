@@ -482,6 +482,7 @@
       const fr = S.emu ? S.emu.frames : 0;
       $('fps').textContent = (fpsStat.draws / dt).toFixed(0);
       $('efps').textContent = ((fr - fpsStat.f0) / dt).toFixed(0);
+      $('clk').textContent = (((fr - fpsStat.f0) / dt) * ($('tv').value === 'pal' ? 35568 : 29868) / 1e6).toFixed(2);
       fpsStat.t = t; fpsStat.draws = 0; fpsStat.f0 = fr;
     }
   }

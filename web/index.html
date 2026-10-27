@@ -255,7 +255,7 @@
   <button id="mapbtn" class="tgl" title="Keyboard mapping…"><svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="20" height="14" rx="2.5"/><path d="M4.5 5h1.5M8.5 5h1.5M12 5h1.5M15.5 5h2M4.5 8.5h2M8.5 8.5h1.5M12 8.5h1.5M15.5 8.5h2M6 12h10" stroke-linecap="round"/></svg></button>
   <button id="sndbtn" class="tgl" title="Sound on/off">🔊</button><button id="fnbtn" class="tgl" title="Virtual FujiNet (SIO device $70) on/off">FN</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
   <div id="infobar"><span id="status" class="dim">choose ROMs, then Boot</span>
-  <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span></span></div>
+  <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span><span title="Effective 6502 clock (emulated frames/s × cycles per frame)"><b id="clk">0.00</b> MHz</span></span></div>
 </header>
 <div id="progstrip" style="display:none"><div class="pfill"></div><span class="plab"></span><span class="ppct"></span></div>
 <main>
@@ -423,6 +423,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zzzz"></script>
+<script src="js/app.js?v=20261027zzzzz"></script>
 </body>
 </html>
