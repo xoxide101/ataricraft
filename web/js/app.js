@@ -440,7 +440,7 @@
 
   function sendJoy() {
     if (!S.emu) return;
-    S.emu.down('joy0', { joy0: S.joy, trig0: S.fire ? 1 : 0 });
+    S.emu.down('joy0', { joy0: S.joy | JOY.ui | JOY.gp, trig0: (S.fire || joyFire()) ? 1 : 0 });
   }
 
   // ---- physical keyboard ----
@@ -1336,12 +1336,150 @@
     const up = () => { b.classList.remove('down'); padPos.held &= ~bit; applyPad(); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
   });
-  // Keyboard panel tabs: Keys / Arrows / Pad. Pad turns the touch pad on while shown and restores the previous state after.
+  // ---- joysticks (Stick tab): on-screen stick plus a real USB controller, with mappable extra buttons ----
+  const JACT = [['none', '(nothing)'], ['fire', 'Fire'], ['fire2', 'Fire 2 (acts as Fire)'], ['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['reset', 'Reset'], ['break', 'Break']];
+  const JOYTYPES = {
+    cx40: { name: 'Atari CX40 joystick (original)', info: ['One red fire button and an 8-way stick', 'Diagonals are two directions at once'],
+      ctl: [['fire', 'Fire', 'big', 'fire']] },
+    cx40p: { name: 'Atari CX40+ (USB)', info: ['One red fire button and an 8-way stick', '2 side buttons: default Select and Option (mappable)'],
+      ctl: [['fire', 'Fire', 'big', 'fire'], ['s1', 'Side 1', 'small', 'select'], ['s2', 'Side 2', 'small', 'option']] },
+    cxstick: { name: 'Atari CXSTICK (newest)', info: ['One red fire button and an 8-way stick', '4 buttons around the ring under the top: mappable, no fixed use', '2 side buttons: default Select and Option (mappable)'],
+      ctl: [['fire', 'Fire', 'big', 'fire'], ['r1', 'Ring 1', 'small', 'none'], ['r2', 'Ring 2', 'small', 'none'], ['r3', 'Ring 3', 'small', 'none'], ['r4', 'Ring 4', 'small', 'none'], ['s1', 'Side 1', 'small', 'select'], ['s2', 'Side 2', 'small', 'option']] },
+    atari2: { name: 'Atari 2-button joystick', info: ['8-way stick: diagonals are two directions at once', 'Left button = standard trigger (Fire)', 'Right button = second button (the core has one trigger line, so it also fires)'],
+      ctl: [['fire', 'Left (Fire)', 'big', 'fire'], ['fire2', 'Right (Fire 2)', 'big', 'fire2']] },
+    c64: { name: 'C64-style joystick', info: ['8-way stick, two red buttons on top left and right', 'Top left = Fire, top right = Fire 2', '4 small buttons along the front: default Start, Select, Option, Reset (mappable)'],
+      ctl: [['t1', 'Top left (Fire)', 'big', 'fire'], ['t2', 'Top right (Fire 2)', 'big', 'fire2'], ['b1', 'Front 1', 'small', 'start'], ['b2', 'Front 2', 'small', 'select'], ['b3', 'Front 3', 'small', 'option'], ['b4', 'Front 4', 'small', 'reset']] },
+  };
+  const JOY = Object.assign({ dev: 'cx40', act: {}, gpb: {}, con: true, usb: true }, JSON.parse(localStorage.getItem('ac.joyx') || '{}'));
+  Object.assign(JOY, { ui: 0, gp: 0, cnt: {}, learn: null, down: {} });
+  const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ dev: JOY.dev, act: JOY.act, gpb: JOY.gpb, con: JOY.con, usb: JOY.usb }));
+  const jdef = () => JOYTYPES[JOY.dev] || JOYTYPES.atari2;
+  const jact = (c) => { const t = (JOY.act[JOY.dev] || {})[c[0]]; return t || c[3]; };
+  const jgpb = (c, i) => { const m = (JOY.gpb[JOY.dev] || {})[c[0]]; return m != null ? m : [0, 1, 2, 3, 4, 5, 8, 9][i]; };
+  const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 } };
+  function joyCtl(id, on) {
+    const c = jdef().ctl.find((x) => x[0] === id); if (!c) return;
+    if (!!JOY.down[id] === on) return;
+    JOY.down[id] = on;
+    const a = jact(c); if (a === 'none') return;
+    JOY.cnt[a] = (JOY.cnt[a] || 0) + (on ? 1 : -1);
+    if (a === 'fire' || a === 'fire2') { sendJoy(); return; }
+    if (!S.emu) return;
+    if (on) S.emu.down('jx:' + a, JFIELDS[a]); else if (!JOY.cnt[a]) S.emu.up('jx:' + a);
+  }
+  function joyRelease() { for (const id of Object.keys(JOY.down)) joyCtl(id, false); JOY.ui = 0; JOY.gp = 0; sendJoy(); }
+  const joyFire = () => ((JOY.cnt.fire || 0) + (JOY.cnt.fire2 || 0)) > 0;
+  function joyMenu(x, y) {
+    const t = jdef();
+    const items = t.info.map((l) => ({ label: l, run: () => {} }));
+    items.push({ label: 'Map buttons…', run: () => joyDialog() });
+    for (const [k, v] of Object.entries(JOYTYPES)) if (k !== JOY.dev) items.push({ label: 'Switch to ' + v.name, run: () => joySet(k) });
+    items.push({ label: (JOY.con ? 'Hide' : 'Show') + ' Start / Select / Option / Reset', run: () => { JOY.con = !JOY.con; joySave(); joyRender(); } });
+    items.push({ label: JOY.usb ? 'Ignore real USB controllers' : 'Use real USB controllers', run: () => { JOY.usb = !JOY.usb; joySave(); if (!JOY.usb) { JOY.gp = 0; sendJoy(); } } });
+    openPick(x, y, 'Emulating: ' + t.name, items);
+  }
+  function joySet(k) { joyRelease(); JOY.dev = k; joySave(); joyRender(); }
+  function joyRender() {
+    const t = jdef(), box = $('kjoy');
+    box.innerHTML = '';
+    const head = document.createElement('div');
+    head.className = 'dim'; head.id = 'joyhead'; head.title = 'Click or right-click: what is emulated, switch device, map buttons';
+    head.style.cssText = 'cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none';
+    head.textContent = `🕹 ${t.name} ▾  (click for details, mapping, switching)`;
+    head.onclick = (e) => joyMenu(e.clientX, e.clientY);
+    head.oncontextmenu = (e) => { e.preventDefault(); joyMenu(e.clientX, e.clientY); };
+    const row = document.createElement('div'); row.className = 'jrow';
+    const stick = document.createElement('div'); stick.id = 'jstick'; stick.title = 'Drag: 8 directions, diagonals are two directions at once';
+    stick.innerHTML = '<div class="jknob"></div>';
+    const knob = stick.firstChild;
+    const aim = (e) => {
+      const r = stick.getBoundingClientRect(), R = r.width / 2;
+      const dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R), th = 0.38 * R;
+      JOY.ui = (dy < -th ? 1 : 0) | (dy > th ? 2 : 0) | (dx < -th ? 4 : 0) | (dx > th ? 8 : 0);
+      const m = Math.min(1, Math.hypot(dx, dy) / R) || 0, a = Math.atan2(dy, dx);
+      knob.style.transform = `translate(${Math.cos(a) * m * R * 0.5}px, ${Math.sin(a) * m * R * 0.5}px)`;
+      sendJoy();
+    };
+    const rel = () => { JOY.ui = 0; knob.style.transform = ''; sendJoy(); };
+    stick.addEventListener('pointerdown', (e) => { stick.setPointerCapture(e.pointerId); aim(e); e.preventDefault(); });
+    stick.addEventListener('pointermove', (e) => { if (stick.hasPointerCapture(e.pointerId)) aim(e); });
+    stick.addEventListener('pointerup', rel); stick.addEventListener('pointercancel', rel);
+    const mid = document.createElement('div'); mid.className = 'jbtns';
+    t.ctl.forEach((c) => {
+      const b = document.createElement('button');
+      b.className = 'jb ' + c[2]; b.dataset.c = c[0];
+      const a = jact(c);
+      b.textContent = c[2] === 'big' ? c[1] : c[1] + ' → ' + (JACT.find((x) => x[0] === a) || [0, a])[1];
+      b.title = c[1] + ' (' + (JACT.find((x) => x[0] === a) || [0, a])[1] + ')';
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); joyCtl(c[0], true); });
+      const up = () => { b.classList.remove('down'); joyCtl(c[0], false); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+      mid.append(b);
+    });
+    row.append(stick, mid);
+    if (JOY.con) {
+      const con = document.createElement('div'); con.className = 'jcon';
+      for (const [k, l] of [['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['reset', 'Reset']]) {
+        const b = document.createElement('button'); b.textContent = l; b.className = 'jb small';
+        b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
+        const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
+        b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+        con.append(b);
+      }
+      row.append(con);
+    }
+    box.append(head, row);
+  }
+  function joyDialog() {
+    let dlg = $('joydlg');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'joydlg'; document.body.append(dlg); }
+    const t = jdef();
+    dlg.innerHTML = '';
+    dlg.style.cssText = 'background:#1b1e24;color:#e6e0d4;border:1px solid #4a5160;border-radius:10px;min-width:300px;max-width:min(94vw,480px)';
+    const h = document.createElement('h3'); h.textContent = 'Map buttons: ' + t.name; h.style.margin = '0 0 8px'; dlg.append(h);
+    const note = document.createElement('div'); note.className = 'dim'; note.style.cssText = 'font-size:12px;margin-bottom:8px';
+    note.textContent = 'Each physical button does the chosen action. "Learn" then press a button on your USB controller to bind it.'; dlg.append(note);
+    t.ctl.forEach((c, i) => {
+      const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0';
+      const l = document.createElement('span'); l.textContent = c[1]; l.style.flex = '1';
+      const sel = document.createElement('select');
+      for (const [v, n] of JACT) { const o = document.createElement('option'); o.value = v; o.textContent = n; sel.append(o); }
+      sel.value = jact(c);
+      sel.onchange = () => { joyRelease(); (JOY.act[JOY.dev] = JOY.act[JOY.dev] || {})[c[0]] = sel.value; joySave(); joyRender(); };
+      const lb = document.createElement('button'); lb.textContent = 'USB: ' + jgpb(c, i) + ' · Learn';
+      lb.onclick = () => { JOY.learn = (idx) => { (JOY.gpb[JOY.dev] = JOY.gpb[JOY.dev] || {})[c[0]] = idx; joySave(); JOY.learn = null; joyDialog(); }; lb.textContent = 'press a button…'; };
+      r.append(l, sel, lb); dlg.append(r);
+    });
+    const x = document.createElement('button'); x.textContent = 'Close'; x.style.cssText = 'display:block;width:100%;margin-top:10px';
+    x.onclick = () => { JOY.learn = null; dlg.close(); };
+    dlg.append(x);
+    if (!dlg.open) dlg.showModal();
+  }
+  const gpPrev = {}, gdn = {};
+  setInterval(() => {
+    if (!navigator.getGamepads) return;
+    let bits = 0, any = false;
+    const t = jdef();
+    for (const g of navigator.getGamepads()) {
+      if (!g) continue;
+      const prev = gpPrev[g.index] || (gpPrev[g.index] = []);
+      if (JOY.learn) { const i = g.buttons.findIndex((b, k) => b.pressed && !prev[k]); if (i >= 0) { prev.length = 0; g.buttons.forEach((b, k) => { prev[k] = b.pressed; }); JOY.learn(i); return; } }
+      g.buttons.forEach((b, k) => { prev[k] = b.pressed; });
+      if (!JOY.usb) continue;
+      any = true;
+      const ax = g.axes[0] || 0, ay = g.axes[1] || 0, B = (k) => g.buttons[k] && g.buttons[k].pressed;
+      bits |= (ay < -0.5 || B(12) ? 1 : 0) | (ay > 0.5 || B(13) ? 2 : 0) | (ax < -0.5 || B(14) ? 4 : 0) | (ax > 0.5 || B(15) ? 8 : 0);
+      t.ctl.forEach((c, i) => { const k = jgpb(c, i); if (k >= 12 && k <= 15) return; const now = !!B(k); if (now !== !!gdn[c[0]]) { gdn[c[0]] = now; joyCtl(c[0], now); } });
+    }
+    if (any && bits !== JOY.gp) { JOY.gp = bits; sendJoy(); }
+  }, 16);
+  joyRender();
+  // Keyboard panel tabs: Keys / Arrows / Pad / Stick. Pad turns the touch pad on while shown and restores the previous state after.
   {
     let padBefore = null;
     const setMode = (m) => {
       document.querySelectorAll('#kbmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
-      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kmini').hidden = m !== 'keys';
+      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kjoy').hidden = m !== 'joy'; $('kmini').hidden = m !== 'keys';
       $('kbview').style.display = m === 'keys' ? '' : 'none';
       if (m === 'pad' && padBefore == null) { padBefore = PAD.on; PAD.on = true; syncPadUi(); applyPad(); }
       else if (m !== 'pad' && padBefore != null) { PAD.on = padBefore; padBefore = null; padPos.held = 0; syncPadUi(); applyPad(); }

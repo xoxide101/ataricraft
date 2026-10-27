@@ -132,7 +132,16 @@
   #padarea.off { opacity:.4; }
   #kbmode { display:flex; gap:6px; margin-bottom:6px; } #kbmode button { flex:1; padding:5px 8px; opacity:.6; } #kbmode button.on { opacity:1; border-color:var(--acc); }
   #karrows { display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
-  #karrows[hidden], #kpad[hidden], #kbd[hidden], #kmini[hidden] { display:none; }
+  #karrows[hidden], #kpad[hidden], #kjoy[hidden], #kbd[hidden], #kmini[hidden] { display:none; }
+  .jrow { display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
+  #jstick { position:relative; width:170px; height:170px; border-radius:50%; background:radial-gradient(#2d3037,#1b1d22); border:2px solid #3a4150; touch-action:none; cursor:grab; flex:none; }
+  #jstick .jknob { position:absolute; left:50%; top:50%; width:62px; height:62px; margin:-31px 0 0 -31px; border-radius:50%; background:radial-gradient(#555a64,#2a2d34); border:2px solid #6a7080; pointer-events:none; }
+  .jbtns { display:flex; flex-wrap:wrap; gap:8px; max-width:300px; align-items:center; }
+  .jb { touch-action:none; user-select:none; font-weight:700; }
+  .jb.big { width:78px; height:78px; border-radius:50%; background:#c63b22; border:3px solid #7a2415; color:#fff; font-size:11px; }
+  .jb.small { min-height:38px; padding:0 8px; font-size:12px; }
+  .jb.down { background:var(--acc); color:#000; }
+  .jcon { display:flex; flex-direction:column; gap:6px; } .jcon .jb { background:#4a4035; color:#e8e0d0; min-width:84px; }
   .akey { height:52px; min-width:54px; padding:0 10px; font-weight:700; font-size:15px; flex:none; }
   .dpad { display:grid; grid-template-columns:repeat(3,76px); grid-template-rows:repeat(2,64px); gap:6px; }
   .dpad .akey { height:100%; font-size:24px; } .dpad .a-up { grid-column:2; grid-row:1; } .dpad .a-left { grid-column:1; grid-row:2; } .dpad .a-down { grid-column:2; grid-row:2; } .dpad .a-right { grid-column:3; grid-row:2; }
@@ -328,7 +337,7 @@
         <div id="cartbar"></div>
     <div id="kbdwrap">
       <div id="kbview"><span>Show:</span><button data-v="base" title="Lower-case glyphs">a Lower</button><button data-v="shift" title="Capital glyphs">A Caps</button><button data-v="ctrl" title="Control/special graphics">♥ Special</button><div id="devbar" title="Device activity: green = read, red = write, yellow = other command. A ring means media is mounted."></div></div>
-      <div id="kbmode"><button data-m="keys" class="on">⌨ Keys</button><button data-m="arrows">✥ Arrows</button><button data-m="pad">🖱 Pad</button></div>
+      <div id="kbmode"><button data-m="keys" class="on">⌨ Keys</button><button data-m="arrows">✥ Arrows</button><button data-m="pad">🖱 Pad</button><button data-m="joy">🕹 Stick</button></div>
       <div id="kbd"></div>
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
@@ -336,6 +345,7 @@
         <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
         <div class="padbtns"><button data-b="1">Button 1 (left click)</button><button data-b="2">Button 2 (right click)</button></div>
       </div>
+      <div id="kjoy" hidden></div>
       <div id="kmini"></div>
       <div class="legend">Legends come from the Atari's character set. <b class="s">Orange</b> = Shift, <b class="c">teal</b> = Control. Click Shift or Control, then a key.</div>
     </div>
@@ -358,6 +368,6 @@
 <script src="js/keyboard.js"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027o"></script>
+<script src="js/app.js?v=20261027p"></script>
 </body>
 </html>
