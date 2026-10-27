@@ -1382,7 +1382,9 @@
   const GRAY = [0, 1, 3, 2];
   const JSAVED = (() => { let o = {}; try { o = JSON.parse(localStorage.getItem('ac.joyx') || '{}'); } catch (e) { /* fresh */ } return o.dev ? { p: [o], con: o.con } : o; })();
   const JSH = { con: JSAVED.con !== false, two: !!JSAVED.two };
-  const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ p: players.map((p) => p.save()), two: JSH.two, con: JSH.con }));
+  // While the Paddle / Driving tab is showing, both players are forced to that device; remember the Stick-tab devices so they are restored and saved.
+  let joyForce = null;
+  const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ p: players.map((p, i) => Object.assign(p.save(), joyForce ? { dev: joyForce[i] } : {})), two: JSH.two, con: JSH.con }));
   const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 }, help: { keycode: 0x11 } };
   function fillCon(con) {
     con.innerHTML = '';
@@ -1636,7 +1638,7 @@
     t.ctl.forEach((c, i) => { const k = jgpb(c, i); if (k >= 12 && k <= 15) return; const now = !!B(k); if (now !== !!gdn[c[0]]) { gdn[c[0]] = now; joyCtl(c[0], now); } });
     if (bits !== JOY.gp) { JOY.gp = bits; sendJoy(); }
   }
-  return { JOY, send, render: joyRender, release: joyRelease, tick, onKey, jdef, padState: () => (jdef().mode === 'paddle' ? { pot: JOY.pot, btn: joyFire() } : null),
+  return { JOY, setDev: joySet, send, render: joyRender, release: joyRelease, tick, onKey, jdef, padState: () => (jdef().mode === 'paddle' ? { pot: JOY.pot, btn: joyFire() } : null),
     save: () => ({ dev: JOY.dev, act: JOY.act, gpb: JOY.gpb, kb: JOY.kb, kbx: JOY.kbon, usb: JOY.usb }) };
   }
   const players = [mkPlayer(0, (JSAVED.p || [])[0]), mkPlayer(1, (JSAVED.p || [])[1])];
@@ -1693,7 +1695,15 @@
     let padBefore = null;
     const setMode = (m) => {
       document.querySelectorAll('#kbmode button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
-      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kjoy').hidden = m !== 'joy'; $('kmini').hidden = m !== 'keys';
+      const forced = { paddle: 'paddle', drive: 'driving' }[m];
+      if (forced) {
+        if (!joyForce) joyForce = players.map((p) => p.JOY.dev);
+        players.forEach((p) => { if (p.JOY.dev !== forced) p.setDev(forced); });
+      } else if (joyForce) {
+        const prev = joyForce; joyForce = null;
+        players.forEach((p, i) => { if (p.JOY.dev !== prev[i]) p.setDev(prev[i]); });
+      }
+      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kjoy').hidden = !(m === 'joy' || forced); $('kmini').hidden = m !== 'keys';
       $('kbview').style.display = m === 'keys' ? '' : 'none';
       if (m === 'pad' && padBefore == null) { padBefore = PAD.on; PAD.on = true; syncPadUi(); applyPad(); }
       else if (m !== 'pad' && padBefore != null) { PAD.on = padBefore; padBefore = null; padPos.held = 0; syncPadUi(); applyPad(); }
