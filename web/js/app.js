@@ -268,6 +268,7 @@
       const r = S.emu.insertCart(+slot, c.name, c.bytes);
       if (r.ok && r.kb && c.type != null) S.emu.setCartType(+slot, c.type);
     }
+    if (S.tape && S.emu.tapeInsert(S.tape.name, S.tape.bytes)) $('tn').textContent = S.tape.name;
     FujiNet.log = log;
     S.emu.run(120);
     hookAudio();
@@ -653,9 +654,13 @@
     if (!S.emu) {
       // Floppies can be inserted with the computer off (Boot mounts them); cartridges too, since they are only changed while off.
       const kk = hint === 'disk' ? 'disk' : (extKind(file.name) || hint);
-      if (kk === 'disk' || kk === 'cart') {
+      if (kk === 'disk' || kk === 'cart' || kk === 'tape') {
         const bytes = await AC.Progress.read(file, 'Loading ' + file.name);
-        if (kk === 'disk') {
+        if (kk === 'tape') {
+          S.tape = { name: file.name, bytes };
+          $('tn').textContent = file.name;
+          log(`Tape: ${file.name} inserted (power is off; it is read when you press Boot)`);
+        } else if (kk === 'disk') {
           const n = typeof alt === 'number' ? alt : alt ? 2 : 1;
           S.disks[n] = { name: file.name, bytes }; S.dirty[n] = false;
           $('d' + n).textContent = file.name;
@@ -680,7 +685,7 @@
     if (t === 5 && !/\.dcm$/i.test(file.name) && extKind(file.name) === 'cart') k = 'cart';
     diag(`load "${file.name}" ${bytes.length} bytes, detect=${t}, kind=${k}, first bytes=${[...bytes.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
     if (k !== 'tape' && S.emu.tapeInfo().status) {
-      S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
+      S.emu.tapeEject(); S.tape = null; $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
     }
     S.lastExe = null;
     if (k === 'disk') {
@@ -702,7 +707,7 @@
       await insertCart(typeof alt === 'number' ? 1 : alt ? 2 : 1, file, bytes);
     } else if (k === 'tape') {
       if (!S.emu.tapeInsert(file.name, bytes)) { log('could not read tape ' + file.name); return; }
-      $('tn').textContent = file.name;
+      $('tn').textContent = file.name; S.tape = { name: file.name, bytes };
       S.emu.tapeBoot();
       log('tape: ' + file.name + ' (booting with Start held; for BASIC tapes reset and use CLOAD)');
     } else log(`${file.name}: unrecognised format${t === 13 || t === 14 ? ' (saved states are not supported)' : ''}`);
@@ -2294,7 +2299,7 @@
 
   // ---- cassette ----
   $('tape').onchange = (e) => e.target.files[0] && loadAny(e.target.files[0], false, 'tape');
-  $('te').onclick = () => { if (!S.emu) return; S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = ''; };
+  $('te').onclick = () => { S.tape = null; if (!S.emu) { $('tn').textContent = 'empty'; $('tape').value = ''; return; } S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = ''; };
   $('tboot').onclick = () => { if (S.emu && S.emu.tapeInfo().status) S.emu.tapeBoot(); };
   $('trew').onclick = () => { if (S.emu) S.emu.tapeRewind(); };
   setInterval(() => {
@@ -2894,7 +2899,7 @@
   }
 
   // Last disks and cartridges are kept in IndexedDB and re-inserted at startup (read when you press Boot).
-  const lastMediaSig = () => JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => S.disks[n] && [S.disks[n].name, S.disks[n].bytes.length]).concat([1, 2].map((n) => S.carts[n] && [S.carts[n].name, S.carts[n].bytes.length, S.carts[n].type])));
+  const lastMediaSig = () => JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => S.disks[n] && [S.disks[n].name, S.disks[n].bytes.length]).concat([1, 2].map((n) => S.carts[n] && [S.carts[n].name, S.carts[n].bytes.length,   S.carts[n].type]))).concat([S.tape && [S.tape.name, S.tape.bytes.length]]);
   let lastSig = null;
   (async () => {
     try {
@@ -2902,7 +2907,8 @@
       if (m && !S.emu && !Object.keys(S.disks).length && !Object.keys(S.carts).length) {
         for (const [n, d] of Object.entries(m.disks || {})) { S.disks[n] = { name: d.name, bytes: d.bytes }; S.dirty[n] = false; $('d' + n).textContent = d.name; }
         for (const [s, c] of Object.entries(m.carts || {})) { S.carts[s] = { name: c.name, bytes: c.bytes, type: c.type }; $('cn' + s).textContent = (s === '1' ? '1 (main, right): ' : '2 (left): ') + c.name; }
-        if (Object.keys(m.disks || {}).length + Object.keys(m.carts || {}).length) log('restored last disks and cartridges');
+        if (m.tape && !S.tape) { S.tape = { name: m.tape.name, bytes: m.tape.bytes }; $('tn').textContent = m.tape.name; }
+        if (Object.keys(m.disks || {}).length + Object.keys(m.carts || {}).length || m.tape) log('restored last disks, cartridges and tape');
       }
     } catch (e) { /* no saved media */ }
     lastSig = lastMediaSig();
@@ -2910,7 +2916,7 @@
       const sig = lastMediaSig();
       if (sig === lastSig) return;
       lastSig = sig;
-      idbSet('lastmedia', { disks: Object.fromEntries(Object.entries(S.disks).map(([n, d]) => [n, { name: d.name, bytes: d.bytes }])), carts: Object.fromEntries(Object.entries(S.carts).map(([n, c]) => [n, { name: c.name, bytes: c.bytes, type: c.type }])) });
+      idbSet('lastmedia', { disks: Object.fromEntries(Object.entries(S.disks).map(([n, d]) => [n, { name: d.name, bytes: d.bytes }])), carts: Object.fromEntries(Object.entries(S.carts).map(([n, c]) => [n,       { name: c.name, bytes: c.bytes, type: c.type }])), tape: S.tape ? { name: S.tape.name, bytes: S.tape.bytes } : null });
     }, 1000);
   })();
   $('profile').value = S.profile;
