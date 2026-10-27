@@ -1,0 +1,49 @@
+diff --git a/src/AltirraLibretro/CMakeLists.txt b/src/AltirraLibretro/CMakeLists.txt
+index afc442a..9bf5142 100644
+--- a/src/AltirraLibretro/CMakeLists.txt
++++ b/src/AltirraLibretro/CMakeLists.txt
+@@ -3,10 +3,12 @@
+ # This target owns the libretro adapter sources and links the existing
+ # emulator/static-library graph without changing AltirraSDL or BridgeServer.
+ 
+-add_library(AltirraLibretro SHARED
+-    libretro.cpp
+-    libretro_vkbd.cpp
+-)
++set(ALTIRRA_LIBRETRO_SRCS libretro.cpp libretro_vkbd.cpp)
++if(EMSCRIPTEN)
++    add_executable(AltirraLibretro ${ALTIRRA_LIBRETRO_SRCS})
++else()
++    add_library(AltirraLibretro SHARED ${ALTIRRA_LIBRETRO_SRCS})
++endif()
+ 
+ option(ALTIRRA_LIBRETRO_BUILD_TESTS
+     "Build and register the Altirra libretro smoke host." OFF)
+@@ -164,7 +166,14 @@ if(MSVC)
+     target_compile_options(AltirraLibretro PRIVATE /FIintrin.h)
+ endif()
+ 
+-if(UNIX AND NOT APPLE)
++if(EMSCRIPTEN)
++    target_link_options(AltirraLibretro PRIVATE
++        -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=134217728
++        -sMODULARIZE=1 -sEXPORT_NAME=AltirraWeb -sFORCE_FILESYSTEM=1
++        "-sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAP32,HEAPF32,ccall,cwrap,UTF8ToString,stringToUTF8"
++        -sENVIRONMENT=web,worker,node -sSTACK_SIZE=2097152 --no-entry)
++    set_target_properties(AltirraLibretro PROPERTIES OUTPUT_NAME "altirra_web")
++elseif(UNIX AND NOT APPLE)
+     target_link_options(AltirraLibretro PRIVATE
+         "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/altirra_libretro.map"
+         "LINKER:--as-needed"
+diff --git a/src/AltirraLibretro/libretro.cpp b/src/AltirraLibretro/libretro.cpp
+index d383ddb..3808d5c 100644
+--- a/src/AltirraLibretro/libretro.cpp
++++ b/src/AltirraLibretro/libretro.cpp
+@@ -5554,3 +5554,7 @@ RETRO_API size_t retro_get_memory_size(unsigned id) {
+ }
+ 
+ }
++
++#ifdef __EMSCRIPTEN__
++#include "web_api.inc"
++#endif

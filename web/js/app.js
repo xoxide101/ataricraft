@@ -243,13 +243,22 @@
 
   S.carts = {};
   S.disks = {};
+  $('core').value = localStorage.getItem('ac.core') === 'altirra' ? 'altirra' : 'atari800';
+  $('core').onchange = () => {
+    localStorage.setItem('ac.core', $('core').value);
+    $('core').blur();
+    if (S.running) boot();
+  };
   async function boot() {
     const model = $('model').value;
-    const os = chosenOs();
-    if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
+    const alt = $('core').value === 'altirra';
+    const os = alt ? null : chosenOs();
+    if (!alt && !os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
     log('booting…');
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
-    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
+    try {
+      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: alt ? null : chosenBasic(), basicOn: $('basic').checked, xep80: !alt && $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
+    } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     hookDevices();
     applyPad();
