@@ -542,8 +542,18 @@
     disk: ['atr', 'xfd', 'atx', 'dcm', 'pro', 'gz', 'dsk'],
     cart: ['car', 'rom', 'bin', 'cart'],
     tape: ['cas'],
-    exe: ['xex', 'com', 'exe', 'bas', 'lst', 'obj'],
+    exe: ['xex', 'com', 'exe', 'axe', 'obx', 'bas', 'lst', 'obj'],
   };
+  // File types by extension, from Atadim's config; for labelling files on a mounted disk.
+  const FILE_TYPES = {
+    run: 'exe com xex axe', obj: 'run ini obj bin dat raw obx hyp', font: 'fnt chr sxs', sys: 'sys bat',
+    text: 'txt asc ata doc cap tch twr man lis', source: 'lm c cpp h pas lst lb lba lbs lt ltb asm a65 asx',
+    basic: 'mac m65 bas tba qa lib',
+    picture: 'pic gr3 gr4 gr5 gr6 gr7 gr8 gr9 g10 g11 g12 g13 g14 g15 apc cin ged hip int mic pi1 pi3 rip inp gif jpg bmp tif png g2f mcp plm pzm ilc scr ist tip',
+    disk: 'atr atx pro xfd dcm dsk', archive: 'arc', rom: 'rom a52 car',
+    music: 'mus cmc tmc tm4 tm8 mpt mod mid rmt sap',
+  };
+  const fileType = (name) => { const e = (name.split('.').pop() || '').toLowerCase(); return Object.keys(FILE_TYPES).find((k) => FILE_TYPES[k].split(' ').includes(e)) || null; };
   const extKind = (name) => {
     const e = (name.split('.').pop() || '').toLowerCase();
     return Object.keys(MEDIA_EXT).find((k) => MEDIA_EXT[k].includes(e)) || null;
