@@ -596,7 +596,9 @@
     log('loading ' + file.name + '…');
     const bytes = await AC.Progress.read(file, 'Loading ' + file.name);
     const t = S.emu.detect(file.name, bytes);
-    const k = typeKind(t) || hint || extKind(file.name);
+    let k = typeKind(t) || hint || extKind(file.name);
+    // Cart images can start with 0xFA/0xF9, which the detector mistakes for a DCM disk header.
+    if (t === 5 && !/\.dcm$/i.test(file.name) && extKind(file.name) === 'cart') k = 'cart';
     diag(`load "${file.name}" ${bytes.length} bytes, detect=${t}, kind=${k}, first bytes=${[...bytes.slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
     if (k !== 'tape' && S.emu.tapeInfo().status) {
       S.emu.tapeEject(); $('tn').textContent = 'empty'; $('tape').value = ''; $('tpos').textContent = '';
@@ -1953,6 +1955,14 @@
     copyText: () => S.emu.screenText(),
     press: (fields, frames) => S.emu.tap(fields, frames || 4),
     scanDir: (handle) => scanHandle(handle, false),
+    mediaList: () => MED.files.map((f) => ({ name: f.name, kind: f.kind })),
+    loadEntry: async (name, drive) => {
+      const m = MED.files.find((f) => f.name === name);
+      if (!m) return { ok: false, msg: 'not in library' };
+      let msg = '';
+      try { await loadAny(await fileOf(m), drive >= 2 ? (drive === 2 ? true : drive) : false, m.kind); msg = $('status').textContent; } catch (e) { return { ok: false, msg: String(e && e.message || e) }; }
+      return { ok: !/^(Could not|could not|boot first)|unrecognised/.test(msg), msg };
+    },
     catalogQuery: (sqlText, params) => AC.Catalog.query(sqlText, params),
     chooseFolders: async (handle) => { medRules = {}; const ok = await chooseFolders(handle); return ok ? await scanHandle(handle, false) : false; },
     joy: (bits, fire) => { S.joy = bits | 0; S.fire = !!fire; sendJoy(); },
