@@ -237,7 +237,7 @@
     if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
     log('booting…');
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
-    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host, mouse: (PADTYPES[PAD.type] || PADTYPES.touch).core });
+    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
     FujiNet.attach(S.emu);
     hookDevices();
     applyPad();
@@ -1300,22 +1300,25 @@
   const PAD = Object.assign({ on: false, type: 'touch', screen: false, fx: false, fy: false }, JSON.parse(localStorage.getItem('ac.pad') || '{}'));
   const padPos = { x: 0.5, y: 0.5, b: 0, held: 0, lx: null, ly: null };
   const padAcc = { x: 0, y: 0 };
-  // Relative mouse types: send the accumulated movement once per frame, keep the fractional remainder.
-  setInterval(() => {
-    if (!S.emu || !PAD.on || !PADTYPES[PAD.type].rel) { padAcc.x = padAcc.y = 0; return; }
-    const dx = Math.max(-127, Math.min(127, Math.trunc(padAcc.x))), dy = Math.max(-127, Math.min(127, Math.trunc(padAcc.y)));
-    if (!dx && !dy) return;
-    padAcc.x -= dx; padAcc.y -= dy;
-    S.emu.down('padm', { mousex: dx & 0xff, mousey: dy & 0xff, mouse_buttons: padPos.b | padPos.held, mouse_mode: 0 }, 1);
-  }, 16);
+  // Relative mice (ST, Amiga, trak-ball) are done here as quadrature on port 2's joystick lines: the core's mouse
+  // input is unsigned, so it cannot move left or up. One quadrature step per axis per frame keeps a once-per-frame reader from aliasing.
+  const QTAB = { st: [0, 2, 3, 1, 8, 10, 11, 9, 12, 14, 15, 13, 4, 6, 7, 5], amiga: [0, 2, 10, 8, 1, 3, 11, 9, 5, 7, 15, 13, 4, 6, 14, 12] };
+  const Q = { x: 0, y: 0, right: 0, down: 0 };
+  function padQuad() {
+    const t = PAD.type;
+    if (!S.emu || !PAD.on || !PADTYPES[t].rel) { padAcc.x = padAcc.y = 0; return; }
+    const sx = Math.sign(Math.trunc(padAcc.x)), sy = Math.sign(Math.trunc(padAcc.y));
+    padAcc.x = Math.max(-40, Math.min(40, padAcc.x - sx)); padAcc.y = Math.max(-40, Math.min(40, padAcc.y - sy));
+    if (sx) { Q.x = (Q.x + sx) & 3; Q.right = sx > 0 ? 1 : 0; }
+    if (sy) { Q.y = (Q.y + sy) & 3; Q.down = sy > 0 ? 1 : 0; }
+    const code = t === 'trak' ? ((Q.y & 1) << 3) | (Q.down << 2) | ((Q.x & 1) << 1) | Q.right : QTAB[t][(Q.y & 3) * 4 + (Q.x & 3)];
+    S.emu.down('padq', { joy1: code ^ 0xf, trig1: (padPos.b | padPos.held) & 1 ? 1 : 0 });
+  }
+  setInterval(padQuad, 16);
   function applyPad() {
     document.querySelectorAll('.padbtns button').forEach((b) => b.classList.toggle('down', !!((padPos.b | padPos.held) & +b.dataset.b)));
     if (!S.emu) return;
-    if (!PAD.on) { S.emu.up('pad'); return; }
-    if (PADTYPES[PAD.type].rel) {
-      S.emu.down('pad', { mouse_buttons: padPos.b | padPos.held, mouse_mode: 0 });
-      return;
-    }
+    if (!PAD.on || PADTYPES[PAD.type].rel) { S.emu.up('pad'); if (!PAD.on || !PADTYPES[PAD.type].rel) S.emu.keys.delete('padq'); return; }
     const fx = PAD.fx ? 1 - padPos.x : padPos.x;
     const fy = PAD.fy ? 1 - padPos.y : padPos.y;
     const potX = Math.round(fx * 227);
@@ -1326,7 +1329,7 @@
   }
   function padMove(e, el) {
     const r = el.getBoundingClientRect();
-    if (PADTYPES[PAD.type].rel && padPos.lx != null) { padAcc.x += (e.clientX - padPos.lx) * 4; padAcc.y += (e.clientY - padPos.ly) * 4; }
+    if (PADTYPES[PAD.type].rel && padPos.lx != null) { padAcc.x += (e.clientX - padPos.lx) * 0.7; padAcc.y += (e.clientY - padPos.ly) * 0.7; }
     padPos.lx = e.clientX; padPos.ly = e.clientY;
     padPos.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     padPos.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
@@ -1697,11 +1700,11 @@
   }
   // Controllers that can sit in the Pad tab. Add new devices here; each one needs only a name and what its two buttons mean.
   const PADTYPES = {
-    touch: { core: 'touch', name: 'Atari Touch Tablet (CX77)', info: ['Position: paddle 0 (X) and paddle 1 (Y) on port 1', 'Button 1 = left click / touch (stylus switch)', 'Button 2 = right click (second button)'] },
-    koala: { core: 'touch', name: 'Koala Pad', info: ['Position: paddle 0 (X) and paddle 1 (Y) on port 1', 'Button 1 = left click / touch', 'Button 2 = right click', 'Y runs the opposite way to the Touch Tablet'] },
-    st: { core: 'st', rel: true, name: 'Atari ST mouse (Diamond GOS default)', info: ['Quadrature on the joystick lines of port 2', 'Left button = fire, right button = POT line', 'Needs an emulator restart when switched'] },
-    amiga: { core: 'amiga', rel: true, name: 'Amiga mouse', info: ['Quadrature on the joystick lines of port 2', 'Left button = fire', 'Needs an emulator restart when switched'] },
-    trak: { core: 'trak', rel: true, name: 'CX-22 trak-ball', info: ['Trak-ball on port 2', 'Left button = fire', 'Needs an emulator restart when switched'] },
+    touch: { name: 'Atari Touch Tablet (CX77)', info: ['Position: paddle 0 (X) and paddle 1 (Y) on port 1', 'Button 1 = left click / touch (stylus switch)', 'Button 2 = right click (second button)'] },
+    koala: { name: 'Koala Pad', info: ['Position: paddle 0 (X) and paddle 1 (Y) on port 1', 'Button 1 = left click / touch', 'Button 2 = right click', 'Y runs the opposite way to the Touch Tablet'] },
+    st: { rel: true, name: 'Atari ST mouse (Diamond GOS default)', info: ['Quadrature on the joystick lines of port 2', 'Left button = fire'] },
+    amiga: { rel: true, name: 'Amiga mouse', info: ['Quadrature on the joystick lines of port 2', 'Left button = fire'] },
+    trak: { rel: true, name: 'CX-22 trak-ball', info: ['Trak-ball on port 2', 'Left button = fire'] },
   };
   function padHeadSync() {
     const t = PADTYPES[PAD.type] || PADTYPES.touch;
@@ -1732,10 +1735,9 @@
   };
   for (const [id, key, isChk] of [['padon', 'on', 1], ['padtype', 'type', 0], ['padscreen', 'screen', 1], ['padfx', 'fx', 1], ['padfy', 'fy', 1]]) {
     $(id).onchange = (e) => {
-      const oldCore = PADTYPES[PAD.type].core;
       PAD[key] = isChk ? e.target.checked : e.target.value;
       localStorage.setItem('ac.pad', JSON.stringify(PAD)); syncPadUi(); applyPad(); e.target.blur();
-      if (id === 'padtype') { padAcc.x = padAcc.y = 0; if (S.emu) S.emu.up('padm'); if (PADTYPES[PAD.type].core !== oldCore && S.running) boot(); }
+      if (id === 'padtype') { padAcc.x = padAcc.y = 0; if (S.emu) S.emu.keys.delete('padq'); }
     };
   }
   syncPadUi();
