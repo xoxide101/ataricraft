@@ -168,7 +168,7 @@
   .padsurf { position:relative; width:100%; aspect-ratio:4/3; background:#23262d; border:1px solid #3a4150; border-radius:6px; touch-action:none; cursor:crosshair; }
   .padsurf .paddot { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; border:2px solid #35e06a; pointer-events:none; left:50%; top:50%; }
   .padsurf.dn .paddot { background:#ff4a3d; border-color:#ff4a3d; }
-  #kpad { width:min(100%,38dvh,470px); margin:0 auto; }
+  #kpad { width:min(100%,calc(34dvh + 92px),515px); margin:0 auto; }
 .padbtns { display:flex; gap:8px; margin-top:8px; } .padbtns button { flex:1; height:clamp(44px,9dvh,72px); transition:transform .05s; } .padbtns button.down { transform:translateY(3px); box-shadow:0 0 12px var(--acc); } .padbtns button { font-size:15px; font-weight:700; touch-action:none; user-select:none; } .padbtns button.down { background:var(--acc); color:#000; }
   @media (max-width:900px) { .center { overflow:auto; max-height:calc(100dvh - var(--hh,50px)); } #stage { position:sticky; top:0; z-index:5; } #screen { width:min(calc(100vw - 20px), calc((100dvh - var(--hh,50px) - 20px) * 1.2)); min-width:0; } }
   @media (max-width:900px) and (orientation:landscape) {
@@ -362,8 +362,10 @@
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
         <div style="display:flex;gap:8px;align-items:center"><button id="padmap" type="button" title="Choose the pad / mouse device">🎛 Device…</button><div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none;flex:1"></div></div>
+        <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1;min-width:0">
         <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
         <div class="padbtns"><button data-b="1">Button 1 (left click)</button><button data-b="2">Button 2 (right click)</button></div>
+        </div><div id="padcon" class="jcon"></div></div>
       </div>
       <div id="kjoy" hidden></div>
       <div id="kmini"></div>
@@ -388,6 +390,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027ze"></script>
+<script src="js/app.js?v=20261027zf"></script>
 </body>
 </html>

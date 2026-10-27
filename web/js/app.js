@@ -1384,6 +1384,17 @@
   const JSH = { con: JSAVED.con !== false, two: !!JSAVED.two };
   const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ p: players.map((p) => p.save()), two: JSH.two, con: JSH.con }));
   const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 }, help: { keycode: 0x11 } };
+  function fillCon(con) {
+    con.innerHTML = '';
+    for (const [k, l] of [['reset', 'Reset'], ['option', 'Option'], ['select', 'Select'], ['start', 'Start'], ['help', 'Help']]) {
+      const b = document.createElement('button'); b.textContent = l; b.className = 'jb ckey';
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
+      const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+      con.append(b);
+    }
+  }
+  fillCon($('padcon'));
   const keyName = (c) => (!c ? '(none)' : ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'Space' })[c] || c.replace(/^Key|^Digit/, ''));
   const JKDIRS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right']];
   function mkPlayer(idx, saved) {
@@ -1649,14 +1660,7 @@
     row.append(players[0].render());
     if (JSH.two) row.append(players[1].render());
     if (JSH.con) {
-      const con = document.createElement('div'); con.className = 'jcon';
-      for (const [k, l] of [['reset', 'Reset'], ['option', 'Option'], ['select', 'Select'], ['start', 'Start'], ['help', 'Help']]) {
-        const b = document.createElement('button'); b.textContent = l; b.className = 'jb ckey';
-        b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
-        const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
-        b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
-        con.append(b);
-      }
+      const con = document.createElement('div'); con.className = 'jcon'; fillCon(con);
       row.append(con);
     }
     box.append(bar, row);
