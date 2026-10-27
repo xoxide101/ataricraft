@@ -40,8 +40,10 @@
     const id = (AC.OS_DB || {})[crc32(bytes)];
     if (id) return /BASIC/i.test(id[0]) ? 'basic' : bytes.length === 10240 ? 'os800' : bytes.length === 16384 ? 'osxl' : null;
     if ((AC.CART_DB || {})[crc32(bytes)]) return null;
-    if (bytes.length === 10240) return 'os800';
-    if (bytes.length === 16384) return 'osxl';
+    // An OS ROM carries the DISKIV/DSKINV/CIOV/SIOV JMP table at $E450; MIO, Black Box, Speedy and DOS cart images do not.
+    const hasJumpTable = (o) => [0, 3, 6, 9].every((i) => bytes[o + i] === 0x4c);
+    if (bytes.length === 10240) return hasJumpTable(0x0c50) ? 'os800' : null;
+    if (bytes.length === 16384) return hasJumpTable(0x2450) ? 'osxl' : null;
     if (bytes.length === 8192) return 'basic';
     return null;
   }
