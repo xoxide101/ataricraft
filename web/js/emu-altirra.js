@@ -22,8 +22,8 @@ window.AC = window.AC || {};
   function loadModule() {
     if (!modPromise) {
       modPromise = (async () => {
-        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=3');
-        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=3');
+        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=4');
+        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=4');
         return AltirraWeb({ locateFile: (p) => (p.endsWith('.wasm') ? 'data:application/wasm;base64,' + window.ALTIRRA_WASM_B64 : p), print: () => {}, printErr: () => {} });
       })();
       modPromise.catch(() => { modPromise = null; });
@@ -50,7 +50,7 @@ window.AC = window.AC || {};
         tapePlay: cw('aw_tape_play', null, ['number']), tapePos: cw('aw_tape_pos', 'number'), tapeLen: cw('aw_tape_len', 'number'),
         stSize: cw('aw_state_size', 'number'), stSave: cw('aw_state_save', 'number', ['number', 'number']), stLoad: cw('aw_state_load', 'number', ['number', 'number']),
         ram: cw('aw_ram', 'number'), ramSize: cw('aw_ram_size', 'number'), alloc: cw('aw_alloc', 'number', ['number']), free: cw('aw_free', null, ['number']),
-        host: cw('aw_host', 'number', ['number']), xep: cw('aw_xep', 'number', ['number']), xepUpdate: cw('aw_xep_update', 'number'),
+        host: cw('aw_host', 'number', ['number']), fwCustom: cw('aw_fw_custom', null, ['string', 'string']), xep: cw('aw_xep', 'number', ['number']), xepUpdate: cw('aw_xep_update', 'number'),
         xepFrame: cw('aw_xep_frame', 'number'), xepW: cw('aw_xep_w', 'number'), xepH: cw('aw_xep_h', 'number'),
       };
       this.prev = { special: 0, start: 0, select: 0, option: 0 };
@@ -69,8 +69,12 @@ window.AC = window.AC || {};
       o('memory', RAM[opt.ram] || (opt.model === '800' ? '48K' : '64K'));
       o('video_standard', opt.tv === 'pal' ? 'pal' : 'ntsc');
       o('basic', opt.basicOn ? 'enabled' : 'disabled');
-      o('basic_firmware', 'internal');
-      o('os_firmware', 'internal');
+      // The OS and BASIC picked in the ROM selectors are what boots, same as the Atari800 core.
+      const fwFile = (kind, bytes) => { const p = '/system/' + kind + '.rom'; m.FS.writeFile(p, bytes); a.fwCustom(kind, p); };
+      if (opt.os) fwFile(opt.model === '800' ? 'os800' : 'osxl', opt.os);
+      else o('os_firmware', 'internal');
+      if (opt.basic) fwFile('basic', opt.basic);
+      else o('basic_firmware', 'internal');
       o('sio_patch', opt.fastSio === false ? 'disabled' : 'enabled');
       for (const [k, v] of Object.entries(opt.altirra || {})) o(k, v);
       if (!a.boot()) throw new Error('Altirra boot failed');

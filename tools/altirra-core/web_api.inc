@@ -12,6 +12,32 @@ namespace {
 
 std::map<std::string, std::string> g_webOpts;
 bool g_webOptsDirty = false;
+
+// User-supplied OS/BASIC images (written to the virtual FS by the page); registered with the firmware manager at boot.
+struct WebFwReq { const char *opt; ATFirmwareType type; std::string path; };
+std::vector<WebFwReq> g_webFwReqs;
+
+void WebRegisterFirmware(ATFirmwareManager& fwm) {
+	for (const WebFwReq& r : g_webFwReqs) {
+		const VDStringW w = VDTextU8ToW(VDStringSpanA(r.path.c_str()));
+		const uint64 id = ATGetFirmwareIdFromPath(w.c_str());
+		ATFirmwareInfo existing {};
+		if (!fwm.GetFirmwareInfo(id, existing)) {
+			ATFirmwareInfo fw {};
+			fw.mId = id;
+			fw.mFlags = 0;
+			fw.mbVisible = true;
+			fw.mbAutoselect = false;
+			fw.mName = VDStringW(VDFileSplitPath(w.c_str()));
+			fw.mPath = w;
+			fw.mType = r.type;
+			fwm.AddFirmware(fw);
+		}
+		char v[32];
+		snprintf(v, sizeof v, "fw_%llx", (unsigned long long)id);
+		g_webOpts[r.opt] = v;
+	}
+}
 uint16_t g_webPad[4] = {};
 std::vector<uint8_t> g_webFrame;
 unsigned g_webW = 0, g_webH = 0;
@@ -209,6 +235,19 @@ EMSCRIPTEN_KEEPALIVE int aw_fw(const char *name) {
 	return 0;
 }
 EMSCRIPTEN_KEEPALIVE const uint8_t *aw_fw_data() { return g_fwDump.data(); }
+
+EMSCRIPTEN_KEEPALIVE void aw_fw_custom(const char *kind, const char *path) {
+	WebFwReq r;
+	r.path = path;
+	if (!strcmp(kind, "basic")) {
+		r.opt = "altirra_basic_firmware";
+		r.type = kATFirmwareType_Basic;
+	} else {
+		r.opt = "altirra_os_firmware";
+		r.type = !strcmp(kind, "os800") ? kATFirmwareType_Kernel800_OSB : kATFirmwareType_KernelXL;
+	}
+	g_webFwReqs.push_back(r);
+}
 
 EMSCRIPTEN_KEEPALIVE int aw_init() {
 	mkdir("/system", 0777);

@@ -253,12 +253,12 @@
   async function boot() {
     const model = $('model').value;
     const alt = $('core').value === 'altirra';
-    const os = alt ? null : chosenOs();
-    if (!alt && !os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
+    const os = chosenOs();
+    if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
     log('booting…');
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
     try {
-      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: alt ? null : chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
+      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     hookDevices();
@@ -2936,7 +2936,7 @@
 
   window.ataricraft = {
     describe: () => ({
-      name: 'ataricraft', core: 'libatari800 (WASM reference)',
+      name: 'ataricraft', core: S.emu && S.emu.core === 'altirra' ? 'AltirraSDL (WASM)' : 'libatari800 (WASM reference)',
       calls: ['loadRoms(files)', 'boot({model,tv,basic})', 'screenshot({scale}) -> PNG data URL', 'screenText()', 'type(text)', 'press(fields,frames)',
         'joy(bits,fire)', 'console({start,select,option})', 'step(n)', 'run()/pause()', 'speed(x)', 'peek(addr,len)', 'poke(addr,bytes)',
         'mountDisk(n,name,bytes)', 'bootFile(name,bytes)', 'snapshot()', 'restore(snap)', 'reset(cold)', 'state()'],
