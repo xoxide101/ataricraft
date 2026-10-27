@@ -1445,6 +1445,10 @@
       ctl: [['fire', 'Button', 'big', 'fire']] },
     driving: { name: 'Atari CX20 driving controller', mode: 'drive', info: ['A knob that turns a full 360° with no end stop, plus one button', 'Sends 16 steps per turn as a 2-bit code on the up/down lines', 'Drag around the knob, use the mouse wheel, or turn a USB stick in a circle'],
       ctl: [['fire', 'Button', 'big', 'fire']] },
+    stick2: { name: 'Two-button joystick (left / right fire)', layout: 'top', info: ['8-way stick, two big fire buttons: left = Fire, right = Fire 2', 'Two small buttons just above them do the same: left = Fire, right = Fire 2', 'The core has one trigger line, so Fire 2 also fires'],
+      ctl: [['fire', 'Left fire (Fire)', 'big', 'fire'], ['fire2', 'Right fire (Fire 2)', 'big', 'fire2'], ['t1', 'Top left (Fire)', 'top', 'fire', ''], ['t2', 'Top right (Fire 2)', 'top', 'fire2', '']] },
+    pad2: { name: 'Two-button joypad (1 and 2 on the right)', layout: 'pad', info: ['8-way pad on the left, buttons 1 and 2 on the right: 1 = Fire, 2 = Fire 2', 'Two small buttons just above them do the same', 'The core has one trigger line, so Fire 2 also fires'],
+      ctl: [['b1', 'Button 1 (Fire)', 'big', 'fire', '1'], ['b2', 'Button 2 (Fire 2)', 'big', 'fire2', '2'], ['t1', 'Top button 1 (Fire)', 'top', 'fire', ''], ['t2', 'Top button 2 (Fire 2)', 'top', 'fire2', '']] },
     c64: { name: 'C64-style joystick', info: ['8-way stick, two red buttons on top left and right', 'Top left = Fire, top right = Fire 2', '4 small buttons along the front: default Start, Select, Option, Reset (mappable)'],
       ctl: [['t1', 'Top left (Fire)', 'big', 'fire'], ['t2', 'Top right (Fire 2)', 'big', 'fire2'], ['b1', 'Front 1', 'small', 'start'], ['b2', 'Front 2', 'small', 'select'], ['b3', 'Front 3', 'small', 'option'], ['b4', 'Front 4', 'small', 'reset']] },
   };
@@ -1598,20 +1602,22 @@
     return stick;
     };
     const stick = t.mode === 'paddle' ? joyPaddleEl() : t.mode === 'drive' ? joyDriveEl() : mkStick();
-    const mid = document.createElement('div'); mid.className = 'jbtns';
+    const mid = document.createElement('div'); mid.className = 'jbtns' + (t.layout ? ' jl-' + t.layout : '');
+    const tops = document.createElement('div'), bigs = document.createElement('div'); tops.className = 'jtops'; bigs.className = 'jbigs';
     t.ctl.forEach((c) => {
       const b = document.createElement('button');
       b.className = 'jb ' + c[2]; b.dataset.c = c[0];
       JOY.vis.btn[c[0]] = b;
       const a = jact(c);
-      b.textContent = c[2] === 'big' ? c[1] : c[1] + ' → ' + (JACT.find((x) => x[0] === a) || [0, a])[1];
+      b.textContent = c[4] != null ? c[4] : c[2] === 'big' ? c[1] : c[1] + ' → ' + (JACT.find((x) => x[0] === a) || [0, a])[1];
       b.title = c[1] + ' (' + (JACT.find((x) => x[0] === a) || [0, a])[1] + ')';
       if (JOY.down[c[0]]) b.classList.add('down');
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); joyCtl(c[0], true); });
       const up = () => joyCtl(c[0], false);
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
-      mid.append(b);
+      (t.layout ? (c[2] === 'top' ? tops : bigs) : mid).append(b);
     });
+    if (t.layout) mid.append(tops, bigs);
     row.append(stick, mid);
     box.append(head, row);
     return box;

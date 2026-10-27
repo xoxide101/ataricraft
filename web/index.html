@@ -147,7 +147,13 @@
   .jbtns { display:flex; flex-wrap:wrap; gap:8px; max-width:300px; align-items:center; }
   .jb { touch-action:none; user-select:none; font-weight:700; }
   .jb.big { width:calc(var(--js)*.46); height:calc(var(--js)*.46); border-radius:50%; background:#c63b22; border:3px solid #7a2415; color:#fff; font-size:11px; }
-  .jb.small { min-height:38px; padding:0 8px; font-size:12px; }
+  .jbtns.jl-top, .jbtns.jl-pad { flex-direction:column; flex-wrap:nowrap; gap:10px; align-items:stretch; }
+  .jtops { display:flex; justify-content:space-between; gap:10px; } .jbigs { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .jb.top { width:calc(var(--js)*.3); height:calc(var(--js)*.15); min-height:18px; border-radius:8px; border:1px solid #5a606b; background:linear-gradient(#8b909a,#6a6f79); color:#fff; font-size:11px; box-shadow:0 2px 0 #3c4048; }
+  .jb.top.down { background:linear-gradient(#fff,#d8dce4); color:#000; border-color:#fff; transform:translateY(2px); box-shadow:0 0 12px #fff; }
+  .jl-pad .jbigs .jb.big { background:radial-gradient(#e9e6dc,#aaa69a); border:3px solid #6d6a60; color:#222; font-size:calc(var(--js)*.16); }
+  .jl-pad .jbigs .jb.big.down { background:radial-gradient(#fff,#ffd24a); border-color:#fff; }
+  .jl-pad .jbigs .jb.big:first-child { margin-top:calc(var(--js)*.18); }  .jb.small { min-height:38px; padding:0 8px; font-size:12px; }
   .jb.down { background:var(--acc); color:#000; }
   .jpaddle { position:relative; width:min(100%,calc(var(--js)*1.5)); height:calc(var(--js)*.33); border-radius:999px; background:linear-gradient(#2d3037,#1b1d22); border:2px solid #3a4150; touch-action:none; cursor:ew-resize; flex:none; }
   .jpaddle .jtick { position:absolute; top:4px; bottom:4px; width:10px; margin-left:-5px; border-radius:5px; background:#c63b22; border:1px solid #7a2415; pointer-events:none; }
@@ -406,6 +412,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zu"></script>
+<script src="js/app.js?v=20261027zv"></script>
 </body>
 </html>
