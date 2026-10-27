@@ -2431,7 +2431,7 @@
       FujiNet.fillPublic(); renderHosts();
       $('fnhostmsg').textContent = n + ' servers online';
     } catch (e) {
-      $('fnhostmsg').textContent = 'could not reach fujinet.online; using the built-in list';
+      $('fnhostmsg').textContent = 'could not reach fujinet.online (start the TNFS relay to fetch it); using the built-in list';
     }
   };
   $('fnboot').onclick = () => {

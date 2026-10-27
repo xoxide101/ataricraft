@@ -115,6 +115,10 @@ const server = http.createServer(async (rq, rs) => {
   rs.setHeader('Access-Control-Allow-Private-Network', 'true');
   if (rq.method === 'OPTIONS') { rs.writeHead(204); rs.end(); return; }
   if (u.pathname === '/ping') { rs.end('ataricraft-tnfs-bridge'); return; }
+  if (u.pathname === '/status') {
+    try { rs.end(await (await fetch('https://fujinet.online/tnfs-server-status/')).text()); } catch (e) { rs.writeHead(502); rs.end(String(e.message)); }
+    return;
+  }
   const host = u.searchParams.get('host') || '', path = u.searchParams.get('path') || '/';
   if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) { rs.writeHead(400); rs.end('bad host'); return; }
   try {

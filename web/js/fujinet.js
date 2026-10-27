@@ -73,7 +73,9 @@
     },
     // Best effort: the status page may be unreachable (offline, or blocked by CORS); the built-in list is kept then.
     async refreshPublic() {
-      const t = await (await fetch('https://fujinet.online/tnfs-server-status/')).text();
+      let t;
+      try { t = await (await fetch('https://fujinet.online/tnfs-server-status/')).text(); }
+      catch (e) { t = await (await fetch(this.bridge + '/status')).text(); } // blocked by CORS from a local page: ask the relay
       const up = [];
       for (const row of t.split(/<tr/i)) {
         const h = row.match(/>\s*([a-z0-9][a-z0-9.-]+\.[a-z]{2,})\s*</i);
