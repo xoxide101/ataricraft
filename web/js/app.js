@@ -116,7 +116,7 @@
       const bytes = new Uint8Array(await f.arrayBuffer());
       const k = classify(f.name, bytes);
       const name = f.webkitRelativePath || f.name;
-      if (k && !S.lib[k].some((e) => e.name === name) && !S.lib[k].some((e) => e.builtin && e.bytes.length === bytes.length && e.bytes.every((v, i) => v === bytes[i]))) { S.lib[k].push({ name, bytes }); saveRom(k, name, bytes); }
+      if (k && !S.lib[k].some((e) => e.name === name)) { S.lib[k].push({ name, bytes }); saveRom(k, name, bytes); }
     }
     fillRomSelects();
   }
