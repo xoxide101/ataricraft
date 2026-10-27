@@ -1365,15 +1365,15 @@
       <rect x="68" y="46" width="50" height="7" rx="2" fill="#a8a49a"/>
       <circle class="led" cx="186" cy="32" r="4"/>
       <rect x="178" y="43" width="16" height="9" rx="1.5" fill="#8d897f"/>
-      <text x="199" y="55" font-size="10" fill="#7a766c" font-family="Consolas,monospace">D${n}</text>
-    </svg><div class="nm">D${n}: empty</div>`;
+      <text x="14" y="57" font-size="13" font-weight="bold" fill="#5f5b52" font-family="Consolas,monospace">D${n}:</text>
+    </svg><div class="nm">empty</div>`;
     $('drvviz').append(d);
     xfEl[n] = d;
     const span = $('d' + n);
     const sync = () => {
       const t = span.textContent.trim();
       d.classList.toggle('has', t && t !== 'empty');
-      d.querySelector('.nm').textContent = 'D' + n + ': ' + (t || 'empty');
+      d.querySelector('.nm').textContent = t || 'empty';
     };
     new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
     sync();
