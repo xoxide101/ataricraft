@@ -270,7 +270,7 @@
     </div>
     <div class="box">
       <h3>Touch pad</h3>
-      <div class="row"><label><input type="checkbox" id="padon"> Enable</label><select id="padtype" title="Atari Touch Tablet (Atari Artist) or Koala Pad"><option value="touch">Atari Touch Tablet</option><option value="koala">Koala Pad</option></select></div>
+      <div class="row"><label><input type="checkbox" id="padon"> Enable</label><select id="padtype" title="Atari Touch Tablet (Atari Artist) or Koala Pad"><option value="touch">Atari Touch Tablet</option><option value="koala">Koala Pad</option><option value="st">Atari ST mouse</option><option value="amiga">Amiga mouse</option><option value="trak">CX-22 trak-ball</option></select></div>
       <div id="padarea" title="Drag with mouse or finger. Press = stylus button (right-click = second button)"><div id="paddot"></div></div>
       <div class="row"><label><input type="checkbox" id="padscreen"> Draw on the main screen</label></div>
       <div class="row"><label><input type="checkbox" id="padfx"> Flip X</label><label><input type="checkbox" id="padfy"> Flip Y</label><span id="padinfo" class="dim"></span></div>
@@ -361,7 +361,7 @@
       <div id="kbd"></div>
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
-        <div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none"></div>
+        <div style="display:flex;gap:8px;align-items:center"><button id="padmap" type="button" title="Choose the pad / mouse device">🎛 Device…</button><div id="padhead" class="dim" title="Right-click (or long-press) for what is emulated and to switch device" style="cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none;flex:1"></div></div>
         <div id="padarea2" class="padsurf" title="Drag with finger or mouse. Moves the Touch Tablet / Koala pad cursor."><div class="paddot"></div></div>
         <div class="padbtns"><button data-b="1">Button 1 (left click)</button><button data-b="2">Button 2 (right click)</button></div>
       </div>
@@ -374,7 +374,7 @@
 <script src="ref/atari-ref.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/progress.js"></script>
-<script src="js/emu.js?v=20261023d"></script>
+<script src="js/emu.js?v=20261027a"></script>
 <script src="js/titles-data.js?v=20261023d"></script>
 <script src="js/fzstd.js?v=20261027a"></script>
 <script src="js/zip.js?v=20261027a"></script>
@@ -388,6 +388,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zc"></script>
+<script src="js/app.js?v=20261027zd"></script>
 </body>
 </html>

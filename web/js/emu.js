@@ -40,7 +40,10 @@ window.AC = window.AC || {};
       const model = MODELS[opt.model];
       m.FS.writeFile('/os.rom', opt.os);
       const ram = model.ram.find((r) => r.v === opt.ram) || model.ram.find((r) => r.v === model.def);
-      const args = ['atari800', opt.tv === 'pal' ? '-pal' : '-ntsc', ...ram.args, model.romFlag, '/os.rom', '-H1', '/host', '-hreadwrite', '-mouse', 'touch', '-directmouse'];
+      const args = ['atari800', opt.tv === 'pal' ? '-pal' : '-ntsc', ...ram.args, model.romFlag, '/os.rom', '-H1', '/host', '-hreadwrite'];
+      const mz = opt.mouse || 'touch';
+      if (mz === 'touch') args.push('-mouse', 'touch', '-directmouse');
+      else args.push('-mouse', mz, '-mouseport', '2');
       m.FS.mkdir('/host');
       for (const [n, b] of Object.entries(opt.host || {})) m.FS.writeFile('/host/' + n, b);
       if (opt.basic) {
