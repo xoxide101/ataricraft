@@ -1363,9 +1363,8 @@
       <rect class="disk" x="22" y="26" width="134" height="12" rx="1" fill="#fbfaf6" stroke="#d0cdc4"/><rect class="disk" x="30" y="29" width="30" height="6" fill="#d9362c"/>
       <rect x="22" y="31.5" width="140" height="1.6" fill="#000"/>
       <rect x="68" y="46" width="50" height="7" rx="2" fill="#a8a49a"/>
-      <circle class="led" cx="186" cy="32" r="4"/>
-      <rect x="178" y="43" width="16" height="9" rx="1.5" fill="#8d897f"/>
-      <text x="14" y="57" font-size="13" font-weight="bold" fill="#5f5b52" font-family="Consolas,monospace">D${n}:</text>
+      <circle class="led" cx="196" cy="50" r="4"/>
+      <text x="210" y="32" text-anchor="end" font-size="14" font-weight="bold" fill="#5f5b52" font-family="Consolas,monospace">D${n}:</text>
     </svg><div class="nm">empty</div>`;
     $('drvviz').append(d);
     xfEl[n] = d;
