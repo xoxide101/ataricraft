@@ -1440,9 +1440,13 @@
     d.className = 'xf cart';
     d.title = n === 1 ? 'Cartridge 1 (main, right slot)' : 'Cartridge 2 (left slot)';
     d.innerHTML = `<svg viewBox="0 0 220 68" aria-hidden="true">
-      <rect class="slot" x="2" y="2" width="216" height="64" rx="6" fill="#14161a" stroke="#6a6f7a" stroke-width="1.5" stroke-dasharray="5 4"/>
-      <image class="cartimg" href="img/cart-top.png" x="2" y="1" width="216" height="66" preserveAspectRatio="xMidYMid meet"/>
-      <text class="ct" x="210" y="62" text-anchor="end" font-size="10" font-weight="bold" font-family="Consolas,monospace">CART ${n}:</text>
+      <rect x="2" y="2" width="216" height="64" rx="6" fill="#ebe8e1" stroke="#9c988e"/>
+      <rect x="2" y="2" width="216" height="9" rx="4" fill="#f7f5f0"/>
+      <rect class="slot" x="12" y="12" width="196" height="50" rx="3" fill="#121214" stroke="#55524b"/>
+      <g class="ribs" stroke="#2c2c30" stroke-width="1.2">${[...Array(15)].map((_, i) => `<line x1="${34 + i * 10.4}" y1="16" x2="${34 + i * 10.4}" y2="58"/>`).join('')}</g>
+      <image class="cartimg" href="img/cart-top.png" x="26" y="13" width="168" height="48" preserveAspectRatio="none"/>
+      <g class="mt"><rect x="14" y="14" width="9" height="46" rx="2" fill="#c9ccd1" stroke="#7c8088"/><rect x="16" y="18" width="2.5" height="38" fill="#f4f6f8"/><rect x="197" y="14" width="9" height="46" rx="2" fill="#c9ccd1" stroke="#7c8088"/><rect x="199" y="18" width="2.5" height="38" fill="#f4f6f8"/></g>
+      <text class="ct" x="210" y="9.5" text-anchor="end" font-size="8" font-weight="bold" font-family="Consolas,monospace">CART ${n}:</text>
     </svg><div class="nm">empty</div>`;
     $('drvviz').append(d);
     const span = $('cn' + n);
