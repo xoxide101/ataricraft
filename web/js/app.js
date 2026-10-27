@@ -161,10 +161,13 @@
       const prev = sel.value;
       sel.innerHTML = '';
       if (none) sel.append(new Option('(none)', ''));
-      list.forEach((e, i) => sel.append(new Option(romLabel(e), String(i))));
+      // The built-in Altirra ROMs are listed first so they are never buried under a long scanned list; the values stay indexes into the list.
+      const order = list.map((e, i) => i).sort((a, b) => !!list[b].builtin - !!list[a].builtin);
+      order.forEach((i) => sel.append(new Option(romLabel(list[i]), String(i))));
       const si = key in sel_ ? (sel_[key] === '' ? '' : String(list.findIndex((e) => e.name === sel_[key]))) : null;
       if (si !== null && si !== '-1' && [...sel.options].some((o) => o.value === si)) { sel.value = si; if (key === 'basic') S.basicTouched = true; }
       else if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+      else { const f = order.find((i) => !list[i].builtin); sel.value = f !== undefined ? String(f) : String(order[0]); }
       const q = $('romfilter').value.trim().toLowerCase();
       if (q) [...sel.options].forEach((o) => { if (o.value !== '' && o.value !== sel.value && !o.text.toLowerCase().includes(q)) o.remove(); });
     };
