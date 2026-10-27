@@ -440,7 +440,7 @@
 
   function sendJoy() {
     if (!S.emu) return;
-    S.emu.down('joy0', { joy0: S.joy | JOY.ui | JOY.gp, trig0: (S.fire || joyFire()) ? 1 : 0 });
+    players.forEach((p, i) => { if (i === 0 || JSH.two) p.send(); });
   }
 
   // ---- physical keyboard ----
@@ -1347,88 +1347,203 @@
       ctl: [['fire', 'Fire', 'big', 'fire'], ['r1', 'Ring 1', 'small', 'none'], ['r2', 'Ring 2', 'small', 'none'], ['r3', 'Ring 3', 'small', 'none'], ['r4', 'Ring 4', 'small', 'none'], ['s1', 'Side 1', 'small', 'select'], ['s2', 'Side 2', 'small', 'option']] },
     atari2: { name: 'Atari CX78+ (2-button)', info: ['8-way stick: diagonals are two directions at once', 'Left button = standard trigger (Fire)', 'Right button = second button (the core has one trigger line, so it also fires)', 'Wired or wireless; the controller sends DB9 joystick over USB, so it shows up as a gamepad'],
       ctl: [['fire', 'Left (Fire)', 'big', 'fire'], ['fire2', 'Right (Fire 2)', 'big', 'fire2']] },
+    paddle: { name: 'Atari CX30 paddle', mode: 'paddle', info: ['One dial (left/right) and one button', 'Dial = paddle 0 position; button = paddle trigger', 'USB: first axis of the controller turns the dial'],
+      ctl: [['fire', 'Button', 'big', 'fire']] },
+    driving: { name: 'Atari CX20 driving controller', mode: 'drive', info: ['A knob that turns a full 360° with no end stop, plus one button', 'Sends 16 steps per turn as a 2-bit code on the up/down lines', 'Drag around the knob, use the mouse wheel, or turn a USB stick in a circle'],
+      ctl: [['fire', 'Button', 'big', 'fire']] },
     c64: { name: 'C64-style joystick', info: ['8-way stick, two red buttons on top left and right', 'Top left = Fire, top right = Fire 2', '4 small buttons along the front: default Start, Select, Option, Reset (mappable)'],
       ctl: [['t1', 'Top left (Fire)', 'big', 'fire'], ['t2', 'Top right (Fire 2)', 'big', 'fire2'], ['b1', 'Front 1', 'small', 'start'], ['b2', 'Front 2', 'small', 'select'], ['b3', 'Front 3', 'small', 'option'], ['b4', 'Front 4', 'small', 'reset']] },
   };
-  const JOY = Object.assign({ dev: 'cx40', act: {}, gpb: {}, con: true, usb: true }, JSON.parse(localStorage.getItem('ac.joyx') || '{}'));
-  Object.assign(JOY, { ui: 0, gp: 0, cnt: {}, learn: null, down: {} });
-  const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ dev: JOY.dev, act: JOY.act, gpb: JOY.gpb, con: JOY.con, usb: JOY.usb }));
-  const jdef = () => JOYTYPES[JOY.dev] || JOYTYPES.atari2;
+  const GRAY = [0, 1, 3, 2];
+  const JSAVED = (() => { let o = {}; try { o = JSON.parse(localStorage.getItem('ac.joyx') || '{}'); } catch (e) { /* fresh */ } return o.dev ? { p: [o], con: o.con } : o; })();
+  const JSH = { con: JSAVED.con !== false, two: !!JSAVED.two };
+  const joySave = () => localStorage.setItem('ac.joyx', JSON.stringify({ p: players.map((p) => p.save()), two: JSH.two, con: JSH.con }));
+  const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 } };
+  const keyName = (c) => (!c ? '(none)' : ({ ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'Space' })[c] || c.replace(/^Key|^Digit/, ''));
+  const JKDIRS = [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right']];
+  function mkPlayer(idx, saved) {
+  const JOY = Object.assign({ dev: 'cx40', act: {}, gpb: {}, kb: {}, kbon: false, usb: true }, saved || {});
+  Object.assign(JOY, { ui: 0, gp: 0, kd: 0, kdir: 0, cnt: {}, learn: null, down: {}, pot: 0.5, ang: 0, step: 0, gpAng: null, vis: {} });
+  const fld = idx ? 'joy1' : 'joy0', trg = idx ? 'trig1' : 'trig0';
+  function joyPaddleEl() {
+    const el = document.createElement('div'); el.className = 'jpaddle'; el.title = 'Drag left/right (or use the mouse wheel) to turn the paddle';
+    el.innerHTML = '<div class="jtick"></div>';
+    const tick = el.firstChild; JOY.vis.tick = tick;
+    const show = () => { tick.style.left = JOY.pot * 100 + '%'; };
+    const aim = (e) => { const r = el.getBoundingClientRect(); JOY.pot = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); show(); sendJoy(); };
+    el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); aim(e); e.preventDefault(); });
+    el.addEventListener('pointermove', (e) => { if (el.hasPointerCapture(e.pointerId)) aim(e); });
+    el.addEventListener('wheel', (e) => { e.preventDefault(); JOY.pot = Math.min(1, Math.max(0, JOY.pot + (e.deltaY > 0 ? 0.03 : -0.03))); show(); sendJoy(); }, { passive: false });
+    show();
+    return el;
+  }
+  function joyDriveEl() {
+    const el = document.createElement('div'); el.className = 'jstick'; el.title = 'Drag around the knob to turn it, or use the mouse wheel'; JOY.vis.drive = el;
+    el.innerHTML = '<div class="jknob" style="width:20px;height:20px;margin:-81px 0 0 -10px;background:#c63b22;border-color:#7a2415"></div>';
+    const knob = el.firstChild;
+    const turn = (d) => { JOY.ang += d; JOY.step = Math.floor(JOY.ang / (Math.PI / 8)); knob.style.transform = ''; el.style.transform = `rotate(${JOY.ang}rad)`; sendJoy(); };
+    let last = null;
+    el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); const r = el.parentNode.getBoundingClientRect(); last = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)); e.preventDefault(); });
+    el.addEventListener('pointermove', (e) => {
+      if (last == null) return;
+      const r = el.parentNode.getBoundingClientRect(), a = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+      let d = a - last; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
+      last = a; turn(d);
+    });
+    const end = () => { last = null; };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+    el.addEventListener('wheel', (e) => { e.preventDefault(); turn(e.deltaY > 0 ? Math.PI / 8 : -Math.PI / 8); }, { passive: false });
+    const wrap = document.createElement('div'); wrap.style.cssText = 'width:170px;height:170px;flex:none;position:relative'; wrap.append(el);
+    el.style.transform = `rotate(${JOY.ang}rad)`;
+    return wrap;
+  }
+  const jdef = () => JOYTYPES[JOY.dev] || JOYTYPES.cx40;
   const jact = (c) => { const t = (JOY.act[JOY.dev] || {})[c[0]]; return t || c[3]; };
   const jgpb = (c, i) => { const m = (JOY.gpb[JOY.dev] || {})[c[0]]; return m != null ? m : [0, 1, 2, 3, 4, 5, 8, 9][i]; };
-  const JFIELDS = { start: { start: 1 }, select: { select: 1 }, option: { option: 1 }, reset: { special: 2 }, break: { special: 5 } };
+  const kbDefaults = () => {
+    const d = idx ? { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' } : { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+    const big = jdef().ctl.filter((c) => c[2] === 'big');
+    if (big[0]) d[big[0][0]] = idx ? 'KeyF' : 'Space';
+    if (big[1]) d[big[1][0]] = idx ? 'KeyG' : 'KeyZ';
+    return d;
+  };
+  const kbMap = () => Object.assign(kbDefaults(), JOY.kb[JOY.dev] || {});
+  function showBits() {
+    const k = JOY.vis.knob; if (!k) return;
+    const b = JOY.ui | JOY.gp | JOY.kd, x = (b & 8 ? 1 : 0) - (b & 4 ? 1 : 0), y = (b & 2 ? 1 : 0) - (b & 1 ? 1 : 0), m = Math.hypot(x, y) || 1;
+    k.style.transform = JOY.dragging ? k.style.transform : `translate(${(x / m) * 42}px, ${(y / m) * 42}px)`;
+  }
   function joyCtl(id, on) {
     const c = jdef().ctl.find((x) => x[0] === id); if (!c) return;
     if (!!JOY.down[id] === on) return;
     JOY.down[id] = on;
+    if (JOY.vis.btn && JOY.vis.btn[id]) JOY.vis.btn[id].classList.toggle('down', on);
     const a = jact(c); if (a === 'none') return;
     JOY.cnt[a] = (JOY.cnt[a] || 0) + (on ? 1 : -1);
     if (a === 'fire' || a === 'fire2') { sendJoy(); return; }
     if (!S.emu) return;
-    if (on) S.emu.down('jx:' + a, JFIELDS[a]); else if (!JOY.cnt[a]) S.emu.up('jx:' + a);
+    if (on) S.emu.down('jx:' + idx + a, JFIELDS[a]); else if (!JOY.cnt[a]) S.emu.up('jx:' + idx + a);
   }
-  function joyRelease() { for (const id of Object.keys(JOY.down)) joyCtl(id, false); JOY.ui = 0; JOY.gp = 0; sendJoy(); }
+  function joyRelease() { for (const id of Object.keys(JOY.down)) joyCtl(id, false); JOY.ui = 0; JOY.gp = 0; JOY.kd = 0; JOY.kdir = 0; showBits(); sendJoy(); }
   const joyFire = () => ((JOY.cnt.fire || 0) + (JOY.cnt.fire2 || 0)) > 0;
+  function send() {
+    if (!S.emu) return;
+    const mode = jdef().mode;
+    let j = (idx ? 0 : S.joy) | JOY.ui | JOY.gp | JOY.kd;
+    const fire = (!idx && S.fire) || joyFire();
+    showBits();
+    if (mode === 'paddle') { padSend(); S.emu.down(fld, { [fld]: 0, [trg]: 0 }); return; }
+    if (mode === 'drive') j = (j & ~3) | GRAY[JOY.step & 3];
+    S.emu.down(fld, { [fld]: j, [trg]: fire ? 1 : 0 });
+  }
   function joyMenu(x, y) {
     const t = jdef();
     const items = t.info.map((l) => ({ label: l, run: () => {} }));
     items.push({ label: 'Map buttons…', run: () => joyDialog() });
+    items.push({ label: 'Keyboard keys…', run: () => keyDialog() });
     for (const [k, v] of Object.entries(JOYTYPES)) if (k !== JOY.dev) items.push({ label: 'Switch to ' + v.name, run: () => joySet(k) });
-    items.push({ label: (JOY.con ? 'Hide' : 'Show') + ' Start / Select / Option / Reset', run: () => { JOY.con = !JOY.con; joySave(); joyRender(); } });
-    items.push({ label: JOY.usb ? 'Ignore real USB controllers' : 'Use real USB controllers', run: () => { JOY.usb = !JOY.usb; joySave(); if (!JOY.usb) { JOY.gp = 0; sendJoy(); } } });
-    openPick(x, y, 'Emulating: ' + t.name, items);
+    items.push({ label: (JSH.con ? 'Hide' : 'Show') + ' Start / Select / Option / Reset', run: () => { JSH.con = !JSH.con; joySave(); joyRenderAll(); } });
+    items.push({ label: JOY.usb ? 'Ignore a real USB controller for this player' : 'Use a real USB controller for this player', run: () => { JOY.usb = !JOY.usb; joySave(); if (!JOY.usb) { JOY.gp = 0; sendJoy(); } } });
+    openPick(x, y, `Player ${idx + 1} emulating: ${t.name}`, items);
   }
-  function joySet(k) { joyRelease(); JOY.dev = k; joySave(); joyRender(); }
+  function joySet(k) { joyRelease(); JOY.dev = k; joySave(); joyRenderAll(); padSend(); sendJoy(); }
   function joyRender() {
-    const t = jdef(), box = $('kjoy');
-    box.innerHTML = '';
+    const t = jdef(), box = document.createElement('div');
+    box.className = 'jplayer';
+    JOY.vis = { btn: {} };
     const head = document.createElement('div');
-    head.className = 'dim'; head.id = 'joyhead'; head.title = 'Click or right-click: what is emulated, switch device, map buttons';
-    head.style.cssText = 'cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none';
-    head.textContent = `🕹 ${t.name} ▾  (click for details, mapping, switching)`;
-    head.onclick = (e) => joyMenu(e.clientX, e.clientY);
-    head.oncontextmenu = (e) => { e.preventDefault(); joyMenu(e.clientX, e.clientY); };
+    head.style.cssText = 'display:flex;gap:6px;align-items:center';
+    const nm = document.createElement('div');
+    nm.className = 'dim'; nm.title = 'Click or right-click: what is emulated, switch device, map buttons';
+    nm.style.cssText = 'cursor:context-menu;padding:2px 4px;user-select:none;-webkit-touch-callout:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    nm.textContent = `🕹 P${idx + 1}: ${t.name} ▾`;
+    nm.onclick = (e) => joyMenu(e.clientX, e.clientY);
+    nm.oncontextmenu = (e) => { e.preventDefault(); joyMenu(e.clientX, e.clientY); };
+    const kb = document.createElement('button'); kb.textContent = '⌨ Keys…'; kb.className = 'jkeys' + (JOY.kbon ? ' on' : '');
+    kb.title = 'Map keyboard keys to this controller' + (JOY.kbon ? ' (keyboard control is on)' : '');
+    kb.onclick = () => keyDialog();
+    head.append(nm, kb);
     const row = document.createElement('div'); row.className = 'jrow';
-    const stick = document.createElement('div'); stick.id = 'jstick'; stick.title = 'Drag: 8 directions, diagonals are two directions at once';
+    const mkStick = () => {
+    const stick = document.createElement('div'); stick.className = 'jstick'; stick.title = 'Drag: 8 directions, diagonals are two directions at once';
     stick.innerHTML = '<div class="jknob"></div>';
-    const knob = stick.firstChild;
+    const knob = stick.firstChild; JOY.vis.knob = knob;
     const aim = (e) => {
       const r = stick.getBoundingClientRect(), R = r.width / 2;
       const dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R), th = 0.38 * R;
       JOY.ui = (dy < -th ? 1 : 0) | (dy > th ? 2 : 0) | (dx < -th ? 4 : 0) | (dx > th ? 8 : 0);
       const m = Math.min(1, Math.hypot(dx, dy) / R) || 0, a = Math.atan2(dy, dx);
+      JOY.dragging = true;
       knob.style.transform = `translate(${Math.cos(a) * m * R * 0.5}px, ${Math.sin(a) * m * R * 0.5}px)`;
       sendJoy();
     };
-    const rel = () => { JOY.ui = 0; knob.style.transform = ''; sendJoy(); };
+    const rel = () => { JOY.ui = 0; JOY.dragging = false; knob.style.transform = ''; sendJoy(); };
     stick.addEventListener('pointerdown', (e) => { stick.setPointerCapture(e.pointerId); aim(e); e.preventDefault(); });
     stick.addEventListener('pointermove', (e) => { if (stick.hasPointerCapture(e.pointerId)) aim(e); });
     stick.addEventListener('pointerup', rel); stick.addEventListener('pointercancel', rel);
+    return stick;
+    };
+    const stick = t.mode === 'paddle' ? joyPaddleEl() : t.mode === 'drive' ? joyDriveEl() : mkStick();
     const mid = document.createElement('div'); mid.className = 'jbtns';
     t.ctl.forEach((c) => {
       const b = document.createElement('button');
       b.className = 'jb ' + c[2]; b.dataset.c = c[0];
+      JOY.vis.btn[c[0]] = b;
       const a = jact(c);
       b.textContent = c[2] === 'big' ? c[1] : c[1] + ' → ' + (JACT.find((x) => x[0] === a) || [0, a])[1];
       b.title = c[1] + ' (' + (JACT.find((x) => x[0] === a) || [0, a])[1] + ')';
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); joyCtl(c[0], true); });
-      const up = () => { b.classList.remove('down'); joyCtl(c[0], false); };
+      if (JOY.down[c[0]]) b.classList.add('down');
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); joyCtl(c[0], true); });
+      const up = () => joyCtl(c[0], false);
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
       mid.append(b);
     });
     row.append(stick, mid);
-    if (JOY.con) {
-      const con = document.createElement('div'); con.className = 'jcon';
-      for (const [k, l] of [['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['reset', 'Reset']]) {
-        const b = document.createElement('button'); b.textContent = l; b.className = 'jb small';
-        b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
-        const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
-        b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
-        con.append(b);
-      }
-      row.append(con);
-    }
     box.append(head, row);
+    return box;
+  }
+  function keyDialog() {
+    let dlg = $('joydlg');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'joydlg'; document.body.append(dlg); }
+    const t = jdef(), map = kbMap();
+    dlg.innerHTML = '';
+    dlg.style.cssText = 'background:#1b1e24;color:#e6e0d4;border:1px solid #4a5160;border-radius:10px;min-width:300px;max-width:min(94vw,480px)';
+    const h = document.createElement('h3'); h.textContent = `Player ${idx + 1} keyboard: ${t.name}`; h.style.margin = '0 0 8px'; dlg.append(h);
+    const on = document.createElement('label'); on.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:8px';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = JOY.kbon;
+    cb.onchange = () => { JOY.kbon = cb.checked; if (!cb.checked) joyRelease(); joySave(); joyRenderAll(); };
+    on.append(cb, 'Control this player with the keyboard (only while the Stick tab is open)'); dlg.append(on);
+    const rows = [...(t.mode === 'paddle' || t.mode === 'drive' ? [['left', 'Turn left'], ['right', 'Turn right']] : JKDIRS), ...t.ctl.map((c) => [c[0], c[1]])];
+    for (const [id, label] of rows) {
+      const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0';
+      const l = document.createElement('span'); l.textContent = label; l.style.flex = '1';
+      const b = document.createElement('button'); b.textContent = keyName(map[id]) + ' · Set';
+      b.onclick = () => {
+        b.textContent = 'press a key… (Esc cancels, Backspace clears)';
+        const h2 = (e) => {
+          e.preventDefault(); e.stopImmediatePropagation(); window.removeEventListener('keydown', h2, true);
+          if (e.code !== 'Escape') { (JOY.kb[JOY.dev] = JOY.kb[JOY.dev] || {})[id] = e.code === 'Backspace' ? '' : e.code; joySave(); }
+          keyDialog();
+        };
+        window.addEventListener('keydown', h2, true);
+      };
+      r.append(l, b); dlg.append(r);
+    }
+    const rs = document.createElement('button'); rs.textContent = 'Reset keys to defaults'; rs.style.cssText = 'display:block;width:100%;margin-top:8px';
+    rs.onclick = () => { delete JOY.kb[JOY.dev]; joySave(); keyDialog(); };
+    const x = document.createElement('button'); x.textContent = 'Close'; x.style.cssText = 'display:block;width:100%;margin-top:6px';
+    x.onclick = () => dlg.close();
+    dlg.append(rs, x);
+    if (!dlg.open) dlg.showModal();
+  }
+  function onKey(e, on) {
+    if (!JOY.kbon) return false;
+    const map = kbMap(), m = jdef().mode, id = Object.keys(map).find((k) => map[k] === e.code);
+    if (!id) return false;
+    const dir = { up: 1, down: 2, left: 4, right: 8 }[id];
+    if (m === 'paddle' || m === 'drive') { if (id === 'left') JOY.kdir = on ? -1 : (JOY.kdir === -1 ? 0 : JOY.kdir); else if (id === 'right') JOY.kdir = on ? 1 : (JOY.kdir === 1 ? 0 : JOY.kdir); else joyCtl(id, on); return true; }
+    if (dir) { JOY.kd = on ? JOY.kd | dir : JOY.kd & ~dir; sendJoy(); return true; }
+    joyCtl(id, on); return true;
   }
   function joyDialog() {
     let dlg = $('joydlg');
@@ -1445,7 +1560,7 @@
       const sel = document.createElement('select');
       for (const [v, n] of JACT) { const o = document.createElement('option'); o.value = v; o.textContent = n; sel.append(o); }
       sel.value = jact(c);
-      sel.onchange = () => { joyRelease(); (JOY.act[JOY.dev] = JOY.act[JOY.dev] || {})[c[0]] = sel.value; joySave(); joyRender(); };
+      sel.onchange = () => { joyRelease(); (JOY.act[JOY.dev] = JOY.act[JOY.dev] || {})[c[0]] = sel.value; joySave(); joyRenderAll(); };
       const lb = document.createElement('button'); lb.textContent = 'USB: ' + jgpb(c, i) + ' · Learn';
       lb.onclick = () => { JOY.learn = (idx) => { (JOY.gpb[JOY.dev] = JOY.gpb[JOY.dev] || {})[c[0]] = idx; joySave(); JOY.learn = null; joyDialog(); }; lb.textContent = 'press a button…'; };
       r.append(l, sel, lb); dlg.append(r);
@@ -1455,25 +1570,88 @@
     dlg.append(x);
     if (!dlg.open) dlg.showModal();
   }
-  const gpPrev = {}, gdn = {};
+  const gdn = {};
+  const turnBy = (d) => { JOY.ang += d; JOY.step = Math.floor(JOY.ang / (Math.PI / 8)); if (JOY.vis.drive) JOY.vis.drive.style.transform = `rotate(${JOY.ang}rad)`; sendJoy(); };
+  const setPot = (v) => { JOY.pot = Math.min(1, Math.max(0, v)); if (JOY.vis.tick) JOY.vis.tick.style.left = JOY.pot * 100 + '%'; sendJoy(); };
+  let kt = 0;
+  // Called every 16 ms with the real gamepad for this player (or null): moves the on-screen controller to match it.
+  function tick(g) {
+    const t = jdef();
+    if (JOY.kdir && t.mode === 'paddle') setPot(JOY.pot + JOY.kdir * 0.02);
+    if (JOY.kdir && t.mode === 'drive' && ++kt % 4 === 0) turnBy(JOY.kdir * Math.PI / 8);
+    if (!g || !JOY.usb) { if (JOY.gp) { JOY.gp = 0; sendJoy(); } return; }
+    const ax = g.axes[0] || 0, ay = g.axes[1] || 0, B = (k) => g.buttons[k] && g.buttons[k].pressed;
+    if (t.mode === 'paddle' && Math.abs(ax) > 0.05) setPot((ax + 1) / 2);
+    if (t.mode === 'drive') {
+      if (Math.hypot(ax, ay) > 0.6) {
+        const a = Math.atan2(ay, ax);
+        if (JOY.gpAng != null) { let d = a - JOY.gpAng; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; turnBy(d); }
+        JOY.gpAng = a;
+      } else JOY.gpAng = null;
+    }
+    const bits = (ay < -0.5 || B(12) ? 1 : 0) | (ay > 0.5 || B(13) ? 2 : 0) | (ax < -0.5 || B(14) ? 4 : 0) | (ax > 0.5 || B(15) ? 8 : 0);
+    t.ctl.forEach((c, i) => { const k = jgpb(c, i); if (k >= 12 && k <= 15) return; const now = !!B(k); if (now !== !!gdn[c[0]]) { gdn[c[0]] = now; joyCtl(c[0], now); } });
+    if (bits !== JOY.gp) { JOY.gp = bits; sendJoy(); }
+  }
+  return { JOY, send, render: joyRender, release: joyRelease, tick, onKey, jdef, padState: () => (jdef().mode === 'paddle' ? { pot: JOY.pot, btn: joyFire() } : null),
+    save: () => ({ dev: JOY.dev, act: JOY.act, gpb: JOY.gpb, kb: JOY.kb, kbon: JOY.kbon, usb: JOY.usb }) };
+  }
+  const players = [mkPlayer(0, (JSAVED.p || [])[0]), mkPlayer(1, (JSAVED.p || [])[1])];
+  function padSend() {
+    if (!S.emu) return;
+    const st = players.map((p, i) => (i === 0 || JSH.two ? p.padState() : null));
+    if (!st[0] && !st[1]) { if (PAD.on) applyPad(); else S.emu.up('pad'); return; }
+    const v = (s) => (s ? 227 - Math.round(s.pot * 227) : 113);
+    S.emu.down('pad', { mousex: v(st[0]), mousey: v(st[1]), mouse_buttons: (st[0] && st[0].btn ? 1 : 0) | (st[1] && st[1].btn ? 2 : 0), mouse_mode: 1 });
+  }
+  function joyRenderAll() {
+    const box = $('kjoy');
+    box.innerHTML = '';
+    const bar = document.createElement('div'); bar.className = 'jbar';
+    for (const [n, l] of [[false, '1 player'], [true, '2 players side by side']]) {
+      const b = document.createElement('button'); b.textContent = l; b.className = JSH.two === n ? 'on' : '';
+      b.onclick = () => { JSH.two = n; if (!n) players[1].release(); joySave(); joyRenderAll(); padSend(); };
+      bar.append(b);
+    }
+    const row = document.createElement('div'); row.className = 'jplayers';
+    row.append(players[0].render());
+    if (JSH.two) row.append(players[1].render());
+    if (JSH.con) {
+      const con = document.createElement('div'); con.className = 'jcon';
+      for (const [k, l] of [['start', 'Start'], ['select', 'Select'], ['option', 'Option'], ['reset', 'Reset']]) {
+        const b = document.createElement('button'); b.textContent = l; b.className = 'jb small';
+        b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('down'); S.emu && S.emu.down('jc:' + k, JFIELDS[k]); });
+        const up = () => { b.classList.remove('down'); S.emu && S.emu.up('jc:' + k); };
+        b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+        con.append(b);
+      }
+      row.append(con);
+    }
+    box.append(bar, row);
+  }
+  const gpPrev = {};
   setInterval(() => {
     if (!navigator.getGamepads) return;
-    let bits = 0, any = false;
-    const t = jdef();
-    for (const g of navigator.getGamepads()) {
-      if (!g) continue;
+    const pads = [...navigator.getGamepads()].filter(Boolean);
+    for (const g of pads) {
       const prev = gpPrev[g.index] || (gpPrev[g.index] = []);
-      if (JOY.learn) { const i = g.buttons.findIndex((b, k) => b.pressed && !prev[k]); if (i >= 0) { prev.length = 0; g.buttons.forEach((b, k) => { prev[k] = b.pressed; }); JOY.learn(i); return; } }
+      const i = g.buttons.findIndex((b, k) => b.pressed && !prev[k]);
+      if (i >= 0) { const p = players.find((q) => q.JOY.learn); if (p) p.JOY.learn(i); }
       g.buttons.forEach((b, k) => { prev[k] = b.pressed; });
-      if (!JOY.usb) continue;
-      any = true;
-      const ax = g.axes[0] || 0, ay = g.axes[1] || 0, B = (k) => g.buttons[k] && g.buttons[k].pressed;
-      bits |= (ay < -0.5 || B(12) ? 1 : 0) | (ay > 0.5 || B(13) ? 2 : 0) | (ax < -0.5 || B(14) ? 4 : 0) | (ax > 0.5 || B(15) ? 8 : 0);
-      t.ctl.forEach((c, i) => { const k = jgpb(c, i); if (k >= 12 && k <= 15) return; const now = !!B(k); if (now !== !!gdn[c[0]]) { gdn[c[0]] = now; joyCtl(c[0], now); } });
     }
-    if (any && bits !== JOY.gp) { JOY.gp = bits; sendJoy(); }
+    players.forEach((p, i) => p.tick(i === 0 || JSH.two ? pads[i] : null));
+    if (!players.some((p) => p.JOY.kdir)) kbKeepAlive = false;
   }, 16);
-  joyRender();
+  let kbKeepAlive = false;
+  const kbHandler = (on) => (e) => {
+    if ($('kjoy').hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || '')) || e.target.isContentEditable) return;
+    if (e.repeat) { if (players.some((p, i) => (i === 0 || JSH.two) && p.JOY.kbon && Object.values(p.JOY.kb[p.JOY.dev] || {}).concat(['x']).length)) { /* swallow repeats of mapped keys below */ } }
+    for (let i = 0; i < 2; i++) if ((i === 0 || JSH.two) && players[i].onKey(e, on)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  };
+  window.addEventListener('keydown', kbHandler(true), true);
+  window.addEventListener('keyup', kbHandler(false), true);
+  joyRenderAll();
   // Keyboard panel tabs: Keys / Arrows / Pad / Stick. Pad turns the touch pad on while shown and restores the previous state after.
   {
     let padBefore = null;
