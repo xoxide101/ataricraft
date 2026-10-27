@@ -69,18 +69,22 @@
   .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:4px 0; }
   .dim { color:var(--dim); font-size:12px; }
   #status { color:var(--acc); }
-  #kbdwrap { width:100%; min-width:min(65vw,100%); max-width:1500px; background:#2b2620; border:1px solid #403830; border-radius:8px; padding:10px; }
+  #kbdwrap { width:100%; min-width:min(65vw,100%); max-width:1500px; background:linear-gradient(#484a4e,#3a3c40); border:1px solid #23252a; border-radius:12px; padding:12px; box-shadow:inset 0 1px 0 #ffffff22, 0 4px 18px #0008; }
+  #kbd .kmain { background:#1a1b1e; border:1px solid #101113; border-radius:10px; padding:12px 12px 8px; box-shadow:inset 0 2px 10px #000c; }
   .krow { display:flex; gap:4px; margin-bottom:4px; }
-  .key { position:relative; height:clamp(38px, 4.8cqw, 68px); min-width:0; padding:0; background:#d9d2c3; color:#202020; border:1px solid #9d9585; border-bottom-width:3px; border-radius:5px; display:flex; align-items:center; justify-content:center; user-select:none; touch-action:none; }
-  .key:hover { background:#e6dfd0; }
-  .key.down { transform:translateY(2px); border-bottom-width:1px; background:#c4bba8; }
+  .key { position:relative; height:clamp(38px, 4.8cqw, 68px); min-width:0; padding:0; background:linear-gradient(#3a3c42,#26282d); color:#e8e8ea; border:1px solid #0d0e10; border-radius:7px; box-shadow:inset 0 1px 0 #ffffff26, 0 3px 0 #08090b, 0 4px 6px #000a; display:flex; align-items:center; justify-content:center; user-select:none; touch-action:none; transition:transform .05s, box-shadow .05s; }
+  .key:hover { background:linear-gradient(#45484f,#2e3036); }
+  .key.down { transform:translateY(3px); box-shadow:inset 0 1px 0 #ffffff18, 0 0 0 #08090b, 0 1px 2px #000a; background:linear-gradient(#2a2c31,#1f2125); }
   #kbd { display:flex; gap:14px; }
   .kmain { flex:1; min-width:0; }
   .kside { width:78px; display:flex; flex-direction:column; justify-content:flex-end; }
-  .kside .key { height:clamp(26px, 3.7cqw, 56px); background:#4a4035; color:#e8e0d0; }
+  .kside { border-left:1px solid #2a2c30; padding-left:12px; }
+  .kside .key { height:clamp(26px, 3.7cqw, 56px); background:linear-gradient(#ddd7c8,#bfb8a6); color:#2a2a2a; border-color:#8a8474; box-shadow:inset 0 1px 0 #fff9, 0 3px 0 #6d685b, 0 4px 6px #0009; }
+  .kside .key:hover { background:linear-gradient(#e8e3d6,#cac3b1); }
+  .kside .key.down { background:linear-gradient(#bfb8a6,#aaa391); box-shadow:0 0 0 #6d685b; }
   .kside .krow { margin-bottom:5px; }
   #kbd[data-layer] .kmain .krow:first-child .key[data-id^=f] { height:30px; }
-  .key.on { background:var(--acc); }
+  .key.on { background:linear-gradient(var(--acc),#0000 220%),#26282d; }
   .key .g { position:absolute; image-rendering:pixelated; width:20px; height:20px; }
   .key .g.base { left:50%; top:50%; margin:-10px 0 0 -10px; }
   .key .g.shift { right:3px; top:2px; width:14px; height:14px; }
@@ -96,6 +100,10 @@
   #kbd[data-layer=shift] .key .g.shift, #kbd[data-layer=ctrl] .key .g.ctrl { width:var(--gb); height:var(--gb); }
   #kbd[data-layer=shift] .key .g.shift { right:50%; top:50%; margin:calc(var(--gb) / -2) calc(var(--gb) / -2) 0 0; }
   #kbd[data-layer=ctrl] .key .g.ctrl { left:50%; bottom:50%; margin:0 0 calc(var(--gb) / -2) calc(var(--gb) / -2); }
+  .tgl { display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:26px; padding:0 6px; border:1px solid #4a5160; border-radius:6px; background:#1b1e24; color:#7d8594; cursor:pointer; user-select:none; font-size:12px; }
+  .tgl input { display:none; }
+  .tgl:has(input:checked), .tgl.on { color:#111; background:var(--acc); border-color:var(--acc); }
+  .tgl:hover { filter:brightness(1.15); }
   #medchips button { padding:2px 8px; font-size:12px; } #medchips select { font-size:12px; max-width:48%; }
   #kbview { display:flex; gap:6px; align-items:center; margin-bottom:6px; font-size:12px; color:var(--dim); }
   #kbview button { padding:3px 9px; font-size:12px; opacity:.5; }
@@ -160,11 +168,12 @@
   <select id="ram" title="RAM"></select>
   <select id="kblayout"><option value="130xe">Keys: 130XE</option><option value="65xe">Keys: 65XE</option><option value="800xl">Keys: 800XL</option><option value="1200xl">Keys: 1200XL</option><option value="800">Keys: 800</option></select>
   <select id="tv"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select>
-  <label class="dim" title="Applies immediately (reboots). Turn off for SpartaDOS X."><input id="basic" type="checkbox" checked style="display:inline"> BASIC on</label>
-  <label class="dim" title="Applies on Boot. Emulates the XEP80 80-column interface on joystick port 1 (load an XEP80 handler such as XEP80.SYS)."><input id="xep80" type="checkbox" style="display:inline"> XEP80</label>
+  <label class="tgl" title="BASIC ROM on/off. Applies immediately (reboots). Turn off for SpartaDOS X."><input id="basic" type="checkbox" checked><b>BAS</b></label>
+  <label class="tgl" title="XEP80 80-column interface on joystick port 1. Applies on Boot (load an XEP80 handler such as XEP80.SYS)."><input id="xep80" type="checkbox"><b>80</b></label>
+  <label class="tgl" title="Fast disk access (SIO patch). Disks load almost instantly. Turn OFF for copy-protected disks or programs with their own serial code. Applies immediately (reboots)."><input id="fastsio" type="checkbox" checked><b>⚡</b></label>
   <button id="boot">Boot</button>
   <button id="mapbtn">Keyboard mapping…</button>
-  <button id="sndbtn">Sound: on</button><button id="fnbtn" title="Virtual FujiNet (SIO device $70) on/off">FujiNet: on</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
+  <button id="sndbtn" class="tgl" title="Sound on/off">🔊</button><button id="fnbtn" class="tgl" title="Virtual FujiNet (SIO device $70) on/off">FN</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
   <div id="infobar"><span id="status" class="dim">choose ROMs, then Boot</span>
   <span class="stats"><span>FPS <b id="fps">0</b></span><span>emu <b id="efps">0</b>/s</span><span>frame <b id="fc">0</b></span><span><b id="spd">1.0</b>×</span></span></div>
 </header>
@@ -210,11 +219,12 @@
       <h3>Media library</h3>
       <div class="row"><button id="medpick" style="display:none" title="Pick folder: choose a folder; it is remembered across page reloads">📁</button><button id="medsel" style="display:none" title="Folders: choose which sub-folders to include in the scan">🗂</button><button id="medrefresh" title="Rescan: scan the folder again and rebuild the saved catalog">🔄</button><button id="medexp" title="Export DB: save the catalog as a .sqlite file">📤</button><label class="btn" title="Import DB: load a catalog .sqlite file">📥<input id="medimp" type="file" accept=".sqlite,.db,.sql" style="display:none"></label><button id="medstop" style="display:none" title="Stop the scan">⛔</button><label class="btn" title="Scan once: one-off scan (not remembered)">🔍<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="Titles XML: MAME software list XML (a800.xml, a5200.xml…) to show real game titles">🏷<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
       <div id="medtitles" class="dim" style="font-size:11px"></div>
-      <div class="row" id="medchips"><input id="medfilter" placeholder="search disks, carts, tapes, programs" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><select id="medkind" title="Category"><option value="all">📚 All types</option><option value="disk">💾 Disk</option><option value="cart">🎮 Cart</option><option value="tape">📼 Tape</option><option value="exe">⚙️ Program</option></select></div>
+      <div class="row" id="medchips"><input id="medfilter" title="Ctrl+L: show short (8.3) and long names" placeholder="search disks, carts, tapes, programs" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><select id="medkind" title="Category"><option value="all">📚 All types</option><option value="disk">💾 Disk</option><option value="cart">🎮 Cart</option><option value="tape">📼 Tape</option><option value="exe">⚙️ Program</option></select></div>
+      <div class="row"><select id="medtypesel" title="Media type (first part of the long name)"></select><select id="medvendsel" title="Vendor (third part of the long name)"></select></div>
       <div class="row"><select id="medextsel" title="File extension"></select> <button id="medview" title="Switch view">☰</button><button id="medexpand" title="Open every folder">⊞</button><button id="medcollapse" title="Close every folder">⊟</button></div>
       <div id="medlist" style="max-height:200px;overflow:auto"></div>
       <div id="medrel"></div>
-      <div class="dim">Click to load (disk → D1, cart → slot 1, tape → cassette, program → run). Shift-click: D2 / cart slot 2. Format is detected from the file contents.</div>
+      <div class="dim">Click a file to load it into #1 (disk → D1, cart → slot 1, tape → cassette, program → run). Right-click or long-press to choose D1–D8, Cart 1/2, etc. Format is detected from the file contents. Ctrl+L: short and long names.</div>
     </div>
     <div class="box">
       <h3>RAM bank test</h3>

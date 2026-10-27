@@ -104,7 +104,7 @@ window.AC = window.AC || {};
     return cv;
   }
 
-  const COLORS = { base: 0xff202020, shift: 0xff1a70d6, ctrl: 0xff9a7d00 };
+  const COLORS = { base: 0xfff0f0f0, shift: 0xff4aa8f5, ctrl: 0xffe8c83f };
 
   AC.keyboard = {
     latch: { shift: false, ctrl: false },

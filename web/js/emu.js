@@ -47,6 +47,7 @@ window.AC = window.AC || {};
         m.FS.writeFile('/basic.rom', opt.basic);
         args.push('-basic_rom', '/basic.rom', opt.basicOn ? '-basic' : '-nobasic');
       }
+      if (opt.fastSio === false) args.push('-nopatch');
       if (opt.xep80) {
         m.FS.writeFile('/xep80.chr', Uint8Array.from(atob(AC.XEP80_CHR), (c) => c.charCodeAt(0)));
         args.push('-xep80', '-xep80port', '1');

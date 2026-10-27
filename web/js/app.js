@@ -204,7 +204,7 @@
     SND.next += buf.duration;
   }
   const hookAudio = () => { if (S.emu) S.emu.onAudio = pushAudio; };
-  const syncSndUi = () => { $('sndbtn').textContent = SND.on ? 'Sound: on' : 'Sound: off'; $('vol').value = SND.vol; };
+  const syncSndUi = () => { $('sndbtn').textContent = SND.on ? '🔊' : '🔇'; $('sndbtn').classList.toggle('on', SND.on); $('vol').value = SND.vol; };
 
   const handle = {
     down: (id, f) => S.emu && S.emu.down(id, f),
@@ -217,6 +217,12 @@
     if (S.running) boot();
   };
 
+  $('fastsio').checked = localStorage.getItem('ac.fastSio') !== '0';
+  $('fastsio').onchange = () => {
+    localStorage.setItem('ac.fastSio', $('fastsio').checked ? '1' : '0');
+    if (S.running) boot();
+  };
+
   S.carts = {};
   S.disks = {};
   async function boot() {
@@ -225,7 +231,7 @@
     if (!os) { log('Need an OS ROM for ' + model + ' (scan a ROM folder first)'); return false; }
     log('booting…');
     if (S.emu) S.host = Object.assign(S.host || {}, S.emu.hostFiles());
-    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, tv: $('tv').value, host: S.host });
+    S.emu = await AC.Emu.boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked, tv: $('tv').value, host: S.host });
     FujiNet.attach(S.emu);
     hookDevices();
     applyPad();
@@ -482,6 +488,16 @@
   window.addEventListener('pointerdown', syncMods, true);
   window.addEventListener('blur', () => { AC.keyboard.phys.shift = AC.keyboard.phys.ctrl = false; AC.keyboard.refresh && AC.keyboard.refresh(); });
 
+  // Ctrl+L in the library toggles short (8.3) + long names; the emulator keeps Ctrl+L otherwise.
+  let medHover = false;
+  $('medlist').addEventListener('mouseenter', () => (medHover = true));
+  $('medlist').addEventListener('mouseleave', () => (medHover = false));
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyL' && (medHover || e.target === $('medfilter'))) {
+      e.preventDefault(); e.stopPropagation();
+      MED.showShort = !MED.showShort; localStorage.setItem('ac.showShort', MED.showShort ? '1' : '0'); renderMed();
+    }
+  }, true);
   window.addEventListener('keydown', (e) => {
     if (!S.capture && e.target.tagName !== 'SELECT' && e.target.tagName !== 'INPUT' && !$('mapdlg').open) litOn(e);
     if (S.capture) { e.preventDefault(); const id = S.capture; S.capture = null; for (const c of Object.keys(S.overrides)) if (S.overrides[c] === id) delete S.overrides[c]; S.overrides[e.code] = id; localStorage.setItem('ac.keymap', JSON.stringify(S.overrides)); renderMap(); return; }
@@ -601,8 +617,75 @@
     for (const f of files) await loadAny(f, drive >= 2 ? (drive === 2 ? true : drive) : false, drive ? 'disk' : null);
   }
 
+  // ---- pick menu: right-click or long-press on a file chooses where it goes; a plain click uses #1 ----
+  const PM = { el: null, openedAt: 0, suppressClickUntil: 0 };
+  function closePick() { if (PM.el) { PM.el.remove(); PM.el = null; } }
+  function openPick(x, y, title, items) {
+    closePick();
+    const m = document.createElement('div');
+    m.className = 'pickmenu';
+    m.style.cssText = 'position:fixed;z-index:9999;background:#1b1e24;border:1px solid #4a5160;border-radius:8px;box-shadow:0 6px 24px #000a;min-width:200px;max-width:min(92vw,360px);max-height:70vh;overflow:auto;font-size:14px;visibility:hidden';
+    const h = document.createElement('div');
+    h.textContent = title; h.className = 'dim';
+    h.style.cssText = 'padding:6px 10px;font-size:11px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    m.append(h);
+    items.forEach((it) => {
+      const r = document.createElement('div');
+      r.textContent = it.label;
+      r.style.cssText = 'padding:11px 12px;cursor:pointer;border-bottom:1px solid #262a32;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      r.onmouseenter = () => (r.style.background = '#2a2f39');
+      r.onmouseleave = () => (r.style.background = '');
+      r.onclick = (e) => { e.stopPropagation(); closePick(); it.run(); };
+      m.append(r);
+    });
+    document.body.append(m);
+    const w = m.offsetWidth, hh = m.offsetHeight;
+    m.style.left = Math.max(4, Math.min(x, innerWidth - w - 4)) + 'px';
+    m.style.top = Math.max(4, Math.min(y, innerHeight - hh - 4)) + 'px';
+    m.style.visibility = 'visible';
+    PM.el = m; PM.openedAt = Date.now();
+  }
+  ['pointerdown', 'wheel'].forEach((ev) => window.addEventListener(ev, (e) => { if (PM.el && !PM.el.contains(e.target)) closePick(); }, true));
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePick(); }, true);
+  const driveItems = (pick) => { const out = []; for (let n = 1; n <= 8; n++) out.push({ label: `D${n}: ${(S.disks[n] && S.disks[n].name) || 'empty'}`, run: () => pick(n) }); return out; };
+  const targetItems = (kind, getFile, after) => {
+    const go = async (fn) => { const fl = await getFile(); if (fl) { await fn(fl); after && after(); } };
+    if (kind === 'disk') return driveItems((n) => go((fl) => loadAny(fl, n, 'disk')));
+    if (kind === 'cart') return [1, 2].map((n) => ({ label: `Cart ${n}${n === 1 ? ' (main, right)' : ' (left)'}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, run: () => go((fl) => insertCart(n, fl)) }));
+    if (kind === 'tape') return [{ label: 'Cassette', run: () => go((fl) => loadAny(fl, false, 'tape')) }];
+    return [{ label: 'Run program', run: () => go((fl) => loadAny(fl, false, kind)) }];
+  };
+  // Click = default target (#1 of its kind); right-click / long-press = pick the target.
+  function attachLoad(el, f, kind, getFile, after, onClick) {
+    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), targetItems(kind, getFile, after));
+    el.onclick = async (e) => {
+      if (Date.now() < PM.suppressClickUntil) return;
+      const fl = await getFile(); if (!fl) return;
+      if (onClick) onClick(fl, e); else { loadAny(fl, e.shiftKey, kind); after && after(); }
+    };
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); if (Date.now() - PM.openedAt > 700) menu(e.clientX, e.clientY); });
+    let t = null, sx = 0, sy = 0;
+    const clear = () => { clearTimeout(t); t = null; };
+    el.addEventListener('touchstart', (e) => {
+      const p = e.touches[0]; sx = p.clientX; sy = p.clientY; clear();
+      t = setTimeout(() => { t = null; PM.suppressClickUntil = Date.now() + 800; if (Date.now() - PM.openedAt > 700) menu(sx, sy); }, 450);
+    }, { passive: true });
+    el.addEventListener('touchmove', (e) => { const p = e.touches[0]; if (Math.abs(p.clientX - sx) + Math.abs(p.clientY - sy) > 10) clear(); }, { passive: true });
+    el.addEventListener('touchend', clear); el.addEventListener('touchcancel', clear);
+    el.style.webkitTouchCallout = 'none'; el.style.userSelect = 'none'; el.title = (el.title ? el.title + '\n' : '') + 'Click: load into #1. Right-click or long-press: choose a drive/slot.';
+  }
+  // Drive pulldowns become a button that opens the pick menu; the hidden input keeps the chosen number in .value.
+  function drivePicker(id) {
+    const sel = $(id), hid = document.createElement('input'), btn = document.createElement('button');
+    hid.type = 'hidden'; hid.id = id; hid.value = '1';
+    btn.textContent = 'D1 ▾'; btn.title = 'Choose drive';
+    btn.onclick = () => { const r = btn.getBoundingClientRect(); openPick(r.left, r.bottom + 2, 'Drive', driveItems((n) => { hid.value = String(n); btn.textContent = `D${n} ▾`; })); };
+    sel.replaceWith(btn, hid);
+  }
+  ['blankslot', 'fsdrv', 'savedrv'].forEach(drivePicker);
+
   // ---- media library (scan a folder, filter by text and type) ----
-  const MED = { files: [], kind: 'all', ext: 'all' };
+  const MED = { files: [], kind: 'all', ext: 'all', ltype: 'all', lvendor: 'all', showShort: localStorage.getItem('ac.showShort') === '1' };
   // MAME software list titles: short zip/set name -> "Title (year, publisher)"
   let TITLES = {};
   try { TITLES = JSON.parse(localStorage.getItem('ac.titles') || '{}'); } catch (e) { TITLES = {}; }
@@ -675,7 +758,7 @@
       d.textContent = (m.name.split('/').pop()) + (m.title ? ` — ${m.title}` : '');
       d.title = m.name;
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--acc)';
-      d.onclick = async (e) => { const fl = await fileOf(m); if (fl) loadAny(fl, !e.shiftKey, 'disk', true); };
+      attachLoad(d, m, 'disk', () => fileOf(m), null, (fl, e) => loadAny(fl, !e.shiftKey, 'disk', true));
       box.append(d);
     });
   }
@@ -723,17 +806,48 @@
         if (open) walk(d, depth + 1);
       });
       const files = node.files.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+      const used = new Set();
       files.slice(0, TREE_FILE_CAP).forEach((f) => {
-        const base = f.name.split('/').pop();
+        const base = shown(f.name.split('/').pop(), used);
         const ico = { disk: '💾', cart: '🎮', tape: '📼', exe: '⚙️' }[f.kind] || '📄';
-        const r = row(depth, f.title ? `${ico} ${base} — ${f.title}` : `${ico} ${base}`, f.title ? `${f.title} — ${f.name}` : f.name);
+        const r = row(depth, f.title ? `${ico} ${base} — ${f.title}` : `${ico} ${base}`, f.title ? `${f.title} — ${f.name}` : longTip(f));
         r.style.paddingLeft = `${4 + depth * 14 + 14}px`;
-        r.onclick = async (e) => { const fl = await fileOf(f); if (fl) { loadAny(fl, e.shiftKey, f.kind); showRelated(f); } };
+        attachLoad(r, f, f.kind, () => fileOf(f), () => showRelated(f));
       });
       if (files.length > TREE_FILE_CAP) row(depth, `… ${files.length - TREE_FILE_CAP} more here: use the search box`).style.opacity = 0.6;
     };
     walk(root, 0);
     return root;
+  }
+  // Reads our "Type - Name - Vendor - Version - Release (notes)" names and TOSEC "Title vX (date)(publisher)(...)[flags]" names.
+  const DUMP_FLAGS = { cr: 'cracked', f: 'fixed', h: 'hacked', m: 'modified', p: 'pirated', t: 'trained', tr: 'translated', o: 'over dump', u: 'under dump', v: 'virus', b: 'bad dump', a: 'alternate', '!': 'verified dump' };
+  function parseTosec(base) {
+    const m = /^(.*?)\s*((?:\((?:[^()]*)\)\s*)+)((?:\[[^\]]*\]\s*)*)$/.exec(base);
+    if (!m) return null;
+    const groups = [...m[2].matchAll(/\(([^()]*)\)/g)].map((g) => g[1]);
+    const di = groups.findIndex((g) => /^(?:\d{4}|\d{3}x|19xx|20xx)(?:-\d\d(?:-[\dx]\d?)?)?$/.test(g));
+    if (di < 0 || di + 1 >= groups.length) return null;
+    const flags = [...m[3].matchAll(/\[([^\]]*)\]/g)].map((g) => g[1]);
+    const notes = flags.map((f) => DUMP_FLAGS[f.split(' ')[0]] || f).concat(groups.slice(di + 2)).join(', ');
+    const tv = /^(.*?)\s+((?:v\d[\w.]*|Rev [\w.]+))$/.exec(m[1]);
+    return { type: 'Software', name: tv ? tv[1] : m[1], vendor: groups[di + 1], version: tv ? tv[2] : 'no version', release: groups[di], notes, tosec: true };
+  }
+  function parseLongName(path) {
+    const base = path.split('/').pop().replace(/\.[^.]+$/, '');
+    const p = base.split(' - ');
+    if (p.length < 5 || !/^(OS|Firmware|Language|Cartridge|Game|Educational|Business|Utility|Software)$/.test(p[0])) return parseTosec(base);
+    const m = /^(.*?)\s*\(([^)]*)\)$/.exec(p.slice(4).join(' - '));
+    return { type: p[0], name: p[1], vendor: p[2], version: p[3], release: m ? m[1] : p.slice(4).join(' - '), notes: m ? m[2] : '' };
+  }
+  // Ctrl+L mode: prefix the 8.3 name the disk would get (unique per `used` set, i.e. per folder).
+  const shown = (base, used) => (MED.showShort ? `${AC.DosFs.to83(base, used)}  ${base}` : base);
+  const longTip = (f) => { const l = parseLongName(f.name); return l ? `${l.type}: ${l.name}\nVendor: ${l.vendor}\nVersion: ${l.version}\nRelease: ${l.release}${l.notes ? '\nNotes: ' + l.notes : ''}\n${f.name}` : f.name; };
+  function fillSel(id, label, counts, key) {
+    const s = $(id); s.innerHTML = '';
+    const o0 = document.createElement('option'); o0.value = 'all'; o0.textContent = label; s.append(o0);
+    Object.keys(counts).sort().forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = `${v} (${counts[v]})`; s.append(o); });
+    s.value = MED[key] in counts ? MED[key] : 'all'; MED[key] = s.value;
+    s.onchange = () => { MED[key] = s.value; renderMed(); };
   }
   function renderMed() {
     const q = $('medfilter').value.toLowerCase();
@@ -762,21 +876,37 @@
     eb.value = MED.ext;
     eb.onchange = () => { MED.ext = eb.value; renderMed(); };
     $('medkind').value = MED.kind;
-    const hits = ofKind.filter((f) => (MED.ext === 'all' || extOf(f) === MED.ext) && (f.name + ' ' + (f.title || '')).toLowerCase().includes(q));
+    const tc = {}, vc = {};
+    ofKind.forEach((f) => { const l = parseLongName(f.name); if (l) { tc[l.type] = (tc[l.type] || 0) + 1; vc[l.vendor] = (vc[l.vendor] || 0) + 1; } });
+    fillSel('medtypesel', `All media types (${Object.keys(tc).length})`, tc, 'ltype');
+    fillSel('medvendsel', `All vendors (${Object.keys(vc).length})`, vc, 'lvendor');
+    ['medtypesel', 'medvendsel'].forEach((id) => ($(id).parentElement.style.display = Object.keys(tc).length ? '' : 'none'));
+    const hits = ofKind.filter((f) => {
+      if (MED.ext !== 'all' && extOf(f) !== MED.ext) return false;
+      if (MED.ltype !== 'all' || MED.lvendor !== 'all') {
+        const l = parseLongName(f.name);
+        if (!l || (MED.ltype !== 'all' && l.type !== MED.ltype) || (MED.lvendor !== 'all' && l.vendor !== MED.lvendor)) return false;
+      }
+      return (f.name + ' ' + (f.title || '')).toLowerCase().includes(q);
+    });
     if (q) hits.sort((a, b) => flagRank(a.name) - flagRank(b.name));
     if (MED.tree) {
       drawTree(box, hits, !!q && hits.length <= 600);
       $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${MED.files.length}` : 'no folder';
       return;
     }
+    const usedByDir = new Map();
     hits.slice(0, 300).forEach((f) => {
       const d = document.createElement('div');
-      d.textContent = f.title ? `${f.title} — ${f.name}` : f.name;
-      d.title = d.textContent;
+      const dir = f.name.split('/').slice(0, -1).join('/');
+      if (!usedByDir.has(dir)) usedByDir.set(dir, new Set());
+      const nm = shown(f.name.split('/').pop(), usedByDir.get(dir));
+      d.textContent = f.title ? `${f.title} — ${nm}` : MED.showShort ? nm : f.name;
+      d.title = longTip(f);
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
       d.onmouseenter = () => (d.style.background = '#2a2f39');
       d.onmouseleave = () => (d.style.background = '');
-      d.onclick = async (e) => { const fl = await fileOf(f); if (fl) { loadAny(fl, e.shiftKey, f.kind); showRelated(f); } };
+      attachLoad(d, f, f.kind, () => fileOf(f), () => showRelated(f));
       box.append(d);
     });
     $('medcount').textContent = MED.files.length ? `${MED.fromDb ? 'catalog: ' : ''}${hits.length} of ${MED.files.length}${hits.length > 300 ? ' (showing 300)' : ''}` : 'no folder';
@@ -1301,7 +1431,7 @@
       d.style.cssText = 'padding:3px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid #2c313b';
       d.onmouseenter = () => (d.style.background = '#2a2f39');
       d.onmouseleave = () => (d.style.background = '');
-      d.onclick = (e) => loadMedia([f.file], e.shiftKey ? 2 : 1);
+      attachLoad(d, f, extKind(f.name) || 'disk', async () => f.file);
       box.append(d);
     });
   }
@@ -1312,7 +1442,7 @@
     renderFn();
   };
   function syncFnUi() {
-    $('fnbtn').textContent = 'FujiNet: ' + (FujiNet.enabled ? 'on' : 'off');
+    $('fnbtn').classList.toggle('on', FujiNet.enabled);
     $('fnboot').disabled = !FujiNet.enabled;
   }
   $('fnbtn').onclick = () => {
@@ -1349,9 +1479,7 @@
   }
   const mdOk = (ss, n) => $('blankmydos').checked && (ss === 256 || (ss === 128 && n === 720));
   const makeBlank = (ss, n) => (mdOk(ss, n) ? AC.DosFs.createMyDos({ sectorSize: ss, sectors: n }) : $('blanksdfs').checked && ss === 256 ? AC.DosFs.createSdfs({ sectorSize: 256, sectors: n, label: 'BLANK' }) : blankAtr(ss, n));
-  for (let n = 1; n <= 8; n++) $('blankslot').append(new Option('D' + n, String(n)));
-  for (let n = 1; n <= 8; n++) $('fsdrv').append(new Option('D' + n, String(n)));
-  const blankName = () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${mdOk(ss, n) ? '_mydos' : $('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
+  const blankName =  () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${mdOk(ss, n) ? '_mydos' : $('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
   $('blankmk').onclick = () => {
     if (!S.emu) { log('boot first, then insert a blank disk'); return; }
     const [ss, n] = $('blankfmt').value.split(',').map(Number), slot = +$('blankslot').value;
@@ -1606,7 +1734,6 @@
       $('c' + n).value = '';
     };
   }
-  for (let n = 1; n <= 8; n++) $('savedrv').append(new Option('D' + n, String(n)));
   $('savedisk').onclick = () => {
     const n = +$('savedrv').value;
     const path = S.emu && S.emu.diskPaths && S.emu.diskPaths[n];
