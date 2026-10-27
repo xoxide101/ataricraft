@@ -1360,7 +1360,7 @@
       <rect x="2" y="2" width="216" height="60" rx="5" fill="#ebe8e1" stroke="#9c988e"/>
       <rect x="2" y="2" width="216" height="9" rx="4" fill="#f7f5f0"/>
       <rect x="14" y="20" width="150" height="24" rx="2" fill="#1d1d1f" stroke="#55524b"/>
-      <rect class="disk" x="22" y="29" width="134" height="6" fill="#2b2b2e" stroke="#777"/>
+      <rect class="disk" x="22" y="26" width="134" height="12" rx="1" fill="#fbfaf6" stroke="#d0cdc4"/><rect class="disk" x="30" y="29" width="30" height="6" fill="#d9362c"/>
       <rect x="22" y="31.5" width="140" height="1.6" fill="#000"/>
       <rect x="68" y="46" width="50" height="7" rx="2" fill="#a8a49a"/>
       <circle class="led" cx="186" cy="32" r="4"/>
