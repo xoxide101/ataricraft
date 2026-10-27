@@ -697,10 +697,11 @@
   };
   // Click = default target (#1 of its kind); right-click / long-press = pick the target.
   function attachLoad(el, f, kind, getFile, after, onClick) {
-    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), targetItems(kind, getFile, after));
+    const getF = async () => { const fl = await getFile(); if (fl) histAdd(f); return fl; };
+    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), targetItems(kind, getF, after));
     el.onclick = async (e) => {
       if (Date.now() < PM.suppressClickUntil) return;
-      const fl = await getFile(); if (!fl) return;
+      const fl = await getF(); if (!fl) return;
       if (onClick) onClick(fl, e); else { loadAny(fl, e.shiftKey, kind); after && after(); }
     };
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); if (Date.now() - PM.openedAt > 700) menu(e.clientX, e.clientY); });
@@ -894,8 +895,43 @@
     const res = q.split(/\s+/).filter(Boolean).map((t) => new RegExp(t.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.'), 'i'));
     return (s) => res.every((r) => r.test(s));
   }
-  function renderMed() {
+  // Library view state (search, filters, open folders, scroll, large view) and the recently-used list survive reloads.
+  const MEDS = (() => { try { return JSON.parse(localStorage.getItem('ac.medstate') || '{}'); } catch (e) { return {}; } })();
+  const medSave = () => {
+    if (!MED.files.length) return;
+    MEDS.q = $('medfilter').value; MEDS.kind = MED.kind; MEDS.ext = MED.ext; MEDS.ltype = MED.ltype; MEDS.lvendor = MED.lvendor; MEDS.open = [...MED.open];
+    localStorage.setItem('ac.medstate', JSON.stringify(MEDS));
+  };
+  const histGet = () => { try { return JSON.parse(localStorage.getItem('ac.medhist') || '[]'); } catch (e) { return []; } };
+  function histAdd(f) {
+    if (!f || !f.name) return;
+    const h = histGet().filter((x) => x.name !== f.name);
+    h.unshift({ name: f.name, kind: f.kind, title: f.title || '' });
+    localStorage.setItem('ac.medhist', JSON.stringify(h.slice(0, 40)));
+    renderHist();
+  }
+  function renderHist() {
+    const box = $('medhist'), h = histGet();
+    box.innerHTML = '';
+    if (!h.length) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    const head = document.createElement('div');
+    head.className = 'medhh'; head.innerHTML = '<b>Recently used</b>';
+    const clr = document.createElement('button'); clr.textContent = 'Clear'; clr.onclick = () => { localStorage.removeItem('ac.medhist'); renderHist(); };
+    head.append(clr); box.append(head);
+    h.forEach((x) => {
+      const f = MED.files.find((m) => m.name === x.name) || { name: x.name, kind: x.kind, title: x.title, file: null };
+      const ico = { disk: '💾', cart: '🎮', tape: '📼', exe: '⚙️' }[f.kind] || '📄';
+      const d = document.createElement('div');
+      d.className = 'medhi'; d.textContent = `${ico} ${x.title ? x.title + ' — ' : ''}${x.name.split('/').pop()}`; d.title = x.name;
+      attachLoad(d, f, f.kind, () => fileOf(f));
+      box.append(d);
+    });
+  }
+  function renderMed() { renderMed0(); medSave(); }
+  function renderMed0() {
     const q = $('medfilter').value.toLowerCase();
+    if (!MED.files.length) { $('medlist').innerHTML = ''; $('medcount').textContent = 'no folder'; return; }
     const qm = textMatcher(q);
     const box = $('medlist');
     box.innerHTML = '';
@@ -1281,8 +1317,40 @@
   $('medview').onclick = () => { MED.tree = !MED.tree; localStorage.setItem('ac.medtree', MED.tree ? '1' : '0'); renderMed(); };
   $('medexpand').onclick = () => { allDirs(window.__medTreeRoot || { dirs: new Map() }, []).forEach((p) => MED.open.add(p)); renderMed(); };
   $('medcollapse').onclick = () => { MED.open.clear(); renderMed(); };
+  {
+    if (MEDS.q) $('medfilter').value = MEDS.q;
+    for (const k of ['kind', 'ext', 'ltype', 'lvendor']) if (MEDS[k]) MED[k] = MEDS[k];
+    (MEDS.open || []).forEach((p) => MED.open.add(p));
+    const box = $('medbox'), list = $('medlist');
+    const setBig = (on) => {
+      box.classList.toggle('medbig', on); $('medbig').textContent = on ? '✕' : '⤢';
+      if (on) { box.classList.remove('collapsed'); document.querySelector('#sidetabs [data-t=fm]').click(); }
+      MEDS.big = on; localStorage.setItem('ac.medstate', JSON.stringify(MEDS));
+      if (MED.files.length) renderMed();
+    };
+    $('medbig').onclick = () => setBig(!box.classList.contains('medbig'));
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && box.classList.contains('medbig') && !document.querySelector('#pickmenu, dialog[open]')) setBig(false); });
+    let st = null;
+    list.addEventListener('scroll', () => { clearTimeout(st); st = setTimeout(() => { if (!MED.files.length) return; MEDS.scroll = list.scrollTop; localStorage.setItem('ac.medstate', JSON.stringify(MEDS)); }, 250); });
+    // The catalog loads after startup: put the scroll position back after its first render.
+    const first = renderMed0; let restored = false;
+    renderMed0 = function () { first(); if (!restored && MED.files.length) { restored = true; list.scrollTop = MEDS.scroll || 0; } };
+    renderHist();
+    if (MEDS.big) setBig(true);
+  }
   $('romfilter').oninput = () => fillRomSelects();
 
+  // ---- side-panel tabs ----
+  {
+    const show = (t) => {
+      document.querySelectorAll('#sidetabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === t));
+      document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
+      localStorage.setItem('ac.sidetab', t);
+    };
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => show(b.dataset.t); });
+    const t0 = localStorage.getItem('ac.sidetab');
+    show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
+  }
   // ---- collapsible side-panel sections (state remembered) ----
   {
     const saved = JSON.parse(localStorage.getItem('ac.collapsed') || '{}');
@@ -1735,6 +1803,9 @@
     const t = PADTYPES[PAD.type] || PADTYPES.touch;
     const items = Object.entries(PADTYPES).map(([k, v]) => ({ label: (k === PAD.type ? '✓ ' : '') + v.name, run: () => { if (k !== PAD.type) { $('padtype').value = k; $('padtype').onchange({ target: $('padtype') }); } } }));
     items.push(...t.info.map((l) => ({ label: '· ' + l, run: () => {} })));
+    for (const [id, label] of [['padscreen', 'Draw on the main screen'], ['padfx', 'Flip X'], ['padfy', 'Flip Y']]) {
+      items.push({ label: ($(id).checked ? '✓ ' : '☐ ') + label, run: () => { $(id).checked = !$(id).checked; $(id).onchange({ target: $(id) }); } });
+    }
     openPick(x, y, 'Pad device: ' + t.name, items);
   }
   {
@@ -2518,7 +2589,7 @@
   AC.keyboard.build($('kbd'), handle);
   AC.keyboard.buildArrows($('karrows'), handle, false);
   AC.keyboard.buildArrows($('kmini'), handle, true);
-  window.AC_setKbMode(localStorage.getItem('ac.kbmode') === 'arrows' ? 'arrows' : 'keys');
+  window.AC_setKbMode(['keys', 'arrows', 'pad', 'joy', 'paddle', 'drive'].includes(localStorage.getItem('ac.kbmode')) ? localStorage.getItem('ac.kbmode') : 'keys');
   $('kblayout').onchange = (e) => AC.keyboard.build($('kbd'), handle, e.target.value);
   $('romfiles').onchange = (e) => addRoms(e.target.files);
   $('model').onchange = () => { fillRomSelects(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };

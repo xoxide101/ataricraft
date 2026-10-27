@@ -190,6 +190,11 @@
   #devbar .dv.wr i { background:#ff4a3d; box-shadow:0 0 6px #ff4a3d; transition:none; }
   #devbar .dv.ot i { background:#ffc233; box-shadow:0 0 6px #ffc233; transition:none; }
   #drvviz { display:flex; flex-direction:column; gap:6px; margin:6px 0 10px; }
+  #drvviz .xf.cart { order:-2; } #drvviz .xf.cart:nth-last-child(2) { margin-bottom:14px; } #drvviz .xf.tape { order:2; margin-top:14px; }
+  #sidetabs { display:flex; flex-wrap:wrap; gap:4px; } #sidetabs button { flex:1 1 auto; padding:5px 7px; font-size:12px; opacity:.6; } #sidetabs button.on { opacity:1; border-color:var(--acc); }
+  .box[data-tab="none"] { display:none; }
+  #medhist { border:1px solid #2c313b; border-radius:5px; margin:4px 0; max-height:110px; overflow:auto; } .medhh { display:flex; justify-content:space-between; align-items:center; padding:2px 6px; font-size:11px; color:var(--dim); position:sticky; top:0; background:var(--panel); } .medhh button { padding:0 6px; font-size:11px; } .medhi { padding:3px 6px; font-size:12px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-top:1px solid #2c313b; } .medhi:hover { background:#2a2f39; }
+  #medbox.medbig { position:fixed; inset:4vh 4vw; z-index:60; overflow:auto; display:flex; flex-direction:column; box-shadow:0 0 0 100vmax #000b; } #medbox.medbig #medlist { max-height:none !important; flex:1; min-height:200px; } #medbox.medbig #medhist { max-height:160px; } #medbox.medbig #medlist > div, #medbox.medbig .medhi { font-size:14px !important; }
   :is(#drvviz,#cartbar) .xf { display:flex; align-items:center; gap:8px; text-align:left; font:11px ui-monospace,Consolas,monospace; color:#9a9486; }
   :is(#drvviz,#cartbar) svg { flex:0 0 130px; width:130px; height:auto; display:block; }
   :is(#drvviz,#cartbar) .xf.has { color:#d8cdb8; }
@@ -246,7 +251,9 @@
 <div id="progstrip" style="display:none"><div class="pfill"></div><span class="plab"></span><span class="ppct"></span></div>
 <main>
   <div class="side">
-    <button id="sbclose">✕ Close panel</button>    <div class="box">
+    <button id="sbclose">✕ Close panel</button>
+    <div id="sidetabs"><button data-t="sys">System</button><button data-t="drv">Cartridges &amp; drives</button><button data-t="fm">File manager</button><button data-t="net">Online &amp; networking</button><button data-t="dbg">Debugging</button></div>
+    <div class="box" data-tab="sys">
       <h3>Machine</h3>
       <div class="row"><button id="reset">Reset</button><button id="cold">Cold start</button><button id="pause">Pause</button></div>
       <div class="row"><button id="pastebtn" title="Ctrl+V">Paste</button><button id="copytxt" title="Ctrl+C">Copy text</button><button id="copyimg">Copy image</button><button id="stoptype">Stop</button></div>
@@ -255,7 +262,7 @@
       <div class="row"><button id="start">Start</button><button id="select">Select</button><button id="option">Option</button><button id="brk">Break</button></div>
       <div class="row"><label class="dim" title="WASD and arrow keys move, Space fires. W, A, S, D and Space stop typing while on."><input id="joy" type="checkbox" style="display:inline"> GAME MODE (WASD / arrows + Space fire)</label></div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="sys">
       <h3>ROMs</h3>
       <div class="row"><label class="btn">Scan folder…<input id="romfolder" type="file" webkitdirectory multiple></label><label class="btn">Files…<input id="romfiles" type="file" multiple></label><button id="romforget" title="Remove ROMs remembered by this browser">Reset ROMs</button></div>
       <div id="romstate" class="dim">no ROMs scanned</div>
@@ -263,49 +270,50 @@
       <div class="row"><span class="dim" style="width:44px">OS</span><select id="osrom" style="flex:1;min-width:0"></select></div>
       <div class="row"><span class="dim" style="width:44px">BASIC</span><select id="basicrom" style="flex:1;min-width:0"></select></div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="none">
       <h3>Cassette</h3>
       <div class="row"><label class="btn">Tape…<input id="tape" type="file"></label><button id="te">Eject</button><span id="tn" class="dim">empty</span></div>
       <div class="row"><button id="tboot" title="Rewind and cold-start with Start held (tape boot)">Boot tape</button><button id="trew">Rewind</button><span id="tpos" class="dim"></span></div>
       <div class="dim">For BASIC tapes: reset, type <code>CLOAD</code>, Return, then Return again to start play.</div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="none">
       <h3>Touch pad</h3>
       <div class="row"><label><input type="checkbox" id="padon"> Enable</label><select id="padtype" title="Atari Touch Tablet (Atari Artist) or Koala Pad"><option value="touch">Atari Touch Tablet</option><option value="koala">Koala Pad</option><option value="st">Atari ST mouse</option><option value="amiga">Amiga mouse</option><option value="trak">CX-22 trak-ball</option></select></div>
       <div id="padarea" title="Drag with mouse or finger. Press = stylus button (right-click = second button)"><div id="paddot"></div></div>
       <div class="row"><label><input type="checkbox" id="padscreen"> Draw on the main screen</label></div>
       <div class="row"><label><input type="checkbox" id="padfx"> Flip X</label><label><input type="checkbox" id="padfy"> Flip Y</label><span id="padinfo" class="dim"></span></div>
       <div class="dim">Emulates the drawing pad on controller port 1 (paddle 0/1 + button). Start Atari Artist, then draw here.</div>
-    </div>    <div class="box">
+    </div>    <div class="box" data-tab="fm" id="medbox">
       <h3>Media library</h3>
-      <div class="row"><button id="medpick" style="display:none" title="Pick folder: choose a folder; it is remembered across page reloads">📁</button><button id="medsel" style="display:none" title="Folders: choose which sub-folders to include in the scan">🗂</button><button id="medrefresh" title="Rescan: scan the folder again and rebuild the saved catalog">🔄</button><button id="medexp" title="Export DB: save the catalog as a .sqlite file">📤</button><label class="btn" title="Import DB: load a catalog .sqlite file">📥<input id="medimp" type="file" accept=".sqlite,.db,.sql" style="display:none"></label><button id="medstop" style="display:none" title="Stop the scan">⛔</button><label class="btn" title="Scan once: one-off scan (not remembered)">🔍<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="Titles XML: MAME software list XML (a800.xml, a5200.xml…) to show real game titles">🏷<input id="medxml" type="file" accept=".xml" multiple></label><span id="medcount" class="dim">no folder</span></div>
+      <div class="row"><button id="medpick" style="display:none" title="Pick folder: choose a folder; it is remembered across page reloads">📁</button><button id="medsel" style="display:none" title="Folders: choose which sub-folders to include in the scan">🗂</button><button id="medrefresh" title="Rescan: scan the folder again and rebuild the saved catalog">🔄</button><button id="medexp" title="Export DB: save the catalog as a .sqlite file">📤</button><label class="btn" title="Import DB: load a catalog .sqlite file">📥<input id="medimp" type="file" accept=".sqlite,.db,.sql" style="display:none"></label><button id="medstop" style="display:none" title="Stop the scan">⛔</button><label class="btn" title="Scan once: one-off scan (not remembered)">🔍<input id="medfolder" type="file" webkitdirectory multiple></label><label class="btn" title="Titles XML: MAME software list XML (a800.xml, a5200.xml…) to show real game titles">🏷<input id="medxml" type="file" accept=".xml" multiple></label><button id="medbig" title="Open the library in a large window (Esc closes)">⤢</button><span id="medcount" class="dim">no folder</span></div>
       <div id="medtitles" class="dim" style="font-size:11px"></div>
       <div class="row" id="medchips"><input id="medfilter" title="Wildcards: * any text, ? one character. Several words must all match. Ctrl+L: show short (8.3) and long names" placeholder="search (wildcards * ?)" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><select id="medkind" title="Category"><option value="all">📚 All types</option><option value="disk">💾 Disk</option><option value="cart">🎮 Cart</option><option value="tape">📼 Tape</option><option value="exe">⚙️ Program</option></select></div>
       <div class="row"><select id="medtypesel" title="Media type (first part of the long name)"></select><select id="medvendsel" title="Vendor (third part of the long name)"></select></div>
       <div class="row"><select id="medextsel" title="File extension"></select> <button id="medview" title="Switch view">☰</button><button id="medexpand" title="Open every folder">⊞</button><button id="medcollapse" title="Close every folder">⊟</button></div>
+      <div id="medhist"></div>
       <div id="medlist" style="max-height:200px;overflow:auto"></div>
       <div id="medrel"></div>
       <div class="dim">Click a file to load it into #1 (disk → D1, cart → slot 1, tape → cassette, program → run). Right-click or long-press to choose D1–D8, Cart 1/2, etc. Format is detected from the file contents. Ctrl+L: short and long names.</div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="dbg">
       <h3>RAM bank test</h3>
       <div class="row"><button id="memtest" title="Runs a test program on the emulated Atari: counts the real extended-RAM banks and fills/verifies each one. Reboots the machine into the test; Reset afterwards.">Run RAM test</button><span id="memexp" class="dim"></span></div>
       <pre id="memout" style="margin:4px 0;white-space:pre-wrap;font-size:12px"></pre>
       <div class="dim">Checks that the selected RAM size really has the right number of 16 KB banks and that every bank holds its own data. $5000-$57FF is skipped (Self-Test ROM).</div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="dbg">
       <h3>Diagnostics</h3>
       <div class="row"><button id="diagsave" title="Save everything logged (status messages, loads, errors) to a text file">Save log…</button><button id="diagclear">Clear</button><span id="diagcount" class="dim"></span></div>
       <div class="dim">Hit a problem? Click Save log and put the file in the project's <code>diag</code> folder.</div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="fm" id="medbox">
       <h3>Host drive (H:)</h3>
       <div class="row"><input id="hostname" value="PASTE.LST" style="flex:1;min-width:0;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"><button id="hostpaste" title="Clipboard text becomes this file">Paste→file</button></div>
       <div class="row"><label class="btn">Import…<input id="hostimport" type="file" multiple></label><span id="hostcount" class="dim">empty</span></div>
       <div id="hostlist"></div>
       <div class="dim">In BASIC: <code>LIST "H:PROG.LST"</code> saves your program as text here; <code>ENTER "H:PROG.LST"</code> loads it back with the same line numbers. Copy puts it on your clipboard.</div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="drv">
       <h3>Drives &amp; cartridges</h3>
       <div id="drvviz"></div>
       <div class="dim" style="margin:-4px 0 8px">Click a drive or cartridge to load a file, or drop one on it. Right-click (long-press on a phone) for eject, blank and pre-formatted disks, browse, save and more.</div>
@@ -337,7 +345,7 @@
       <div class="row"><button id="fullreset" title="Forgets everything this page stored: catalog, remembered folders, ROMs, settings, log. Your files on disk are not touched.">Full reset (forget everything)</button></div>
       <div class="dim">Any disk, cartridge, tape or program format is detected from its contents. You can also drop a file on the page.</div>
     </div>
-    <div class="box">
+    <div class="box" data-tab="net">
       <h3>Virtual FujiNet node</h3>
       <div class="row"><label class="btn">Point at folder…<input id="fnfolder" type="file" webkitdirectory multiple></label><span id="fncount" class="dim">no host folder</span></div>
       <div class="row"><input id="fnfilter" title="Wildcards: * any text, ? one character" placeholder="filter (wildcards * ?)" style="width:100%;background:#14161a;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px"></div>
@@ -391,6 +399,6 @@
 <script src="js/keyboard.js?v=20261027za"></script>
 <script src="js/fujinet-config.js"></script>
 <script src="js/fujinet.js"></script>
-<script src="js/app.js?v=20261027zi"></script>
+<script src="js/app.js?v=20261027zj"></script>
 </body>
 </html>
