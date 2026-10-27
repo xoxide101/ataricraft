@@ -2885,10 +2885,17 @@
       let h;
       try { h = await showDirectoryPicker({ id: 'ataricraft-roms', mode: 'read' }); } catch (err) { return; }
       await idbSet('romDir', h);
+      $('romrescan').style.display = '';
       await romScan(h, true);
     });
+    $('romrescan').onclick = async () => {
+      const h = await idbGet('romDir');
+      if (!h) { log('no ROM folder yet: use Scan folder…'); return; }
+      try { if (!(await romScan(h, true))) log('access to the ROM folder was not granted'); } catch (e) { log('ROM rescan failed: ' + e.message); }
+    };
     idbGet('romDir').then(async (h) => {
       if (!h) return;
+      $('romrescan').style.display = '';
       try { if (await romScan(h, false)) return; } catch (e) { return; }
       const regrant = async () => { try { await romScan(h, true); } catch (e) { /* denied */ } };
       document.addEventListener('pointerdown', regrant, { once: true });
