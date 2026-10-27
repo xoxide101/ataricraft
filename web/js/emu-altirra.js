@@ -22,8 +22,8 @@ window.AC = window.AC || {};
   function loadModule() {
     if (!modPromise) {
       modPromise = (async () => {
-        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=5');
-        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=5');
+        if (typeof AltirraWeb === 'undefined') await loadScript('ref/altirra-web.js?v=7');
+        if (!window.ALTIRRA_WASM_B64) await loadScript('ref/altirra-wasm.js?v=7');
         return AltirraWeb({ locateFile: (p) => (p.endsWith('.wasm') ? 'data:application/wasm;base64,' + window.ALTIRRA_WASM_B64 : p), print: () => {}, printErr: () => {} });
       })();
       modPromise.catch(() => { modPromise = null; });
@@ -52,6 +52,7 @@ window.AC = window.AC || {};
         ram: cw('aw_ram', 'number'), ramSize: cw('aw_ram_size', 'number'), alloc: cw('aw_alloc', 'number', ['number']), free: cw('aw_free', null, ['number']),
         host: cw('aw_host', 'number', ['number']), fwCustom: cw('aw_fw_custom', null, ['string', 'string']), xep: cw('aw_xep', 'number', ['number']), xepUpdate: cw('aw_xep_update', 'number'),
         xepFrame: cw('aw_xep_frame', 'number'), xepW: cw('aw_xep_w', 'number'), xepH: cw('aw_xep_h', 'number'),
+        fn: cw('aw_fn', 'number', ['number']), fnProto: cw('aw_fn_proto', null, ['number', 'number', 'number']),
       };
       this.prev = { special: 0, start: 0, select: 0, option: 0 };
       this.resPos = 0;
@@ -95,6 +96,16 @@ window.AC = window.AC || {};
     hostDelete(name) { this.m.FS.unlink('/host/' + name); }
 
     clearInput() {}
+
+    // Virtual FujiNet ($70): the core's SIO device calls back into FujiNet.sio().
+    fnAttach(fn) {
+      const a = this.aw;
+      for (const [c, d, l] of fn.proto) a.fnProto(c, d, l);
+      this.m.fnSio = (cmd, dstats, aux, buf, len) => fn.sio(cmd, dstats, aux, buf, len);
+      this.fnDevice(fn.enabled);
+    }
+    fnDevice(on) { this.aw.fn(on ? 1 : 0); }
+    fnMem() { return this.m.HEAPU8; }
 
     // Same input model as AC.Emu (held fields + key FIFO), delivered to Altirra's POKEY/GTIA instead of libatari800.
     applyInput() {

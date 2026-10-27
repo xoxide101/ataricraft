@@ -44,15 +44,28 @@
 
     attach(emu) {
       this.emu = emu;
-      emu.m.acSio = (dev, cmd, dstats, aux, data, len) => {
-        if (dev !== 0x70 || !this.enabled) return 0;
-        try {
-          const r = this.cmd(cmd, dstats, aux, data, len) || N;
-          if (cmd === 0xf3 || cmd === 0xf1 || cmd === 0xe2 || cmd === 0xe9 || cmd === 0xf8) this.save();
-          return r;
-        } catch (e) { console.error('fujinet', e); return E; }
-      };
+      if (emu.fnAttach) { emu.fnAttach(this); return; }
+      emu.m.acSio = (dev, cmd, dstats, aux, data, len) => (dev !== 0x70 ? 0 : this.sio(cmd, dstats, aux, data, len));
     },
+
+    sio(cmd, dstats, aux, data, len) {
+      if (!this.enabled) return 0;
+      try {
+        const r = this.cmd(cmd, dstats, aux, data, len) || N;
+        if (cmd === 0xf3 || cmd === 0xf1 || cmd === 0xe2 || cmd === 0xe9 || cmd === 0xf8) this.save();
+        return r;
+      } catch (e) { console.error('fujinet', e); return E; }
+    },
+
+    // Direction (0 none, 1 read, 2 write) and length per command, for cores that need them before the data phase.
+    proto: [[0xff, 0, 0], [0x53, 1, 4], [0xfa, 1, 1], [0xea, 1, 1], [0xfe, 1, 97], [0xfb, 2, 97], [0xfd, 1, 1], [0xfc, 1, 34], [0xe8, 1, 140], [0xc4, 1, 240],
+      [0xf4, 1, 256], [0xf3, 2, 256], [0xf2, 1, 304], [0xf1, 2, 304], [0xf9, 0, 0], [0xe6, 0, 0], [0xf7, 2, 256], [0xf5, 0, 0], [0xf6, 1, 256], [0xe5, 1, 2], [0xe4, 0, 0],
+      [0xe2, 2, 256], [0xda, 1, 256], [0xf8, 0, 0], [0xd7, 0, 0], [0xe9, 0, 0], [0xe1, 2, 256], [0xe0, 1, 256], [0xd9, 0, 0], [0xd6, 0, 0], [0xe3, 1, 1], [0xdf, 0, 0], [0xd3, 1, 1]],
+
+    // Runs fn after the emulated machine returns control (disk changes must not happen inside an SIO command).
+    defer(fn) { if (this.emu.core === 'altirra') Promise.resolve().then(fn); else fn(); },
+
+    mem() { return this.emu.fnMem ? this.emu.fnMem() : this.emu.mem(); },
 
     fillPublic() {
       this.hosts = ['SD', ...this.publicHosts.slice(0, HOSTS - 1)];
@@ -94,7 +107,6 @@
       if (f && !this.cache.has(path)) this.cache.set(path, new Uint8Array(await f.file.arrayBuffer()));
     },
 
-    mem() { return this.emu.mem(); },
     cstr(mem, p, max) {
       let s = '';
       for (let i = 0; i < max && mem[p + i]; i++) s += String.fromCharCode(mem[p + i]);
@@ -242,7 +254,7 @@
           const s = this.slots[a1];
           if (!s) return E;
           s.mounted = false;
-          if (a1 < 8) this.emu.ejectDisk(a1 + 1);
+          if (a1 < 8) this.defer(() => this.emu.ejectDisk(a1 + 1));
           return C;
         }
         case 0xe1: case 0xe0: if (cmd === 0xe0) this.put(data, [0], len); return C; // host prefix
@@ -258,7 +270,8 @@
       const bytes = this.cache.get(s.path);
       if (!bytes) { this.prefetch(s.path); return E; }
       if (!IMG.test(s.path)) return E;
-      this.emu.mountDisk(i + 1, s.path.split('/').pop(), bytes);
+      const name = s.path.split('/').pop();
+      this.defer(() => this.emu.mountDisk(i + 1, name, bytes));
       s.mounted = true; s.mode = mode;
       this.log(`FujiNet: D${i + 1} = ${s.path}`);
       if (this.onMount) this.onMount(i, s.path);

@@ -139,7 +139,133 @@ IATDeviceVideoOutput *WebXepOutput() {
 
 }
 
+#include <at/atcore/deviceimpl.h>
+#include <at/atcore/devicesio.h>
+
+// Virtual FujiNet: SIO device $70 forwarded to JavaScript (Module.fnSio). The protocol table
+// (direction and length per command) is registered by the page through aw_fn_proto().
+EM_JS(int, ac_fn_sio, (int cmd, int dstats, int aux, int buf, int len), {
+	return Module.fnSio ? Module.fnSio(cmd, dstats, aux, buf, len) : 0;
+});
+
+namespace {
+
+struct FnProto { uint8_t dir; uint16_t len; bool known; };
+FnProto g_fnProto[256];
+uint8_t g_fnBuf[2048];
+
+class ATWebFujiNet final : public ATDeviceT<IATDeviceSIO> {
+public:
+	void GetDeviceInfo(ATDeviceInfo& info) override;
+
+	void Shutdown() override {
+		mpIf = nullptr;
+		mpMgr = nullptr;
+	}
+
+	void InitSIO(IATDeviceSIOManager *mgr) override {
+		mpMgr = mgr;
+		mpIf = mgr->AddDevice(this);
+	}
+
+	CmdResponse OnSerialBeginCommand(const ATDeviceSIOCommand& c) override {
+		if (c.mDevice != 0x70)
+			return kCmdResponse_NotHandled;
+		const FnProto& p = g_fnProto[c.mCommand];
+		if (!p.known)
+			return kCmdResponse_Fail_NAK;
+		return Run(c, p.dir, p.len);
+	}
+
+	CmdResponse OnSerialAccelCommand(const ATDeviceSIORequest& r) override {
+		if (r.mDevice != 0x70)
+			return kCmdResponse_NotHandled;
+		return Run(r, (r.mMode & 0x80) ? 2 : (r.mMode & 0x40) ? 1 : 0, r.mLength);
+	}
+
+	void OnSerialAbortCommand() override {}
+
+	void OnSerialReceiveComplete(uint32 id, const void *data, uint32 len, bool checksumOK) override {
+		if (!mpIf)
+			return;
+		memcpy(g_fnBuf, data, len < sizeof g_fnBuf ? len : sizeof g_fnBuf);
+		const int r = ac_fn_sio(mCmd, 0x80, mAux, (int)(intptr_t)g_fnBuf, (int)len);
+		if (r == 'C')
+			mpIf->SendComplete();
+		else
+			mpIf->SendError();
+		mpIf->EndCommand();
+	}
+
+	void OnSerialFence(uint32 id) override {}
+
+private:
+	CmdResponse Run(const ATDeviceSIOCommand& c, int dir, uint32 len) {
+		if (!mpIf || len > sizeof g_fnBuf)
+			return kCmdResponse_Fail_NAK;
+		mCmd = c.mCommand;
+		mAux = c.mAUX[0] | (c.mAUX[1] << 8);
+		if (dir == 2) {
+			mpIf->BeginCommand();
+			mpIf->SendACK();
+			mpIf->ReceiveData(1, len, true);
+			return kCmdResponse_Start;
+		}
+		memset(g_fnBuf, 0, len);
+		const int r = ac_fn_sio(mCmd, dir == 1 ? 0x40 : 0, mAux, (int)(intptr_t)g_fnBuf, (int)len);
+		if (r == 0 || r == 'N')
+			return kCmdResponse_Fail_NAK;
+		mpIf->HandleCommand(g_fnBuf, r == 'C' && dir == 1 ? len : 0, r == 'C');
+		return kCmdResponse_Start;
+	}
+
+	IATDeviceSIOManager *mpMgr = nullptr;
+	vdrefptr<IATDeviceSIOInterface> mpIf;
+	uint8 mCmd = 0;
+	int mAux = 0;
+};
+
+void ATCreateWebFujiNet(const ATPropertySet&, IATDevice **dev) {
+	vdrefptr<ATWebFujiNet> p(new ATWebFujiNet);
+	*dev = p.release();
+}
+
+const ATDeviceDefinition g_WebFujiNetDef = { "webfujinet", nullptr, L"FujiNet (browser)", ATCreateWebFujiNet, 0, nullptr };
+
+void ATWebFujiNet::GetDeviceInfo(ATDeviceInfo& info) {
+	info.mpDef = &g_WebFujiNetDef;
+}
+
+}
+
 extern "C" {
+
+// FujiNet protocol table entry: dir 0 none, 1 read (device to Atari), 2 write.
+EMSCRIPTEN_KEEPALIVE void aw_fn_proto(int cmd, int dir, int len) {
+	g_fnProto[cmd & 255] = { (uint8_t)dir, (uint16_t)len, true };
+}
+
+// Adds or removes the virtual FujiNet device ($70).
+EMSCRIPTEN_KEEPALIVE int aw_fn(int on) {
+	if (!g_core.simulatorInitialized)
+		return 0;
+	ATDeviceManager *dm = g_sim.GetDeviceManager();
+	static bool defAdded = false;
+	if (!defAdded) {
+		dm->AddDeviceDefinition(&g_WebFujiNetDef);
+		defAdded = true;
+	}
+	IATDevice *ex = dm->GetDeviceByTag("webfujinet");
+	if (ex)
+		dm->RemoveDevice(ex);
+	if (!on)
+		return 1;
+	try {
+		return dm->AddDevice(&g_WebFujiNetDef, ATPropertySet(), false) ? 1 : 0;
+	} catch (...) {
+		return 0;
+	}
+}
 
 // H: host drive mapped to the Emscripten folder /host (read/write).
 EMSCRIPTEN_KEEPALIVE int aw_host(int on) {
@@ -356,9 +482,11 @@ EMSCRIPTEN_KEEPALIVE int aw_disk_mount(int n, const char *path, int writeMode) {
 	try {
 		ATDiskInterface& di = g_sim.GetDiskInterface(n);
 		di.UnloadDisk();
-		di.SetWriteMode(WebWriteMode(writeMode));
+		ATImageLoadContext ctx {};
+		ctx.mLoadIndex = n;
 		const VDStringW w = WebPath(path);
-		di.LoadDisk(w.c_str());
+		if (!g_sim.Load(w.c_str(), WebWriteMode(writeMode), &ctx))
+			return 0;
 		return di.IsDiskLoaded() ? 1 : 0;
 	} catch (...) {
 		return 0;

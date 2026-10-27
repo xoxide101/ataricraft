@@ -278,6 +278,7 @@
     // FujiNet selected and nothing else to boot from: power on straight into the FujiNet CONFIG menu.
     if (FujiNet.enabled && !S.disks[1] && !Object.keys(S.carts).length && !S.pending) {
       FujiNet.mountConfig();
+      if (alt) S.emu.coldStart();
       $('d1').textContent = 'FujiNet CONFIG';
       log('FujiNet: booting the CONFIG menu (mount a disk on D1 or insert a cartridge to boot something else)');
     }
@@ -2397,6 +2398,7 @@
     FujiNet.enabled = !FujiNet.enabled;
     localStorage.setItem('ac.fujinet', FujiNet.enabled ? '1' : '0');
     syncFnUi();
+    if (S.emu && S.emu.fnDevice) S.emu.fnDevice(FujiNet.enabled);
     log('FujiNet ' + (FujiNet.enabled ? 'on' : 'off (device $70 absent; takes effect immediately, reset to reboot)'));
     if (FujiNet.enabled && S.emu && !S.off) { FujiNet.bootConfig(); $('d1').textContent = 'FujiNet CONFIG'; }
   };
