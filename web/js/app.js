@@ -593,6 +593,23 @@
   }
   async function loadAny0(file, alt, hint, noBoot) {
     if (!S.emu) {
+      // Floppies can be inserted with the computer off (Boot mounts them); cartridges too, since they are only changed while off.
+      const kk = hint === 'disk' ? 'disk' : (extKind(file.name) || hint);
+      if (kk === 'disk' || kk === 'cart') {
+        const bytes = await AC.Progress.read(file, 'Loading ' + file.name);
+        if (kk === 'disk') {
+          const n = typeof alt === 'number' ? alt : alt ? 2 : 1;
+          S.disks[n] = { name: file.name, bytes }; S.dirty[n] = false;
+          $('d' + n).textContent = file.name;
+          log(`D${n}: ${file.name} inserted (power is off; it is read when you press Boot)`);
+        } else {
+          const slot = typeof alt === 'number' ? 1 : alt ? 2 : 1;
+          S.carts[slot] = { name: file.name, bytes, type: null };
+          $('cn' + slot).textContent = (slot === 1 ? '1 (main, right): ' : '2 (left): ') + file.name;
+          log(`Cart ${slot}: ${file.name} inserted (power is off; it is read when you press Boot)`);
+        }
+        return;
+      }
       S.pending = { file, alt, hint, noBoot };
       log(`${file.name} is queued; it loads when you press Boot`);
       return;
@@ -613,7 +630,7 @@
       if (!S.emu.mountDisk(n, file.name, bytes)) { log('could not mount ' + file.name); return; }
       S.disks[n] = { name: file.name, bytes }; S.dirty[n] = false;
       $('d' + n).textContent = file.name;
-      if (n > 2) noBoot = true;
+      if (n > 2 || S.off) noBoot = true;
       S.emu.coldStart && !noBoot && S.emu.coldStart();
       log(`D${n}: ${file.name}${noBoot ? ' (no reboot)' : ''}`);
       if (AC.DISK_DB) {
@@ -1904,21 +1921,29 @@
       }
     } else if (slot === 2) S.emu.coldStart();
   }
+  // Cartridges are only changed with the power off: warn, then switch the computer off.
+  function confirmCartPower(what) {
+    if (!S.emu || S.off) return true;
+    if (!confirm(`Cartridges should only be changed with the power off.\n\nPower off now and ${what} the cartridge? Press Boot afterwards to start again.`)) return false;
+    powerOff();
+    return true;
+  }
   for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
     $('de' + n).onclick = () => {
-      if (!S.emu) return;
-      S.emu.ejectDisk(n);
-      if (S.emu.diskPaths) delete S.emu.diskPaths[n];
+      if (S.emu) {
+        S.emu.ejectDisk(n);
+        if (S.emu.diskPaths) delete S.emu.diskPaths[n];
+      }
       delete S.disks[n]; delete S.dirty[n];
       $('d' + n).textContent = 'empty';
       $('f' + n).value = '';
     };
   }
   for (const n of [1, 2]) {
-    $('c' + n).onchange = (e) => e.target.files[0] && insertCart(n, e.target.files[0]);
+    $('c' + n).onchange = (e) => e.target.files[0] && (S.emu ? insertCart(n, e.target.files[0]) : loadAny(e.target.files[0], n === 2, 'cart'));
     $('ce' + n).onclick = () => {
-      if (!S.emu) return;
-      S.emu.ejectCart(n);
+      if (!confirmCartPower('eject')) return;
+      if (S.emu) S.emu.ejectCart(n);
       delete S.carts[n];
       devFlash('K' + n, 'ot');
       $('cn' + n).textContent = (n === 1 ? '1 (main, right): ' : '2 (left): ') + 'empty';
@@ -1928,10 +1953,9 @@
   $('savedisk').onclick = () => {
     const n = +$('savedrv').value;
     const path = S.emu && S.emu.diskPaths && S.emu.diskPaths[n];
-    if (!path) { log(`D${n}: no disk mounted`); return; }
-    const bytes = S.emu.readDisk(n);
-    if (!bytes) { log(`D${n}: could not read the disk image`); return; }
-    const name = (S.disks[n] && S.disks[n].name) || path.replace(/^\/d\d_/, '');
+    const bytes = path ? S.emu.readDisk(n) : (S.disks[n] && S.disks[n].bytes);
+    if (!bytes) { log(`D${n}: no disk mounted`); return; }
+    const name = (S.disks[n] && S.disks[n].name) || (path || '').replace(/^\/d\d_/, '') || `d${n}.atr`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
     a.download = name; a.click();
