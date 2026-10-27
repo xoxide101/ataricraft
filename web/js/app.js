@@ -2854,6 +2854,47 @@
   $('osrom').onchange = () => { updateCharset(); saveRomSel(); };
   $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); };
   $('romfolder').onchange = (e) => addRoms(e.target.files);
+
+  // The ROM folder is remembered (Chromium) and rescanned on every page load; if the browser wants the permission again, the first click or key press re-grants it.
+  if (window.showDirectoryPicker) {
+    const romWalk = async (d, path, out, depth) => {
+      for await (const [name, e] of d.entries()) {
+        if (out.length >= 3000) return;
+        if (e.kind === 'directory') { if (depth < 6) await romWalk(e, path + name + '/', out, depth + 1); continue; }
+        if (!/\.(rom|bin|rm|zip|7z)$/i.test(name)) continue;
+        try {
+          const f = await e.getFile();
+          if (/\.(zip|7z)$/i.test(name) ? f.size > 4e6 : ![8192, 10240, 16384].includes(f.size)) continue;
+          Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
+          out.push(f);
+        } catch (err) { /* unreadable */ }
+      }
+    };
+    const romScan = async (h, interactive) => {
+      let p = await h.queryPermission({ mode: 'read' });
+      if (p !== 'granted' && interactive) p = await h.requestPermission({ mode: 'read' });
+      if (p !== 'granted') return false;
+      const out = [];
+      await romWalk(h, h.name + '/', out, 0);
+      await addRoms(out);
+      log(`ROM folder "${h.name}" scanned`);
+      return true;
+    };
+    $('romfolder').addEventListener('click', async (e) => {
+      e.preventDefault();
+      let h;
+      try { h = await showDirectoryPicker({ id: 'ataricraft-roms', mode: 'read' }); } catch (err) { return; }
+      await idbSet('romDir', h);
+      await romScan(h, true);
+    });
+    idbGet('romDir').then(async (h) => {
+      if (!h) return;
+      try { if (await romScan(h, false)) return; } catch (e) { return; }
+      const regrant = async () => { try { await romScan(h, true); } catch (e) { /* denied */ } };
+      document.addEventListener('pointerdown', regrant, { once: true });
+      document.addEventListener('keydown', regrant, { once: true });
+    }).catch(() => {});
+  }
   function syncPower() { $('boot').classList.toggle('on', !!S.emu && !S.off); $('boot').title = S.emu && !S.off ? 'Power off (Shift+click: reboot)' : 'Power on / Boot'; }
   function powerOff() {
     S.running = false; S.off = true;
