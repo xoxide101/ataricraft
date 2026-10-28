@@ -81,3 +81,7 @@ API table at `$3800` (version byte at `$3803`, currently 1), three bytes per ent
 - `cmds\file.asm`, `cmds\misc.asm`, `cmds\run.asm` commands, program/batch/plug-in runner
 - `lib\` console and CIO helpers, DOS detection, paths and long names, FujiNet
 - `loader.asm` page-6 binary loader that survives programs which overwrite CMD
+
+## LZH.COM (standalone LHA/LZH lister/extractor)
+Prompt: `L file.LZH` list, `X file.LZH [dest] [member]` extract, `T file.LZH` test (CRC-16). Methods -lh0-, -lh1-, -lh4-, -lh5- with level 0/1 headers; others report UNSUPPORTED METHOD (lh6/lh7 need 32K+ rings). Port of web/js/lzh.js; verified on all 69 sample entries (CRC OK). Works from CMD via the hand-off: `LZH X A.LZH`. lh4 is untested (no samples).
+
