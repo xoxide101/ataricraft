@@ -1039,7 +1039,7 @@
       } else {
         const h = doc.querySelector('header > name');
         const hn = h ? h.textContent.replace(/^TOSEC\s*-?\s*/i, '').replace(/^"|"$/g, '').split(/\s+-\s+/)[0].trim() : '';
-        if (hn) sys = hn.replace(/^Atari 8bit$/i, 'Atari 8-bit').replace(/^Atari 8-bit Family$/i, 'Atari 8-bit').replace(/^Atari 2600 & VCS$/i, 'Atari 2600');
+        if (hn) sys = atariSys(h.textContent) || hn.replace(/^Atari 8bit$/i, 'Atari 8-bit').replace(/^Atari 8-bit Family$/i, 'Atari 8-bit').replace(/^Atari 2600 & VCS$/i, 'Atari 2600');
       }
       doc.querySelectorAll('game, machine, software, resource').forEach((g) => {
         const d = g.querySelector(':scope > description');
@@ -1103,7 +1103,8 @@
     return out;
   };
   const syncDats = () => { const n = Object.keys(DATCRC).length; if (n) $('medtitles').textContent += ` · ${n} DAT CRCs`; };
-  const sysFromName = (n) => n.split('/').pop().replace(/\.[^.]+$/, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^NoIntro\s*-\s*/i, '').replace(/^Atari\s*-\s*8-bit Family$/i, 'Atari 8-bit').replace(/^Atari\s*-\s*/i, 'Atari ').trim();
+  const atariSys = (s) => { const m = /Atari\s*-?\s*(?:Atari\s*)?(2600|5200|7800|Lynx|Jaguar(?:\s*CD)?|ST|8-?\s?bit)/i.exec(s || ''); if (!m) return ''; const k = m[1].replace(/\s+/g, ' '); return /^8/.test(k) ? 'Atari 8-bit' : /^\d/.test(k) ? `Atari ${k}` : `Atari ${k[0].toUpperCase()}${k.slice(1).toLowerCase().replace('st', 'ST').replace(' cd', ' CD')}`; };
+  const sysFromName = (n) => { const b = n.split('/').pop().replace(/\.[^.]+$/, ''); return atariSys(b) || b.replace(/\s*\([^)]*\)\s*$/, '').replace(/^NoIntro\s*-\s*/i, '').replace(/^Atari\s*-\s*8-bit Family$/i, 'Atari 8-bit').replace(/^Atari\s*-\s*/i, 'Atari ').trim(); };
   const dropDat = (name) => { DATIDX = DATIDX.filter((e) => e.d !== name); };
   const saveDats = () => idbSet('datCrc', DATCRC).then(() => idbSet('datSys', DATSYS)).then(() => idbSet('datIdx', DATIDX));
   async function loadDats(files) {
