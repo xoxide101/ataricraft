@@ -446,16 +446,22 @@
       for (const k of [...side.keys()]) if (!names.has(k)) { side.delete(k); res.pruned++; changed = true; }
       for (const e of kids) {
         const key = e.name.toUpperCase(), cur = side.get(key);
+        // An entry already in LONGNAME.TXT for an unchanged file (same size) is left exactly as it is, keeping its date and detail.
+        if (cur && cur.size === e.size) continue;
         let found = '', src = 'DB';
-        const redo = cur && cur.source === 'INFO' && !e.dir && opts.describe !== false;
-        if (!cur || cur.long.toUpperCase() === key || /^[\w.-]{1,12}$/.test(cur.long) || redo) {
-          if (!redo) try { found = (lookup(e.name, e.path) || '').trim(); } catch (x) { found = ''; }
+        const auto = !cur || cur.source === 'INFO' || cur.source === 'DISK' || cur.long.toUpperCase() === key || /^[\w.-]{1,12}$/.test(cur.long);
+        if (auto) {
+          try { found = (lookup(e.name, e.path) || '').trim(); } catch (x) { found = ''; }
           if (found.toUpperCase().replace(/\.[^.]*$/, '') === key.replace(/\.[^.]*$/, '')) found = '';
           const plain = !found || /^[\w.-]{1,12}$/.test(found);
           if (plain && !e.dir && opts.describe !== false) { const dsc = describe(m, e.name, e.path); if (dsc) { found = dsc; src = 'INFO'; } }
         }
         if (!cur) { side.set(key, { short: key, long: found || e.name, added: stampNow(opts.now), size: e.size, source: found ? src : 'DISK' }); res.added++; changed = true; }
-        else if (found && found.toUpperCase() !== key && found !== cur.long) { cur.long = found; cur.source = cur.source || src; res.upgraded++; changed = true; }
+        else {
+          // the file was replaced or edited: refresh its size and date, and its description unless the user named it
+          if (found && found.toUpperCase() !== key && found !== cur.long) { cur.long = found; cur.source = src; }
+          cur.size = e.size; cur.added = stampNow(opts.now); res.upgraded++; changed = true;
+        }
       }
       if (!changed) continue;
       try { writeSidecar(m, d, side); res.written++; touch(m); }
