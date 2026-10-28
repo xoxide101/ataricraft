@@ -251,8 +251,6 @@ cmdtab:
         .word cmd_help
         .byte 'MAN',0
         .word cmd_help
-        .byte 'ARC',0
-        .word cmd_stub
         .byte 'ATR',0
         .word cmd_stub
         .byte 'BOOT',0
