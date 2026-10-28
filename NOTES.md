@@ -46,3 +46,6 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 ## Raw drives D9:/D10: (read-only)
 
 web\js\rawdisk.js claims SIO $39/$3A through Module.acSio (libatari800 core only; Altirra can't claim non-$70 IDs). Commands: $53 status (8 bytes: sectors u32, sector size u16, flags, unit), $48 set high 16 bits of the next sector number, $52 read (AUX = low 16 bits, DBYT bytes). Images load from the D9/D10 device-bar dialog; sector size is 2048 for ISO/UDF, else 512. Host readers for the filesystems: web\js\discfs.js. Smoke test: out\t_sio.cjs (scratch).
+
+### DISC.COM / UDF (6502)
+`tools\cmd\disc.asm` reads D9:/D10: via SIO ($48 high-word read): ISO 9660, UDF (AVDP@256, VDS -> partition + LVD -> FSD -> root ICB; 2048-byte sectors, UBUF=$7800), FAT12/16/32. Verified in `out\sim6502.cjs` against fat12/16/32/iso/joliet/udf images (23/0 files byte-identical). Host `discfs.js` LVD FSD lbn is at +252 (fixed). ARC.COM T mode no longer prints the "X " prefix. Not yet browser-tested with real RawDisk.

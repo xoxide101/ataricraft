@@ -217,7 +217,7 @@
           else lvdMap.push({ type: mt });
           q += ml;
         }
-        fsd = { part: u16(b, o + 256 + 4), lbn: u32(b, o + 256) };
+        fsd = { part: u16(b, o + 256), lbn: u32(b, o + 252) };
         label = ascii(b, o + 84, 31).replace(/[\0 ]+$/, '').replace(/^\x08/, '');
       } else if (t === 8) break;
     }

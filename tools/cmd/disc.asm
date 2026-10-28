@@ -9,9 +9,13 @@ SBUF    = $6400         ; data sector (up to 2048 bytes)
 FBUF    = $6C00         ; FAT sector (512 bytes)
 PATHB   = $6E00         ; 64  path being resolved
 DEST    = $6E40         ; 64  extract destination
-CMPN    = $6E80         ; 16  path component, upper case
 LABEL   = $6E90         ; 34  volume label
 VARS    = $6F00
+UBUF    = $7800         ; 2048 UDF file entry sector
+ADBUF   = $8000         ; 256  allocation descriptors of the open UDF file
+FIDB    = $8100         ; 40   UDF file identifier descriptor header
+FNB     = $8140         ; 256  raw UDF name / label bytes
+CMPN    = $8240         ; 48   path component, upper case
 
 unitn   = VARS          ; 9 or 10
 ssl     = VARS+1        ; sector size
@@ -48,6 +52,19 @@ tcl     = VARS+36
 tch     = VARS+37
 kl      = VARS+38
 kh      = VARS+39
+aic     = VARS+54
+ubv     = VARS+40       ; 1 when UBUF holds the sector in utag
+adl     = VARS+41       ; bytes of allocation descriptors in ADBUF
+adp     = VARS+42       ; next descriptor
+ads     = VARS+43       ; descriptor size, 8 (short) or 16 (long)
+emd     = VARS+44       ; embedded data already delivered
+uc      = VARS+45       ; dstring compression id
+ugot    = VARS+46       ; bit 0 partition found, bit 1 volume descriptor found
+chr     = VARS+47       ; FID characteristics
+fil     = VARS+48       ; FID L_FI
+pad     = VARS+49
+eoff    = VARS+50       ; 2 bytes offset of the descriptors / embedded data inside UBUF
+elen    = VARS+52       ; 2 bytes L_AD
 
 R       = VARS+$40
 lba     = R
@@ -75,6 +92,7 @@ secs    = R+84
 rootlen = R+88
 dig     = R+92          ; 8
 stb     = R+100         ; 8
+utag    = R+108
 
         .macro MOV4 d,s
         lda :2
@@ -214,7 +232,7 @@ stb     = R+100         ; 8
 start:  lda #9
         sta unitn
         jsr putsi
-        .byte 'DISC 0.1  READ-ONLY D9:/D10: (ISO 9660, FAT)',EOL
+        .byte 'DISC 0.1  READ-ONLY D9:/D10: (ISO 9660, UDF, FAT)',EOL
         .byte 'D [PATH] | T PATH | X PATH [DEST] | I',EOL
         .byte 'PREFIX D9: OR D10: PICKS THE DRIVE',EOL
         .byte 'BLANK LINE EXITS',EOL,0
@@ -359,15 +377,22 @@ sioset: sta DCOMND
 
 ; read sector lba into SBUF (A = 0) or FBUF (A = 1)
 rdsec:  sta bsel
-        bne rs_f
+        bne rs_n0
         lda sbv
-        beq rs_go
+        jeq rs_go
         NE4 lba,sbtag,rs_go
         clc
         rts
-rs_f:   lda fbv
-        beq rs_go
+rs_n0:  cmp #1
+        bne rs_u
+        lda fbv
+        jeq rs_go
         NE4 lba,fbtag,rs_go
+        clc
+        rts
+rs_u:   lda ubv
+        jeq rs_go
+        NE4 lba,utag,rs_go
         clc
         rts
 rs_go:  lda lba+2
@@ -401,13 +426,24 @@ rs_r:   lda #$52
         lda ssh
         sta DBYTHI
         jmp rs_x
-rs_b:   lda #<FBUF
+rs_b:   cmp #1
+        bne rs_ub
+        lda #<FBUF
         sta DBUFLO
         lda #>FBUF
         sta DBUFHI
         lda #0
         sta DBYTLO
         lda #2
+        sta DBYTHI
+        jmp rs_x
+rs_ub:  lda #<UBUF
+        sta DBUFLO
+        lda #>UBUF
+        sta DBUFHI
+        lda #0
+        sta DBYTLO
+        lda #8
         sta DBYTHI
 rs_x:   lda lba
         sta DAUX1
@@ -422,14 +458,22 @@ rs_x:   lda lba
         sta sbv
         clc
         rts
-rs_t:   MOV4 fbtag,lba
+rs_t:   cmp #1
+        bne rs_tu
+        MOV4 fbtag,lba
         lda #1
         sta fbv
+        clc
+        rts
+rs_tu:  MOV4 utag,lba
+        lda #1
+        sta ubv
         clc
         rts
 rs_e:   lda #0
         sta sbv
         sta fbv
+        sta ubv
         jsr putsi
         .byte EOL,'DISK READ ERROR',EOL,0
         jmp abort
@@ -439,6 +483,7 @@ mount:  lda #0
         sta fst
         sta sbv
         sta fbv
+        sta ubv
         lda #$53
         ldx #$40
         jsr sioset
@@ -464,15 +509,131 @@ mount:  lda #0
         MOV4 secs,stb
         lda ssh
         cmp #8
-        beq mt_iso
+        jeq mt_ui
         cmp #2
         jeq mt_fat
 mt_unk: jsr putsi
-        .byte 'UNKNOWN FILE SYSTEM (ISO 9660 AND FAT ONLY)',EOL,0
+        .byte 'UNKNOWN FILE SYSTEM (ISO 9660, UDF AND FAT ONLY)',EOL,0
         sec
         rts
 mt_nd:  jsr putsi
         .byte 'NO IMAGE IN THAT DRIVE (LOAD ONE FROM THE D9/D10 DEVICE BAR)',EOL,0
+        sec
+        rts
+
+mt_ui:  jsr mt_udf
+        jcs mt_iso
+        clc
+        rts
+
+; UDF (2048 byte sectors, one plain partition, short / long / embedded descriptors). Carry set when the drive is not UDF.
+mt_udf: lda secs+2
+        ora secs+3
+        bne mu_ok
+        lda secs+1
+        cmp #2
+        bcs mu_ok
+        cmp #1
+        jne mu_no
+        lda secs
+        cmp #5
+        jcc mu_no
+mu_ok:  CLR4 lba
+        lda #1
+        sta lba+1
+        lda #0
+        jsr rdsec
+        lda SBUF
+        cmp #2
+        jne mu_no
+        lda SBUF+1
+        jne mu_no
+        MOV4 lba,SBUF+20
+        lda SBUF+17
+        lsr
+        lsr
+        lsr
+        clc
+        adc #1
+        cmp #17
+        bcc mu_c
+        lda #16
+mu_c:   sta ctr
+        lda #0
+        sta ugot
+mu_v:   lda #0
+        jsr rdsec
+        lda SBUF+1
+        bne mu_nx
+        lda SBUF
+        cmp #8
+        jeq mu_dn
+        cmp #5
+        bne mu_6
+        ldx #3
+mu_pb:  lda SBUF+188,x
+        sta base,x
+        dex
+        bpl mu_pb
+        lda ugot
+        ora #1
+        sta ugot
+        bne mu_nx
+mu_6:   cmp #6
+        bne mu_nx
+        lda SBUF+440
+        cmp #1
+        jne mu_no
+        ldx #3
+mu_fb:  lda SBUF+252,x
+        sta rootlba,x
+        dex
+        bpl mu_fb
+        ldx #0
+mu_lc:  lda SBUF+84,x
+        sta FNB,x
+        inx
+        cpx #33
+        bcc mu_lc
+        lda SBUF+211
+        cmp #33
+        bcc mu_ll
+        lda #33
+mu_ll:  sta tl
+        lda #<LABEL
+        sta T1
+        lda #>LABEL
+        sta T1+1
+        jsr ustr
+        lda ugot
+        ora #2
+        sta ugot
+mu_nx:  INC4 lba
+        dec ctr
+        jne mu_v
+mu_dn:  lda ugot
+        cmp #3
+        jne mu_no
+        ADD4 rootlba,base
+        MOV4 lba,rootlba
+        lda #0
+        jsr rdsec
+        lda SBUF
+        jne mu_no
+        lda SBUF+1
+        cmp #1
+        jne mu_no
+        ldx #3
+mu_rr:  lda SBUF+404,x
+        sta rootlba,x
+        dex
+        bpl mu_rr
+        lda #3
+        sta fst
+        clc
+        rts
+mu_no:  lda #0
+        sta sbv
         sec
         rts
 
@@ -888,6 +1049,8 @@ fx_l:   stx ctr
 
 ; ---- streams: sopen sets one up from e_start / e_size / e_dir, snext puts the next sector in SBUF (sn = valid bytes) ----
 sopen:  lda fst
+        cmp #3
+        jeq so_udf
         cmp #1
         jne so_fat
         lda #0
@@ -950,7 +1113,10 @@ snext:  lda s_lim
         ZER4 s_rem
         jeq sn_end
 sn_a:   lda sm
-        bne sn_chn
+        cmp #2
+        jcs sn_udf
+        cmp #1
+        beq sn_chn
         ZER4 s_cnt
         jeq sn_end
         MOV4 lba,s_lba
@@ -1050,6 +1216,382 @@ sn_dn:  clc
 sn_end: sec
         rts
 
+; ---- UDF ----
+; (T1) = destination (NUL ended, at most 40 characters); FNB = dstring (compression id 8 or 16 first), tl = its length
+ustr:   ldy #0
+        lda tl
+        beq us_z
+        lda FNB
+        sta uc
+        ldx #1
+us_l:   cpx tl
+        bcs us_z
+        cpy #40
+        bcs us_z
+        lda uc
+        cmp #16
+        beq us_w
+        lda FNB,x
+        inx
+        jmp us_p
+us_w:   lda FNB,x
+        inx
+        cpx tl
+        bcs us_z
+        pha
+        lda FNB,x
+        inx
+        sta tcl
+        pla
+        beq us_h
+        lda #'?'
+        bne us_p
+us_h:   lda tcl
+us_p:   cmp #' '
+        bcs us_s
+        lda #'?'
+us_s:   sta (T1),y
+        iny
+        jmp us_l
+us_z:   lda #0
+        sta (T1),y
+        rts
+
+; the file entry at partition block e_start -> UBUF; e_size, eoff, elen and aic set
+readfe: MOV4 lba,e_start
+        ADD4 lba,base
+        lda #2
+        jsr rdsec
+        lda UBUF+1
+        cmp #1
+        bne rf_bad
+        ldx #0
+        lda UBUF
+        cmp #5
+        beq rf_ok
+        ldx #40
+        cmp #$0A
+        bne rf_bad
+rf_ok:  ldy #3
+rf_s:   lda UBUF+56,y
+        sta e_size,y
+        dey
+        bpl rf_s
+        lda UBUF+168,x
+        clc
+        adc #176
+        sta eoff
+        lda UBUF+169,x
+        adc #0
+        sta eoff+1
+        txa
+        clc
+        adc eoff
+        sta eoff
+        bcc rf_e
+        inc eoff+1
+rf_e:   lda UBUF+172,x
+        sta elen
+        lda UBUF+173,x
+        sta elen+1
+        lda UBUF+34
+        and #7
+        sta aic
+        lda eoff+1
+        cmp #8
+        bcs rf_bad
+        rts
+rf_bad: jsr putsi
+        .byte EOL,'BAD UDF FILE ENTRY',EOL,0
+        jmp abort
+
+so_udf: jsr readfe
+        MOV4 s_rem,e_size
+        lda #1
+        sta s_lim
+        lda #0
+        sta emd
+        sta adp
+        sta adl
+        CLR4 s_cnt
+        lda aic
+        cmp #3
+        bne su_a
+        lda #3
+        sta sm
+        rts
+su_a:   ldx #8
+        cmp #0
+        beq su_s
+        ldx #16
+        cmp #1
+        beq su_s
+        lda #1
+        sta emd
+        lda #3
+        sta sm
+        rts
+su_s:   stx ads
+        lda elen+1
+        bne su_cap
+        lda elen
+        jmp su_m
+su_cap: lda #255
+su_m:   ldx ads
+        cpx #16
+        bne su_8
+        and #$F0
+        jmp su_n
+su_8:   and #$F8
+su_n:   sta adl
+        lda #<UBUF
+        clc
+        adc eoff
+        sta T0
+        lda #>UBUF
+        adc eoff+1
+        sta T0+1
+        ldy #0
+su_c:   cpy adl
+        bcs su_d
+        lda (T0),y
+        sta ADBUF,y
+        iny
+        bne su_c
+su_d:   lda #2
+        sta sm
+        rts
+
+; next sector of a UDF stream (s_lim is always set)
+sn_udf: lda sm
+        cmp #3
+        jeq sn_emb
+        ZER4 s_cnt
+        jne su_rd
+su_nx:  lda adp
+        cmp adl
+        jcs sn_end
+        tay
+        lda ADBUF+3,y
+        and #$C0
+        cmp #$C0
+        jeq sn_end
+        ldx #0
+su_l:   lda ADBUF,y
+        sta s_cnt,x
+        iny
+        inx
+        cpx #4
+        bcc su_l
+        lda s_cnt+3
+        and #$3F
+        sta s_cnt+3
+        ldx #0
+su_b:   lda ADBUF,y
+        sta s_lba,x
+        iny
+        inx
+        cpx #4
+        bcc su_b
+        ADD4 s_lba,base
+        lda adp
+        clc
+        adc ads
+        sta adp
+        clc
+        lda s_cnt
+        adc #<2047
+        sta s_cnt
+        lda s_cnt+1
+        adc #>2047
+        sta s_cnt+1
+        lda s_cnt+2
+        adc #0
+        sta s_cnt+2
+        lda s_cnt+3
+        adc #0
+        sta s_cnt+3
+        ldx #11
+su_sh:  SHR4 s_cnt
+        dex
+        bne su_sh
+        ZER4 s_cnt
+        jeq sn_end
+su_rd:  MOV4 lba,s_lba
+        lda #0
+        jsr rdsec
+        INC4 s_lba
+        DEC4 s_cnt
+        jmp sn_z
+
+; embedded data: copy it from the file entry in UBUF to SBUF, once
+sn_emb: lda emd
+        jne sn_end
+        lda #1
+        sta emd
+        lda elen
+        sta tcl
+        lda elen+1
+        sta tch
+        lda #<UBUF
+        clc
+        adc eoff
+        sta T0
+        lda #>UBUF
+        adc eoff+1
+        sta T0+1
+        lda #<SBUF
+        sta T1
+        lda #>SBUF
+        sta T1+1
+        ldy #0
+se_l:   lda tcl
+        ora tch
+        beq se_d
+        lda (T0),y
+        sta (T1),y
+        inc T0
+        bne se_a
+        inc T0+1
+se_a:   inc T1
+        bne se_b
+        inc T1+1
+se_b:   lda tcl
+        bne se_c
+        dec tch
+se_c:   dec tcl
+        jmp se_l
+se_d:   lda #0
+        sta sbv
+        jmp sn_z
+
+; read one byte of the open directory stream; carry set at the end
+gb:     lda dpos+1
+        cmp sn+1
+        bcc gb_h
+        bne gb_m
+        lda dpos
+        cmp sn
+        bcc gb_h
+gb_m:   jsr snext
+        bcs gb_e
+        lda #0
+        sta dpos
+        sta dpos+1
+        jmp gb
+gb_h:   lda dpos
+        clc
+        adc #<SBUF
+        sta T0
+        lda dpos+1
+        adc #>SBUF
+        sta T0+1
+        ldy #0
+        lda (T0),y
+        inc dpos
+        bne gb_r
+        inc dpos+1
+gb_r:   clc
+        rts
+gb_e:   sec
+        rts
+
+; next file identifier descriptor -> NAMEB, e_dir, e_start (file entry block), e_size
+dn_udf: lda #0
+        sta kl
+du_h:   jsr gb
+        jcs dn_end
+        ldx kl
+        sta FIDB,x
+        inc kl
+        lda kl
+        cmp #38
+        bcc du_h
+        lda FIDB
+        cmp #1
+        jne dn_end
+        lda FIDB+1
+        cmp #1
+        jne dn_end
+        lda FIDB+18
+        sta chr
+        lda FIDB+19
+        sta fil
+        lda FIDB+36
+        sta tcl
+        lda FIDB+37
+        sta tch
+du_i:   lda tcl
+        ora tch
+        beq du_n
+        jsr gb
+        jcs dn_end
+        lda tcl
+        bne du_j
+        dec tch
+du_j:   dec tcl
+        jmp du_i
+du_n:   lda #0
+        sta kl
+du_f:   lda kl
+        cmp fil
+        bcs du_p
+        jsr gb
+        jcs dn_end
+        ldx kl
+        sta FNB,x
+        inc kl
+        jmp du_f
+du_p:   lda FIDB+36
+        clc
+        adc fil
+        clc
+        adc #38
+        sta pad
+        lda #0
+        sec
+        sbc pad
+        and #3
+        sta pad
+du_s:   lda pad
+        beq du_d
+        jsr gb
+        dec pad
+        jmp du_s
+du_d:   lda chr
+        and #$0C
+        jne dn_udf
+        lda fil
+        jeq dn_udf
+        sta tl
+        lda #<NAMEB
+        sta T1
+        lda #>NAMEB
+        sta T1+1
+        jsr ustr
+        ldx #0
+du_u:   lda NAMEB,x
+        beq du_e
+        jsr toupper
+        sta NAMEB,x
+        inx
+        bne du_u
+du_e:   lda chr
+        lsr
+        and #1
+        sta e_dir
+        ldx #3
+du_l:   lda FIDB+24,x
+        sta e_start,x
+        dex
+        bpl du_l
+        CLR4 e_size
+        lda e_dir
+        bne du_r
+        jsr readfe
+du_r:   clc
+        rts
+
 ; ---- directories ----
 dopen:  jsr sopen
         lda #0
@@ -1063,6 +1605,9 @@ dopen:  jsr sopen
 ; next entry -> NAMEB, e_dir, e_start, e_size; carry set at the end
 dnext:  lda dend
         jne dn_end
+        lda fst
+        cmp #3
+        jeq dn_udf
 dn_t:   lda dpos+1
         cmp sn+1
         bcc dn_hv
@@ -1252,7 +1797,12 @@ setroot:
         lda #1
         sta e_dir
         lda fst
-        cmp #1
+        cmp #3
+        bne sr_i
+        MOV4 e_start,rootlba
+        CLR4 e_size
+        rts
+sr_i:   cmp #1
         bne sr_f
         MOV4 e_start,rootlba
         MOV4 e_size,rootlen
@@ -1291,7 +1841,7 @@ wk_cc:  lda PATHB,y
         jsr issep
         beq wk_ce
         jsr toupper
-        cpx #12
+        cpx #40
         bcs wk_sk
         sta CMPN,x
         inx
@@ -1329,7 +1879,12 @@ doinfo: jsr putsi
         jsr putsi
         .byte ': ',0
         lda fst
-        cmp #1
+        cmp #3
+        bne di_i
+        jsr putsi
+        .byte 'UDF',0
+        jmp di_l
+di_i:   cmp #1
         bne di_f
         jsr putsi
         .byte 'ISO 9660',0
@@ -1396,14 +1951,17 @@ ll_n:   lda NAMEB,y
         beq ll_p
         jsr putc
         iny
-        cpy #13
-        bcc ll_n
+        bne ll_n
 ll_p:   sty tl
+        cpy #13
+        bcs ll_o
         lda #13
         sec
         sbc tl
         tay
-        jsr putsp
+        jmp ll_q
+ll_o:   ldy #1
+ll_q:   jsr putsp
         lda e_dir
         beq ll_f
         jsr putsi

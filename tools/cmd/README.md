@@ -89,3 +89,12 @@ Prompt: `L file.LZH` list, `X file.LZH [dest] [member]` extract, `T file.LZH` te
 ## ALF.COM (standalone ALF lister/extractor)
 Prompt: `L file.ALF` list, `X file.ALF [dest] [member]` extract, `T file.ALF` test (16-bit additive checksum). ALF is the Atari LZ.COM/DZ.COM format: 29-byte ARC-like headers with LZW data (9-12 bit codes, MSB first). Port of web/js/alf.js; verified on all 264 entries of the 41 sample archives and byte-identical to the host decoder. Works from CMD via the hand-off: `ALF X A.ALF`. Decoding only (no compressor). Uses about 16K of tables at $6400-.
 
+
+## DISC.COM (standalone CD/hard-disk image reader)
+
+Reads the virtual raw drives D9:/D10: (see NOTES.md). Run `DISC` or `DISC D9:` to pick a drive.
+File systems: ISO 9660, UDF (single plain partition), FAT12/16/32 (8.3 names, MBR ok).
+Commands: `D`/`L` list, `T file` type, `X file` extract to the current DOS disk, `I` info, `Q` quit.
+Names with spaces must be quoted: `T "A LONG FILE NAME.TXT"`.
+Limits: no Rock Ridge/Joliet names on the 6502 side; UDF allocation descriptors past 255 bytes,
+extended ADs and continuation extents are not followed.
