@@ -1,6 +1,6 @@
 {
   "format": "ACDOSPK1",
-  "strip": ["AFM.COM", "AFM80.COM", "CMD.COM", "ARC.COM", "ZIP.COM", "DCM.COM", "LZH.COM", "ALF.COM", "DISC.COM", "TOOLS.TXT", "HELLO.COM", "AUTORUN.SYS"],
+  "strip": ["AFM.COM", "AFM80.COM", "CMD.COM", "ARC.COM", "ZIP.COM", "DCM.COM", "LZH.COM", "ALF.COM", "DISC.COM", "ZOO.COM", "ARJ.COM", "TOOLS.TXT", "HELLO.COM", "AUTORUN.SYS"],
   "entries": [
     { "kind": "dos", "id": "dos2.0s", "family": "dos2", "name": "Atari DOS 2.0S", "version": "2.0S", "size": "90K SD", "file": "web/library/craftapps/DOS images/d20.atr", "strip": true },
     { "kind": "dos", "id": "dos2.5", "family": "dos2", "name": "Atari DOS 2.5", "version": "2.5", "size": "130K ED", "file": "web/library/craftapps/DOS images/d25.atr" },
@@ -38,7 +38,9 @@
     { "kind": "tool", "id": "dcm", "name": "DCM", "version": "", "dest": "DCM.COM", "file": "tools/cmd/bin/dcm.com" },
     { "kind": "tool", "id": "lzh", "name": "LZH", "version": "", "dest": "LZH.COM", "file": "tools/cmd/bin/lzh.com" },
     { "kind": "tool", "id": "alf", "name": "ALF", "version": "", "dest": "ALF.COM", "file": "tools/cmd/bin/alf.com" },
-    { "kind": "tool", "id": "disc", "name": "DISC", "version": "", "dest": "DISC.COM", "file": "tools/cmd/bin/disc.com" }
+    { "kind": "tool", "id": "disc", "name": "DISC", "version": "", "dest": "DISC.COM", "file": "tools/cmd/bin/disc.com" },
+    { "kind": "tool", "id": "zoo", "name": "ZOO", "version": "", "dest": "ZOO.COM", "file": "tools/cmd/bin/zoo.com" },
+    { "kind": "tool", "id": "arj", "name": "ARJ", "version": "", "dest": "ARJ.COM", "file": "tools/cmd/bin/arj.com" }
   ],
   "extraDir": "tools/dospack/extra"
 }
