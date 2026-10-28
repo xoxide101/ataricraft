@@ -4,7 +4,7 @@
   "entries": [
     { "kind": "dos", "id": "dos2.0s", "family": "dos2", "name": "Atari DOS 2.0S", "version": "2.0S", "size": "90K SD", "file": "web/library/craftapps/DOS images/d20.atr", "strip": true },
     { "kind": "dos", "id": "dos2.5", "family": "dos2", "name": "Atari DOS 2.5", "version": "2.5", "size": "130K ED", "file": "web/library/craftapps/DOS images/d25.atr" },
-    { "kind": "dos", "id": "dosxl", "family": "dosxl", "name": "Atari DOS XL", "version": "2.30", "size": "90K SD", "file": "web/library/craftapps/DOS images/dosxl.atr" },
+    { "kind": "dos", "id": "dosxl", "family": "dosxl", "name": "Indus GT DOS XL (System Master)", "version": "2.20", "size": "90K SD", "file": "web/library/craftapps/DOS images/dosxl.atr" },
     { "kind": "dos", "id": "mydos4.55-90k", "family": "mydos", "name": "MyDOS", "version": "4.55 beta 4", "size": "90K SD", "file": "web/library/craftapps/DOS images/MyDos455Beta4.atr" },
     { "kind": "dos", "id": "mydos4.55-720k", "family": "mydos", "name": "MyDOS", "version": "4.55", "size": "720K DD", "file": "web/library/craftapps/Ready to run/MyDOS 4.55 boot + AFM + AFM80.atr", "strip": true },
     { "kind": "dos", "id": "mydos4.55-16m", "family": "mydos", "name": "MyDOS", "version": "4.55", "size": "16MB", "file": "web/library/craftapps/Ready to run/MyDOS 16MB blank + AFM + AFM80.atr", "strip": true },
