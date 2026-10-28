@@ -284,7 +284,7 @@ wrrec:  lda #9
         rts
 
 ; XIO on the spec at V_SPL/V_SPH: A = command, V_FLG = ICAX1. Returns Y/N like CIO.
-xio:    ldx #$20
+xio:    ldx #$10
 xiox:   sta ICCOM,x
         lda V_SPL
         sta ICBAL,x
