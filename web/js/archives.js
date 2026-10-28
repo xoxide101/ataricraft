@@ -24,6 +24,7 @@
 //        mirrors the 6502 ARC.COM. Methods 5-7 (old hashed crunch) and 9 (squashed) are reported as unsupported.
 //   zip  PKZIP. Stored/Deflate/zstd go through zip.js (fast, browser-native). Every other PKZIP method -
 //        Shrink, Reduce, Implode, Deflate64, BZip2, LZMA, PPMd, AES - and ZIP64 are handed to 7-Zip per entry.
+//   alf  ALF (Atari LZ.COM/DZ.COM LZW, alf.js)
 //   lzh  LZH/LHA, level 0/1 headers, -lh0-/-lh1-/-lh4-..-lh7- (Pure JS lzh.js, mirrors the 6502 LZH.COM), rest via 7-Zip.
 //   7z   7-Zip WASM (web/js/7z, LGPL + unRAR licence): 7z, RAR/RAR5, LZH/LHA, ARJ, CAB, GZ, BZ2, XZ, TAR, ZOO and more.
 //
@@ -78,8 +79,17 @@
     },
   });
 
-  // ---- LZH / LHA ----
-  // Native for level 0/1 headers with -lh0-, -lh1-, -lh4- .. -lh7- (lzh.js, mirrors the 6502 LZH.COM); anything else (level 2
+  // ---- ALF (Atari LZ.COM / DZ.COM, LZW) ----
+  register({
+    id: 'alf', name: 'ALF (Atari LZ/DZ)', exts: ['alf'],
+    sniff: (h) => h.length > 28 && h[0] === 0x1a && h[1] === 0x0f,
+    async list(file) {
+      return AC.Alf.list(await readBytes(file)).map((e) => ({ name: e.name, size: e.size, modified: e.modified, method: 'alf', _a: e }));
+    },
+    async extract(file, ent) { return AC.Alf.extract(await readBytes(file), ent._a); },
+  });
+
+  // ---- LZH / LHA ----  // Native for level 0/1 headers with -lh0-, -lh1-, -lh4- .. -lh7- (lzh.js, mirrors the 6502 LZH.COM); anything else (level 2
   // headers, -lzs-, -pm2- ...) is handed to 7-Zip.
   const LZH_NATIVE = new Set(['lh0', 'lh1', 'lh4', 'lh5', 'lh6', 'lh7']);
   register({
