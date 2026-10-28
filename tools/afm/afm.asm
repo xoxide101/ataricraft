@@ -32,7 +32,7 @@ COLS80  = 0
         .if COLS80
 SH      = $0600
 PC1     = 40
-PW      = 20
+PW      = 24
 CLRW    = 80
 SP      = $CC
 B80     = $8060
@@ -4054,7 +4054,11 @@ g80:    lda COLCRS
 g8_j:   jmp g8_r
 g8_k:   lda pc_a
         and #$7F
-        cmp #$60
+        cmp #$7C
+        bne g8_c
+        lda #$60
+        bne g8_a
+g8_c:   cmp #$60
         bcc g8_a
         sbc #$20
 g8_a:   sec
@@ -4201,6 +4205,13 @@ redraw: jsr rowprompt
         jsr setpos
         jsr putsi
         .byte ' ATARICRAFT AFM  DOS2/MYDOS FILE MGR ',0
+        .if COLS80
+        ldy #43
+dr_tp:  lda #' '
+        jsr putc
+        dey
+        bne dr_tp
+        .endif
         lda #0
         sta inv
         lda #22
