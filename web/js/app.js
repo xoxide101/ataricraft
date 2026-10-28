@@ -1447,11 +1447,29 @@
       await idbSet('catalogDb', bytes);
     } catch (err) { log('import failed: ' + err.message); }
   };  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
+  // Cartridges with no title from names/MAME: identify by CRC32 of the ROM (header-less, or after a 16-byte CART header).
+  async function identifyCarts(list) {
+    const db = AC.CART_DB || {};
+    const todo = list.filter((f) => f.kind === 'cart' && !f.title && f.file && f.file.size <= 1048576 && /\.(bin|rom|car)$/i.test(f.name));
+    if (!todo.length) return;
+    let hit = 0;
+    for (let i = 0; i < todo.length; i++) {
+      try {
+        const b = new Uint8Array(await todo[i].file.arrayBuffer());
+        const hdr = b.length > 16 && b[0] === 67 && b[1] === 65 && b[2] === 82 && b[3] === 84;
+        const e = db[crc32(b)] || (hdr && db[crc32(b.subarray(16))]);
+        if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : ''); hit++; }
+      } catch (err) { /* unreadable file: leave untitled */ }
+      if (i % 50 === 49) { log(`identifying cartridges by CRC: ${i + 1}/${todo.length}`); await new Promise((r) => setTimeout(r, 0)); }
+    }
+    log(`cartridges identified by CRC: ${hit} of ${todo.length} untitled`);
+  }
   async function scanMedia(all, persist, root) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
     if (xmls.length) await loadTitlesXml(xmls);
     const files = await expandZips(all);
     const fresh = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
+    await identifyCarts(fresh);
     // A saved scan of one folder replaces only that folder's rows; other scanned folders stay in the catalog.
     MED.files = persist && root ? MED.files.filter((f) => !f.name.startsWith(root + '/')).concat(fresh) : fresh;
     MED.fromDb = false;
