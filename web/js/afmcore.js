@@ -385,7 +385,7 @@
   // Descriptions for well-known system/utility files; anything not listed gets none.
   const KNOWN = {
     'DUP.SYS': 'DOS menu (disk utility package)', 'AUTORUN.SYS': 'Runs automatically at boot', 'MEM.SAV': 'DOS menu memory-save file',
-    'AFM.COM': 'Ataricraft File Manager', 'FMTDIR.COM': 'MyDOS directory formatter', 'RAMDISK.AR0': 'MyDOS RAM disk driver (130XE)',
+    'AFM.COM': 'Ataricraft File Manager', 'AFM80.COM': 'Ataricraft File Manager (80-column)', 'FMTDIR.COM': 'MyDOS directory formatter', 'RAMDISK.AR0': 'MyDOS RAM disk driver (130XE)',
     'COMMAND.COM': 'SpartaDOS command processor', 'DOS.SYS': '',
   };
   // Pull a version out of the file's own text (7-bit ATASCII); '' when the file carries none.
