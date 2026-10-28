@@ -34,6 +34,7 @@
   #wafm tr.r{cursor:default;user-select:none}#wafm tr.r:hover{background:#262b34}#wafm tr.sel{background:#2f3a52}#wafm tr.cur td:first-child{box-shadow:inset 3px 0 #e8a33d}
   #wafm tr.dropt{outline:2px dashed #e8a33d}#wafm td.n small{color:#8a93a3;margin-left:6px}#wafm td.num{text-align:right;color:#aab}
   #wafm tr.wix td{color:#8a93a3}
+  #wafm .wpt{padding:4px 10px;background:#14161a;border-top:1px solid #2c313b;color:#9bd1ff;font:12px Consolas,monospace;min-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #wafm .wst{padding:6px 10px;background:#1e2128;border-top:1px solid #2c313b;color:#e8a33d;min-height:18px}
   #wafm .wxf{padding:6px 10px;background:#171a20;border-top:1px solid #2c313b;font-size:12px}
   #wafm .wxf[hidden]{display:none}
@@ -264,7 +265,7 @@
       <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
-      <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
+      <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div><div class="wpt" title="Where you are"></div>`;
     document.body.append(el);
     const pn = el.querySelector('.wpanes');
     W.panes.forEach((p, i) => {
@@ -309,6 +310,17 @@
     if (!W.el) return;
     W.panes.forEach((p, i) => renderPane(i));
     updateTb();
+    pathBar();
+  }
+  // Full path of the active pane's cursor (or current folder), e.g. D1:\GAMES\ARCADE\PACMAN.COM
+  function pathBar() {
+    const e = W.el.querySelector('.wpt'); if (!e) return;
+    const p = W.panes[W.active], r = rec(p);
+    if (!r) { e.textContent = ''; return; }
+    const root = r.kind === 'drive' ? 'D' + r.n + ':' : r.name + ':';
+    const cur = p.cur && C.entries(r.m).find((x) => x.path === p.cur);
+    const path = cur ? cur.path : p.dir || '';
+    e.textContent = root + '\\' + path.replace(/\//g, '\\') + (cur && cur.dir ? '\\' : '') + (cur && cur.long ? '   (' + cur.long + ')' : '');
   }
   function updateTb() {
     const a = W.panes[W.active], r = rec(a), o = rec(W.panes[1 - W.active]);
