@@ -547,7 +547,13 @@
     if (r.m.vol.readOnly) return log('this disk is read-only here');
     const all = C.entries(r.m), files = items.map((it) => all.find((x) => x.path === it)).filter((e) => e && !e.dir);
     if (!files.length) return log('tag or select a file to copy first');
-    const label = (e) => { const n = e.long || e.name, i = n.lastIndexOf('.'); return i > 0 ? n.slice(0, i) + '_COPY' + n.slice(i) : n + '_COPY'; };
+    const used = new Set(all.filter((x) => parentOf(x.path) === parentOf(files[0].path)).map((x) => x.name.toUpperCase()));
+    // TEST.TXT -> TEST_1.TXT, TEST_2.TXT ...; an 8-character stem is trimmed to make room (TEXT1234.TXT -> TEXT12_1.TXT)
+    const label = (e) => {
+      const n = e.name, i = n.lastIndexOf('.'), stem = i > 0 ? n.slice(0, i) : n, ext = i > 0 ? n.slice(i) : '';
+      for (let k = 1; k < 1000; k++) { const sfx = '_' + k, cand = stem.slice(0, 8 - sfx.length) + sfx + ext; if (!used.has(cand.toUpperCase())) { used.add(cand.toUpperCase()); return cand; } }
+      return stem + '_X' + ext;
+    };
     const names = new Map();
     if (files.length === 1) {
       const nm = await ask('Make a copy', `Name for the copy of "${files[0].long || files[0].name}" (made in this folder)`, label(files[0]), 'Names longer than 8.3 are shortened on the disk and the full name is kept in LONGNAME.TXT.'); if (!nm) return;
