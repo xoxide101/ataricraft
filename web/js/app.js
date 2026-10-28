@@ -934,7 +934,10 @@
     const sysS = document.createElement('select'); sysS.style.cssText = 'max-width:55%';
     const sameL = document.createElement('label'); sameL.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px';
     const sameC = document.createElement('input'); sameC.type = 'checkbox'; sameL.append(sameC, 'same size as this file');
-    bar.append(sysS, sameL);
+    const mk = (txt) => { const l = document.createElement('label'); l.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px'; const c = document.createElement('input'); c.type = 'checkbox'; l.append(c, txt); return [l, c]; };
+    const [invL, invC] = mk('invert (exclude matches)'), [missL, missC] = mk('not in my library');
+    invL.title = 'Show DAT entries that do NOT match the words / filters / system above'; missL.title = 'Hide DAT entries whose CRC matches a scanned file (shows what your library lacks)';
+    bar.append(sysS, sameL, invL, missL);
     const info = document.createElement('div'); info.className = 'dim'; info.style.cssText = 'font-size:11px;margin-bottom:4px';
     const res = document.createElement('div'); res.style.cssText = 'overflow:auto;max-height:260px;min-height:40px';
     const pick = async (title) => {
@@ -964,26 +967,26 @@
         else words.push(w);
       }
       const sysSel = sysS.value, same = sameC.checked, sizes = fi.size ? [fi.size, fi.size - 16] : [];
+      const inv = invC.checked && !!(words.length || Object.keys(flt).length || sysSel);
+      let have = null;
+      if (missC.checked) { have = new Set(); MED.files.forEach((m) => { const i = CRCOF.get(m); if (i) i.crcs.forEach((c) => have.add(c)); }); }
       const found = [], seen = new Set();
       for (const e of DATIDX) {
-        if (sysSel && e.s !== sysSel) continue;
-        if (flt.sys && !(e.s || '').toLowerCase().includes(flt.sys)) continue;
-        if (flt.dat && !(e.d || '').toLowerCase().includes(flt.dat)) continue;
-        if (flt.crc && e.c !== flt.crc) continue;
-        if (flt.sha1 && e.h !== flt.sha1) continue;
-        if (flt.size && String(e.z) !== flt.size) continue;
+        if (have && have.has(e.c)) continue;
+        const tl = e.t.toLowerCase();
+        const hay = `${tl} ${(e.r || '').toLowerCase()}`;
+        const ok = (!sysSel || e.s === sysSel) && (!flt.sys || (e.s || '').toLowerCase().includes(flt.sys)) && (!flt.dat || (e.d || '').toLowerCase().includes(flt.dat)) &&
+          (!flt.crc || e.c === flt.crc) && (!flt.sha1 || e.h === flt.sha1) && (!flt.size || String(e.z) === flt.size) && words.every((w) => hay.includes(w));
+        if (inv ? ok : !ok) continue;
         const sameSize = !!e.z && sizes.includes(e.z);
         if (same && !sameSize) continue;
-        const tl = e.t.toLowerCase();
         const exact = fi.crcs.includes(e.c) || (!!fi.sha1 && e.h === fi.sha1);
         let s = (exact ? 1000 : 0) + (sameSize ? 30 : 0);
-        if (words.length) {
-          const hay = `${tl} ${(e.r || '').toLowerCase()}`;
-          if (!words.every((w) => hay.includes(w))) continue;
+        if (words.length && !inv) {
           s += 20 + (tl.startsWith(words[0]) ? 10 : 0) - Math.min(tl.length, 100) * 0.05;
-        } else if (!(flt.crc || flt.sha1 || flt.size || flt.sys || flt.dat)) {
+        } else if (!inv && !(flt.crc || flt.sha1 || flt.size || flt.sys || flt.dat)) {
           const n = nameScore(sqz(e.t), fq, ftoks);
-          if (!exact && n < 20) continue;
+          if (!exact && n < 20 && !have) continue;
           s += n;
         }
         const k = `${e.c}|${e.t}|${e.s}`;
@@ -1011,7 +1014,7 @@
       search();
     };
     let tm; inp.oninput = () => { clearTimeout(tm); tm = setTimeout(search, 150); };
-    sysS.onchange = sameC.onchange = search;
+    sysS.onchange = sameC.onchange = invC.onchange = missC.onchange = search;
     fileLine.textContent = `This file: ${fi.size.toLocaleString()} bytes (reading CRC…)`;
     sec.append(h, fileLine, inp, bar, info, res);
     fillSys();
@@ -1788,8 +1791,12 @@
     const body = document.createElement('div'); body.style.cssText = 'display:flex;gap:12px;flex:1;min-height:0';
     const left = document.createElement('div'); left.style.cssText = 'width:36%;display:flex;flex-direction:column;min-height:0';
     const q = document.createElement('input'); q.type = 'text'; q.placeholder = 'filter file names…'; q.style.cssText = 'box-sizing:border-box;width:100%;margin-bottom:4px';
-    const onlyL = document.createElement('label'); onlyL.style.cssText = 'font-size:12px;display:flex;gap:4px;align-items:center;margin-bottom:4px';
-    const only = document.createElement('input'); only.type = 'checkbox'; only.checked = true; onlyL.append(only, 'only unidentified (guessed titles)');
+    const onlyL = document.createElement('div'); onlyL.style.cssText = 'font-size:12px;display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap';
+    const only = document.createElement('select');
+    [['u', 'Unidentified (guessed titles)'], ['i', 'Identified / assigned'], ['a', 'All carts']].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; only.append(o); });
+    const invF = document.createElement('input'); invF.type = 'checkbox';
+    const invFL = document.createElement('label'); invFL.style.cssText = 'display:flex;gap:4px;align-items:center'; invFL.title = 'Show files whose name does NOT contain the filter text'; invFL.append(invF, 'invert filter');
+    onlyL.append(only, invFL);
     const cnt = document.createElement('div'); cnt.className = 'dim'; cnt.style.cssText = 'font-size:11px;margin-bottom:4px';
     const list = document.createElement('div'); list.style.cssText = 'overflow:auto;flex:1;border:1px solid #2c313b';
     left.append(q, onlyL, cnt, list);
@@ -1799,7 +1806,8 @@
     let rows = [], cur = null;
     const render = () => {
       const t = q.value.trim().toLowerCase();
-      rows = MED.files.filter((f) => f.kind === 'cart' && CART_RE.test(f.name) && (!only.checked || (isGuess(f) && !MANUAL[f.name])) && (!t || f.name.toLowerCase().includes(t)));
+      const un = (f) => isGuess(f) && !MANUAL[f.name];
+      rows = MED.files.filter((f) => f.kind === 'cart' && CART_RE.test(f.name) && (only.value === 'a' || (only.value === 'u') === un(f)) && (!t || f.name.toLowerCase().includes(t) !== invF.checked));
       cnt.textContent = `${rows.length.toLocaleString()} file${rows.length === 1 ? '' : 's'}${rows.length > 500 ? ' (first 500 shown: use the filter)' : ''}`;
       list.innerHTML = '';
       rows.slice(0, 500).forEach((f) => {
@@ -1813,7 +1821,7 @@
     };
     const select = async (f) => {
       cur = f; render();
-      const sec = findInDats(f, () => { const i = rows.indexOf(f); render(); if (only.checked && rows[i]) select(rows[i]); else if (!only.checked) select(f); else { cur = null; right.innerHTML = '<div class="dim">Done: no more files in this list.</div>'; } });
+      const sec = findInDats(f, () => { const i = rows.indexOf(f); render(); if (only.value === 'u' && rows[i]) select(rows[i]); else if (only.value !== 'u') select(f); else { cur = null; right.innerHTML = '<div class="dim">Done: no more files in this list.</div>'; } });
       sec.style.borderTop = '0'; sec.style.marginTop = '0';
       right.innerHTML = ''; right.append(sec);
       try {
@@ -1826,7 +1834,7 @@
         }
       } catch (e) { /* suggestions fall back to name + size */ }
     };
-    q.oninput = render; only.onchange = render;
+    q.oninput = render; only.onchange = invF.onchange = render;
     const done = () => { bk.remove(); window.removeEventListener('keydown', onk, true); if (!MED.fromDb) saveCatalog(); };
     const onk = (e) => { if (e.key === 'Escape' && e.target.tagName !== 'INPUT') { e.stopPropagation(); done(); } };
     close.onclick = done; bk.onclick = (e) => { if (e.target === bk) done(); };
