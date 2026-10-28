@@ -283,7 +283,7 @@
     d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); updateTb(); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
-      if (v === 'pc') pickFile(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
+      if (v === 'pc') pickFile(i); else if (v === 'lib') importLib(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
     };
     d.querySelector('.up').onclick = () => { p.dir = parentOf(p.dir); p.sel = new Set(); render(); };
     d.querySelector('.tg').onclick = () => { p.tree = !p.tree; render(); };
@@ -335,7 +335,7 @@
     sel.innerHTML = '<option value="">— choose a disk —</option>';
     for (let n = 1; n <= 8; n++) { const dk = host().disk(n); if (dk) sel.insertAdjacentHTML('beforeend', `<option value="D${n}">D${n}: ${esc(dk.name)}</option>`); }
     for (const [k, x] of W.mounts) if (x.kind === 'file') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
-    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option>');
+    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option><option value="lib">Scanned media library…</option>');
     sel.value = p.src || '';
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
     { const tg = d.querySelector('.tg'), cp = r ? C.caps(r.m).tree : { ok: false, why: 'pick a disk first' }; tg.disabled = !cp.ok; tg.title = cp.ok ? '' : 'not available: ' + cp.why; }
@@ -497,33 +497,72 @@
     W.el.append(mn); setTimeout(() => document.addEventListener('pointerdown', away, true));
   }
   function importPC() { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.onchange = () => addFiles(W.active, [...inp.files]); inp.click(); }
-  async function importLib() {
-    const r = rec(W.panes[W.active]); if (!r) return;
-    const all = host().library ? host().library() : [];
-    if (!all.length) return msg('Media library is empty', 'Scan a folder in the media library first (File manager → Scan folder), then add files from it here.');
+  // Scanned-library picker for pane `i`: folder tree (or flat when filtering), type filter, wildcard filter, select all or a few.
+  // "Add" puts the files into that pane's current folder; "Open as disk" opens the first selected disk image in that pane.
+  async function importLib(i) {
+    i = typeof i === 'number' ? i : W.active;
+    const p = W.panes[i], r = rec(p), all = host().library ? host().library() : [];
+    if (!all.length) return msg('Media library is empty', 'Scan a folder in the media library first (File manager → Scan folder), then use it here.');
+    const kinds = [...new Set(all.map((f) => f.kind).filter(Boolean))].sort();
     const body = document.createElement('div');
-    body.innerHTML = '<input class="lq" placeholder="filter by name or title…" style="width:100%;box-sizing:border-box;margin-bottom:6px"><div class="lc dim" style="margin-bottom:4px"></div><div class="ll" style="max-height:340px;overflow:auto;border:1px solid #3a4150;border-radius:4px"></div>';
-    const q = body.querySelector('.lq'), lc = body.querySelector('.lc'), ll = body.querySelector('.ll'), pick = new Set();
+    body.innerHTML = `<div style="display:flex;gap:6px;margin-bottom:6px"><input class="lq" placeholder="text or wildcard: *.atr  mydos*  ???.com" style="flex:1;min-width:0"><select class="lk"><option value="">All types</option>${kinds.map((k) => `<option>${esc(k)}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px"><button class="ea">Expand all</button><button class="ca">Collapse all</button><button class="sa">Select all shown</button><button class="sn">Select none</button></div>
+      <div class="lc dim" style="margin-bottom:4px"></div><div class="dim" style="margin-bottom:4px">${r ? `Files go to <b>${esc(r.name)}</b>${p.dir ? ' / ' + esc(p.dir) : ''} (pane ${i ? 'right' : 'left'})` : `Pane ${i ? 'right' : 'left'} has no disk: use “Open as disk”`}</div>
+      <div class="ll" style="max-height:340px;overflow:auto;border:1px solid #3a4150;border-radius:4px"></div>`;
+    const q = (s) => body.querySelector(s), pick = new Set(), state = new Map(); let dflt = null, hit = [];
+    const rx = () => { const t = q('.lq').value.trim(); if (!t) return null; if (!/[*?]/.test(t)) { const l = t.toLowerCase(); return { test: (s) => s.toLowerCase().includes(l) }; } return new RegExp('^' + t.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i'); };
+    const files = (n) => { let o = n.files.map((x) => x.f.name); for (const c of n.dirs.values()) o = o.concat(files(c)); return o; };
     const draw = () => {
-      const t = q.value.trim().toLowerCase(), hit = all.filter((f) => !t || (f.name + ' ' + (f.title || '')).toLowerCase().includes(t));
-      lc.textContent = `${hit.length} of ${all.length} files${hit.length > 300 ? ' (showing the first 300 — narrow the filter)' : ''} · ${pick.size} selected`;
-      ll.textContent = '';
-      for (const f of hit.slice(0, 300)) {
-        const row = document.createElement('label'); row.style.cssText = 'display:flex;gap:6px;padding:2px 6px;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden';
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = pick.has(f.name);
-        cb.onchange = () => { cb.checked ? pick.add(f.name) : pick.delete(f.name); lc.textContent = lc.textContent.replace(/\d+ selected$/, pick.size + ' selected'); };
-        const sp = document.createElement('span'); sp.textContent = f.name + (f.title ? '  —  ' + f.title : ''); sp.style.cssText = 'overflow:hidden;text-overflow:ellipsis';
-        row.append(cb, sp); ll.append(row);
-      }
+      const re = rx(), k = q('.lk').value, filtering = !!(re || k);
+      hit = all.filter((f) => (!k || f.kind === k) && (!re || re.test(f.name) || re.test(f.name.split('/').pop()) || re.test(f.title || '')));
+      const root = { dirs: new Map(), files: [] };
+      for (const f of hit) { const parts = f.name.split('/'); let n = root, pa = ''; for (let j = 0; j < parts.length - 1; j++) { pa += (pa ? '/' : '') + parts[j]; if (!n.dirs.has(parts[j])) n.dirs.set(parts[j], { dirs: new Map(), files: [], path: pa, name: parts[j] }); n = n.dirs.get(parts[j]); } n.files.push({ f, leaf: parts[parts.length - 1] }); }
+      const isOpen = (n) => state.has(n.path) ? state.get(n.path) : dflt === 'all' || (dflt === null && filtering && hit.length <= 400);
+      const ll = q('.ll'); ll.textContent = ''; let rows = 0, capped = false;
+      const row = (depth) => { const d = document.createElement('div'); d.style.cssText = `display:flex;gap:6px;align-items:center;padding:1px 6px 1px ${6 + depth * 16}px;font-size:12px;white-space:nowrap;overflow:hidden`; ll.append(d); return d; };
+      const walk = (n, depth) => {
+        for (const c of [...n.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+          if (rows++ > 1500) { capped = true; return; }
+          const fs = files(c), on = fs.filter((x) => pick.has(x)).length, d = row(depth), open = isOpen(c);
+          const tg = document.createElement('span'); tg.textContent = open ? '▾' : '▸'; tg.style.cssText = 'cursor:pointer;width:12px'; tg.onclick = () => { state.set(c.path, !open); draw(); };
+          const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = on === fs.length && fs.length > 0; cb.indeterminate = on > 0 && on < fs.length;
+          cb.onchange = () => { for (const x of fs) cb.checked ? pick.add(x) : pick.delete(x); draw(); };
+          const nm = document.createElement('span'); nm.textContent = '📁 ' + c.name + '  (' + fs.length + ')'; nm.style.cssText = 'cursor:pointer;overflow:hidden;text-overflow:ellipsis'; nm.onclick = tg.onclick;
+          d.append(tg, cb, nm);
+          if (open) walk(c, depth + 1);
+          if (capped) return;
+        }
+        for (const x of n.files.sort((a, b) => a.leaf.localeCompare(b.leaf))) {
+          if (rows++ > 1500) { capped = true; return; }
+          const d = row(depth), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = pick.has(x.f.name);
+          cb.onchange = () => { cb.checked ? pick.add(x.f.name) : pick.delete(x.f.name); count(); };
+          const nm = document.createElement('span'); nm.textContent = x.leaf + (x.f.title ? '  —  ' + x.f.title : ''); nm.style.cssText = 'overflow:hidden;text-overflow:ellipsis';
+          const kd = document.createElement('span'); kd.textContent = x.f.kind || ''; kd.className = 'dim'; kd.style.marginLeft = 'auto';
+          d.append(cb, nm, kd); d.style.cursor = 'pointer'; d.onclick = (e) => { if (e.target !== cb) { cb.checked = !cb.checked; cb.onchange(); } };
+        }
+      };
+      walk(root, 0);
+      if (capped) ll.insertAdjacentHTML('beforeend', '<div class="dim" style="padding:4px 6px">…more rows not shown; narrow the filter or collapse folders</div>');
+      count();
     };
-    q.oninput = draw; draw();
-    const go = await dlg('Add from scanned media library', body, [{ label: 'Cancel', value: false }, { label: 'Add selected', value: true, pri: true }]);
+    const count = () => { q('.lc').textContent = `${hit.length} of ${all.length} files shown · ${pick.size} selected`; };
+    q('.lq').oninput = draw; q('.lk').onchange = draw;
+    q('.ea').onclick = () => { state.clear(); dflt = 'all'; draw(); }; q('.ca').onclick = () => { state.clear(); dflt = false; draw(); };
+    q('.sa').onclick = () => { for (const f of hit) pick.add(f.name); draw(); }; q('.sn').onclick = () => { pick.clear(); draw(); };
+    draw();
+    const go = await dlg('Scanned media library', body, [{ label: 'Cancel', value: null }, { label: 'Open as disk', value: 'open' }, { label: 'Add selected to this pane', value: 'add', pri: true }]);
     if (!go || !pick.size) return;
-    const files = [], bad = [];
-    for (const nm of pick) {
-      try { const f = await host().libraryFile(nm); if (f) files.push(f); else bad.push(nm); } catch (e) { bad.push(nm + ': ' + e.message); }
+    if (go === 'open') {
+      const nm = [...pick].find((n) => /\.(atr|atx|xfd|dcm|pro|dsk|img)$/i.test(n)) || [...pick][0];
+      try { const f = await host().libraryFile(nm); if (f) await openFile(i, f); else msg('Could not read', esc(nm)); } catch (e) { msg('Could not read', esc(nm + ': ' + e.message)); }
+      return;
     }
-    if (files.length) await addFiles(W.active, files);
+    if (!r) return msg('No disk in this pane', 'Open or create a disk in this pane first, or use “Open as disk”.');
+    const got = [], bad = [];
+    for (const nm of pick) {
+      try { const f = await host().libraryFile(nm); if (f) got.push(f); else bad.push(nm); } catch (e) { bad.push(nm + ': ' + e.message); }
+    }
+    if (got.length) await addFiles(i, got, p.dir);
     if (bad.length) msg('Some files could not be read', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
   }
   function doExport() {
