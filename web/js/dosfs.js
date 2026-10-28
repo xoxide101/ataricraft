@@ -221,7 +221,10 @@
     }
     function removeAt(dir, off) {
       const d = readMap(dir.map, rd24(readMap(dir.map, 6), 3));
-      if (d[off] & 0x20) throw new Error('is a directory');
+      if (d[off] & 0x20) {
+        const cd = readMap(rd16(d, off + 1), rd24(readMap(rd16(d, off + 1), 6), 3));
+        for (let o = 23; o + 23 <= cd.length; o += 23) if ((cd[o] & 0x08) && !(cd[o] & 0x10)) throw new Error('directory not empty');
+      }
       freeChain(rd16(d, off + 1));
       d[off] = 0x10; d[off + 1] = 0; d[off + 2] = 0;
       dirWrite(dir.map, d);

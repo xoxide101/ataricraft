@@ -262,6 +262,7 @@
     if (!e) throw new Error('not found: ' + path);
     const dir = parentOf(path), used = existingNames(m, dir);
     used.delete(e.name.toUpperCase());
+    if (used.has(newName.toUpperCase())) throw new Error('already exists: ' + newName);
     const s = shortName(newName, used, e.dir);
     m.vol.rename(path, s.short);
     const side = readSidecar(m, dir), old = side.get(e.name.toUpperCase());
