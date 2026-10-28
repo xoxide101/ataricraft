@@ -1048,6 +1048,34 @@
         const y = yv && yv.textContent !== '????' ? yv.textContent : '', p = pv && !/unknown/i.test(pv.textContent) ? pv.textContent : '';
         g.querySelectorAll('rom').forEach((r) => put(r.getAttribute('crc'), t, { h: r.getAttribute('sha1'), z: r.getAttribute('size'), r: r.getAttribute('name'), y, p }));
       });
+    } else if (/^\s*Title,Comments,Date,Publisher,CRC-32/.test(text.slice(0, 200))) {
+      // WUDSN Atari 8-bit ROM list: quoted CSV, size as "16KB", tags like [o] overdump / [b] bad dump in Comments.
+      sys = 'Atari 8-bit';
+      const rowsC = []; let cur = [], fld = '', q = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (q) { if (ch === '"') { if (text[i + 1] === '"') { fld += '"'; i++; } else q = false; } else fld += ch; }
+        else if (ch === '"') q = true;
+        else if (ch === ',') { cur.push(fld); fld = ''; }
+        else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; cur.push(fld); fld = ''; rowsC.push(cur); cur = []; }
+        else fld += ch;
+      }
+      if (fld || cur.length) { cur.push(fld); rowsC.push(cur); }
+      const flag = { o: 'overdump', u: 'underdump', b: 'bad dump', cr: 'crack', f: 'fix', h: 'hack', m: 'modified' };
+      for (const r of rowsC.slice(1)) {
+        if (!r[0] || !/^[0-9a-fA-F]{8}$/.test((r[4] || '').trim())) continue;
+        const tags = [...(r[1] || '').matchAll(/\[([a-z]+)(?:\s[^\]]*)?\]/g)].map((m) => flag[m[1]]).filter(Boolean);
+        const km = /^(\d+)\s*KB/i.exec(r[5] || '');
+        put(r[4].trim(), r[0].trim() + (tags.length ? ` (${[...new Set(tags)].join(', ')})` : ''), { z: km ? +km[1] * 1024 : 0, y: (r[2] || '').slice(0, 4), p: r[3] });
+      }
+    } else if (/^\s*File Size;MD5;CRC32;Type;Id/.test(text.slice(0, 200))) {
+      // WUDSN ROMVersions.csv: OS / BASIC / BIOS ROMs of the 8-bit machines and the 5200.
+      for (const ln of text.split(/\r?\n/).slice(1)) {
+        const f = ln.split(';');
+        const m = /0x([0-9A-Fa-f]{8})/.exec(f[2] || '');
+        sys = /5200/.test(f[4] || '') ? 'Atari 5200' : 'Atari 8-bit';
+        if (m && f[3]) put(m[1], `${f[3]}${f[9] && !/^(Orginal|Original|n\/a)$/i.test(f[9]) ? ' ' + f[9] : ''} (system ROM)`, { z: f[0], r: f[4], y: /^\d{4}$/.test(f[6]) ? f[6] : '', p: f[5] });
+      }
     } else if (/CRC-32\s+CCITT/.test(text.slice(0, 600))) {
       const sm = /Atari\s*(2600|5200|7800|8-?bit|800)/i.exec(text.slice(0, 600));
       if (sm) sys = /^\d{4}$/.test(sm[1]) ? `Atari ${sm[1]}` : 'Atari 8-bit';
@@ -1087,9 +1115,9 @@
   }
   setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; DATSYS = (await idbGet('datSys')) || {}; DATIDX = (await idbGet('datIdx')) || []; syncDats(); } catch (e) { /* none saved */ } }, 0);
   async function loadTitlesXml(files) {
-    const dats = files.filter((f) => /\.(dat|txt)$/i.test(f.name));
+    const dats = files.filter((f) => /\.(dat|txt|csv)$/i.test(f.name));
     if (dats.length) await loadDats(dats);
-    files = files.filter((f) => !/\.(dat|txt)$/i.test(f.name));
+    files = files.filter((f) => !/\.(dat|txt|csv)$/i.test(f.name));
     if (!files.length) return;
     let n = 0;
     for (const f of files) {
