@@ -798,7 +798,8 @@
     const size = f.size || (f.file && f.file.size) || 0, mod = f.modified || (f.file && f.file.lastModified) || 0;
     const fmtDate = (t) => { const d = new Date(t), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
     const sz = size >= 1048576 ? ` (${(size / 1048576).toFixed(2)} MB)` : size >= 1024 ? ` (${(size / 1024).toFixed(1)} KB)` : '';
-    const rows = [['File name', base], ['Title', f.title || ''], ['Type', f.kind || ''], ['Size', size.toLocaleString() + ' bytes' + sz],
+    const sysM = /\[([^\]]+)\]\s*$/.exec(f.title || '');
+    const rows = [['File name', base], ['Title', f.title || ''], ['System', sysM ? sysM[1] : ''], ['Type', f.kind || ''], ['Size', size.toLocaleString() + ' bytes' + sz],
       ['Written / updated', mod ? fmtDate(mod) + (ci >= 0 ? ' (archive date)' : '') : 'unknown — rescan the library to record dates'], ['Location', parts.slice(0, -1).join('/') || '(root)']];
     if (ci >= 0) rows.push(['Inside archive', parts[ci]]);
     closePick();
@@ -1032,7 +1033,7 @@
       files.slice(0, TREE_FILE_CAP).forEach((f) => {
         const base = shown(f.name.split('/').pop(), used);
         const ico = { disk: '💾', cart: '🎮', tape: '📼', exe: '⚙️' }[f.kind] || '📄';
-        const r = row(depth, f.title ? `${ico} ${base} — ${f.title}` : `${ico} ${base}`, f.title ? `${f.title} — ${f.name}` : longTip(f));
+        const r = row(depth, f.title ? `${ico} ${base} — ${f.title}` : `${ico} ${base}`, longTip(f));
         r.style.paddingLeft = `${4 + depth * 14 + 14}px`;
         attachLoad(r, f, f.kind, () => fileOf(f), ctx ? undefined : () => showRelated(f));
       });
@@ -1063,7 +1064,7 @@
   }
   // Ctrl+L mode: prefix the 8.3 name the disk would get (unique per `used` set, i.e. per folder).
   const shown = (base, used) => (MED.showShort ? `${AC.DosFs.to83(base, used)}  ${base}` : base);
-  const longTip = (f) => { const l = parseLongName(f.name); return l ? `${l.type}: ${l.name}\nVendor: ${l.vendor}\nVersion: ${l.version}\nRelease: ${l.release}${l.notes ? '\nNotes: ' + l.notes : ''}\n${f.name}` : f.name; };
+  const longTip = (f) => { const l = parseLongName(f.name); const t = f.title ? `${f.title}\n` : ''; return t + (l ? `${l.type}: ${l.name}\nVendor: ${l.vendor}\nVersion: ${l.version}\nRelease: ${l.release}${l.notes ? '\nNotes: ' + l.notes : ''}\n${f.name}` : f.name); };
   function fillSel(id, label, counts, key) {
     const s = $(id); s.innerHTML = '';
     const o0 = document.createElement('option'); o0.value = 'all'; o0.textContent = label; s.append(o0);
