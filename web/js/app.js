@@ -85,27 +85,48 @@
   };
 
   // MAME-style .zip files are expanded into virtual files (extracted only when used).
+  // Archive listings are cached in the catalog by path + size + modified time, so a rescan only opens new or changed archives.
+  const ARC = new Map();
+  let arcLoaded = false;
+  async function loadArcCache() {
+    if (arcLoaded) return;
+    try {
+      for (const r of await AC.Catalog.rows('SELECT path, size, modified, ents FROM arc')) ARC.set(r.path, r);
+      arcLoaded = true;
+    } catch (e) { diag('archive cache not loaded: ' + e.message, 'warn'); }
+  }
   async function expandZips(files) {
     files = Array.from(files);
     const out = [];
-    let zips = 0;
+    let zips = 0, cached = 0, fresh = [];
     const nz = files.filter((f) => /\.(zip|7z)$/i.test(f.name)).length;
     const prog = nz ? AC.Progress.begin('Reading archives', nz) : null;
+    if (nz) await loadArcCache();
     for (const f of files) {
       if (!/\.(zip|7z)$/i.test(f.name)) { out.push(f); continue; }
-      if (prog) { prog.text('Reading archive ' + f.name); prog.set(zips); }
+      const base = f.webkitRelativePath || f.name;
+      if (prog) { prog.text('Reading archive ' + f.name); prog.set(zips); prog.note(`${cached} cached, ${fresh.length} new`); }
       try {
-        const base = f.webkitRelativePath || f.name;
         const Z = /\.7z$/i.test(f.name) ? AC.SevenZip : AC.Zip;
-        for (const ent of await Z.list(f)) {
+        const hit = ARC.get(base);
+        let ents;
+        if (hit && hit.size === f.size && hit.modified === (f.lastModified || 0)) { ents = JSON.parse(hit.ents); cached++; }
+        else {
+          ents = await Z.list(f);
+          const rec = { path: base, size: f.size, modified: f.lastModified || 0, ents: JSON.stringify(ents) };
+          ARC.set(base, rec); fresh.push(rec);
+          if (fresh.length >= 25) { await AC.Catalog.putArcs(fresh); fresh = []; await idbSet('catalogDb', await AC.Catalog.exportBytes()); }
+        }
+        for (const ent of ents) {
           out.push({ name: ent.name.split('/').pop(), webkitRelativePath: base + '/' + ent.name, size: ent.size, arrayBuffer: () => Z.extract(f, ent) });
         }
       } catch (e) { out.push(f); }
       zips++;
       if (prog) await AC.Progress.yieldUI();
     }
+    if (fresh.length) { try { await AC.Catalog.putArcs(fresh); await idbSet('catalogDb', await AC.Catalog.exportBytes()); } catch (e) { diag('archive cache save failed: ' + e.message, 'warn'); } }
     if (prog) prog.end();
-    if (zips) log(`read ${zips} archive${zips > 1 ? 's' : ''}`);
+    if (zips) log(`read ${zips} archive${zips > 1 ? 's' : ''} (${cached} from cache)`);
     return out;
   }
 
@@ -1141,12 +1162,16 @@
     return { path: f.name, name: parts[parts.length - 1], ext: (parts[parts.length - 1].split('.').pop() || '').toLowerCase(), kind: f.kind, size: f.size || (f.file && f.file.size) || 0, modified: f.file && f.file.lastModified, container: ci >= 0 ? parts.slice(0, ci + 1).join('/') : '', title: f.title || '', grp: groupKey(f) };
   };
   async function saveCatalog() {
+    const sp = AC.Progress.begin('Saving catalog…', MED.files.length);
     try {
-      await AC.Catalog.rebuild(MED.files.map(catRow), { root: Object.keys(medHandles).join(', ') || (medHandle ? medHandle.name : ''), scanned: new Date().toISOString(), count: MED.files.length });
+      await AC.Catalog.rebuild(MED.files.map(catRow), { root: Object.keys(medHandles).join(', ') || (medHandle ? medHandle.name : ''), scanned: new Date().toISOString(), count: MED.files.length }, (d) => sp.set(d), [...ARC.values()]);
+      sp.text('Writing catalog to browser storage…');
+      await AC.Progress.yieldUI();
       await idbSet('catalogDb', await AC.Catalog.exportBytes());
       MED.fromDb = false;
       diag(`catalog saved: ${MED.files.length} rows`);
     } catch (e) { diag('catalog save failed: ' + e.message, 'warn'); log('could not save catalog: ' + e.message); }
+    finally { sp.end(); }
   }
   async function loadCatalogRows() {
     const bytes = await idbGet('catalogDb');
@@ -3381,7 +3406,7 @@
     return c.toDataURL(format || 'image/png');
   }
 
-  const VERSION = '0.4.0-dev', BUILD = '2026-10-27 18:05';
+  const VERSION = '0.4.0-dev', BUILD = '2026-10-27 19:30';
   { const h = $('appver'); if (h) { h.title = `Ataricraft v${VERSION}, built ${BUILD}`; h.querySelector('small').textContent = `v${VERSION} · ${BUILD}`; } console.log(`Ataricraft v${VERSION} (${BUILD})`); }
   window.ataricraft = {
     version: `${VERSION} (${BUILD})`,

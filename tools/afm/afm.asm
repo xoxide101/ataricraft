@@ -35,6 +35,9 @@ INBUF   = $51C0
 IOBUF   = $5800
 VROWS   = 18
 MAXLV   = 6
+SDLSTL  = $0230
+DLB     = $5000
+RULE    = $5030
 VBUF    = $7500
 
 ; editor / viewer
@@ -75,6 +78,10 @@ EMAXPG  = $A5
         org $2000
 
 start:
+        lda SDLSTL
+        sta osdl
+        lda SDLSTL+1
+        sta osdl+1
         lda #1
         sta CRSINH
         lda #0
@@ -832,6 +839,7 @@ doview: lda #1
         bne ed_set
 doedit: lda #0
 ed_set: sta edro
+        jsr dlstock
         lda #0
         sta ednew
         jsr needf
@@ -2191,6 +2199,7 @@ dohelp: lda #125
         jmp main
 
 doquit:
+        jsr dlstock
         lda #0
         sta CRSINH
         lda #125
@@ -2264,6 +2273,7 @@ ru_cp:  lda FSPEC,x
         bne ru_cp
         ldx #$30
         jsr closeF
+        jsr dlstock
         lda #0
         sta CRSINH
         lda #125
@@ -3911,7 +3921,59 @@ showerr:
         lda est
         jmp putdec
 
+dlstock:
+        lda osdl
+        sta SDLSTL
+        lda osdl+1
+        sta SDLSTL+1
+        rts
+
+dlfancy:
+        ldy #39
+        lda #$FF
+dlf0:   sta RULE,y
+        dey
+        bpl dlf0
+        ldy #46
+dlf1:   lda dlt,y
+        sta DLB,y
+        dey
+        bpl dlf1
+        ldx #6
+dlf2:   lda dro,x
+        clc
+        adc SAVMSC
+        sta ES
+        lda dro+1,x
+        adc SAVMSC+1
+        sta ES+1
+        txa
+        lsr
+        tay
+        lda dpo,y
+        tay
+        lda ES
+        sta DLB,y
+        lda ES+1
+        sta DLB+1,y
+        dex
+        dex
+        bpl dlf2
+        lda #<DLB
+        sta SDLSTL
+        lda #>DLB
+        sta SDLSTL+1
+        rts
+
+dlt:    .byte $70,$70,$70,$42,0,0,$4F,<RULE,>RULE,$42,0,0,$4F,<RULE,>RULE,$42,0,0
+        :19 .byte 2
+        .byte $4F,<RULE,>RULE,$42,0,0,2,$41,<DLB,>DLB
+dpo:    .byte 4,10,16,41
+dro:    .word 0,40,80,880
+osdl:   .word 0
+
 drawui:
+        jsr dlfancy
         lda #0
         sta inv
         lda #125
