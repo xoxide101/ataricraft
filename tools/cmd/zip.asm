@@ -94,17 +94,17 @@ dv      = VARS+58       ; 4 bytes
 tv      = VARS+62       ; 4 bytes
 dig     = VARS+66       ; 8 digits
 lendh   = VARS+74
-lq      = $F4           ; zero page: LENS write pointer
-lend    = $F6           ; end of the lengths being read
-wp      = $E0           ; window write pointer
-sp      = $E2           ; window read pointer for matches
-pcl     = $E4           ; current table: counts low / high, symbols low / high
-pch     = $E6
-psl     = $E8
-psh     = $EA
-ex      = $EC
-lp      = $F0           ; lengths pointer for table builds
-q       = $F2
+lq      = $C4           ; zero page: LENS write pointer
+lend    = $C6           ; end of the lengths being read
+wp      = $B0           ; window write pointer
+sp      = $B2           ; window read pointer for matches
+pcl     = $B4           ; current table: counts low / high, symbols low / high
+pch     = $B6
+psl     = $B8
+psh     = $BA
+ex      = $BC
+lp      = $C0           ; lengths pointer for table builds
+q       = $C2
 
         org CODE
         icl 'lib\io.asm'
@@ -1453,7 +1453,7 @@ ll_n:   lda NAMEB,y
         cpy #13
         bcc ll_n
 ll_p:   sty tl
-        lda #14
+        lda #12
         sec
         sbc tl
         tay
@@ -1477,17 +1477,6 @@ ll_c:   lda HDR+18,x
         lda HDR+8
         jsr mname
         lda #' '
-        jsr putc
-        lda HDR+13
-        lsr
-        clc
-        adc #80
-yl:     cmp #100
-        bcc ylo
-        sbc #100
-        bcs yl
-ylo:    jsr put2d
-        lda #'-'
         jsr putc
         lda HDR+12
         lsr
@@ -1572,7 +1561,7 @@ d3_z:   lda dig,y
         iny
         bne d3_z
 d3_r:   rts
-putdig: ldy #0
+putdig: ldy #1
 pg_l:   lda dig,y
         jsr putc
         iny
@@ -1587,3 +1576,4 @@ pw:     .dword 10000000
         .dword 100
         .dword 10
         .dword 1
+        run start

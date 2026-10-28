@@ -41,6 +41,9 @@ Anything else is run as `NAME.CMX`, `NAME.COM` or `NAME.BAT` in the current fold
 ## ARC.COM (standalone archive tool)
 Run ARC.COM from DOS. Prompt: `L file.ARC` list, `T` test, `X file.ARC [dest] [member]` extract. Reads SEA ARC methods 1-4 (stored, RLE, squeezed) and 8 (crunched LZW); CRC16-checked. Methods 5-7 and 9 are not supported. Uses $3800-, so it is a separate program, not a CMD plug-in yet.
 
+## ZIP.COM (standalone PKZIP tool)
+Prompt: L file.ZIP list, T test, X file.ZIP [dest] [member] extract. Reads stored (0) and deflate (8) members, CRC32-checked, including data-descriptor entries. Names are cut to 8.3 (last path part, upper case, other characters become _). Other PKZIP methods (shrink, reduce, implode, deflate64, bzip2, LZMA) are listed and reported as unsupported; use the host side (web/js/archives.js, which falls back to 7-Zip) for those. Inflate keeps a 14336-byte window, so a deflate stream that refers back further than that stops with WINDOW TOO SMALL; small Atari-sized archives are fine, large highly repetitive ones may not be. Uses -, standalone like ARC.COM.
+
 ## Not implemented yet
 
 These names are accepted but only print a message: ARC, ATR, BOOT, CAR, CHTD, CHVOL, CLR, COMP, CON, DATE, DELTREE, DEV, ED, FMT, FORMAT, MAP, MENU, RS232, SAVE, SETPATHS, SIOSET, SORTDIR, SWAP, TD, TIME, UNERASE, VERIFY.
