@@ -289,6 +289,7 @@
       S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
+    RawDisk.attach(S.emu);
     hookDevices();
     applyPad();
     for (const [n, d] of Object.entries(S.disks)) S.emu.mountDisk(+n, d.name, d.bytes);
@@ -2460,7 +2461,7 @@
   }
   syncPadUi();
   // ---- device activity lights (keyboard panel, top right) ----
-  const DEVLIST = [['K1', 'CART1'], ['K2', 'CART2']].concat([...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']), [['H', 'H:'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
+  const DEVLIST = [['K1', 'CART1'], ['K2', 'CART2']].concat([...Array(8)].map((_, i) => ['D' + (i + 1), 'D' + (i + 1) + ':']), [['D9', 'D9:'], ['D10', 'D10:'], ['H', 'H:'], ['C', 'C:'], ['P', 'P:'], ['R', 'R:'], ['N', 'N:']]);
   const devEl = {};
   DEVLIST.forEach(([id, label]) => {
     const s = document.createElement('span');
@@ -2473,7 +2474,7 @@
     $('devbar').append(s);
     devEl[id] = s;
   });
-  const devId = (dev) => (dev >= 0x31 && dev <= 0x38 ? 'D' + (dev - 0x30) : dev === 0x60 ? 'C' : dev >= 0x40 && dev <= 0x43 ? 'P' : dev >= 0x50 && dev <= 0x53 ? 'R' : dev >= 0x70 && dev <= 0x7f ? 'N' : null);
+  const devId = (dev) => (dev >= 0x31 && dev <= 0x38 ? 'D' + (dev - 0x30) : dev === 0x39 ? 'D9' : dev === 0x3a ? 'D10' : dev === 0x60 ? 'C' : dev >= 0x40 && dev <= 0x43 ? 'P' : dev >= 0x50 && dev <= 0x53 ? 'R' : dev >= 0x70 && dev <= 0x7f ? 'N' : null);
   // XF551-style drive pictures (front view) for D1-D8: LED follows SIO activity, the sleeve shows when a disk is mounted.
   const xfEl = {};
   const ramOn = () => $('ramd8').checked;
@@ -2736,7 +2737,21 @@
   }, 400);
 
   // ---- device bar: short state in the bar, details on hover, a dialog for just that device on click ----
+  const rawUnit = (id) => (id === 'D9' ? 9 : id === 'D10' ? 10 : 0);
+  const rawDev = (n) => RawDisk.units[n === 10 ? 0x3a : 0x39];
+  function rawPick(n) {
+    const f = document.createElement('input');
+    f.type = 'file';
+    f.onchange = async () => {
+      const file = f.files[0];
+      if (!file) return;
+      RawDisk.set(n, file.name, new Uint8Array(await file.arrayBuffer()));
+      log(`D${n}: ${file.name} (read-only, ${rawDev(n).ss} byte sectors)`);
+    };
+    f.click();
+  }
   function devShort(id) {
+    if (rawUnit(id)) { const d = rawDev(rawUnit(id)); return d ? d.name.replace(/\.[^.]*$/, '') : ''; }
     if (id[0] === 'D' && id.length === 2) { const n = +id[1]; return S.disks[n] ? S.disks[n].name.replace(/\.[^.]*$/, '') : (n === 8 && ramOn() ? 'RAM' : ''); }
     if (id[0] === 'K') { const c = S.carts[+id[1]]; return c ? c.name.replace(/\.[^.]*$/, '') : ''; }
     if (id === 'C') { const t = $('tn').textContent; return t === 'empty' ? '' : t.replace(/\.[^.]*$/, ''); }
@@ -2747,7 +2762,16 @@
     const st = devEl[id].classList.contains('rd') ? 'reading' : devEl[id].classList.contains('wr') ? 'writing' : devEl[id].classList.contains('ot') ? 'busy' : 'idle';
     const L = [];
     let title = id, acts = [];
-    if (id[0] === 'D' && id.length === 2) {
+    if (rawUnit(id)) {
+      const n = rawUnit(id), d = rawDev(n);
+      title = `Raw drive D${n}: (read-only)`;
+      L.push(d ? `Image: ${d.name}` : 'Empty - no image loaded');
+      if (d) L.push(`Size: ${d.bytes.length} bytes`, `Sector size: ${d.ss} bytes`, `Sectors: ${Math.floor(d.bytes.length / d.ss)}`);
+      if (S.emu && S.emu.core === 'altirra') L.push('', 'Needs the libatari800 core (the Altirra core cannot claim this device).');
+      L.push('', 'FAT12/16/32, ISO 9660 and UDF images, read by CMD through SIO (device $' + (0x30 + n).toString(16).toUpperCase() + ').');
+      acts = [{ label: 'Load image...', run: () => rawPick(n) }];
+      if (d) acts.push({ label: 'Eject', run: () => RawDisk.set(n, null) });
+    } else if (id[0] === 'D' && id.length === 2) {
       const n = +id[1], d = S.disks[n];
       title = `Drive D${n}:`;
       L.push(d ? `Disk: ${d.name}` : 'Empty - no disk inserted');

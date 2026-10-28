@@ -42,3 +42,7 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 - AFM/AFM80 (REV 13) with full Properties screen (long name, added date, DOS date on SDX/BW-DOS); WebAFM two-pane disk explorer; DAT/CRC cart identification; FujiNet TNFS browse via relay.
 - Release zip: web/ (with git-ignored web/ref cores, only library/craftapps/AFM from the library), roms/altirra, tools/altirra-core, docs, README, NOTES, LICENSE. Third-party DOS boot disks are not shipped.
 - Screenshots: scripts/screenshots.cjs, scripts/screenshots-webafm.cjs; AFM shots taken from the emulator.
+
+## Raw drives D9:/D10: (read-only)
+
+web\js\rawdisk.js claims SIO $39/$3A through Module.acSio (libatari800 core only; Altirra can't claim non-$70 IDs). Commands: $53 status (8 bytes: sectors u32, sector size u16, flags, unit), $48 set high 16 bits of the next sector number, $52 read (AUX = low 16 bits, DBYT bytes). Images load from the D9/D10 device-bar dialog; sector size is 2048 for ISO/UDF, else 512. Host readers for the filesystems: web\js\discfs.js. Smoke test: out\t_sio.cjs (scratch).
