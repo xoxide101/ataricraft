@@ -12,9 +12,9 @@ const fs = require('fs');
   await pg.evaluate(async ([a, c]) => {
     const u8 = (s) => Uint8Array.from(atob(s), (x) => x.charCodeAt(0));
     AC.WebAfm.open();
-    await AC.WebAfm.openFile(0, new File([u8(a)], 'SpartaDOS 720K boot + AFM.atr'));
-    await AC.WebAfm.openFile(1, new File([u8(c)], 'DOS 2.5 boot + AFM.atr'));
-  }, [load('SpartaDOS 720K boot + AFM.atr'), load('DOS 2.5 boot + AFM.atr')]);
+    await AC.WebAfm.openFile(0, new File([u8(a)], 'SpartaDOS 720K boot + AFM + AFM80.atr'));
+    await AC.WebAfm.openFile(1, new File([u8(c)], 'DOS 2.5 boot + AFM + AFM80.atr'));
+  }, [load('SpartaDOS 720K boot + AFM + AFM80.atr'), load('DOS 2.5 boot + AFM + AFM80.atr')]);
   await pg.waitForTimeout(800);
   await pg.screenshot({ path: R + 'docs/screenshots/07-webafm.png' });
   await b.close();
