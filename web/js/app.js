@@ -202,6 +202,73 @@
     S.roms.basic = bas[0] ? bas[0].bytes : null;
     $('romstate').textContent = `OS800 ${S.lib.os800.length} · XL/XE ${S.lib.osxl.length} · BASIC ${S.lib.basic.length}`;
     updateCharset();
+    window.dispatchEvent(new CustomEvent('ac-roms-changed', { detail: { os800: S.lib.os800.length, osxl: S.lib.osxl.length, basic: S.lib.basic.length } }));
+  }
+
+  // Pick a ROM by (part of) its name: kind 'os' (current model), 'os800', 'osxl' or 'basic' ('' = no BASIC). The choice is remembered like a manual pick.
+  function selectRom(kind, name) {
+    const k = kind === 'os' ? ($('model').value === '800' ? 'os800' : 'osxl') : kind;
+    if (!S.lib[k]) return false;
+    const s = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
+    if (k === 'basic' && name === '') s.basic = '';
+    else {
+      const q = String(name).toLowerCase();
+      const e = S.lib[k].find((x) => x.name.toLowerCase() === q) || S.lib[k].find((x) => (x.name + ' ' + romLabel(x)).toLowerCase().includes(q));
+      if (!e) return false;
+      s[k] = e.name;
+    }
+    localStorage.setItem('ac.romsel', JSON.stringify(s));
+    fillRomSelects();
+    return true;
+  }
+
+  // Extra ROM sources (server, FujiNet, cloud...) register a function returning File-like objects; every source is run by autoLoadRoms().
+  const ROM_SOURCES = [];
+  // Default source: the roms/ folder next to the page. Uses roms/index.json (["file.rom", "sub/x.zip"]) when present, else the web server's directory listing.
+  ROM_SOURCES.push(async () => {
+    const out = [];
+    const ok = /\.(rom|bin|rm|zip)$/i;
+    let base = 'roms/';
+    const get = async (rel) => { const r = await fetch(base + rel); if (!r.ok) throw new Error(r.status); return r; };
+    const mk = async (rel) => {
+      const f = new File([await (await get(rel.split('/').map(encodeURIComponent).join('/'))).blob()], rel.split('/').pop());
+      Object.defineProperty(f, 'webkitRelativePath', { value: 'roms/' + rel });
+      return f;
+    };
+    for (const b of ['roms/', '../roms/']) { base = b; try { if ((await fetch(b)).ok || (await fetch(b + 'index.json')).ok) break; } catch (e) { /* try next */ } }
+    let names = null;
+    try { const j = await (await get('index.json')).json(); if (Array.isArray(j)) names = j; } catch (e) { /* no manifest */ }
+    if (!names) {
+      names = [];
+      const walk = async (dir, depth) => {
+        const html = await (await get(dir)).text();
+        for (const m of html.matchAll(/href="([^"?#]+)"/gi)) {
+          const h = decodeURIComponent(m[1]);
+          if (h.startsWith('/') || h.startsWith('.') || h.includes(':')) continue;
+          if (h.endsWith('/')) { if (depth < 3) await walk(dir + h, depth + 1); } else if (ok.test(h)) names.push(dir + h);
+        }
+      };
+      try { await walk('', 0); } catch (e) { return out; }
+    }
+    for (const n of names) {
+      if (!ok.test(n) || /^altirra\//i.test(n)) continue;
+      try { out.push(await mk(n)); } catch (e) { /* skip */ }
+    }
+    return out;
+  });
+  async function autoLoadRoms() {
+    let n = 0;
+    for (const src of ROM_SOURCES) {
+      try { const files = await src(); if (files && files.length) { await addRoms(files); n += files.length; } } catch (e) { diag('ROM source failed: ' + e.message, 'warn'); }
+    }
+    if (n) log(`roms/ folder and sources: ${n} files checked`);
+    return n;
+  }
+  // ?os=name&basic=name (basic= for none) select ROMs for this visit without being asked; matching is by part of the name.
+  function romUrlParams() {
+    const q = new URLSearchParams(location.search);
+    if (q.has('os')) selectRom('os', q.get('os'));
+    if (q.has('basic')) selectRom('basic', q.get('basic'));
   }
 
   const chosenOs = () => { const l = S.lib[$('model').value === '800' ? 'os800' : 'osxl']; const e = l[+$('osrom').value]; return e ? e.bytes : null; };
@@ -3626,7 +3693,7 @@
   $('boot').addEventListener('click', () => { if (phone()) document.body.classList.add('nosb'); });
 
   fillRomSelects();
-  loadSavedRoms();
+  loadSavedRoms().then(autoLoadRoms).then(romUrlParams);
 
   // ---- UI wiring ----
   AC.keyboard.restoreCharset();
@@ -3965,6 +4032,13 @@
     }),
     state: () => ({ booted: !!S.emu, running: S.running, frames: S.emu ? S.emu.frames : 0, speed: S.speed, model: $('model').value, tv: $('tv').value, roms: Object.fromEntries(Object.entries(S.roms).map(([k, v]) => [k, !!v])) }),
     addRoms: (files) => addRoms(files),
+    roms: {
+      list: () => ({ os800: S.lib.os800.map((e) => e.name), osxl: S.lib.osxl.map((e) => e.name), basic: S.lib.basic.map((e) => e.name) }),
+      select: selectRom,
+      current: () => ({ os: ($('osrom').selectedOptions[0] || {}).text || null, basic: ($('basicrom').selectedOptions[0] || {}).text || null }),
+      rescan: autoLoadRoms,
+      addSource: (fn) => { ROM_SOURCES.push(fn); return autoLoadRoms(); },
+    },
     boot: async (o) => { if (o && o.model) $('model').value = o.model; if (o && o.tv) $('tv').value = o.tv; if (o && o.basic != null) $('basic').checked = !!o.basic; return boot(); },
     screenshot: (o) => shot((o && o.scale) || 2, o && o.format),
     screenText: () => S.emu.screenText(),
