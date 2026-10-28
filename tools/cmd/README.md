@@ -38,6 +38,9 @@ Anything else is run as `NAME.CMX`, `NAME.COM` or `NAME.BAT` in the current fold
 - `INPUT` (`JOY`): live joysticks 1-2, 8 paddles and console keys. `INPUT 4` adds ports 3-4 (400/800 only). Any key quits.
 - `COLOR`: grey ramp and 16-hue palette in 8 luminance bands. `MONITOR`: geometry grid with circle, pixel checker, grey ramp and palette. Any key = next, ESC = quit. Needs RAMTOP of $BC00 or more.
 
+## ARC.COM (standalone archive tool)
+Run ARC.COM from DOS. Prompt: `L file.ARC` list, `T` test, `X file.ARC [dest] [member]` extract. Reads SEA ARC methods 1-4 (stored, RLE, squeezed) and 8 (crunched LZW); CRC16-checked. Methods 5-7 and 9 are not supported. Uses $3800-, so it is a separate program, not a CMD plug-in yet.
+
 ## Not implemented yet
 
 These names are accepted but only print a message: ARC, ATR, BOOT, CAR, CHTD, CHVOL, CLR, COMP, CON, DATE, DELTREE, DEV, ED, FMT, FORMAT, MAP, MENU, RS232, SAVE, SETPATHS, SIOSET, SORTDIR, SWAP, TD, TIME, UNERASE, VERIFY.
