@@ -3640,6 +3640,15 @@
     S.dirty[n] = false;
     log(`D${n}: saved ${name} (${bytes.length} bytes) to your Downloads`);
   };
+  $('savedcm').onclick = () => {
+    const n = +$('savedrv').value, bytes = S.disks[n] && ((S.emu && S.emu.readDisk(n)) || S.disks[n].bytes);
+    if (!bytes) { log(`D${n}: no disk mounted`); return; }
+    try {
+      const dcm = AC.DiskConv.atrToDcm(bytes), name = ((S.disks[n].name || `d${n}`).replace(/\.[^.]*$/, '')) + '.dcm';
+      saveBlob(name, [dcm]);
+      log(`D${n}: saved ${name} (${dcm.length} bytes, DiskComm) to your Downloads`);
+    } catch (e) { log(`D${n}: cannot save as DCM: ${e.message}`); }
+  };
   // Save all / Load all: every mounted disk and cartridge as one .zip (with a slot manifest), or many files at once.
   const SETMAN = 'ataricraft-set.json';
   $('saveall').onclick = () => {

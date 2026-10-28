@@ -70,7 +70,9 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 ## Pending
 
 - **Chip documentation archive (Atari Preservation Society):** 8-bit, 16-bit (ST/STE) and 32-bit (TT/Falcon/Jaguar) chip documents. The user is still downloading the whole archive; path to be supplied. Planned: one subfolder per generation, catalogue and audit, then feed the machine-profile / chip-database work (parked until the user says go).
-- DCM export is not yet exposed in the UI (diskconv.atrToDcm exists, round-trip tested on 115 ATRs).
+- DCM export: "Save as .dcm" next to Save disk (round-trip tested on 115 ATRs and through the browser button). No real DCM sample to cross-check other decoders.
+- DOS 2.0S/2.5 blank creator (`DosFs.createDos2`, "Pre-format as Atari DOS 2.0S / 2.5" checkbox): 1040-sector enhanced density verified under real DOS 2.5 (directory of D2 reads, 1010 free) and read/write in Node. Note a blank can only be inserted after Boot.
+- **Unverified, no samples:** UDF with non-zero FSD lbn / fragmented / embedded files; Rock Ridge/Joliet ignored on the 6502 side; Altirra core not claiming D9/D10; SpartaDOS XIO 43; CMD FORMAT Y path; ARJ hand-off form and multi-volume; ZOO comments and version suffixes. `?os=` is verified (picks from saved ROMs only).
 
 - **Chip-doc archive path:** `I:\Online_Archives_A-Z` (mirror of 10 sites; still downloading). Richest area: `Atari_FTP\collections\Atari documents` (CPUs / Custom Chips Datasheets and Databooks, Schematics, Service Manuals, TT030 manuals, 8-bit internal docs). First-pass index: `node tools/index_chipdocs.cjs` -> `out/chipdocs_index.csv` (790 candidate docs; keyword match includes game manuals, needs filtering). Re-run when the download finishes.
 - **Reference archive policy:** the large Atari archive (millions of files: docs, books, software, disks) is private reference only and is never shipped or committed. Only the DOS images database (ACDOS.PAK, 101 items) is for runtime use and extraction.
