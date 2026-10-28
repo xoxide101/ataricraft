@@ -307,17 +307,35 @@
     }
     function exactSize(e) { let t = 0; for (const n of chain(e.start)) { const s = sec(n); t += Math.min(s[s.length - 1], s.length - 3); } return t; }
     // Only layouts with a single, DOS 2-style bitmap model are written (MyDOS multi-VTOC for 256-byte sectors, or 90K single density).
-    const writable = (ss === 256 || nsec === 720) && nsec <= 65535 && nsec >= 720;
+    // Atari DOS 2.5 enhanced density: 1040 x 128 B. Sectors 0..719 live in the VTOC at 360; sectors 720..1023 in the second VTOC at
+    // sector 1024 (whose bytes 0..83 also mirror 48..719 and bytes 122..123 count the free sectors above 719).
+    const ed = ss === 128 && nsec === 1040 && sec(360)[0] === 2;
+    const writable = ((ss === 256 || nsec === 720) && nsec <= 65535 && nsec >= 720) || ed;
     const nvtoc = 1 + Math.floor((nsec + 80) / (ss * 8));
-    const bitLoc = (s) => { const bi = (s >> 3) + 10; return [sec(360 - Math.floor(bi / ss)), bi % ss, 0x80 >> (s & 7)]; };
+    const bitLoc = (s) => {
+      if (ed) {
+        if (s >= 1024 || s === 0) return [new Uint8Array(1), 0, 0];
+        if (s >= 720) return [sec(1024), (s - 48) >> 3, 0x80 >> ((s - 48) & 7)];
+        return [sec(360), 10 + (s >> 3), 0x80 >> (s & 7)];
+      }
+      const bi = (s >> 3) + 10; return [sec(360 - Math.floor(bi / ss)), bi % ss, 0x80 >> (s & 7)];
+    };
     const isFree = (s) => { const [d, i, m] = bitLoc(s); return !!(d[i] & m); };
-    const setFree = (d) => { const t = sec(360), f = rd16(t, 3) + d; t[3] = f & 255; t[4] = (f >> 8) & 255; };
-    const freeSectors = () => rd16(sec(360), 3);
+    const mark = (s, free) => {
+      const [d, i, m] = bitLoc(s);
+      if (free) d[i] |= m; else d[i] &= ~m;
+      if (ed && s >= 48 && s < 720) { const v = sec(1024), j = (s - 48) >> 3, mm = 0x80 >> ((s - 48) & 7); if (free) v[j] |= mm; else v[j] &= ~mm; }
+    };
+    const setFree = (d, s) => {
+      if (ed && s >= 720) { const v = sec(1024), f = rd16(v, 122) + d; v[122] = f & 255; v[123] = (f >> 8) & 255; return; }
+      const t = sec(360), f = rd16(t, 3) + d; t[3] = f & 255; t[4] = (f >> 8) & 255;
+    };
+    const freeSectors = () => rd16(sec(360), 3) + (ed ? rd16(sec(1024), 122) : 0);
     let cursor = 369;
     function alloc() {
       for (let k = 0; k < nsec; k++) {
         const s = ((cursor - 1 + k) % nsec) + 1;
-        if (isFree(s)) { const [d, i, m] = bitLoc(s); d[i] &= ~m; setFree(-1); cursor = s + 1; return s; }
+        if (isFree(s)) { mark(s, false); setFree(-1, s); cursor = s + 1; return s; }
       }
       throw new Error('disk full');
     }
@@ -325,11 +343,11 @@
       for (let s = 369; s + n - 1 <= nsec; s++) {
         let ok = true;
         for (let k = 0; k < n; k++) if (!isFree(s + k)) { ok = false; s += k; break; }
-        if (ok) { for (let k = 0; k < n; k++) { const [d, i, m] = bitLoc(s + k); d[i] &= ~m; } setFree(-n); return s; }
+        if (ok) { for (let k = 0; k < n; k++) { mark(s + k, false); setFree(-1, s + k); } return s; }
       }
       throw new Error('disk full (no contiguous space for a directory)');
     }
-    function release(n) { if (!isFree(n)) { const [d, i, m] = bitLoc(n); d[i] |= m; setFree(1); } }
+    function release(n) { if (!isFree(n)) { mark(n, true); setFree(1, n); } }
     const pack = (name) => {
       const up = name.toUpperCase(), dot = up.lastIndexOf('.');
       const c = (x, k) => x.replace(/[^A-Z0-9_]/g, '_').slice(0, k).padEnd(k, ' ');
@@ -445,6 +463,29 @@
     return out;
   }
 
+  // Empty Atari DOS 2.x volume: 90K single density (DOS 2.0S layout) or 130K enhanced density (DOS 2.5 layout with the
+  // second VTOC at sector 1024). 128-byte sectors. Not bootable: add the DOS files, or boot another disk.
+  function createDos2(o) {
+    const nsec = o.sectors || 720;
+    if ((o.sectorSize || 128) !== 128 || (nsec !== 720 && nsec !== 1040)) throw new Error('Atari DOS 2.x volumes here are 128-byte sectors, 720 or 1040 sectors');
+    const img = makeAtr(128, nsec), L = layout(img), t = L.sec(360);
+    const used = new Set([0, 1, 2, 3, 360, 361, 362, 363, 364, 365, 366, 367, 368, 720]);
+    const free = (s) => !used.has(s);
+    const part1 = []; for (let s = 0; s < 720; s++) if (free(s)) part1.push(s);
+    t[0] = 2;
+    const total = part1.length + (nsec === 1040 ? 303 : 0);
+    t[1] = total & 255; t[2] = total >> 8;
+    t[3] = part1.length & 255; t[4] = part1.length >> 8;
+    for (let s = 0; s < 720; s++) if (free(s)) t[10 + (s >> 3)] |= 0x80 >> (s & 7);
+    if (nsec === 1040) {
+      const v = L.sec(1024);
+      for (let s = 48; s < 1024; s++) if (free(s)) v[(s - 48) >> 3] |= 0x80 >> ((s - 48) & 7);
+      v[122] = 303 & 255; v[123] = 303 >> 8;
+    }
+    const b1 = L.sec(1); b1[1] = 3; b1[3] = 7;
+    return img;
+  }
+
   // Empty MyDOS volume (256-byte sectors up to 65535, or 90K single density). Not bootable: add the DOS files or boot another disk.
   function createMyDos(o) {
     const ss = o.sectorSize || 256, nsec = o.sectors || 65535;
@@ -540,7 +581,7 @@
     }
   }
 
-  const api = { open, createSdfs, createMyDos, buildSdfs, to83, makeAtr, layout };
+  const api = { open, createSdfs, createMyDos, createDos2, buildSdfs, to83, makeAtr, layout };
   if (typeof AC !== 'undefined') AC.DosFs = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
