@@ -13,7 +13,10 @@ node_modules/
 target/
 out/
 books/
-web/library/
+web/library/*
+!web/library/craftapps/
+web/library/craftapps/*
+!web/library/craftapps/AFM/
 web/js/diskdb.js
 
 # archive: blank disks are tracked; DOS boot disks (third-party) stay local
