@@ -124,12 +124,23 @@ cmd_rd: jsr reqdirs
         jsr needtok
         jcs failr
         jsr mkspec
-        lda #0
+        jsr rmdirx
+        jmi failr
+        clc
+        rts
+
+; remove the folder in FSPEC: XIO 43 (SpartaDOS, BW-DOS), or XIO 33 when the DOS has no XIO 43 (MyDOS)
+rmdirx: lda #0
         sta V_FLG
         lda #43
         jsr xio1
-        jmi failr
-        clc
+        cmp #168
+        bne rx_r
+        lda #0
+        sta V_FLG
+        lda #33
+        jsr xio1
+rx_r:   lda V_ERR
         rts
 
 cmd_pwd:
@@ -451,3 +462,321 @@ fd_hit: lda #<IOBUF
         jsr pstr
         jsr putnl
         jmp fd_l
+
+; ---- COMP file1 file2: byte compare, first 8 differences shown ----
+getb:   lda #7
+        sta ICCOM,x
+        lda #0
+        sta ICBLL,x
+        sta ICBLH,x
+        jsr CIOV
+        sty V_ERR
+        rts
+
+cmd_comp:
+        jsr needtok
+        jcs failr
+        jsr mkspec
+        jsr needtok
+        jcs failr
+        jsr mkspec2
+        lda #4
+        ldx #$10
+        jsr fopen1
+        jmi cpy_fail
+        lda #4
+        ldx #$20
+        jsr fopen2
+        jmi cpy_fail
+        lda #0
+        sta V_CNT
+        sta V_CNT+1
+        sta V_A1
+cq_l:   ldx #$10
+        jsr getb
+        sta N2
+        lda V_ERR
+        sta N3
+        ldx #$20
+        jsr getb
+        sta N4
+        lda N3
+        bpl cq_a
+        cmp #136
+        bne cq_e1
+cq_a:   lda V_ERR
+        bpl cq_b
+        cmp #136
+        bne cq_e2
+cq_b:   lda N3
+        bmi cq_f1
+        lda V_ERR
+        jmi cq_len
+        lda N2
+        cmp N4
+        beq cq_n
+        lda V_A1
+        cmp #$FF
+        beq cq_s
+        inc V_A1
+cq_s:   lda V_A1
+        cmp #9
+        bcs cq_n
+        jsr putsi
+        .byte 'DIFF AT $',0
+        ldx V_CNT+1
+        lda V_CNT
+        jsr puthex16
+        lda #' '
+        jsr putc
+        lda N2
+        jsr puthex8
+        lda #' '
+        jsr putc
+        lda N4
+        jsr puthex8
+        jsr putnl
+cq_n:   inc V_CNT
+        bne cq_l
+        inc V_CNT+1
+        jmp cq_l
+cq_e1:  sta V_ERR
+        jmp cpy_fail
+cq_e2:  jmp cpy_fail
+cq_f1:  lda V_ERR
+        bpl cq_len
+        lda V_A1
+        bne cq_cnt
+        jsr putsi
+        .byte 'FILES MATCH',EOL,0
+        jmp cpy_d
+cq_cnt: sta N0
+        lda #0
+        sta N1
+        jsr putdec16
+        jsr putsi
+        .byte ' DIFFERENCES',EOL,0
+        jmp cpy_d
+cq_len: jsr putsi
+        .byte 'LENGTHS DIFFER AT $',0
+        ldx V_CNT+1
+        lda V_CNT
+        jsr puthex16
+        jsr putnl
+        jmp cpy_d
+
+; ---- FORMAT Dn: ----
+cmd_format:
+        jsr needtok
+        jcs failr
+        lda TOK
+        jsr toupper
+        cmp #'D'
+        jne fmt_bad
+        lda TOK+1
+        cmp #'1'
+        jcc fmt_bad
+        cmp #'9'
+        jcs fmt_bad
+        lda TOK+2
+        cmp #':'
+        jne fmt_bad
+        lda TOK+3
+        jne fmt_bad
+        jsr putsi
+        .byte 'ERASE ALL DATA ON ',0
+        lda #<TOK
+        ldx #>TOK
+        jsr pstr
+        jsr putsi
+        .byte '? Y/N ',0
+        jsr getkey
+        pha
+        jsr putnl
+        pla
+        cmp #'Y'
+        bne fmt_no
+        lda TOK
+        jsr toupper
+        sta FSPEC
+        lda TOK+1
+        sta FSPEC+1
+        lda #':'
+        sta FSPEC+2
+        lda #EOL
+        sta FSPEC+3
+        lda #0
+        sta V_FLG
+        lda #254
+        jsr xio1
+        jmi failr
+        jsr putsi
+        .byte 'FORMATTED',EOL,0
+        clc
+        rts
+fmt_no: jsr putsi
+        .byte 'CANCELLED',EOL,0
+        clc
+        rts
+fmt_bad:
+        jsr putsi
+        .byte 'USE FORMAT D2:  (D1: TO D8:)',EOL,0
+        lda #165
+        sta V_ERR
+        sec
+        rts
+
+; ---- DELTREE folder: delete a folder and everything below it ----
+TP      = IOBUF
+
+tpcopy: ldy #0
+tc_l:   lda TP,y
+        cmp #EOL
+        beq tc_d
+        sta FSPEC,y
+        iny
+        bne tc_l
+tc_d:   rts
+
+cmd_deltree:
+        jsr reqdirs
+        jcs failr
+        jsr needtok
+        jcs failr
+        jsr mkspec
+        ldy #0
+dtr_c:  lda FSPEC,y
+        cmp #EOL
+        beq dtr_cd
+        sta TP,y
+        iny
+        bne dtr_c
+dtr_cd: dey
+        lda TP,y
+        cmp #':'
+        beq dtr_root
+        cmp #'>'
+        beq dtr_ok
+        iny
+        lda #'>'
+        sta TP,y
+dtr_ok: iny
+        sty V_A0
+        sty V_A0+1
+        lda #EOL
+        sta TP,y
+        jsr putsi
+        .byte 'DELETE EVERYTHING IN ',0
+        lda #<TP
+        ldx #>TP
+        jsr pstr
+        jsr putsi
+        .byte '? Y/N ',0
+        jsr getkey
+        pha
+        jsr putnl
+        pla
+        cmp #'Y'
+        beq dtr_scan
+        jsr putsi
+        .byte 'CANCELLED',EOL,0
+        clc
+        rts
+dtr_root:
+        jsr putsi
+        .byte 'GIVE A FOLDER NAME, NOT A WHOLE DISK',EOL,0
+        lda #165
+        sta V_ERR
+        sec
+        rts
+dtr_scan:
+        jsr tpcopy
+        lda #'*'
+        sta FSPEC,y
+        iny
+        lda #'.'
+        sta FSPEC,y
+        iny
+        lda #'*'
+        sta FSPEC,y
+        iny
+        lda #EOL
+        sta FSPEC,y
+        jsr dopen
+        jmi dtr_err
+dtr_nx: jsr dnext
+        bcs dtr_empty
+        lda DREC+2
+        cmp #'.'
+        beq dtr_nx
+        jsr dname
+        jsr dclose
+        jsr isdirrec
+        beq dtr_dir
+        jsr tpcopy
+        ldx #0
+dtr_nm: lda NAMEB,x
+        beq dtr_nd
+        sta FSPEC,y
+        iny
+        inx
+        bne dtr_nm
+dtr_nd: lda #EOL
+        sta FSPEC,y
+        lda #0
+        sta V_FLG
+        lda #33
+        jsr xio1
+        jmi failr
+        jmp dtr_scan
+dtr_dir:
+        ldy V_A0+1
+        ldx #0
+dtr_ap: lda NAMEB,x
+        beq dtr_ad
+        sta TP,y
+        iny
+        inx
+        bne dtr_ap
+dtr_ad: lda #'>'
+        sta TP,y
+        iny
+        lda #EOL
+        sta TP,y
+        sty V_A0+1
+        jmp dtr_scan
+dtr_empty:
+        jsr dclose
+        jsr tpcopy
+        dey
+        lda #EOL
+        sta FSPEC,y
+        jsr rmdirx
+        jmi failr
+        lda V_A0+1
+        cmp V_A0
+        beq dtr_done
+        ldy V_A0+1
+        dey
+dtr_b:  dey
+        lda TP,y
+        cmp #'>'
+        bne dtr_b
+        iny
+        sty V_A0+1
+        lda #EOL
+        sta TP,y
+        jmp dtr_scan
+dtr_done:
+        jsr putsi
+        .byte 'DELETED',EOL,0
+        clc
+        rts
+dtr_err:
+        lda V_ERR
+        pha
+        jsr dclose
+        pla
+        sta V_ERR
+        sec
+        rts
