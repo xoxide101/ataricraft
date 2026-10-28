@@ -784,7 +784,9 @@
   const driveItems = (pick) => { const out = []; for (let n = 1; n <= 8; n++) out.push({ label: `D${n}: ${(S.disks[n] && S.disks[n].name) || 'empty'}`, run: () => pick(n) }); return out; };
   const targetItems = (kind, getFile, after) => {
     const go = async (fn) => { const fl = await getFile(); if (fl) { await fn(fl); after && after(); } };
-    if (kind === 'disk') return driveItems((n) => go((fl) => loadAny(fl, n, 'disk')));
+    if (kind === 'disk') return [...driveItems((n) => go((fl) => loadAny(fl, n, 'disk'))),
+      { label: 'Open in WebAFM (left pane)', run: () => go((fl) => AC.WebAfm.openFile(0, fl)) },
+      { label: 'Open in WebAFM (right pane)', run: () => go((fl) => AC.WebAfm.openFile(1, fl)) }];
     if (kind === 'cart') return [1, 2].map((n) => ({ label: `Cart ${n}${n === 1 ? ' (main, right)' : ' (left)'}: ${(S.carts[n] && S.carts[n].name) || 'empty'}`, run: () => go((fl) => insertCart(n, fl)) }));
     if (kind === 'tape') return [{ label: 'Cassette', run: () => go((fl) => loadAny(fl, false, 'tape')) }];
     return [{ label: 'Run program', run: () => go((fl) => loadAny(fl, false, kind)) }];
@@ -1467,7 +1469,7 @@
       document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
       localStorage.setItem('ac.sidetab', t);
     };
-    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => show(b.dataset.t); });
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : show(b.dataset.t)); });
     const t0 = localStorage.getItem('ac.sidetab');
     show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
   }
@@ -2128,6 +2130,8 @@
     if (have) for (let t = 1; t <= 8; t++) if (t !== n) items.push({ label: `Move to D${t}:${S.disks[t] ? ' (swap with ' + S.disks[t].name + ')' : ''}`, run: () => moveDisk(n, t) });
     const pick = (id, fn) => { $(id).value = String(n); fn(); };
     if (have) items.push(
+      { label: 'Open in WebAFM (left pane)', run: () => AC.WebAfm.openDrive(0, n) },
+      { label: 'Open in WebAFM (right pane)', run: () => AC.WebAfm.openDrive(1, n) },
       { label: 'Properties…', run: () => driveProps(n) },
       { label: 'Browse files', run: () => pick('fsdrv', () => $('fsbrowse').click()) },
       { label: 'Add files…', run: () => pick('fsdrv', () => {
@@ -2714,6 +2718,15 @@
   const fsBytes = (n) => { if (!S.emu) return null; const b = S.emu.readDisk(n); return b || (S.disks[n] && S.disks[n].bytes) || null; };
   const saveBlob = (name, parts, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(parts, { type: type || 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
   const crcNum = (b) => parseInt(crc32(b), 16);
+  AC.WebAfmHost = {
+    disk: (n) => { const d = S.disks[n]; if (!d) return null; return { name: d.name, bytes: (S.emu && S.emu.readDisk(n)) || d.bytes }; },
+    commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes); S.disks[n] = { name: d.name, bytes }; S.dirty[n] = true; },
+    renameDisk: (n, name) => { const d = S.disks[n]; if (!d) return; d.name = name; S.dirty[n] = true; const el = $('d' + n); if (el) el.textContent = name; },
+    running: () => !!(S.emu && !S.off),
+    save: (name, bytes, type) => saveBlob(name, [bytes], type),
+    zip: (files) => storedZip(files),
+    log: (s) => log(s),
+  };
   function storedZip(files) {
     const parts = [], cd = [];
     let off = 0;

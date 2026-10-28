@@ -130,7 +130,7 @@
   // opts: {conflict:'error'|'skip'|'overwrite'|'rename', flatten:false}
   function plan(src, items, dst, dstDir, opts) {
     opts = opts || {};
-    const P = { ok: true, errors: [], warnings: [], files: [], dirs: [], conflicts: [], sectors: 0, free: 0, sameVolume: src === dst, longNames: new Map() };
+    const P = { ok: true, errors: [], warnings: [], files: [], dirs: [], conflicts: [], sectors: 0, free: 0, sameVolume: src === dst, longNames: new Map(), items: items.slice() };
     const fail = (s) => { P.ok = false; P.errors.push(s); };
     if (dst.vol.readOnly) { fail(`${dst.kind.toUpperCase()} disk with ${dst.vol.sectorSize}-byte sectors is read-only here`); return P; }
     dstDir = dstDir || '';
@@ -203,7 +203,7 @@
   // ---------- execution ----------
   // Writes the plan, reads every file back and compares, and (move) deletes each source only after its copy verified.
   // opts: {move, verify (default true), onProgress(done,total,label), conflict}
-  function execute(P, src, dst, opts) {
+  function* run(P, src, dst, opts) {
     opts = opts || {};
     const res = { copied: 0, skipped: 0, failed: [], verified: 0, deleted: 0 };
     if (!P.ok) { res.failed.push({ path: '', error: P.errors.join('; ') }); return res; }
@@ -212,11 +212,13 @@
     const tick = (l) => { done++; if (opts.onProgress) opts.onProgress(done, total, l); };
     const okFiles = new Set();
     for (const d of P.dirs) {
+      yield;
       try { dst.vol.mkdir(d.to); } catch (e) { res.failed.push({ path: d.to, error: e.message }); }
       tick(d.to);
     }
     touch(dst);
     for (const f of P.files) {
+      yield;
       try {
         if (f.existed && opts.conflict === 'skip') { res.skipped++; tick(f.to); continue; }
         const e = findEntry(src, f.from), data = src.vol.read(e);
@@ -236,11 +238,21 @@
     for (const [d, mp] of P.longNames) { try { writeSidecar(dst, d, mp); } catch (e) { res.failed.push({ path: joinP(d, SIDECAR), error: 'long-name file: ' + e.message }); } }
     touch(dst);
     if (opts.move) {
-      for (const p of okFiles) { try { src.vol.remove(p); res.deleted++; } catch (e) { res.failed.push({ path: p, error: 'delete source: ' + e.message }); } }
-      for (const d of [...P.dirs.map((x) => x.to)].length ? P.srcDirs || [] : []) { /* placeholder */ }
+      for (const p of okFiles) { yield; try { remove(src, p); res.deleted++; } catch (e) { res.failed.push({ path: p, error: 'delete source: ' + e.message }); } }
+      if (!res.failed.length) removeEmptyDirs(src, dirsUnder(src, P.items || []));
       touch(src);
     }
     return res;
+  }
+  const execute = (P, src, dst, opts) => { const g = run(P, src, dst, opts); let r; do { r = g.next(); } while (!r.done); return r.value; };
+  // Same as execute() but lets the page paint every ~40 ms so the progress strip moves.
+  async function executeAsync(P, src, dst, opts) {
+    const g = run(P, src, dst, opts); let r, t = Date.now();
+    for (;;) {
+      r = g.next();
+      if (r.done) return r.value;
+      if (Date.now() - t > 40) { await new Promise((ok) => setTimeout(ok, 0)); t = Date.now(); }
+    }
   }
   // Source folders (deepest first) that can be removed after a move; call after execute() when nothing failed.
   function removeEmptyDirs(src, paths) {
@@ -311,7 +323,7 @@
     return joinP(dir, s.short);
   }
 
-  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs };
+  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, refresh: touch };
   if (typeof AC !== 'undefined') AC.AfmCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
