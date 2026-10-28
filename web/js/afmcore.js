@@ -56,12 +56,20 @@
   function formatLongNames(map) {
     const lines = [];
     for (const e of [...map.values()].sort((a, b) => (a.short < b.short ? -1 : 1))) lines.push(`${e.short.padEnd(12)}|${e.long}|${e.added || ''}|${e.size || 0}|${e.source || ''}`);
-    return new TextEncoder().encode(lines.join('\x9b') + (lines.length ? '\x9b' : ''));
+    const s = lines.join('\x9b') + (lines.length ? '\x9b' : '');
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 255;
+    return out;
   }
   function readSidecar(m, dir) {
     const e = findEntry(m, joinP(dir, SIDECAR));
     if (!e) return new Map();
-    try { return parseLongNames(String.fromCharCode(...m.vol.read(e))); } catch (x) { return new Map(); }
+    try {
+      const b = m.vol.read(e);
+      let s = '';
+      for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+      return parseLongNames(s);
+    } catch (x) { return new Map(); }
   }
   function writeSidecar(m, dir, map) {
     const p = joinP(dir, SIDECAR);
@@ -85,7 +93,7 @@
     for (const e of entries(m)) {
       if (parentOf(e.path) !== dir) continue;
       const l = side.get(e.name.toUpperCase());
-      out.push({ ...e, long: l ? l.long : '', added: l ? l.added : '', source: l ? l.source : '', sidecar: e.name.toUpperCase() === SIDECAR, sectors: e.dir ? 0 : sectorsFor(m, e.size) });
+      out.push({ ...e, long: l && l.long.toUpperCase() !== e.name.toUpperCase() ? l.long : '', indexed: !!l, added: l ? l.added : '', source: l ? l.source : '', sidecar: e.name.toUpperCase() === SIDECAR, sectors: e.dir ? 0 : sectorsFor(m, e.size) });
     }
     return out.sort((a, b) => (a.dir !== b.dir ? (a.dir ? -1 : 1) : a.name < b.name ? -1 : 1));
   }
@@ -100,7 +108,9 @@
       if (!x.path.startsWith(pre)) continue;
       const rel = x.path.slice(pre.length), lvl = rel.split('/').length;
       r.depth = Math.max(r.depth, lvl);
-      if (x.dir) { r.dirs++; r.sectors += dirSectors(m); } else {
+      if (x.dir) { r.dirs++; r.sectors += dirSectors(m); } else if (x.name.toUpperCase() === SIDECAR) {
+        r.sectors += sectorsFor(m, x.size); r.indexBytes = (r.indexBytes || 0) + x.size; // counted as space, not as a user file
+      } else {
         r.files++; r.bytes += x.size; r.sectors += sectorsFor(m, x.size);
         if (!r.largest || x.size > r.largest.size) r.largest = { path: x.path, size: x.size };
       }
@@ -137,7 +147,8 @@
     const usedByDir = new Map(), usedFor = (d) => { if (!usedByDir.has(d)) usedByDir.set(d, existingNames(dst, d)); return usedByDir.get(d); };
     const counted = new Map(), slotsLeft = (d) => dirLimit(dst) - existingNames(dst, d).size - (counted.get(d) || 0);
     const bump = (d) => counted.set(d, (counted.get(d) || 0) + 1);
-    const srcEntries = entries(src);
+    const srcEntries = entries(src), sideCache = new Map();
+    const longOf = (e) => { const d = parentOf(e.path); if (!sideCache.has(d)) sideCache.set(d, readSidecar(src, d)); const l = sideCache.get(d).get(e.name.toUpperCase()); return l ? l.long : ''; };
     const mapped = new Map(); // src dir path -> dst dir path
     const mapDir = (srcDirParent, name, isDir, forceDstParent) => name;
     for (const top of items) {
@@ -145,7 +156,7 @@
       if (!te) { fail('not found: ' + top); continue; }
       const topDst = (n) => {
         const s = shortName(n, null, te.dir), used = usedFor(dstDir);
-        let sn = s.short, ln = s.long;
+        let sn = s.short, ln = s.long || longOf(te);
         if (used.has(sn.toUpperCase()) && !(te.dir && opts.conflict !== 'rename')) {
           if (opts.conflict === 'rename') { const r = shortName(n.length ? n : sn, used, te.dir); sn = r.short; ln = ln || n; }
           else P.conflicts.push(joinP(dstDir, sn));
@@ -157,7 +168,7 @@
       if (slotsLeft(dstDir) <= 0 && !P.conflicts.includes(joinP(dstDir, t.short))) { fail(`directory "${dstDir || 'root'}" is full (${dirLimit(dst)} entries)`); continue; }
       bump(dstDir);
       const dstTop = joinP(dstDir, t.short);
-      const note = (dir, short, long, size, from) => { if (!long) return; if (!P.longNames.has(dir)) P.longNames.set(dir, new Map()); P.longNames.get(dir).set(short.toUpperCase(), { short: short.toUpperCase(), long, added: stampNow(opts.now), size, source: from }); };
+      const note = (dir, short, long, size, from) => { if (opts.index === false || short.toUpperCase() === SIDECAR) return; if (!P.longNames.has(dir)) P.longNames.set(dir, new Map()); P.longNames.get(dir).set(short.toUpperCase(), { short: short.toUpperCase(), long: long || short, added: stampNow(opts.now), size, source: from }); };
       if (!te.dir) {
         P.files.push({ from: te.path, to: dstTop, size: te.size, long: t.long, existed: findEntry(dst, dstTop) });
         note(dstDir, t.short, t.long, te.size, (src.name || '') + ':' + te.path);
@@ -172,16 +183,16 @@
       note(dstDir, t.short, t.long, 0, (src.name || '') + ':' + te.path);
       P.sectors += dirSectors(dst);
       const pre = te.path + '/', dmap = new Map([[te.path, dstTop]]);
-      for (const x of srcEntries.filter((y) => y.path.startsWith(pre))) {
+      for (const x of srcEntries.filter((y) => y.path.startsWith(pre) && (y.dir || y.name.toUpperCase() !== SIDECAR))) {
         const sp = parentOf(x.path), dp = dmap.get(sp);
         if (dp === undefined) continue;
         const used = usedFor(dp), s = shortName(baseOf(x.path), used, x.dir);
         if (slotsLeft(dp) <= 0) { fail(`directory "${dp}" would be full`); continue; }
         bump(dp);
-        const to = joinP(dp, s.short);
-        if (x.dir) { dmap.set(x.path, to); P.dirs.push({ to, long: s.long }); P.sectors += dirSectors(dst); }
-        else { P.files.push({ from: x.path, to, size: x.size, long: s.long }); P.sectors += sectorsFor(dst, x.size); }
-        note(dp, s.short, s.long, x.size, (src.name || '') + ':' + x.path);
+        const to = joinP(dp, s.short), sl = s.long || longOf(x);
+        if (x.dir) { dmap.set(x.path, to); P.dirs.push({ to, long: sl }); P.sectors += dirSectors(dst); }
+        else { P.files.push({ from: x.path, to, size: x.size, long: sl }); P.sectors += sectorsFor(dst, x.size); }
+        note(dp, s.short, sl, x.size, (src.name || '') + ':' + x.path);
       }
     }
     // sidecar files for folders that received long names
@@ -208,38 +219,48 @@
     const res = { copied: 0, skipped: 0, failed: [], verified: 0, deleted: 0 };
     if (!P.ok) { res.failed.push({ path: '', error: P.errors.join('; ') }); return res; }
     const total = P.files.length + P.dirs.length;
-    let done = 0;
-    const tick = (l) => { done++; if (opts.onProgress) opts.onProgress(done, total, l); };
+    let done = 0, doneBytes = 0, fileNo = 0;
+    const totalBytes = P.files.reduce((a, f) => a + (f.size || 0), 0);
+    const info = (phase, f) => ({ phase, file: fileNo, files: P.files.length, bytes: doneBytes, totalBytes, size: f ? f.size || 0 : 0 });
+    const tick = (l, ph, f) => { done++; if (opts.onProgress) opts.onProgress(done, total, l, info(ph || 'done', f)); };
+    const step = (l, ph, f) => { if (opts.onProgress) opts.onProgress(done, total, l, info(ph, f)); };
     const okFiles = new Set();
     for (const d of P.dirs) {
       yield;
       try { dst.vol.mkdir(d.to); } catch (e) { res.failed.push({ path: d.to, error: e.message }); }
-      tick(d.to);
+      tick(d.to, 'folder');
     }
     touch(dst);
     for (const f of P.files) {
       yield;
+      if (opts.cancelled && opts.cancelled()) { res.cancelled = true; break; }
+      fileNo++;
       try {
-        if (f.existed && opts.conflict === 'skip') { res.skipped++; tick(f.to); continue; }
+        step(f.to, 'write', f);
+        if (f.existed && opts.conflict === 'skip') { res.skipped++; doneBytes += f.size || 0; tick(f.to, 'skip', f); continue; }
         const e = findEntry(src, f.from), data = src.vol.read(e);
         dst.vol.writeFile(f.to, data, true);
         res.copied++;
         if (opts.verify !== false) {
+          yield; step(f.to, 'verify', f);
           touch(dst);
           const back = dst.vol.read(findEntry(dst, f.to));
-          if (!eq(back, data)) { res.failed.push({ path: f.to, error: 'verify failed - source kept' }); tick(f.to); continue; }
+          if (!eq(back, data)) { res.failed.push({ path: f.to, error: 'verify failed - source kept' }); doneBytes += f.size || 0; tick(f.to, 'done', f); continue; }
           res.verified++;
         }
         okFiles.add(f.from);
       } catch (e) { res.failed.push({ path: f.to, error: e.message }); }
-      tick(f.to);
+      doneBytes += f.size || 0;
+      tick(f.to, 'done', f);
     }
     touch(dst);
+    step('long names', 'index');
     for (const [d, mp] of P.longNames) { try { writeSidecar(dst, d, mp); } catch (e) { res.failed.push({ path: joinP(d, SIDECAR), error: 'long-name file: ' + e.message }); } }
     touch(dst);
     if (opts.move) {
+      step('removing sources', 'cleanup');
       for (const p of okFiles) { yield; try { remove(src, p); res.deleted++; } catch (e) { res.failed.push({ path: p, error: 'delete source: ' + e.message }); } }
-      if (!res.failed.length) removeEmptyDirs(src, dirsUnder(src, P.items || []));
+      if (!res.failed.length && !res.cancelled) removeEmptyDirs(src, dirsUnder(src, P.items || []));
       touch(src);
     }
     return res;
@@ -318,7 +339,7 @@
     const need = sectorsFor(m, data.length);
     if (need > m.vol.freeSectors()) throw new Error(`does not fit: needs ${need} sectors, ${m.vol.freeSectors()} free`);
     m.vol.writeFile(joinP(dir, s.short), data, true);
-    if (s.long) { const sc = readSidecar(m, dir); sc.set(s.short.toUpperCase(), { short: s.short.toUpperCase(), long: s.long, added: stampNow((opts || {}).now), size: data.length, source: (opts || {}).source || 'PC' }); writeSidecar(m, dir, sc); }
+    if ((s.long || (opts || {}).index !== false) && s.short.toUpperCase() !== SIDECAR) { const sc = readSidecar(m, dir); sc.set(s.short.toUpperCase(), { short: s.short.toUpperCase(), long: s.long || s.short, added: stampNow((opts || {}).now), size: data.length, source: (opts || {}).source || 'PC' }); writeSidecar(m, dir, sc); }
     touch(m);
     return joinP(dir, s.short);
   }

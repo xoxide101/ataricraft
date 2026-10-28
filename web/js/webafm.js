@@ -32,8 +32,16 @@
   #wafm td{padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
   #wafm tr.r{cursor:default;user-select:none}#wafm tr.r:hover{background:#262b34}#wafm tr.sel{background:#2f3a52}#wafm tr.cur td:first-child{box-shadow:inset 3px 0 #e8a33d}
   #wafm tr.dropt{outline:2px dashed #e8a33d}#wafm td.n small{color:#8a93a3;margin-left:6px}#wafm td.num{text-align:right;color:#aab}
-  #wafm tr.side td{color:#8a93a3}
+  #wafm tr.wix td{color:#8a93a3}
   #wafm .wst{padding:6px 10px;background:#1e2128;border-top:1px solid #2c313b;color:#e8a33d;min-height:18px}
+  #wafm .wxf{padding:6px 10px;background:#171a20;border-top:1px solid #2c313b;font-size:12px}
+  #wafm .wxf[hidden]{display:none}
+  #wafm .wxf .r1{display:flex;gap:12px;align-items:center}#wafm .wxf .xt{color:#8fb8ff}#wafm .wxf .xs{flex:1;text-align:right;color:#aab}
+  #wafm .wxf .xc{padding:1px 10px}#wafm .wxf .xf{color:#cfd3da;margin:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #wafm .wxf .xb{position:relative;height:16px;background:#232733;border:1px solid #39404f;border-radius:3px;overflow:hidden}
+  #wafm .wxf .xb i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#2b6fd6,#4aa3ff)}
+  #wafm .wxf .xb.done i{background:#3aa55d}#wafm .wxf .xb.bad i{background:#c2503f}
+  #wafm .wxf .xp{position:absolute;right:6px;top:0;line-height:16px;font-weight:600;color:#fff;text-shadow:0 0 2px #000}
   #wafm .wdlg{position:absolute;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:5}
   #wafm .wdb{background:#1e2128;border:1px solid #4a5160;border-radius:10px;padding:14px;min-width:340px;max-width:min(92vw,720px);max-height:88vh;overflow:auto}
   #wafm .wdb h3{margin:0 0 8px;color:#e8a33d}#wafm .wdb .bt{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
@@ -44,7 +52,44 @@
   `;
 
   // ---------- small UI helpers ----------
+  const KINDS = [
+    ['⚙', 'Program', 'COM XEX EXE OBJ BIN CMD'], ['📜', 'BASIC', 'BAS BA LST TUR ACT'], ['📝', 'Text / source', 'TXT DOC ASM SRC MAC M65 H A65 INC LIB MD'],
+    ['🖼', 'Picture', 'PIC MIC GR7 GR8 GR9 GR15 GR11 APL PCT HIP MCH INP RGB VBM IMG'], ['🎵', 'Music', 'MUS CMC MPT RMT TMC TM2 SAP DMC MPD DLT'],
+    ['💾', 'Disk image', 'ATR ATX XFD DCM PRO DI'], ['🎮', 'Cartridge', 'CAR ROM'], ['🗜', 'Archive', 'ZIP LZH LHA ARC ARJ SDX 7Z GZ'], ['🔧', 'System', 'SYS DOS DUP AUT'],
+    ['🔤', 'Font', 'FNT SET FON CHR'], ['📊', 'Data', 'DAT DTA DB'],
+  ];
+  const KIND_OF = {}; for (const [ic, nm, ex] of KINDS) for (const x of ex.split(' ')) KIND_OF[x] = [ic, nm];
+  function kindOf(e) {
+    if (e.dir) return ['📁', 'Folder']; if (e.sidecar) return ['🏷', 'Long-name index'];
+    const m = /\.([^.]+)$/.exec(e.name); return (m && KIND_OF[m[1].toUpperCase()]) || ['📄', 'File'];
+  }
+  const iconOf = (e) => kindOf(e)[0];
   function setStatus(s) { const e = W.el && W.el.querySelector('.wst'); if (e) e.textContent = s; }
+  // Transfer panel above the status line: "File 3 of 20", current file, bytes, speed, elapsed and a bar.
+  function xferBar(title, nFiles) {
+    const box = W.el.querySelector('.wxf'), q = (s) => box.querySelector(s), t0 = performance.now();
+    const clock = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+    clearTimeout(W.xfHide); W.cancel = false;
+    box.hidden = false; q('.xt').textContent = title; q('.xc').hidden = false; q('.xc').disabled = false; q('.xb').className = 'xb';
+    q('.xc').onclick = () => { W.cancel = true; q('.xc').disabled = true; q('.xf').textContent = 'Cancelling after the current file…'; };
+    const bar = (frac, pctText) => { q('.xb i').style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(1) + '%'; q('.xp').textContent = pctText; };
+    bar(0, '0%'); q('.xs').textContent = ''; q('.xf').textContent = 'Starting…';
+    const phaseText = { write: 'Writing', verify: 'Verifying', folder: 'Folder', skip: 'Skipped', done: 'Done', index: 'Updating', cleanup: 'Removing' };
+    return {
+      update(d, t, label, i) {
+        i = i || {}; const sec = (performance.now() - t0) / 1000;
+        const frac = i.totalBytes ? i.bytes / i.totalBytes : t ? d / t : 0, rate = sec > 0.05 ? i.bytes / sec : 0;
+        const n = i.files ? `File ${Math.min(Math.max(i.file, 1), i.files)} of ${i.files}` : (t ? `${d} of ${t}` : '');
+        q('.xf').textContent = `${phaseText[i.phase] || ''} ${label || ''}${i.size ? ' · ' + kb(i.size) : ''}`.trim();
+        q('.xs').textContent = [n, i.totalBytes ? kb(i.bytes) + ' / ' + kb(i.totalBytes) : '', rate ? kb(rate) + '/s' : '', clock(sec)].filter(Boolean).join('  ·  ');
+        bar(frac, Math.floor(frac * 100) + '%');
+      },
+      end(text, bad) {
+        q('.xc').hidden = true; q('.xb').className = 'xb ' + (bad ? 'bad' : 'done'); bar(1, bad ? 'stopped' : '100%'); q('.xf').textContent = text || '';
+        W.xfHide = setTimeout(() => { box.hidden = true; }, 8000);
+      },
+    };
+  }
   function dlg(title, body, buttons) {
     return new Promise((res) => {
       const bk = document.createElement('div'); bk.className = 'wdlg';
@@ -52,7 +97,7 @@
       const h = document.createElement('h3'); h.textContent = title; b.append(h);
       if (typeof body === 'string') { const d = document.createElement('div'); d.innerHTML = body; b.append(d); } else if (body) b.append(body);
       const bt = document.createElement('div'); bt.className = 'bt';
-      const done = (v) => { bk.remove(); W.el.removeEventListener('keydown', onk, true); W.el.focus(); res(v); };
+      const done = (v) => { bk.remove(); W.el.removeEventListener('keydown', onk, true); if (W.dlgKey === onk) W.dlgKey = null; W.el.focus(); res(v); };
       for (const x of buttons || [{ label: 'OK', value: true, pri: true }]) {
         const k = document.createElement('button'); k.textContent = x.label; if (x.pri) k.className = 'pri';
         k.onclick = () => done(typeof x.value === 'function' ? x.value() : x.value); bt.append(k); x.el = k;
@@ -62,7 +107,7 @@
         if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); done(null); }
         else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') { const p = (buttons || [{ pri: 1, el: bt.firstChild }]).find((x) => x.pri); if (p && p.el) { e.stopPropagation(); e.preventDefault(); p.el.click(); } }
       };
-      W.el.addEventListener('keydown', onk, true);
+      W.el.addEventListener('keydown', onk, true); W.dlgKey = onk;
       const f = b.querySelector('input,textarea,select') || (bt.querySelector('.pri') || bt.firstChild); f && f.focus();
       if (f && f.select) f.select();
     });
@@ -196,7 +241,7 @@
       <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button><button data-a="mkdir" title="F7">New folder</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>
       <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
-      <div class="wpanes"></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
+      <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
     document.body.append(el);
     const pn = el.querySelector('.wpanes');
     W.panes.forEach((p, i) => {
@@ -210,7 +255,8 @@
   }
   function wirePane(d, i) {
     const p = W.panes[i];
-    d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; render(); } }, true);
+    // Only flag the pane here; a full render would replace the row under the cursor and swallow the click.
+    d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
       if (v === 'pc') pickFile(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
@@ -221,8 +267,8 @@
     d.querySelector('.flt').oninput = (e) => { p.filter = e.target.value; render(); };
     const l = d.querySelector('.wl');
     l.onclick = (e) => rowClick(i, e);
-    l.ondblclick = (e) => { const tr = e.target.closest('tr.r'); if (tr) openRow(i, tr.dataset.p, tr.dataset.up === '1'); };
-    l.onclick = (e) => { const th = e.target.closest('th[data-k]'); if (th) { const k = th.dataset.k; p.sort = { k, asc: p.sort.k === k ? !p.sort.asc : true }; render(); } else rowClick(i, e); };
+    // Rows are rebuilt on every click, so the browser's dblclick can miss; use the click count instead.
+    l.onclick = (e) => { const tr = e.target.closest('tr.r'); if (e.detail === 2 && tr && !e.target.classList.contains('ck')) { openRow(i, tr.dataset.p, tr.dataset.up === '1'); return; } const th = e.target.closest('th[data-k]'); if (th) { const k = th.dataset.k; p.sort = { k, asc: p.sort.k === k ? !p.sort.asc : true }; render(); } else rowClick(i, e); };
     l.addEventListener('contextmenu', (e) => { e.preventDefault(); const tr = e.target.closest('tr.r'); if (tr && tr.dataset.p && !p.sel.has(tr.dataset.p)) { p.sel = new Set([tr.dataset.p]); p.cur = tr.dataset.p; render(); } ctxMenu(i, e.clientX, e.clientY); });
     d.addEventListener('dragover', (e) => { e.preventDefault(); const tr = e.target.closest('tr.r'); l.querySelectorAll('.dropt').forEach((x) => x.classList.remove('dropt')); if (tr && tr.dataset.dir === '1') tr.classList.add('dropt'); });
     d.addEventListener('dragleave', () => l.querySelectorAll('.dropt').forEach((x) => x.classList.remove('dropt')));
@@ -276,7 +322,7 @@
     for (const e of rows) {
       const isSel = p.sel.has(e.path), name = e.long || e.name;
       const exp = p.tree && e.dir ? (p.collapsed.has(e.path) ? '▸ ' : '▾ ') : '';
-      h += `<tr class="r${isSel ? ' sel' : ''}${p.cur === e.path ? ' cur' : ''}${e.sidecar ? ' side' : ''}" draggable="true" data-p="${esc(e.path)}" data-dir="${e.dir ? 1 : 0}"><td><input type="checkbox" class="ck" ${isSel ? 'checked' : ''} style="padding:0"></td><td class="n" style="padding-left:${6 + e.depth * 16}px" title="${esc(e.path + (e.long ? '\n' + e.long : ''))}">${exp}${e.dir ? '📁' : e.sidecar ? '🏷' : '📄'} ${esc(name)}${e.long ? '<small>' + esc(e.name) + '</small>' : ''}${e.flat ? '<small>' + esc(parentOf(e.path)) + '</small>' : ''}</td><td class="num">${e.dir ? '' : (e.approx ? '~' : '') + kb(e.size)}</td><td class="num">${e.dir ? '' : e.sectors}</td><td>${esc(e.date || e.added || '')}</td></tr>`;
+      h += `<tr class="r${isSel ? ' sel' : ''}${p.cur === e.path ? ' cur' : ''}${e.sidecar ? ' wix' : ''}" draggable="true" data-p="${esc(e.path)}" data-dir="${e.dir ? 1 : 0}"><td><input type="checkbox" class="ck" ${isSel ? 'checked' : ''} style="padding:0"></td><td class="n" style="padding-left:${6 + e.depth * 16}px" title="${esc(kindOf(e)[1] + ' · ' + e.path + (e.long ? '\n' + e.long : ''))}">${exp}${iconOf(e)} ${esc(name)}${e.long ? '<small>' + esc(e.name) + '</small>' : ''}${e.flat ? '<small>' + esc(parentOf(e.path)) + '</small>' : ''}</td><td class="num">${e.dir ? '' : (e.approx ? '~' : '') + kb(e.size)}</td><td class="num">${e.dir ? '' : e.sectors}</td><td>${esc(e.date || e.added || '')}</td></tr>`;
     }
     l.dataset.sc = l.scrollTop; l.innerHTML = h + '</table>';
     l.scrollTop = +l.dataset.sc || 0;
@@ -328,7 +374,7 @@
     items = items || selItems(sp);
     if (!items.length) return log('tag or select something first');
     toDir = toDir == null ? dp.dir : toDir;
-    let P, opts = { conflict: W.conflict === 'error' ? undefined : W.conflict };
+    let P, opts = { conflict: W.conflict === 'error' ? undefined : W.conflict, index: W.index !== false };
     const sum = document.createElement('div');
     const paint = () => {
       P = C.plan(sr.m, items, dr.m, toDir, opts);
@@ -347,7 +393,9 @@
       const go = sum.parentElement && sum.parentElement.querySelector('.pri'); if (go) go.disabled = !P.ok;
     };
     const verify = document.createElement('label'); verify.innerHTML = '<input type="checkbox" checked> Verify every file by reading it back'; verify.style.cssText = 'display:block;margin-top:8px';
-    const wrap = document.createElement('div'); wrap.append(sum, verify);
+    const idx = document.createElement('label'); idx.innerHTML = `<input type="checkbox" ${opts.index === false ? '' : 'checked'}> Record every name, date, size and source in LONGNAME.TXT`; idx.style.cssText = 'display:block;margin-top:4px';
+    idx.querySelector('input').onchange = (e) => { opts.index = e.target.checked; W.index = opts.index; paint(); };
+    const wrap = document.createElement('div'); wrap.append(sum, verify, idx);
     paint();
     const go = dlg(move ? 'Move' : 'Copy', wrap, [{ label: 'Cancel', value: false }, { label: move ? 'Move' : 'Copy', value: true, pri: true }]);
     paint();
@@ -355,10 +403,14 @@
     P = C.plan(sr.m, items, dr.m, toDir, opts);
     if (!P.ok) return log('not done: ' + P.errors.join('; '));
     snapshot((move ? 'move' : 'copy') + ' ' + items.length + ' item(s)', [sr, dr]);
-    const total = P.files.length + P.dirs.length, pg = AC.Progress.begin((move ? 'Moving' : 'Copying') + ' to ' + dr.name + '…', total);
+    const total = P.files.length + P.dirs.length, verb = move ? 'Moving' : 'Copying';
+    const pg = AC.Progress.begin(verb + ' to ' + dr.name + '…', total), xb = xferBar(`${verb}  ${sr.name} → ${dr.name}`, P.files.length), t0 = performance.now();
     let res;
-    try { res = await C.executeAsync(P, sr.m, dr.m, { move, verify: verify.querySelector('input').checked, conflict: opts.conflict, onProgress: (d, t, l) => { pg.set(d, t); pg.text((move ? 'Moving ' : 'Copying ') + l); } }); }
+    try { res = await C.executeAsync(P, sr.m, dr.m, { move, verify: verify.querySelector('input').checked, conflict: opts.conflict, cancelled: () => W.cancel, onProgress: (d, t, l, i) => { pg.set(d, t); pg.text(verb + ' ' + l); xb.update(d, t, l, i); } }); }
+    catch (e) { xb.end('Failed: ' + e.message, true); throw e; }
     finally { pg.end(); }
+    const secs = (performance.now() - t0) / 1000, tb = P.files.reduce((a, f) => a + (f.size || 0), 0);
+    xb.end(`${res.cancelled ? 'Cancelled after' : 'Finished'} ${res.copied + res.skipped} of ${P.files.length} file(s), ${kb(tb)} in ${secs.toFixed(1)} s${res.failed.length ? ' · ' + res.failed.length + ' failed' : ''}`, res.cancelled || res.failed.length > 0);
     await afterWrite([sr, dr]);
     sp.sel = new Set(); dp.sel = new Set();
     log(`${move ? 'Moved' : 'Copied'} ${res.copied} file(s)${res.verified ? ', ' + res.verified + ' verified' : ''}${res.skipped ? ', ' + res.skipped + ' skipped' : ''}${res.failed.length ? ', ' + res.failed.length + ' FAILED' : ''}.`);
@@ -369,13 +421,16 @@
     const p = W.panes[i], r = rec(p); if (!r) return;
     if (r.m.vol.readOnly) return log('this disk is read-only here');
     snapshot('add files', [r]);
-    const pg = AC.Progress.begin('Adding files to ' + r.name + '…', files.length); let n = 0; const bad = [];
+    const pg = AC.Progress.begin('Adding files to ' + r.name + '…', files.length), xb = xferBar('Adding from PC → ' + r.name, files.length), t0 = performance.now(), totalB = files.reduce((a, f) => a + (f.size || 0), 0); let n = 0, doneB = 0, k = 0; const bad = [];
     try {
       for (const f of files) {
-        pg.text('Adding ' + f.name); pg.set(n);
-        try { C.addHostFile(r.m, dir == null ? p.dir : dir, f.name, await AC.Progress.read(f), { source: 'PC', now: new Date(f.lastModified || Date.now()) }); n++; } catch (e) { bad.push(f.name + ': ' + e.message); }
+        if (W.cancel) break;
+        k++; pg.text('Adding ' + f.name); pg.set(n);
+        xb.update(n, files.length, f.name, { phase: 'write', file: k, files: files.length, bytes: doneB, totalBytes: totalB, size: f.size });
+        try { C.addHostFile(r.m, dir == null ? p.dir : dir, f.name, await AC.Progress.read(f), { source: 'PC', now: new Date(f.lastModified || Date.now()), index: W.index !== false }); n++; } catch (e) { bad.push(f.name + ': ' + e.message); }
+        doneB += f.size || 0; await new Promise((ok) => setTimeout(ok, 0));
       }
-    } finally { pg.end(); }
+    } finally { pg.end(); xb.end(`${W.cancel ? 'Cancelled after' : 'Finished'} ${n} of ${files.length} file(s), ${kb(doneB)} in ${((performance.now() - t0) / 1000).toFixed(1)} s${bad.length ? ' · ' + bad.length + ' failed' : ''}`, W.cancel || bad.length > 0); }
     await afterWrite([r]); log(`Added ${n} file(s)${bad.length ? '; ' + bad.length + ' failed' : ''}.`); render();
     if (bad.length) msg('Some files were not added', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
   }
@@ -542,6 +597,7 @@
   window.addEventListener('keydown', (e) => {
     if (!W.el || W.el.style.display === 'none' || W.el.contains(e.target)) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (W.dlgKey) { W.dlgKey(e); e.stopPropagation(); return; }
     W.el.focus(); onKey(e);
     if (!e.ctrlKey && !e.metaKey) e.stopPropagation();
   }, true);
