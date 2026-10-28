@@ -2644,9 +2644,9 @@
   // The old blank/browse/save controls take their drive from a hidden value: borrow it, press the button, put it back.
   const viaVal = (id, v, fn) => { const h = $(id), old = h.value; h.value = String(v); try { fn(); } finally { h.value = old; } };
   function insertBlank(n, fmt, f) {
-    const sd = $('blanksdfs'), md = $('blankmydos'), fm = $('blankfmt'), o = [sd.checked, md.checked, fm.value];
-    sd.checked = !!f.sd; md.checked = !!f.md; fm.value = fmt;
-    try { viaVal('blankslot', n, () => $('blankmk').click()); } finally { sd.checked = o[0]; md.checked = o[1]; fm.value = o[2]; }
+    const sd = $('blanksdfs'), md = $('blankmydos'), d2 = $('blankdos2'), fm = $('blankfmt'), o = [sd.checked, md.checked, fm.value, d2.checked];
+    sd.checked = !!f.sd; md.checked = !!f.md; d2.checked = false; fm.value = fmt;
+    try { viaVal('blankslot', n, () => $('blankmk').click()); } finally { sd.checked = o[0]; md.checked = o[1]; fm.value = o[2]; d2.checked = o[3]; }
   }
   function blankMenu(n, x, y) {
     openPick(x, y, `Blank disk for D${n}:`, [...$('blankfmt').options].map((o) => ({
@@ -3250,8 +3250,9 @@
     return out;
   }
   const mdOk = (ss, n) => $('blankmydos').checked && (ss === 256 || (ss === 128 && n === 720));
-  const makeBlank = (ss, n) => (mdOk(ss, n) ? AC.DosFs.createMyDos({ sectorSize: ss, sectors: n }) : $('blanksdfs').checked && ss === 256 ? AC.DosFs.createSdfs({ sectorSize: 256, sectors: n, label: 'BLANK' }) : blankAtr(ss, n));
-  const blankName =  () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${mdOk(ss, n) ? '_mydos' : $('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
+  const d2Ok = (ss, n) => $('blankdos2').checked && ss === 128 && (n === 720 || n === 1040);
+  const makeBlank = (ss, n) => (d2Ok(ss, n) ? AC.DosFs.createDos2({ sectors: n }) : mdOk(ss, n) ? AC.DosFs.createMyDos({ sectorSize: ss, sectors: n }) : $('blanksdfs').checked && ss === 256 ? AC.DosFs.createSdfs({ sectorSize: 256, sectors: n, label: 'BLANK' }) : blankAtr(ss, n));
+  const blankName =  () => { const [ss, n] = $('blankfmt').value.split(',').map(Number); return `blank_${$('blankfmt').selectedOptions[0].textContent.split(' (')[0].replace(/[^\w]+/g, '_')}${d2Ok(ss, n) ? '_dos2' : mdOk(ss, n) ? '_mydos' : $('blanksdfs').checked && ss === 256 ? '_sdfs' : ''}.atr`; };
   $('blankmk').onclick = () => {
     if (!S.emu) { log('boot first, then insert a blank disk'); return; }
     const [ss, n] = $('blankfmt').value.split(',').map(Number), slot = +$('blankslot').value;
@@ -3852,7 +3853,7 @@
   $('speed').oninput = (e) => { S.speed = Math.pow(2, +e.target.value); const s = S.speed.toFixed(S.speed < 1 ? 2 : 1); $('speedv').textContent = s + '×'; $('spd').textContent = s; };
 
   // ---- remembered settings and last-used media (survive reloads) ----
-  const CTL = ['model', 'ram', 'tv', 'xep80', 'kblayout', 'speed', 'blankfmt', 'blanksdfs', 'blankmydos'];
+  const CTL = ['model', 'ram', 'tv', 'xep80', 'kblayout', 'speed', 'blankfmt', 'blanksdfs', 'blankmydos', 'blankdos2'];
   const ctlRead = () => { try { return JSON.parse(localStorage.getItem('ac.ctl') || '{}'); } catch (e) { return {}; } };
   const ctlVal = (el) => (el.type === 'checkbox' ? el.checked : el.value);
   for (const id of CTL) {
@@ -3874,7 +3875,7 @@
     };
     // The model rebuilds the RAM list and keyboard layout, so it goes first.
     put('model', 'change'); put('ram'); put('kblayout', 'change'); put('tv'); put('xep80');
-    put('speed', 'input'); put('blankfmt'); put('blanksdfs'); put('blankmydos');
+    put('speed', 'input'); put('blankfmt'); put('blanksdfs'); put('blankmydos'); put('blankdos2');
   }
 
   // ---- edited disks: pull the emulated image back into S.disks so reboots, reloads and sets keep your changes ----
