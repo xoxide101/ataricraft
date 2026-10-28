@@ -407,6 +407,7 @@
   // Content signatures: identify a file by what is inside it, whatever it is called (e.g. AFM_1.COM is still AFM).
   const SIGS = [
     [/ATARICRAFT AFM V(\d+\.\d+) REV (\d+)/, (r) => 'Ataricraft File Manager V' + r[1] + ' REV ' + r[2]],
+    [/ATARICRAFT AFM/, () => 'Ataricraft File Manager (older build, no version number)'],
     [/Dir Formatter\s+(\d[\d.]*)\s+By:\s*([\w ]+)/i, (r) => 'MyDOS directory formatter ' + r[1] + ' (' + r[2].trim() + ')'],
     [/MyDOS\s+(\d[\w.]*(?: Beta \d+)?)\s+\(C\)/i, (r) => 'MyDOS ' + r[1] + ' disk utility package'],
     [/DISK OPERATING SYSTEM II VERSION\s+(\d\.\d\w*)/i, (r) => 'Atari DOS ' + r[1] + ' disk utility package'],
@@ -447,9 +448,11 @@
         const key = e.name.toUpperCase(), cur = side.get(key);
         let found = '', src = 'DB';
         const redo = cur && cur.source === 'INFO' && !e.dir && opts.describe !== false;
-        if (!cur || cur.long.toUpperCase() === key || redo) {
+        if (!cur || cur.long.toUpperCase() === key || /^[\w.-]{1,12}$/.test(cur.long) || redo) {
           if (!redo) try { found = (lookup(e.name, e.path) || '').trim(); } catch (x) { found = ''; }
-          if (!found && !e.dir && opts.describe !== false) { found = describe(m, e.name, e.path); src = 'INFO'; }
+          if (found.toUpperCase().replace(/\.[^.]*$/, '') === key.replace(/\.[^.]*$/, '')) found = '';
+          const plain = !found || /^[\w.-]{1,12}$/.test(found);
+          if (plain && !e.dir && opts.describe !== false) { const dsc = describe(m, e.name, e.path); if (dsc) { found = dsc; src = 'INFO'; } }
         }
         if (!cur) { side.set(key, { short: key, long: found || e.name, added: stampNow(opts.now), size: e.size, source: found ? src : 'DISK' }); res.added++; changed = true; }
         else if (found && found.toUpperCase() !== key && found !== cur.long) { cur.long = found; cur.source = cur.source || src; res.upgraded++; changed = true; }
