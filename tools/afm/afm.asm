@@ -34,13 +34,14 @@ SH      = $0600
 PC1     = 40
 PW      = 24
 CLRW    = 80
+TW      = 80
 SP      = $CC
-B80     = $8060
         .else
 SH      = 0
 PC1     = 20
 PW      = 5
 CLRW    = 39
+TW      = 40
         .endif
 
 MAXE    = 120
@@ -107,6 +108,9 @@ start:
         sta inv
         sta m80
         sta act
+        .if COLS80
+        jsr setb80
+        .endif
         ldx #0
         stx sel
         stx sel+1
@@ -859,7 +863,9 @@ doview: lda #1
         bne ed_set
 doedit: lda #0
 ed_set: sta edro
+        .if !COLS80
         jsr dlstock
+        .endif
         lda #0
         sta ednew
         jsr needf
@@ -886,7 +892,14 @@ ed_ld:  lda $6A
         cmp #EMAXPG
         bcc ed_l1
         lda #EMAXPG
-ed_l1:  sta elim+1
+ed_l1:
+        .if COLS80
+        cmp b80h
+        bcc ed_l2
+        lda b80h
+ed_l2:
+        .endif
+        sta elim+1
         lda #0
         sta elim
         sta edmod
@@ -969,6 +982,14 @@ ed_fail:
 ed_ok:  jsr close1
 ed_ok2: lda #125
         jsr putraw
+        .if COLS80
+        ldx #23
+        lda #0
+ed_rs:  sta rsa,x
+        sta rsb,x
+        dex
+        bpl ed_rs
+        .endif
 ed_loop:
         jsr edfix
         jsr edrender
@@ -1240,6 +1261,19 @@ sv_ok:  lda #0
         rts
 
 edclr22:
+        .if COLS80
+        lda #0
+        sta inv
+        lda #22
+        ldx #0
+        jsr setpos
+        ldy #80
+ec_l:   lda #' '
+        jsr putc
+        dey
+        bne ec_l
+        rts
+        .else
         clc
         lda SAVMSC
         adc #<880
@@ -1253,12 +1287,27 @@ ec_l:   sta (ES),y
         dey
         bpl ec_l
         rts
+        .endif
 
-edstat: ldy #39
+edstat: .if COLS80
+        lda #$80
+        sta inv
+        lda #0
+        tax
+        jsr setpos
+        ldy #80
+est1:   lda #' '
+        jsr putc
+        dey
+        bne est1
+        lda #$80
+        .else
+        ldy #39
         lda #$80
 est1:   sta (SAVMSC),y
         dey
         bpl est1
+        .endif
         sta inv
         lda #0
         ldx #1
@@ -1420,18 +1469,18 @@ ea_l:   cmw EL EE
         beq ea_r
         inc edcn
         lda edcn
-        cmp #40
+        cmp #TW
         bcc ea_l
 ea_r:   rts
 
 mod40:  lda EV+1
         bne m40s
         lda EV
-        cmp #40
+        cmp #TW
         bcc m40d
 m40s:   sec
         lda EV
-        sbc #40
+        sbc #TW
         sta EV
         bcs mod40
         dec EV+1
@@ -1499,14 +1548,14 @@ dn_t:   jsr edls
         sta EW+1
         clc
         lda EV
-        adc #40
+        adc #TW
         sta EN
         lda EV+1
         adc #0
         sta EN+1
         cmw EW EN
         bcc dn_nx
-        adw EC #40
+        adw EC #TW
         rts
 dn_nx:  cmw EL EE
         bcs dn_rt
@@ -1547,7 +1596,7 @@ up_t:   jsr edls
         sta EV+1
         bne up_p
         lda EV
-        cmp #40
+        cmp #TW
         bcs up_p
         cmi EA EBUF
         beq up_r
@@ -1590,7 +1639,7 @@ up_n:   clc
         adc EN+1
         sta EC+1
 up_r:   rts
-up_p:   sbw EC #40
+up_p:   sbw EC #TW
         rts
 
 ; A = character to insert at the cursor
@@ -1670,7 +1719,10 @@ edrender:
         lda edhex
         beq er_t
         jmp edhrender
-er_t:   clc
+er_t:   .if COLS80
+        jmp edr80
+        .else
+        clc
         lda SAVMSC
         adc #40
         sta ES
@@ -1748,9 +1800,13 @@ er_done:
         eor #$80
         sta (EN),y
 er_x:   rts
+        .endif
 
 ; hex dump: offset, 8 bytes, 8 chars per row
 edhrender:
+        .if COLS80
+        jmp edh80
+        .else
         clc
         lda SAVMSC
         adc #40
@@ -1874,6 +1930,7 @@ hr_m2:  lda edi
         eor #$80
         sta (ES),y
 hr_x:   rts
+        .endif
 
 hr_h2:  pha
         lsr
@@ -3968,23 +4025,25 @@ dl8a:   sta DLB,y
         bcc dl8a
         lda #$4F
         sta DLB+3
-        lda #<B80
+        lda b80l
         sta DLB+4
-        lda #>B80
+        lda b80h
         sta DLB+5
         ldy #6
         lda #$0F
 dl8b:   sta DLB,y
         iny
-        cpy #105
+        cpy dlcut5
         bcc dl8b
         lda #$4F
-        sta DLB+105
+        sta DLB,y
+        iny
         lda #0
-        sta DLB+106
-        lda #$90
-        sta DLB+107
-        ldy #108
+        sta DLB,y
+        iny
+        lda dlcuth
+        sta DLB,y
+        iny
         lda #$0F
 dl8c:   sta DLB,y
         iny
@@ -4002,13 +4061,55 @@ dl8c:   sta DLB,y
         sta SDLSTL+1
         rts
 
+; bitmap base: top of RAM when RAMTOP allows (BASIC off), else $8060. Both put a 4K boundary on a scan-line boundary.
+setb80: lda $6A
+        cmp #$C0
+        bcc sb_lo
+        lda #$00
+        sta b80l
+        lda #$A1
+        sta b80h
+        lda #101
+        sta dlcut5
+        lda #$B0
+        sta dlcuth
+        jmp mkrows
+sb_lo:  lda #$60
+        sta b80l
+        lda #$80
+        sta b80h
+        lda #105
+        sta dlcut5
+        lda #$90
+        sta dlcuth
+mkrows: lda b80l
+        sta SP
+        lda b80h
+        sta SP+1
+        ldx #0
+mr_l:   lda SP
+        sta rowlo,x
+        lda SP+1
+        sta rowhi,x
+        clc
+        lda SP
+        adc #<320
+        sta SP
+        lda SP+1
+        adc #>320
+        sta SP+1
+        inx
+        cpx #24
+        bcc mr_l
+        rts
+
 ; software 80-column driver: draws char pc_a at ROWCRS/COLCRS, handles EOL ($9B), backspace ($7E) and clear (125)
 p80:    lda pc_a
         cmp #125
         bne p8_1
-        lda #<B80
+        lda b80l
         sta SP
-        lda #>B80
+        lda b80h
         sta SP+1
         ldx #31
         lda #0
@@ -4139,11 +4240,321 @@ g8_n:   inx
 g8_r:   inc COLCRS
         rts
 
-rowlo:  :24 .byte <(B80+320*#)
-rowhi:  :24 .byte >(B80+320*#)
+rowlo:  .ds 24
+rowhi:  .ds 24
+b80l:   .byte 0
+b80h:   .byte 0
+dlcut5: .byte 0
+dlcuth: .byte 0
 gb:     .ds 8
+gl:     .ds 8
 gm:     .byte 0
 godd:   .byte 0
+gsc:    .byte 0
+ca:     .byte 0
+cb:     .byte 0
+bk:     .byte 0
+bx:     .byte 0
+brow:   .byte 0
+wcur:   .byte 0
+edeof:  .byte 0
+hxcr:   .byte 0
+hxci:   .byte 0
+WL:     .ds 80
+rsa:    .ds 24
+rsb:    .ds 24
+SQ      = $CE
+
+; editor text row: build WL (80 screen codes), then blitrow draws it
+edr80:  mwa ET EP
+        lda #0
+        sta edeof
+        sta brow
+er8_row: ldx #79
+        lda #0
+er8_c:  sta WL,x
+        dex
+        bpl er8_c
+        lda #$FF
+        sta wcur
+        lda #0
+        sta ecol
+        lda edeof
+        bne er8_b
+er8_l:  cmw EP EC
+        bne er8_1
+        lda ecol
+        sta wcur
+er8_1:  cmw EP EE
+        bne er8_2
+        lda #1
+        sta edeof
+        jmp er8_b
+er8_2:  ldy #0
+        lda (EP),y
+        cmp #$9B
+        beq er8_e
+        jsr tosc
+        ldx ecol
+        sta WL,x
+        inw EP
+        inc ecol
+        lda ecol
+        cmp #80
+        bcc er8_l
+        jmp er8_b
+er8_e:  inw EP
+er8_b:  lda wcur
+        bmi er8_n
+        tax
+        lda WL,x
+        eor #$80
+        sta WL,x
+er8_n:  jsr blitrow
+        inc brow
+        lda brow
+        cmp #21
+        bcs er8_x
+        jmp er8_row
+er8_x:  rts
+
+edh80:  mwa ET EP
+        lda #$FF
+        sta hxcr
+        sec
+        lda EC
+        sbc ET
+        sta EV
+        lda EC+1
+        sbc ET+1
+        bne eh8_0
+        lda EV
+        cmp #168
+        bcs eh8_0
+        lsr
+        lsr
+        lsr
+        sta hxcr
+        lda EV
+        and #7
+        sta hxci
+eh8_0:  lda #0
+        sta brow
+eh8_r:  ldx #79
+        lda #0
+eh8_c:  sta WL,x
+        dex
+        bpl eh8_c
+        lda #<WL
+        sta ES
+        lda #>WL
+        sta ES+1
+        cmw EP EE
+        bcc eh8_k
+        jmp eh8_f
+eh8_k:  sec
+        lda EP
+        sbc #<EBUF
+        sta EV
+        lda EP+1
+        sbc #>EBUF
+        sta EV+1
+        ldy #0
+        lda EV+1
+        jsr hr_h2
+        lda EV
+        jsr hr_h2
+        ldx #0
+eh8_b:  stx edi
+        txa
+        clc
+        adc EP
+        sta EN
+        lda EP+1
+        adc #0
+        sta EN+1
+        cmw EN EE
+        bcs eh8_f
+        lda edi
+        asl
+        clc
+        adc edi
+        clc
+        adc #5
+        tay
+        sty edy
+        ldy #0
+        lda (EN),y
+        sta ecv
+        ldy edy
+        lda ecv
+        jsr hr_h2
+        lda ecv
+        jsr tohc
+        pha
+        lda edi
+        clc
+        adc #30
+        tay
+        pla
+        sta (ES),y
+        ldx edi
+        inx
+        cpx #8
+        bcc eh8_b
+eh8_f:  lda hxcr
+        cmp brow
+        bne eh8_n
+        lda hxci
+        asl
+        clc
+        adc hxci
+        tax
+        lda WL+5,x
+        eor #$80
+        sta WL+5,x
+        lda WL+6,x
+        eor #$80
+        sta WL+6,x
+        ldx hxci
+        lda WL+30,x
+        eor #$80
+        sta WL+30,x
+eh8_n:  jsr blitrow
+        adw EP #8
+        inc brow
+        lda brow
+        cmp #21
+        bcs eh8_x
+        jmp eh8_r
+eh8_x:  rts
+
+; draw WL on text row brow+1 unless it matches the cached checksum for that row
+blitrow:
+        lda #0
+        sta ca
+        sta cb
+        ldx #79
+bl_s:   lda ca
+        clc
+        adc WL,x
+        sta ca
+        lda cb
+        clc
+        adc ca
+        sta cb
+        dex
+        bpl bl_s
+        ldx brow
+        lda ca
+        cmp rsa,x
+        bne bl_d
+        lda cb
+        cmp rsb,x
+        bne bl_d
+        rts
+bl_d:   lda ca
+        sta rsa,x
+        lda cb
+        sta rsb,x
+        inx
+        lda rowlo,x
+        sta SQ
+        lda rowhi,x
+        sta SQ+1
+        lda #0
+        sta bk
+bl_p:   lda SQ
+        sta SP
+        lda SQ+1
+        sta SP+1
+        lda bk
+        asl
+        tax
+        stx bx
+        lda WL,x
+        jsr mkg
+        ldx #7
+bl_c:   lda gb,x
+        sta gl,x
+        dex
+        bpl bl_c
+        ldx bx
+        lda WL+1,x
+        jsr mkg
+        ldx #0
+bl_w:   lda gl,x
+        asl
+        asl
+        asl
+        asl
+        ora gb,x
+        ldy #0
+        sta (SP),y
+        clc
+        lda SP
+        adc #40
+        sta SP
+        bcc bl_n
+        inc SP+1
+bl_n:   inx
+        cpx #8
+        bcc bl_w
+        inc SQ
+        bne bl_q
+        inc SQ+1
+bl_q:   inc bk
+        lda bk
+        cmp #40
+        bcc bl_p
+        rts
+
+; screen code in A -> 8 glyph nibble rows in gb
+mkg:    sta gsc
+        and #$7F
+        cmp #$7C
+        beq mg_r
+        cmp #$60
+        bcs mg_m
+        cmp #$40
+        bcs mg_z
+        tay
+        jmp mg_g
+mg_m:   and #$3F
+        tay
+        jmp mg_g
+mg_z:   ldy #0
+        jmp mg_g
+mg_r:   ldy #64
+mg_g:   lda #0
+        bit gsc
+        bpl mg_k
+        lda #$0F
+mg_k:   sta gm
+        sta gb
+        sta gb+6
+        sta gb+7
+        lda f80_0,y
+        asl
+        eor gm
+        sta gb+1
+        lda f80_1,y
+        asl
+        eor gm
+        sta gb+2
+        lda f80_2,y
+        asl
+        eor gm
+        sta gb+3
+        lda f80_3,y
+        asl
+        eor gm
+        sta gb+4
+        lda f80_4,y
+        asl
+        eor gm
+        sta gb+5
+        rts
         icl 'font80.inc'
         .else
 dlfancy:
