@@ -222,37 +222,50 @@
     return true;
   }
 
-  // Extra ROM sources (server, FujiNet, cloud...) register a function returning File-like objects; every source is run by autoLoadRoms().
-  const ROM_SOURCES = [];
-  // Default source: the roms/ folder next to the page. Uses roms/index.json (["file.rom", "sub/x.zip"]) when present, else the web server's directory listing.
+  // ROM roots are URLs; each is read by the handler registered for its scheme (http:, https:, file:, or one you add), so nothing assumes one transport.
+  // A handler is { list(rootUrl) -> [{ path, url }], read(entry) -> Blob }. Files can also be pushed in directly (inject / postMessage).
+  const ROM_HANDLERS = {}, ROM_ROOTS = [], ROM_SOURCES = [];
+  const ROM_EXT = /\.(rom|bin|rm|zip)$/i;
+  // fetch-based reader shared by http(s) and file; file:// only works where the browser allows the page to fetch it (flags, Electron), else list() finds nothing.
+  const fetchHandler = {
+    async list(root) {
+      const get = async (rel) => { const r = await fetch(root + rel); if (!r.ok) throw new Error(r.status); return r; };
+      let names = null;
+      try { const j = await (await get('index.json')).json(); if (Array.isArray(j)) names = j; } catch (e) { /* no manifest */ }
+      if (!names) {
+        names = [];
+        const walk = async (dir, depth) => {
+          const html = await (await get(dir)).text();
+          for (const m of html.matchAll(/href="([^"?#]+)"/gi)) {
+            const h = decodeURIComponent(m[1]);
+            if (h.startsWith('/') || h.startsWith('.') || h.includes(':')) continue;
+            if (h.endsWith('/')) { if (depth < 3) await walk(dir + h, depth + 1); } else if (ROM_EXT.test(h)) names.push(dir + h);
+          }
+        };
+        await walk('', 0);
+      }
+      return names.map((n) => ({ path: n, url: root + n.split('/').map(encodeURIComponent).join('/') }));
+    },
+    async read(e) { const r = await fetch(e.url); if (!r.ok) throw new Error(r.status); return r.blob(); },
+  };
+  ROM_HANDLERS['http:'] = ROM_HANDLERS['https:'] = ROM_HANDLERS['file:'] = fetchHandler;
+  const rootName = (root) => new URL(root).pathname.split('/').filter(Boolean).pop() || 'roms';
+  ROM_ROOTS.push(new URL('roms/', location.href).href, new URL('../roms/', location.href).href);
   ROM_SOURCES.push(async () => {
     const out = [];
-    const ok = /\.(rom|bin|rm|zip)$/i;
-    let base = 'roms/';
-    const get = async (rel) => { const r = await fetch(base + rel); if (!r.ok) throw new Error(r.status); return r; };
-    const mk = async (rel) => {
-      const f = new File([await (await get(rel.split('/').map(encodeURIComponent).join('/'))).blob()], rel.split('/').pop());
-      Object.defineProperty(f, 'webkitRelativePath', { value: 'roms/' + rel });
-      return f;
-    };
-    for (const b of ['roms/', '../roms/']) { base = b; try { if ((await fetch(b)).ok || (await fetch(b + 'index.json')).ok) break; } catch (e) { /* try next */ } }
-    let names = null;
-    try { const j = await (await get('index.json')).json(); if (Array.isArray(j)) names = j; } catch (e) { /* no manifest */ }
-    if (!names) {
-      names = [];
-      const walk = async (dir, depth) => {
-        const html = await (await get(dir)).text();
-        for (const m of html.matchAll(/href="([^"?#]+)"/gi)) {
-          const h = decodeURIComponent(m[1]);
-          if (h.startsWith('/') || h.startsWith('.') || h.includes(':')) continue;
-          if (h.endsWith('/')) { if (depth < 3) await walk(dir + h, depth + 1); } else if (ok.test(h)) names.push(dir + h);
-        }
-      };
-      try { await walk('', 0); } catch (e) { return out; }
-    }
-    for (const n of names) {
-      if (!ok.test(n) || /^altirra\//i.test(n)) continue;
-      try { out.push(await mk(n)); } catch (e) { /* skip */ }
+    for (const root of ROM_ROOTS) {
+      let h, ents;
+      try { h = ROM_HANDLERS[new URL(root).protocol]; if (!h) { diag('no ROM handler for ' + root, 'warn'); continue; } ents = await h.list(root); } catch (e) { continue; }
+      for (const en of ents) {
+        if (!ROM_EXT.test(en.path) || /^altirra\//i.test(en.path)) continue;
+        try {
+          const f = new File([await h.read(en)], en.path.split('/').pop());
+          Object.defineProperty(f, 'webkitRelativePath', { value: rootName(root) + '/' + en.path });
+          out.push(f);
+        } catch (e) { /* skip */ }
+        if (ents.length > 3000) break;
+      }
+      if (ents.length) break;
     }
     return out;
   });
@@ -261,9 +274,24 @@
     for (const src of ROM_SOURCES) {
       try { const files = await src(); if (files && files.length) { await addRoms(files); n += files.length; } } catch (e) { diag('ROM source failed: ' + e.message, 'warn'); }
     }
-    if (n) log(`roms/ folder and sources: ${n} files checked`);
+    if (n) log(`ROM roots and sources: ${n} files checked`);
     return n;
   }
+  // Push ROMs in directly: File objects or { name, bytes } (Uint8Array / ArrayBuffer / number[]).
+  function injectRoms(list) {
+    return addRoms(Array.from(list).map((f) => {
+      if (typeof f.arrayBuffer === 'function') return f;
+      const b = f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes);
+      return { name: f.name, webkitRelativePath: f.name, size: b.length, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.length) };
+    }));
+  }
+  // window.postMessage({ type: 'ac-roms', files: [{ name, bytes }] }) or { type: 'ac-roms-root', url } from this origin, the parent frame or the opener.
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || typeof d !== 'object' || !(ev.origin === location.origin || ev.source === window.parent || ev.source === window.opener)) return;
+    if (d.type === 'ac-roms' && Array.isArray(d.files)) injectRoms(d.files);
+    else if (d.type === 'ac-roms-root' && typeof d.url === 'string') { ROM_ROOTS.unshift(new URL(d.url, location.href).href); autoLoadRoms(); }
+  });
   // ?os=name&basic=name (basic= for none) select ROMs for this visit without being asked; matching is by part of the name.
   function romUrlParams() {
     const q = new URLSearchParams(location.search);
@@ -4038,6 +4066,10 @@
       current: () => ({ os: ($('osrom').selectedOptions[0] || {}).text || null, basic: ($('basicrom').selectedOptions[0] || {}).text || null }),
       rescan: autoLoadRoms,
       addSource: (fn) => { ROM_SOURCES.push(fn); return autoLoadRoms(); },
+      registerHandler: (scheme, h) => { ROM_HANDLERS[scheme.replace(/:?$/, ':')] = h; },
+      addRoot: (url) => { ROM_ROOTS.unshift(new URL(url, location.href).href); return autoLoadRoms(); },
+      inject: injectRoms,
+      handlers: () => Object.keys(ROM_HANDLERS),
     },
     boot: async (o) => { if (o && o.model) $('model').value = o.model; if (o && o.tv) $('tv').value = o.tv; if (o && o.basic != null) $('basic').checked = !!o.basic; return boot(); },
     screenshot: (o) => shot((o && o.scale) || 2, o && o.format),
