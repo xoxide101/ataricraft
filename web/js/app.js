@@ -653,7 +653,7 @@
   // ---- media ----
   const MEDIA_EXT = {
     disk: ['atr', 'xfd', 'atx', 'dcm', 'pro', 'gz', 'dsk'],
-    cart: ['car', 'rom', 'bin', 'cart'],
+    cart: ['car', 'rom', 'bin', 'cart', 'a26', 'a52', 'a78'],
     tape: ['cas'],
     exe: ['xex', 'com', 'exe', 'axe', 'obx', 'bas', 'lst', 'obj'],
   };
@@ -1034,6 +1034,13 @@
         const y = yv && yv.textContent !== '????' ? yv.textContent : '', p = pv && !/unknown/i.test(pv.textContent) ? pv.textContent : '';
         g.querySelectorAll('rom').forEach((r) => put(r.getAttribute('crc'), t, { h: r.getAttribute('sha1'), z: r.getAttribute('size'), r: r.getAttribute('name'), y, p }));
       });
+    } else if (/CRC-32\s+CCITT/.test(text.slice(0, 600))) {
+      const sm = /Atari\s*(2600|5200|7800|8-?bit|800)/i.exec(text.slice(0, 600));
+      if (sm) sys = /^\d{4}$/.test(sm[1]) ? `Atari ${sm[1]}` : 'Atari 8-bit';
+      for (const ln of text.split(/\r?\n/)) {
+        const m = /^\s*([0-9A-Fa-f]{8})\s+[0-9A-Fa-f]{4}\s+[0-9A-Fa-f]{4}\s+(\d+)\s+(.+?)\s*$/.exec(ln);
+        if (m) put(m[1], m[3].replace(/\.[A-Za-z0-9]{1,4}$/, '').replace(/_/g, ' '), { z: m[2], r: m[3] });
+      }
     } else if (text.includes('\u00AC')) {
       for (const ln of text.split(/\r?\n/)) { const f = ln.split('\u00AC'); if (f.length > 7) put(f[6], f[4] || f[3], { z: f[7], r: f[5] }); }
     } else {
@@ -1066,9 +1073,9 @@
   }
   setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; DATSYS = (await idbGet('datSys')) || {}; DATIDX = (await idbGet('datIdx')) || []; syncDats(); } catch (e) { /* none saved */ } }, 0);
   async function loadTitlesXml(files) {
-    const dats = files.filter((f) => /\.dat$/i.test(f.name));
+    const dats = files.filter((f) => /\.(dat|txt)$/i.test(f.name));
     if (dats.length) await loadDats(dats);
-    files = files.filter((f) => !/\.dat$/i.test(f.name));
+    files = files.filter((f) => !/\.(dat|txt)$/i.test(f.name));
     if (!files.length) return;
     let n = 0;
     for (const f of files) {
@@ -1649,7 +1656,7 @@
   // Cartridges with no title from names/MAME: identify by CRC32 of the ROM (header-less, or after a 16-byte CART header).
   async function identifyCarts(list) {
     const db = AC.CART_DB || {};
-    const todo = list.filter((f) => f.kind === 'cart' && !f.title && f.file && f.file.size <= 1048576 && /\.(bin|rom|car)$/i.test(f.name));
+    const todo = list.filter((f) => f.kind === 'cart' && !f.title && f.file && f.file.size <= 1048576 && /\.(bin|rom|car|a26|a52|a78)$/i.test(f.name));
     if (!todo.length) return;
     let hit = 0;
     for (let i = 0; i < todo.length; i++) {
@@ -1673,7 +1680,9 @@
       const base = f.name.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
       if (!base) continue;
       const nice = base === base.toUpperCase() ? base.toLowerCase().replace(/\b[a-z]/g, (m) => m.toUpperCase()) : base;
-      f.title = nice + (f.file.size === 2048 || f.file.size === 4096 ? ' (2600?)' : '');
+      const ext = (f.name.match(/\.([^.\/]+)$/) || [])[1] || '';
+      const hint = { a26: '2600', a52: '5200', a78: '7800' }[ext.toLowerCase()] || (/^(bin|rom)$/i.test(ext) && (f.file.size === 2048 || f.file.size === 4096) ? '2600?' : '');
+      f.title = nice + (hint ? ` [${hint}]` : '');
       guess++;
     }
     log(`cartridges identified by CRC: ${hit} of ${todo.length} untitled; ${guess} named from filename`);
