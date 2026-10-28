@@ -78,31 +78,52 @@ re_dot: inx
         bmi re_bad
         lda N4
         cmp #'B'
-        beq run_bat
+        jeq run_bat
         lda N5
         cmp #'M'
-        beq run_cmx
+        jeq run_cmx
         bne run_com
 re_nd:  lda #<s_cmx
         ldx #>s_cmx
         jsr tryext
-        bpl run_cmx
+        jpl run_cmx
         jsr unext
         lda #<s_com
         ldx #>s_com
         jsr tryext
-        bpl run_com
+        jpl run_com
         jsr unext
         lda #<s_bat
         ldx #>s_bat
         jsr tryext
-        bpl run_bat
+        jpl run_bat
 re_bad: jsr putsi
         .byte 'BAD COMMAND',EOL,0
         clc
         rts
 
+; pass the rest of the command line to the program (see lib\hand.asm)
+sethand:
+        lda #0
+        sta $0480
+        jsr argend
+        beq sh_r
+        ldy #0
+sh_c:   lda (ARG),y
+        sta $0481,y
+        cmp #EOL
+        beq sh_d
+        iny
+        cpy #100
+        bcc sh_c
+        lda #EOL
+        sta $0481,y
+sh_d:   lda #$A5
+        sta $0480
+sh_r:   rts
+
 run_com:
+        jsr sethand
         jsr copyldr
         lda #0
         sta $0603

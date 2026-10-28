@@ -41,6 +41,9 @@ Anything else is run as `NAME.CMX`, `NAME.COM` or `NAME.BAT` in the current fold
 ## ARC.COM (standalone archive tool)
 Run ARC.COM from DOS. Prompt: `L file.ARC` list, `T` test, `X file.ARC [dest] [member]` extract. Reads SEA ARC methods 1-4 (stored, RLE, squeezed) and 8 (crunched LZW); CRC16-checked. Methods 5-7 and 9 are not supported. Uses $3800-, so it is a separate program, not a CMD plug-in yet. Typing ARC or ZIP in CMD runs it (CMD does not come back afterwards).
 
+## Running tools with arguments
+CMD hands the rest of the line to any program it runs (stored at $0480, see lib\hand.asm). ARC, ZIP and DCM read it, run that one command and return to DOS, so `ZIP X A.ZIP`, `ARC L A.ARC` and `DCM X A.DCM` work straight from the CMD prompt. With no arguments they open their own prompt. New tools use `getlineh` instead of `getline` to get this. Tools exit to DOS, not back to CMD.
+
 ## DCM.COM (standalone DiskComm decoder)
 Prompt: `X file.DCM [dest.ATR]` converts a DiskComm (DCM) image to an ATR (dest defaults to the source name with `.ATR`). Streaming, port of `dcmToAtr` in web/js/diskconv.js (atari800 compfile.c); supports single/enhanced/double density and multi-part files. Output was verified byte-identical to the host decoder. The ATR needs a disk with enough space (a 90K disk is too small; use a 16MB MyDOS disk). Standalone like ARC.COM/ZIP.COM; run it from CMD by typing `DCM`.
 
