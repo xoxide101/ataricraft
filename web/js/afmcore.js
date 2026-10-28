@@ -2,6 +2,7 @@
 // No DOM or browser APIs: the web explorer and a later standalone (Electron/Tauri/Node) app share this file.
 (function () {
   const DosFs = typeof require !== 'undefined' && typeof module !== 'undefined' ? require('./dosfs.js') : AC.DosFs;
+  const Conv = typeof require !== 'undefined' && typeof module !== 'undefined' ? require('./diskconv.js') : AC.DiskConv;
   const SIDECAR = 'LONGNAME.TXT';
   const NAME83 = /^[A-Z0-9_]{1,8}(\.[A-Z0-9_]{1,3})?$/;
   const pad2 = (n) => String(n).padStart(2, '0');
@@ -12,10 +13,13 @@
   const eq = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
 
   // ---------- volumes ----------
+  // DCM/PRO images are converted to ATR on open; saving writes an ATR (m.from remembers the original container).
   function mount(bytes, name) {
+    let from = null;
+    if (Conv) { const f = Conv.detect(bytes, name); if (f === 'dcm' || f === 'pro') { try { bytes = Conv.toAtr(bytes, name); from = f; } catch (e) { return null; } } }
     const vol = DosFs.open(bytes);
     if (!vol) return null;
-    return { vol, bytes, name: name || '', kind: vol.kind, dirty: false };
+    return { vol, bytes, name: from ? (name || '').replace(/\.[^.]*$/, '') + '.atr' : name || '', kind: vol.kind, dirty: false, from };
   }
 
   const canDirs = (m) => m.kind === 'sdfs' || m.kind === 'mydos';

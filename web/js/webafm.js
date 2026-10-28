@@ -476,9 +476,23 @@
     render();
     if (res.failed.length) msg('Some items failed', res.failed.map((f) => `<div class="bad">${esc(f.path)}: ${esc(f.error)}</div>`).join(''));
   }
+  // Archives (ARC/ARK, ZIP, 7z, RAR, LZH...) dropped or picked from the PC can be unpacked onto the disk instead of copied whole (see archives.js).
+  async function unpackArchives(files) {
+    if (!window.AC || !AC.Archives) return files;
+    const out = [];
+    for (const f of files) {
+      if (!AC.Archives.looksLikeArchive(f.name)) { out.push(f); continue; }
+      if (!confirm(f.name + ' is an archive.\n\nOK = unpack its files onto the disk\nCancel = copy the archive file itself')) { out.push(f); continue; }
+      try { for (const it of await AC.Archives.expand(f)) out.push(await it.get()); }
+      catch (e) { log(f.name + ': ' + e.message + ' - copying the archive as a file'); out.push(f); }
+    }
+    return out;
+  }
+
   async function addFiles(i, files, dir) {
     const p = W.panes[i], r = rec(p); if (!r) return;
     if (r.m.vol.readOnly) return log('this disk is read-only here');
+    files = await unpackArchives(files);
     snapshot('add files', [r]);
     const pg = AC.Progress.begin('Adding files to ' + r.name + '…', files.length), xb = xferBar('Adding from PC → ' + r.name, files.length), t0 = performance.now(), totalB = files.reduce((a, f) => a + (f.size || 0), 0); let n = 0, doneB = 0, k = 0; const bad = [];
     try {
