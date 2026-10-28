@@ -40,3 +40,8 @@ Tested on DOS 2.0, DOS 2.5, DOS XL, MyDOS 4.55 and SpartaDOS X 4.43 (copy, delet
 
 ### Known limit: SuperDOS
 SuperDOS keeps its resident code above $2000, where AFM loads, so booting SuperDOS and running AFM cannot read D1: safely. Boot another DOS and use the SuperDOS disk as D2 or higher (browsing works), or use the page's Browse files.
+
+## 80-column build
+
+Assemble with `mads afm.asm -d:COLS80=1 -o:afm80.com`. Uses a 4x8 glyph bitmap (ANTIC mode F) for the main file-manager screen; other screens (editor, viewer, help) fall back to 40 columns. Experimental: tested on the atari800 core only. Shipped as AFM80.COM and the disk 'DOS 2.5 boot + AFM 80-col.atr'.
+

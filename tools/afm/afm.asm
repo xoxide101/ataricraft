@@ -25,21 +25,39 @@ INITAD  = $02E2
 ZP      = $D4
 ZP3     = $D8
 
+; COLS80=1 builds the software 80-column version (AFM80): 4x8 glyphs in an ANTIC mode F bitmap.
+        .ifndef COLS80
+COLS80  = 0
+        .endif
+        .if COLS80
+SH      = $0600
+PC1     = 40
+PW      = 20
+CLRW    = 80
+SP      = $CC
+B80     = $8060
+        .else
+SH      = 0
+PC1     = 20
+PW      = 5
+CLRW    = 39
+        .endif
+
 MAXE    = 120
-PANE0   = $5C00
-PANE1   = $6400
-MARKS   = $6C00
-LINE    = $5100
-FSPEC   = $5140
-FSPEC2  = $5180
-INBUF   = $51C0
-IOBUF   = $5800
+PANE0   = $5C00+SH
+PANE1   = $6400+SH
+MARKS   = $6C00+SH
+LINE    = $5100+SH
+FSPEC   = $5140+SH
+FSPEC2  = $5180+SH
+INBUF   = $51C0+SH
+IOBUF   = $5800+SH
 VROWS   = 18
 MAXLV   = 6
 SDLSTL  = $0230
-DLB     = $5000
-RULE    = $5030
-VBUF    = $7500
+DLB     = $5000+SH
+RULE    = $5030+SH
+VBUF    = $7500+SH
 
 ; editor / viewer
 SAVMSC  = $58
@@ -53,7 +71,7 @@ EL      = $EC
 EN      = $EE
 EV      = $F0
 EW      = $F2
-EBUF    = $6D00
+EBUF    = $6D00+SH
 EMAXPG  = $A5
 
 ; 16-bit compare: carry set if a>=b, Z set if equal
@@ -87,6 +105,7 @@ start:
         sta CRSINH
         lda #0
         sta inv
+        sta m80
         sta act
         ldx #0
         stx sel
@@ -3829,6 +3848,12 @@ putc:   ora inv
 putraw: sta pc_a
         stx pc_x
         sty pc_y
+        .if COLS80
+        lda m80
+        beq pr_cio
+        jmp p80
+pr_cio:
+        .endif
         lda #11
         sta ICCOM
         lda #0
@@ -3905,7 +3930,7 @@ rowprompt:
 clrrow: pha
         ldx #0
         jsr setpos
-        ldy #39
+        ldy #CLRW
 cr1:    lda #$20
         jsr putc
         dey
@@ -3923,12 +3948,200 @@ showerr:
         jmp putdec
 
 dlstock:
+        lda #0
+        sta m80
         lda osdl
         sta SDLSTL
         lda osdl+1
         sta SDLSTL+1
         rts
 
+        .if COLS80
+dlfancy:
+        lda #1
+        sta m80
+        ldy #0
+        lda #$70
+dl8a:   sta DLB,y
+        iny
+        cpy #3
+        bcc dl8a
+        lda #$4F
+        sta DLB+3
+        lda #<B80
+        sta DLB+4
+        lda #>B80
+        sta DLB+5
+        ldy #6
+        lda #$0F
+dl8b:   sta DLB,y
+        iny
+        cpy #105
+        bcc dl8b
+        lda #$4F
+        sta DLB+105
+        lda #0
+        sta DLB+106
+        lda #$90
+        sta DLB+107
+        ldy #108
+        lda #$0F
+dl8c:   sta DLB,y
+        iny
+        cpy #199
+        bcc dl8c
+        lda #$41
+        sta DLB+199
+        lda #<DLB
+        sta DLB+200
+        lda #>DLB
+        sta DLB+201
+        lda #<DLB
+        sta SDLSTL
+        lda #>DLB
+        sta SDLSTL+1
+        rts
+
+; software 80-column driver: draws char pc_a at ROWCRS/COLCRS, handles EOL ($9B), backspace ($7E) and clear (125)
+p80:    lda pc_a
+        cmp #125
+        bne p8_1
+        lda #<B80
+        sta SP
+        lda #>B80
+        sta SP+1
+        ldx #31
+        lda #0
+        tay
+c8c:    sta (SP),y
+        iny
+        bne c8c
+        inc SP+1
+        dex
+        bne c8c
+        lda #0
+        sta ROWCRS
+        sta COLCRS
+        jmp p8_d
+p8_1:   cmp #$9B
+        bne p8_2
+        lda #0
+        sta COLCRS
+        inc ROWCRS
+        jmp p8_d
+p8_2:   cmp #$7E
+        bne p8_3
+        lda COLCRS
+        beq p8_d
+        dec COLCRS
+        lda #' '
+        sta pc_a
+        jsr g80
+        dec COLCRS
+        jmp p8_d
+p8_3:   jsr g80
+p8_d:   ldy pc_y
+        ldx pc_x
+        lda pc_a
+        rts
+
+g80:    lda COLCRS
+        cmp #80
+        bcs g8_j
+        lda ROWCRS
+        cmp #24
+        bcc g8_k
+g8_j:   jmp g8_r
+g8_k:   lda pc_a
+        and #$7F
+        cmp #$60
+        bcc g8_a
+        sbc #$20
+g8_a:   sec
+        sbc #$20
+        bcs g8_b
+        lda #0
+g8_b:   tay
+        lda #0
+        bit pc_a
+        bpl g8_m
+        lda #$0F
+g8_m:   sta gm
+        sta gb
+        sta gb+6
+        sta gb+7
+        lda f80_0,y
+        asl
+        eor gm
+        sta gb+1
+        lda f80_1,y
+        asl
+        eor gm
+        sta gb+2
+        lda f80_2,y
+        asl
+        eor gm
+        sta gb+3
+        lda f80_3,y
+        asl
+        eor gm
+        sta gb+4
+        lda f80_4,y
+        asl
+        eor gm
+        sta gb+5
+        ldx ROWCRS
+        lda rowlo,x
+        sta SP
+        lda rowhi,x
+        sta SP+1
+        lda COLCRS
+        and #1
+        sta godd
+        lda COLCRS
+        lsr
+        clc
+        adc SP
+        sta SP
+        bcc g8_p
+        inc SP+1
+g8_p:   ldx #0
+        ldy #0
+g8_l:   lda godd
+        bne g8_o
+        lda gb,x
+        asl
+        asl
+        asl
+        asl
+        sta gm
+        lda (SP),y
+        and #$0F
+        ora gm
+        jmp g8_w
+g8_o:   lda (SP),y
+        and #$F0
+        ora gb,x
+g8_w:   sta (SP),y
+        clc
+        lda SP
+        adc #40
+        sta SP
+        bcc g8_n
+        inc SP+1
+g8_n:   inx
+        cpx #8
+        bcc g8_l
+g8_r:   inc COLCRS
+        rts
+
+rowlo:  :24 .byte <(B80+320*#)
+rowhi:  :24 .byte >(B80+320*#)
+gb:     .ds 8
+gm:     .byte 0
+godd:   .byte 0
+        icl 'font80.inc'
+        .else
 dlfancy:
         ldy #39
         lda #$FF
@@ -3965,6 +4178,7 @@ dlf2:   lda dro,x
         lda #>DLB
         sta SDLSTL+1
         rts
+        .endif
 
 dlt:    .byte $70,$70,$70,$42,0,0,$4F,<RULE,>RULE,$42,0,0,$4F,<RULE,>RULE,$42,0,0
         :19 .byte 2
@@ -4021,7 +4235,7 @@ dh1:    lda #1
         ldx #0
         ldy hp
         beq dh2
-        ldx #20
+        ldx #PC1
 dh2:    jsr setpos
         jsr putsi
         .byte 'D',0
@@ -4049,7 +4263,7 @@ fd_l:   ldx fi
         ldx hp
         lda plen,x
         sec
-        sbc #5
+        sbc #PW
         bcs hp_o
         lda #0
 hp_o:   sta hs
@@ -4070,7 +4284,7 @@ hp_s:   lda #' '
 hp_p:   jsr putc
         inc fi
         lda fi
-        cmp #5
+        cmp #PW
         bcc hp_l
         lda #0
         sta inv
@@ -4106,7 +4320,7 @@ drawrow2:        sta rdx
         ldx #0
         ldy rpane
         beq dr_c
-        ldx #20
+        ldx #PC1
 dr_c:   jsr setpos
         lda #0
         sta inv
@@ -4160,6 +4374,13 @@ dr_b:   lda #' '
         bne dr_b
 dr_end: lda #0
         sta inv
+        .if COLS80
+        ldy #20
+dr_pd:  lda #' '
+        jsr putc
+        dey
+        bne dr_pd
+        .endif
         lda #' '
         jsr putc
         lda rpane
@@ -4275,6 +4496,7 @@ bkch:   .byte 0
 pc_a:   .byte 0
 pc_x:   .byte 0
 pc_y:   .byte 0
+m80:    .byte 0
         run start
 
 ; ---------- XEX loader (own segment at $0600, runs after AFM exits) ----------
