@@ -95,6 +95,14 @@ Prompt: `L file.LZH` list, `X file.LZH [dest] [member]` extract, `T file.LZH` te
 ## ALF.COM (standalone ALF lister/extractor)
 Prompt: `L file.ALF` list, `X file.ALF [dest] [member]` extract, `T file.ALF` test (16-bit additive checksum). ALF is the Atari LZ.COM/DZ.COM format: 29-byte ARC-like headers with LZW data (9-12 bit codes, MSB first). Port of web/js/alf.js; verified on all 264 entries of the 41 sample archives and byte-identical to the host decoder. Works from CMD via the hand-off: `ALF X A.ALF`. Decoding only (no compressor). Uses about 16K of tables at $6400-.
 
+## ZOO.COM (standalone ZOO lister/extractor)
+Prompt: `L file.ZOO` list, `X file.ZOO [dest] [member]` extract, `T file.ZOO [member]` test (CRC-16). Rahul Dhesi ZOO 2.x archives: stored, LZW (9-13 bit, full 8192-entry table via a page map) and LZH (lh5 coder, 8K ring) members; deleted entries are skipped and the short 8.3 name is used (long names and directory extras are ignored). The archive is read front to back following the directory chain, so an archive whose chain runs backwards (entries not in file order) stops with ENTRY ORDER NEEDS A BACKWARD SEEK. LZW unwinding uses a 1K stack (LZW STRING TOO LONG on extreme runs, beyond about 500K of identical bytes). Works from CMD via the hand-off: `ZOO X A.ZOO`.
+Verified in the emulator on archives made with Zoo 2.1 (LZW and LZH, 7 members each: text, binary, a 30K zero run, incompressible data, a 5-byte file), byte-identical to the originals, plus a small third-party stored archive for L/T. Not verified: archives with comments, generations/version suffixes, or entries of type 1 (no sample).
+
+## ARJ.COM (standalone ARJ lister/extractor)
+Prompt: `L file.ARJ` list, `X file.ARJ [dest] [member]` extract, `T file.ARJ [member]` test. Header and file CRC-32 are checked. Methods 0 (stored), 1-3 (LZ77 + Huffman) and 4 (fastest). The ARJ window is 26K; here a 22K ring ($6400-$BBFF) is used, so a member whose match distance reaches beyond 22K (in practice files over about 22K that repeat far-away data) reports WINDOW TOO SMALL and the other members still process; method 4 never needs more than 16K. Encrypted entries report ENCRYPTED, SKIPPED. Directory/label entries are ignored, multi-volume sets and ARJ-protect data are not handled; the last path component is mapped to 8.3. Works from CMD via the hand-off: `ARJ X A.ARJ`.
+Verified in the emulator on archives made with ARJ 3.10 (-m0 to -m4, 7 members each): every member byte-identical to the original except the 38K text file in methods 1-3, which correctly reports WINDOW TOO SMALL; method 4 extracts all 7. Also tested on two third-party archives (stored, and one encrypted). Not verified: archives with ARJ extended headers.
+
 
 ## DISC.COM (standalone CD/hard-disk image reader)
 
@@ -105,4 +113,4 @@ Names with spaces must be quoted: `T "A LONG FILE NAME.TXT"`.
 Limits: no Rock Ridge/Joliet names on the 6502 side; UDF allocation descriptors past 255 bytes,
 extended ADs and continuation extents are not followed.
 
-`HELP` lists commands and tools; `HELP ARC` (or ZIP, LZH, ALF, DCM, DISC) shows that tool's usage.
+`HELP` lists commands and tools; `HELP ARC` (or ZIP, LZH, ALF, ZOO, ARJ, DCM, DISC) shows that tool's usage.

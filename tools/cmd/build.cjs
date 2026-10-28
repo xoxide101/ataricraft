@@ -11,3 +11,5 @@ run('dcm.asm', '-o:bin\\dcm.com');
 run('lzh.asm', '-o:bin\\lzh.com');
 run('alf.asm', '-o:bin\\alf.com');
 run('disc.asm', '-o:bin\\\\disc.com');
+run('zoo.asm', '-o:bin\\zoo.com');
+run('arj.asm', '-o:bin\\arj.com');
