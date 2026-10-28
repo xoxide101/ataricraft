@@ -45,6 +45,7 @@ AH      = VARS+32       ; ATR header (16 bytes)
 
         org CODE
         icl 'lib\io.asm'
+        icl 'lib\hand.asm'
 
 start:  jsr putsi
         .byte 'DCM 0.1  DISKCOMM TO ATR',EOL
@@ -55,7 +56,7 @@ prompt: tsx
         jsr putnl
         jsr putsi
         .byte 'DCM>',0
-        jsr getline
+        jsr getlineh
         lda #<LINE
         sta ARG
         lda #>LINE

@@ -108,6 +108,7 @@ q       = $C2
 
         org CODE
         icl 'lib\io.asm'
+        icl 'lib\hand.asm'
 
 start:  jsr crctab
         jsr putsi
@@ -119,7 +120,7 @@ prompt: tsx
         jsr putnl
         jsr putsi
         .byte 'ZIP>',0
-        jsr getline
+        jsr getlineh
         lda #<LINE
         sta ARG
         lda #>LINE

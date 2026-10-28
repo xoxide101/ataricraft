@@ -80,6 +80,7 @@ EH      = $E9
 
         org CODE
         icl 'lib\io.asm'
+        icl 'lib\hand.asm'
 
 start:  jsr crctab
         jsr putsi
@@ -89,7 +90,7 @@ start:  jsr crctab
 prompt: jsr putnl
         jsr putsi
         .byte 'ARC>',0
-        jsr getline
+        jsr getlineh
         lda #<LINE
         sta ARG
         lda #>LINE
