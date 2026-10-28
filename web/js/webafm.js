@@ -261,8 +261,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button><button data-a="mkdir" title="F7">New folder</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>
-      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
@@ -314,14 +313,14 @@
   function updateTb() {
     const a = W.panes[W.active], r = rec(a), o = rec(W.panes[1 - W.active]);
     const need = {
-      mkdir: r && C.caps(r.m).mkdir, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import, names: r && C.caps(r.m).longnames,
+      mkdir: r && C.caps(r.m).mkdir, az: r && C.caps(r.m).mkdir, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import, names: r && C.caps(r.m).longnames,
       copy: o ? C.caps(o.m).write : { ok: false, why: 'open a disk in the other pane first' },
       move: !o ? { ok: false, why: 'open a disk in the other pane first' } : !C.caps(o.m).write.ok ? C.caps(o.m).write : C.caps(r ? r.m : o.m).del,
     };
     for (const b of W.el.querySelectorAll('.wtb button')) {
       const k = b.dataset.a;
       if (b.dataset.t === undefined) b.dataset.t = b.title || '';
-      if (!['copy', 'move', 'mkdir', 'rename', 'del', 'props', 'view', 'export', 'import', 'all', 'names'].includes(k)) continue;
+      if (!['copy', 'move', 'mkdir', 'az', 'rename', 'del', 'props', 'view', 'export', 'import', 'all', 'names'].includes(k)) continue;
       let ok = !!r, why = r ? '' : 'pick a disk first';
       if (r && need[k] && !need[k].ok) { ok = false; why = need[k].why; }
       if (r && (k === 'copy' || k === 'move') && !o) { ok = false; why = 'open a disk in the other pane first'; }
@@ -393,7 +392,7 @@
   }
   function ctxMenu(i, x, y) {
     W.active = i;
-    const items = [['Open / view', 'view'], ['Copy to other pane', 'copy'], ['Move to other pane', 'move'], ['Rename…', 'rename'], ['New folder…', 'mkdir'], ['Delete…', 'del'], ['Save to PC', 'export'], ['Properties…', 'props']];
+    const items = [['Open / view', 'view'], ['Copy to other pane', 'copy'], ['Move to other pane', 'move'], ['Rename…', 'rename'], ['New folder…', 'mkdir'], ['A–Z / 0–9 folders…', 'az'], ['Delete…', 'del'], ['Save to PC', 'export'], ['Properties…', 'props']];
     const m = document.createElement('div');
     m.style.cssText = `position:fixed;z-index:9999;left:${Math.min(x, innerWidth - 200)}px;top:${Math.min(y, innerHeight - 260)}px;background:#1b1e24;border:1px solid #4a5160;border-radius:8px;box-shadow:0 6px 24px #000a;min-width:190px;overflow:hidden`;
     for (const [l, a] of items) { const d = document.createElement('div'); d.textContent = l; d.style.cssText = 'padding:8px 12px;cursor:pointer'; d.onmouseenter = () => (d.style.background = '#2a2f39'); d.onmouseleave = () => (d.style.background = ''); d.onclick = () => { m.remove(); act(a); }; m.append(d); }
@@ -405,7 +404,7 @@
   // ---------- actions ----------
   function act(a) {
     const A = W.panes[W.active];
-    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
+    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
       all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, compare: doCompare, names: () => makeNames(rec(A)), refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
@@ -500,6 +499,26 @@
     const nm = await ask('New folder', 'Folder name (long names are fine; a short 8-character name is made and the long one is recorded)', ''); if (!nm) return;
     snapshot('new folder', [r]);
     try { C.mkdir(r.m, p.dir, nm); await afterWrite([r]); log('Folder created.'); } catch (e) { log('new folder: ' + e.message); }
+    render();
+  }
+  async function doAZ() {
+    const p = W.panes[W.active], r = rec(p); if (!r) return;
+    if (!C.canDirs(r.m)) return msg('No folders here', `${r.m.kind.toUpperCase()} disks cannot have folders. MyDOS and SpartaDOS disks can.`);
+    if (r.m.vol.readOnly) return log('this disk is read-only here');
+    const body = document.createElement('div');
+    body.innerHTML = '<p>Make one-letter folders in the current folder (existing ones are skipped).</p><label><input type="checkbox" id="wazl" checked> A–Z (26 folders)</label><br><label><input type="checkbox" id="wazn" checked> 0–9 (10 folders)</label>';
+    const v = await dlg('A–Z / 0–9 folders', body, [{ label: 'Cancel', value: null }, { label: 'Create', pri: true, value: () => ({ l: body.querySelector('#wazl').checked, n: body.querySelector('#wazn').checked }) }]);
+    if (!v || (!v.l && !v.n)) return;
+    const names = []; if (v.n) for (let i = 0; i < 10; i++) names.push(String(i)); if (v.l) for (let i = 0; i < 26; i++) names.push(String.fromCharCode(65 + i));
+    const have = new Set(C.entries(r.m).filter((e) => e.path.split('/').slice(0, -1).join('/') === p.dir).map((e) => e.name.toUpperCase()));
+    snapshot('A-Z / 0-9 folders', [r]);
+    let made = 0, skipped = 0, err = '';
+    for (const n of names) {
+      if (have.has(n)) { skipped++; continue; }
+      try { C.mkdir(r.m, p.dir, n); made++; } catch (e) { err = e.message; break; }
+    }
+    await afterWrite([r]);
+    log(`Folders: ${made} created, ${skipped} already there${err ? '; stopped: ' + err : ''}.`);
     render();
   }
   async function doRename() {
