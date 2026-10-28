@@ -43,5 +43,5 @@ SuperDOS keeps its resident code above $2000, where AFM loads, so booting SuperD
 
 ## 80-column build
 
-Assemble with `mads afm.asm -d:COLS80=1 -o:afm80.com`. Uses a 4x8 glyph bitmap (ANTIC mode F) for the main file-manager screen; other screens (editor, viewer, help) fall back to 40 columns. Experimental: tested on the atari800 core only. Shipped as AFM80.COM and the disk 'DOS 2.5 boot + AFM 80-col.atr'.
+Assemble with `mads afm.asm -d:COLS80=1 -o:afm80.com`. Uses a 4x8 glyph bitmap (ANTIC mode F) for every screen: file manager, editor (text and hex), viewer, help and info. The bitmap sits at the top of RAM when BASIC is off, otherwise at $8060 (which shrinks the edit buffer). Tested on DOS 2.5 and MyDOS 4.55 (atari800 core) and DOS 2.5 (Altirra core, main screen only); SpartaDOS X is untested. Shipped as AFM80.COM on the Ready to run disks and in the library AFM folder.
 

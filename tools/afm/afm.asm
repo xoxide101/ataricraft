@@ -2085,7 +2085,7 @@ doinfo:
         lda #125
         jsr putraw
         jsr putsi
-        .byte ' ATARICRAFT AFM V0.4 REV 11',$9B,' BUILD 2026-10-27',$9B,' SYSTEM INFO',$9B,$9B
+        .byte ' ATARICRAFT AFM V0.4 REV 12',$9B,' BUILD 2026-10-28',$9B,' SYSTEM INFO',$9B,$9B
         .byte 'COMPUTER: ',0
         lda $FCD8
         cmp #$4C
@@ -2250,7 +2250,7 @@ ph_d:   adc #'0'
 dohelp: lda #125
         jsr putraw
         jsr putsi
-        .byte ' ATARICRAFT AFM V0.4 REV 11 - KEYS',$9B,$9B
+        .byte ' ATARICRAFT AFM V0.4 REV 12 - KEYS',$9B,$9B
         .byte 'W/S OR -/=   MOVE CURSOR',$9B
         .byte ', . OR < >   PAGE UP / DOWN',$9B
         .byte 'TAB OR SPACE SWITCH PANE',$9B
