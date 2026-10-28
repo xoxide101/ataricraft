@@ -32,3 +32,11 @@ Editor: arrows/Ctrl-arrows move, Backspace deletes, Return inserts a line break.
 Copy/tags/properties/find/mkdir/bulk mkdir on MyDOS, DOS 2 and SDX; viewer, hex view, edit+save+reload on DOS 2.0S; viewer/hex and save-error path on MyDOS; load/render/insert on SDX. New file (G) tested on DOS 2.5: create, save, "already exists", cancel; hex digit entry tested (41 42 FF). Editor save on SDX and on MyDOS (the beta image used rejects writes) is untested.
 
 Build: `mads afm.asm -o:afm.com`.
+
+## Screen updates
+AFM no longer clears and redraws the whole screen after each action. Copy, delete, rename, lock, mkdir, cancel, pane switch and drive change repaint only what changed and re-read only the affected pane (and the other pane only when it shows the same drive).
+
+Tested on DOS 2.0, DOS 2.5, DOS XL, MyDOS 4.55 and SpartaDOS X 4.43 (copy, delete, rename, cancel; DOS 2.0 also tab and drive change).
+
+### Known limit: SuperDOS
+SuperDOS keeps its resident code above $2000, where AFM loads, so booting SuperDOS and running AFM cannot read D1: safely. Boot another DOS and use the SuperDOS disk as D2 or higher (browsing works), or use the page's Browse files.

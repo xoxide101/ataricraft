@@ -100,7 +100,7 @@ ks1:    lda kspec,x
         jsr doinfo
         jsr drawui
         jsr reloadall
-        jsr drawui
+        jsr redraw
         jmp main
 jdn:    jmp k_dn
 jtab:   jmp k_tab
@@ -203,7 +203,7 @@ k_tab:
         lda act
         eor #1
         sta act
-        jsr drawui
+        jsr redraw
         jmp main
 
 k_up:
@@ -267,8 +267,9 @@ k_drive:
         sta plen,x
         sta sel,x
         sta top,x
-        jsr reloadall
-        jsr drawui
+        ldx act
+        jsr loaddir
+        jsr redraw
         jmp main
 
 endir:  ldy #2
@@ -333,8 +334,8 @@ en_rl:  ldx act
         lda #0
         sta sel,x
         sta top,x
-        jsr reloadall
-        jsr drawui
+        jsr loaddir
+        jsr redraw
         jmp main
 
 dotag:  ldx act
@@ -818,7 +819,7 @@ ed_k:   lda #0
         jsr getraw
         jsr edkey
         bcc ed_loop
-        jsr reloadall
+        jsr reloadact
         jsr drawui
         jmp main
 
@@ -2366,16 +2367,16 @@ dc_ok:  ldx #$20
         jmp dc_err2
 dc_ok2: jsr close1
         jmp dc_next
-dc_all: jsr reloadall
-        jsr drawui
+dc_all: jsr reloadoth
+        jsr redraw
         jsr msgrow
         jsr putsi
         .byte 'COPIED OK',0
         jmp main
 dc_err: sty est
 dc_err2:
-        jsr reloadall
-        jsr drawui
+        jsr reloadoth
+        jsr redraw
         jsr showerr
         jmp main
 
@@ -2544,7 +2545,7 @@ dr_e:   lda #<FSPEC2
         jmp xioFin
 
 cancel:
-        jsr drawui
+        jsr redraw
         jsr msgrow
         jsr putsi
         .byte 'CANCELLED',0
@@ -2704,8 +2705,8 @@ bk_end: ldy #1
         sty est
         lda #0
         sta xa1
-        jsr reloadall
-        jsr drawui
+        jsr reloadact
+        jsr redraw
         jsr msgrow
         jsr putsi
         .byte 'CREATED ',0
@@ -2775,8 +2776,8 @@ xioDone:
 xioFin: sty est
         lda #0
         sta xa1
-        jsr reloadall
-        jsr drawui
+        jsr reloadact
+        jsr redraw
         lda est
         cmp #1
         beq xd_ok
@@ -2902,6 +2903,30 @@ reloadall:
         ldx #1
         jsr loaddir
         rts
+
+; Re-read only the pane(s) an operation can have changed: the pane itself, plus the other one when it shows the same drive.
+reloadact:
+        lda act
+        jmp reloadpn
+reloadoth:
+        lda act
+        eor #1
+reloadpn:
+        sta rpn
+        tax
+        jsr loaddir
+        lda rpn
+        eor #1
+        tay
+        ldx rpn
+        lda drv,x
+        cmp drv,y
+        bne rp_x
+        tya
+        tax
+        jsr loaddir
+rp_x:   rts
+rpn:    .byte 0
 
 mkdrvspec:
         stx pn
@@ -3259,6 +3284,7 @@ drawui:
         sta inv
         lda #125
         jsr putraw
+redraw: jsr rowprompt
         lda #$80
         sta inv
         lda #0
