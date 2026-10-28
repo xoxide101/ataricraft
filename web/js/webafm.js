@@ -589,7 +589,13 @@
     if (!C.canDirs(r.m)) return msg('No folders here', `${r.m.kind.toUpperCase()} disks cannot have folders. MyDOS and SpartaDOS disks can.`);
     if (r.m.vol.readOnly) return log('this disk is read-only here');
     const body = document.createElement('div');
-    body.innerHTML = '<p>Make one-letter folders in the current folder (existing ones are skipped).</p><label><input type="checkbox" id="wazl" checked> A–Z (26 folders)</label><br><label><input type="checkbox" id="wazn" checked> 0–9 (10 folders)</label>';
+    body.innerHTML = '<p>Make one-letter folders in the current folder (existing ones are skipped).</p><label><input type="checkbox" id="wazl" checked> A–Z (26 folders)</label><br><label><input type="checkbox" id="wazn" checked> 0–9 (10 folders)</label><div class="azc" style="margin-top:8px"></div>';
+    const per = r.m.kind === 'sdfs' ? 2 : 8, free = r.m.vol.freeSectors(), ss = r.m.vol.sectorSize || 256;
+    const cost = () => {
+      const n = (body.querySelector('#wazl').checked ? 26 : 0) + (body.querySelector('#wazn').checked ? 10 : 0), s = n * per;
+      body.querySelector('.azc').innerHTML = `<span class="${s > free ? 'bad' : s > free / 3 ? 'warn' : 'dim'}">Each folder uses ${per} sectors on this disk. ${n} folder(s) = ${s} of ${free} free sectors (${Math.round(s * ss / 1024)} KB, ${free ? Math.round(s * 100 / free) : 0}%).${s > free ? ' Not enough room.' : ''}</span>`;
+    };
+    body.addEventListener('change', cost); cost();
     const v = await dlg('A–Z / 0–9 folders', body, [{ label: 'Cancel', value: null }, { label: 'Create', pri: true, value: () => ({ l: body.querySelector('#wazl').checked, n: body.querySelector('#wazn').checked }) }]);
     if (!v || (!v.l && !v.n)) return;
     const names = []; if (v.n) for (let i = 0; i < 10; i++) names.push(String(i)); if (v.l) for (let i = 0; i < 26; i++) names.push(String.fromCharCode(65 + i));
