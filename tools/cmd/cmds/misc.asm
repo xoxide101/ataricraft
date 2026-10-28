@@ -406,6 +406,10 @@ tp_no:  jsr putsi
 
 ; HELP name: name,0,text,0 (name+text must stay under 250 bytes)
 topics:
+        .byte 'COMPLETE',0
+        .byte 'COMPLETE ON|OFF',EOL
+        .byte 'ON: TAB COMPLETES COMMANDS AND NAMES',EOL
+        .byte 'KEYS: RETURN BACKSPACE TAB ONLY',EOL,0
         .byte 'ARC',0
         .byte 'ARC L FILE.ARC   LIST',EOL
         .byte 'ARC T FILE.ARC   TEST',EOL

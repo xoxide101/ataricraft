@@ -52,7 +52,13 @@ Prompt: L file.ZIP list, T test, X file.ZIP [dest] [member] extract. Reads store
 
 ## Not implemented yet
 
-These names are accepted but only print a message: ATR, BOOT, CAR, CHTD, CHVOL, CLR, COMP, CON, DATE, DELTREE, DEV, ED, FMT, FORMAT, MAP, MENU, RS232, SAVE, SETPATHS, SIOSET, SORTDIR, SWAP, TD, TIME, UNERASE, VERIFY.
+These names are accepted but only print a message: ATR, BOOT, CAR, CHTD, CHVOL, CLR, CON, DEV, ED, MAP, MENU, RS232, SAVE, SETPATHS, SIOSET, SORTDIR, SWAP, TD, UNERASE, VERIFY.
+
+Implemented since: `COMP f1 f2` (byte compare), `FORMAT`/`FMT Dn:` (XIO 254, asks Y/N), `DELTREE folder` (asks Y/N; removes folders with XIO 43, or XIO 33 on MyDOS), `DATE`/`TIME` (text kept for this session only).
+
+## Tab completion (opt-in)
+
+`COMPLETE ON` switches the prompt to CMD's own line editor: Return, Backspace and Tab only (no cursor editing or history; that is why it is off by default). Tab completes the first word from the command list and later words from the directory (the folder part is honoured, e.g. `TYPE GAMES>RE<Tab>`) as far as all matches agree. A single match gets a space (command) or `>` (folder). With several matches it adds the common part and stays silent. `COMPLETE OFF` restores the screen editor. Put `COMPLETE ON` in AUTOEXEC.BAT to keep it.
 
 ## Known limits
 
