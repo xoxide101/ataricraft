@@ -113,11 +113,11 @@
     },
     // Asks the relay (async, so the page stays responsive) whether a host answers.
     async probe(h) {
-      const t = performance.now();
+      const t = performance.now(), ac = new AbortController(), to = setTimeout(() => ac.abort(), 12000);
       try {
-        const r = await fetch(this.bridge + '/list?host=' + encodeURIComponent(h) + '&path=/');
+        const r = await fetch(this.bridge + '/list?host=' + encodeURIComponent(h) + '&path=/', { signal: ac.signal });
         return r.ok ? Math.round(performance.now() - t) : -1;
-      } catch (e) { return -2; }
+      } catch (e) { return e.name === 'AbortError' ? -1 : -2; } finally { clearTimeout(to); }
     },
     // Best effort: the status page may be unreachable (offline, or blocked by CORS); the built-in list is kept then.
     async refreshPublic() {

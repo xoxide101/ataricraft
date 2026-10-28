@@ -54,7 +54,9 @@ class Conn {
     return new Promise((ok, bad) => {
       const s = this.sock = net.connect(this.port, this.host);
       s.setNoDelay(true);
-      s.once('connect', ok);
+      const ct = setTimeout(() => s.destroy(new Error('tcp connect timeout')), 4000);
+      s.once('connect', () => { clearTimeout(ct); ok(); });
+      s.once('close', () => clearTimeout(ct));
       const fail = (e) => { this.dead = true; bad(e); this.queue.splice(0).forEach((w) => { clearTimeout(w.t); w.rej(new Error('tcp connection lost')); }); };
       s.on('error', fail);
       s.on('close', () => fail(new Error('tcp closed')));

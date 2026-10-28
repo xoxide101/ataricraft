@@ -25,15 +25,17 @@ ZP      = $D4
 ZP3     = $D8
 
 MAXE    = 120
-PANE0   = $5400
-PANE1   = $5C00
-MARKS   = $6400
-LINE    = $4900
-FSPEC   = $4940
-FSPEC2  = $4980
-INBUF   = $49C0
-IOBUF   = $5000
+PANE0   = $5C00
+PANE1   = $6400
+MARKS   = $6C00
+LINE    = $5100
+FSPEC   = $5140
+FSPEC2  = $5180
+INBUF   = $51C0
+IOBUF   = $5800
 VROWS   = 18
+MAXLV   = 6
+VBUF    = $7500
 
 ; editor / viewer
 SAVMSC  = $58
@@ -47,7 +49,7 @@ EL      = $EC
 EN      = $EE
 EV      = $F0
 EW      = $F2
-EBUF    = $6500
+EBUF    = $6D00
 EMAXPG  = $A5
 
 ; 16-bit compare: carry set if a>=b, Z set if equal
@@ -209,8 +211,11 @@ c21:    cmp #'V'
         bne c22
         jmp doview
 c22:    cmp #'G'
-        bne c18
+        bne c23
         jmp donew
+c23:    cmp #'O'
+        bne c18
+        jmp domove
 c18:    jmp main
 
 k_tab:
@@ -384,7 +389,7 @@ en_dn:  ldx act
         lda plen,x
         clc
         adc #9
-        cmp #25
+        cmp #41
         bcc en_ok
         jsr msgrow
         jsr putsi
@@ -564,7 +569,9 @@ pr_nl:  lda (ZP),y
         inc tfil
         jmp pr_s
 pr_d:   inc tdir
-pr_s:   ldy #14
+pr_s:   jsr addsec
+        jmp pr_l
+addsec: ldy #14
         jsr dig
         tax
         lda #100
@@ -582,8 +589,53 @@ pr_s:   ldy #14
         lda #1
         sta mlo
         jsr mulacc
-        jmp pr_l
+        rts
 pr_done:
+        lda bsing
+        bne pr_d1
+        jmp pr_nt
+pr_d1:  lda tdir
+        bne pr_d2
+        jmp pr_nt
+pr_d2:  lda #0
+        sta tfil
+        sta tdir
+        sta qmsg
+        lda #2
+        sta mvf
+        jsr msgrow
+        jsr putsi
+        .byte 'COUNTING...',0
+        ldx act
+        lda bcu
+        jsr entp
+        jsr dotree
+        bcc pr_tok
+        jmp dc_fail
+pr_tok: jsr msgrow
+        lda tfil
+        sta pvl
+        lda #0
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte ' FILES ',0
+        lda tdir
+        sta pvl
+        jsr putd16
+        jsr putsi
+        .byte ' DIRS ',0
+        lda tsec
+        sta pvl
+        lda tsec+1
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte ' SECTORS',0
+        jsr rowprompt
+        jsr putfs
+        jmp main
+pr_nt:
         jsr msgrow
         lda bsing
         beq pr_multi
@@ -2120,6 +2172,7 @@ dohelp: lda #125
         .byte '1-8          CHANGE DRIVE',$9B
         .byte 'RETURN       RUN / OPEN (.. = UP)',$9B,$9B
         .byte 'C COPY  D DELETE  R RENAME',$9B
+        .byte 'O MOVE (COPY+VERIFY+DELETE)',$9B
         .byte 'L LOCK  U UNLOCK  F FORMAT',$9B
         .byte 'X CLEAR DISK/FOLDER',$9B
         .byte 'M MKDIR  K RMDIR',$9B
@@ -2339,7 +2392,13 @@ bx_l:   jsr bnext
 bx_d:   ldy #1
         jmp xioFin
 
-docopy:
+domove: lda #1
+        sta mvf
+        jmp dc_s
+docopy: lda #0
+        sta mvf
+dc_s:   lda #0
+        sta qmsg
         jsr needf
         bne dc_go
         jmp main
@@ -2358,7 +2417,7 @@ dc_go:
 dc_pc:  cpy plen
         bcs dc_same
         lda PATHS,y
-        cmp PATHS+24,y
+        cmp PATHS+40,y
         bne dc_diff
         iny
         bne dc_pc
@@ -2377,15 +2436,88 @@ dc_one: sta bcu
         ldx act
         lda bcu
         jsr mkspec
-        ldx act
+        jsr isdir
+        bne dc_file
+        jsr dotree
+        bcs dc_fail
+        jmp dc_next
+dc_file:
+        lda act
+        sta cps
+        eor #1
+        sta cpd
+        jsr buildcp
+        jsr cpfile
+        bcs dc_fail
+        lda mvf
+        beq dc_next
+        jsr vfile
+        bcc dc_del
+        lda #1
+        sta qmsg
+        jmp dc_fail
+dc_del: lda #33
+        jsr xioA
+        cpy #1
+        beq dc_next
+        sty est
+dc_fail:
+        jsr reloadall
+        jsr redraw
+        jsr msgrow
+        lda qmsg
+        bne df_q
+        jmp df_n
+df_q:   cmp #1
+        bne df_q2
+        jsr putsi
+        .byte 'VERIFY FAILED - SOURCE KEPT',0
+        jmp main
+df_q2:  cmp #2
+        bne df_q3
+        jsr putsi
+        .byte 'CANNOT COPY FOLDER INTO ITSELF',0
+        jmp main
+df_q3:  cmp #3
+        bne df_q4
+        jsr putsi
+        .byte 'FOLDERS NESTED TOO DEEP',0
+        jmp main
+df_q4:  jsr putsi
+        .byte 'PATH TOO LONG',0
+        jmp main
+df_n:   jsr showerr
+        jmp main
+dc_all: jsr reloadall
+        jsr redraw
+        jsr msgrow
+        lda mvf
+        bne da_mv
+        jsr putsi
+        .byte 'COPIED OK',0
+        jmp main
+da_mv:  jsr putsi
+        .byte 'MOVED OK (VERIFIED)',0
+        jmp main
+
+isdir:  ldy #0
+        lda (ZP),y
+        cmp #':'
+        beq id_r
+        iny
+        lda (ZP),y
+        cmp #':'
+id_r:   rts
+
+; FSPEC holds the source name; build the destination spec in FSPEC2
+buildcp:
+        ldx cps
         lda plen,x
         clc
         adc #3
         sta ei2
-        lda act
-        eor #1
-        sta pn
-        tax
+        ldx cpd
+        stx pn
         lda drv,x
         ora #'0'
         sta FSPEC2+1
@@ -2396,13 +2528,16 @@ dc_one: sta bcu
         ldx #$43
         jsr apath
         ldy ei2
-dc_cp:  lda FSPEC,y
+bc_cp:  lda FSPEC,y
         sta FSPEC,x
         inx
         iny
         cmp #$9B
-        bne dc_cp
-        jsr msgrow
+        bne bc_cp
+        rts
+
+; copy FSPEC -> FSPEC2; carry set on error (est holds the code)
+cpfile: jsr msgrow
         jsr putsi
         .byte 'COPYING ',0
         jsr putfs
@@ -2410,18 +2545,20 @@ dc_cp:  lda FSPEC,y
         ldx #$10
         lda #4
         jsr openF
-        bpl dc_o2
-        jmp dc_err
-dc_o2:  jsr usef2
+        bpl cf_o2
+        sty est
+        sec
+        rts
+cf_o2:  jsr usef2
         ldx #$20
         lda #8
         jsr openF
-        bpl dc_loop
+        bpl cf_lp
         sty est
         jsr close1
-        jmp dc_err2
-dc_loop:
-        ldx #$10
+        sec
+        rts
+cf_lp:  ldx #$10
         jsr bget
         sty cpst
         lda ICBLL+$10
@@ -2429,46 +2566,449 @@ dc_loop:
         lda ICBLH+$10
         sta lenhi
         ora lenlo
-        beq dc_fin
+        beq cf_fin
         ldx #$20
         jsr bput
-        bpl dc_chk
+        bpl cf_chk
         sty est
         jsr close2
         jsr close1
-        jmp dc_err2
-dc_chk: lda cpst
+        sec
+        rts
+cf_chk: lda cpst
         cmp #1
-        beq dc_loop
-dc_fin: lda cpst
+        beq cf_lp
+cf_fin: lda cpst
         cmp #1
-        beq dc_ok
+        beq cf_ok
         cmp #136
-        beq dc_ok
+        beq cf_ok
         sta est
         jsr close2
         jsr close1
-        jmp dc_err2
-dc_ok:  ldx #$20
+        sec
+        rts
+cf_ok:  ldx #$20
         jsr closeF
-        bpl dc_ok2
+        bpl cf_ok2
         sty est
         jsr close1
-        jmp dc_err2
-dc_ok2: jsr close1
-        jmp dc_next
-dc_all: jsr reloadoth
-        jsr redraw
-        jsr msgrow
-        jsr putsi
-        .byte 'COPIED OK',0
-        jmp main
-dc_err: sty est
-dc_err2:
-        jsr reloadoth
-        jsr redraw
-        jsr showerr
-        jmp main
+        sec
+        rts
+cf_ok2: jsr close1
+        clc
+        rts
+
+; compare FSPEC with FSPEC2 byte for byte; carry set if they differ
+vfile:  jsr usef1
+        ldx #$10
+        lda #4
+        jsr openF
+        bpl vf_o2
+        jmp vf_bad0
+vf_o2:  jsr usef2
+        ldx #$20
+        lda #4
+        jsr openF
+        bpl vf_lp
+        jsr close1
+        jmp vf_bad0
+vf_lp:  ldx #$10
+        jsr bget
+        sty cpst
+        lda ICBLL+$10
+        sta lenlo
+        lda ICBLH+$10
+        sta lenhi
+        ldx #$20
+        jsr bget2
+        lda ICBLL+$20
+        cmp lenlo
+        bne vf_bad
+        lda ICBLH+$20
+        cmp lenhi
+        bne vf_bad
+        lda lenhi
+        ora lenlo
+        sta vz
+        lda #<IOBUF
+        sta ZP
+        lda #>IOBUF
+        sta ZP+1
+        lda #<VBUF
+        sta ZP3
+        lda #>VBUF
+        sta ZP3+1
+        ldy #0
+vc_p:   lda lenlo
+        ora lenhi
+        beq vc_d
+        lda (ZP),y
+        cmp (ZP3),y
+        bne vf_bad
+        iny
+        bne vc_n
+        inc ZP+1
+        inc ZP3+1
+vc_n:   lda lenlo
+        bne vc_x
+        dec lenhi
+vc_x:   dec lenlo
+        jmp vc_p
+vc_d:   lda vz
+        beq vf_ok
+        lda cpst
+        cmp #1
+        beq vf_lp
+        cmp #136
+        bne vf_bad
+vf_ok:  jsr close2
+        jsr close1
+        clc
+        rts
+vf_bad: jsr close2
+        jsr close1
+vf_bad0:
+        sec
+        rts
+
+bget2:  lda #7
+        sta ICCOM,x
+        lda #<VBUF
+        sta ICBAL,x
+        lda #>VBUF
+        sta ICBAH,x
+        lda #0
+        sta ICBLL,x
+        lda #4
+        sta ICBLH,x
+        jmp CIOV
+
+; ---------- recursive folder copy / move ----------
+; pane 2 = source folder being walked (listing in EBUF), pane 3 = matching destination path.
+; Entry: ZP = folder entry (bcu) in the active pane.  Carry set on error.
+dotree: lda act
+        ldx #2
+        jsr setpp
+        lda act
+        eor #1
+        ldx #3
+        jsr setpp
+        ldx act
+        lda bcu
+        jsr entp
+        ldx #2
+        jsr appname
+        bcs tr_long
+        ldx #3
+        jsr appname
+        bcs tr_long
+        lda mvf
+        cmp #2
+        beq tr_cnt
+        lda drv+2
+        cmp drv+3
+        bne tr_go
+        lda plen+2
+        cmp plen+3
+        beq tr_pf
+        bcs tr_go
+tr_pf:  ldy #0
+tr_pl:  cpy plen+2
+        bcs tr_self
+        lda PATHS+80,y
+        cmp PATHS+120,y
+        bne tr_go
+        iny
+        bne tr_pl
+tr_self:
+        lda #2
+        sta qmsg
+        sec
+        rts
+tr_long:
+        lda #4
+        sta qmsg
+        sec
+        rts
+tr_deep:
+        lda #3
+        sta qmsg
+        sec
+        rts
+tr_go:  ldx #3
+        jsr stripp
+        lda mvf
+        cmp #2
+        beq tr_cnt
+        jsr dspec
+        lda #8
+        sta xa1
+        lda #42
+        jsr xioA
+        lda #0
+        sta xa1
+        ldx #3
+        jsr appname
+tr_cnt: lda #0
+        sta lvl
+        jsr trload
+tr_lp:  ldx lvl
+        lda idx,x
+        cmp cnt+2
+        bcc tr_ent
+        jmp tr_end
+tr_ent: ldx #2
+        jsr entp
+        jsr isdir
+        bne tr_fl
+        jmp tr_dir
+tr_fl:  lda mvf
+        cmp #2
+        bne tr_fl2
+        inc tfil
+        jsr addsec
+        jmp tr_inc
+tr_fl2: ldx lvl
+        lda idx,x
+        ldx #2
+        jsr mkspec
+        lda #2
+        sta cps
+        lda #3
+        sta cpd
+        jsr buildcp
+        jsr cpfile
+        bcs tr_f1
+        lda mvf
+        beq tr_inc
+        jsr vfile
+        bcc tr_dl
+        lda #1
+        sta qmsg
+        sec
+        rts
+tr_dl:  lda #33
+        jsr xioA
+        cpy #1
+        beq tr_rel
+        sty est
+        sec
+        rts
+tr_rel: ldx #2
+        jsr loaddir
+        jmp tr_lp
+tr_f1:  sec
+        rts
+tr_inc: ldx lvl
+        inc idx,x
+        jmp tr_lp
+tr_dir: lda lvl
+        cmp #MAXLV
+        bcc tr_d1
+        jmp tr_deep
+tr_d1:  lda mvf
+        cmp #2
+        bne tr_d0
+        inc tdir
+        jsr addsec
+tr_d0:  jsr dspec
+        lda mvf
+        cmp #2
+        beq tr_d2s
+        lda #8
+        sta xa1
+        lda #42
+        jsr xioA
+        lda #0
+        sta xa1
+tr_d2s: ldx #2
+        jsr appname
+        bcc tr_d2
+        jmp tr_long
+tr_d2:  lda mvf
+        cmp #2
+        beq tr_d3
+        ldx #3
+        jsr appname
+        bcc tr_d3
+        jmp tr_long
+tr_d3:  lda mvf
+        cmp #1
+        beq tr_dn
+        ldx lvl
+        inc idx,x
+tr_dn:  inc lvl
+        jsr trload
+        jmp tr_lp
+tr_end: lda lvl
+        beq tr_fin
+        lda mvf
+        cmp #1
+        bne tr_up
+        jsr rmtree
+        bcs tr_fail
+tr_up:  ldx #2
+        jsr stripp
+        lda mvf
+        cmp #2
+        beq tr_u2
+        ldx #3
+        jsr stripp
+tr_u2:  dec lvl
+        ldx #2
+        jsr loaddir
+        jmp tr_lp
+tr_fin: lda mvf
+        cmp #1
+        bne tr_ok
+        jsr rmtree
+        bcs tr_fail
+tr_ok:  clc
+        rts
+tr_fail:
+        sec
+        rts
+
+trload: ldx #2
+        jsr loaddir
+        ldx lvl
+        lda #1
+        sta idx,x
+        rts
+
+; remove the folder named by pane 2's path
+rmtree: lda drv+2
+        ora #'0'
+        sta FSPEC+1
+        lda #'D'
+        sta FSPEC
+        lda #':'
+        sta FSPEC+2
+        lda #2
+        sta pn
+        ldx #3
+        jsr apath
+        dex
+        lda #$9B
+        sta FSPEC,x
+        lda #43
+        jsr xioA
+        cpy #1
+        beq rt_ok
+        lda #33
+        jsr xioA
+        cpy #1
+        beq rt_ok
+        sty est
+        sec
+        rts
+rt_ok:  clc
+        rts
+
+; destination folder spec: pane 3's path + the name at ZP
+dspec:  lda drv+3
+        ora #'0'
+        sta FSPEC+1
+        lda #'D'
+        sta FSPEC
+        lda #':'
+        sta FSPEC+2
+        lda #3
+        sta pn
+        ldx #3
+        jsr apath
+        ldy #2
+ds1:    lda (ZP),y
+        cmp #' '
+        beq ds2
+        sta FSPEC,x
+        inx
+        iny
+        cpy #10
+        bcc ds1
+ds2:    lda #$9B
+        sta FSPEC,x
+        rts
+
+; pane A -> pane X: drive and path
+setpp:  sta spp
+        stx dpp
+        tay
+        lda drv,y
+        sta drv,x
+        lda plen,y
+        sta plen,x
+        beq sp_x
+        sta apn
+        lda pbase,y
+        tay
+        lda pbase,x
+        tax
+sp_l:   lda PATHS,y
+        sta PATHS,x
+        inx
+        iny
+        dec apn
+        bne sp_l
+sp_x:   rts
+
+; append the folder name at ZP to pane X's path; carry set if it won't fit
+appname:
+        stx apx
+        lda plen,x
+        clc
+        adc #9
+        cmp #41
+        bcs an_bad
+        lda pbase,x
+        clc
+        adc plen,x
+        tax
+        ldy #2
+an_c:   lda (ZP),y
+        cmp #' '
+        beq an_e
+        sta PATHS,x
+        inx
+        iny
+        cpy #10
+        bcc an_c
+an_e:   lda #'>'
+        sta PATHS,x
+        inx
+        txa
+        ldx apx
+        sec
+        sbc pbase,x
+        sta plen,x
+        clc
+        rts
+an_bad: sec
+        rts
+
+; drop the last folder from pane X's path
+stripp: lda plen,x
+        beq sr_set
+        sec
+        sbc #1
+        sta tmp
+        lda pbase,x
+        sta tmp+1
+sr_u:   lda tmp
+        beq sr_set
+        clc
+        adc tmp+1
+        tay
+        dey
+        lda PATHS,y
+        cmp #'>'
+        beq sr_set
+        dec tmp
+        jmp sr_u
+sr_set: lda tmp
+        sta plen,x
+        rts
 
 close1: ldx #$10
         jmp closeF
@@ -3060,8 +3600,10 @@ loaddir:
         stx lp
         lda #0
         sta cnt,x
+        cpx #2
+        bcs ld_nm
         jsr clrmk
-        lda frbase,x
+ld_nm:  lda frbase,x
         tay
         lda #' '
         sta frb,y
@@ -3216,8 +3758,8 @@ ep2:    clc
         adc panehi,x
         sta ZP+1
         rts
-panelo: .byte <PANE0,<PANE1
-panehi: .byte >PANE0,>PANE1
+panelo: .byte <PANE0,<PANE1,<EBUF,<EBUF
+panehi: .byte >PANE0,>PANE1,>EBUF,>EBUF
 
 mkspec: stx pn
         pha
@@ -3388,7 +3930,7 @@ redraw: jsr rowprompt
         ldx #0
         jsr setpos
         jsr putsi
-        .byte 'C'+$80,'OPY ','D'+$80,'EL ','R'+$80,'EN ','M'+$80,'KDIR ','K'+$80,'RMDIR ','P'+$80,'ROPS ','F'+$80,'MT',0
+        .byte 'C'+$80,'OPY ','D'+$80,'EL ','R'+$80,'EN ','M'+$80,'KDIR ','K'+$80,'RMDIR ','P'+$80,'ROPS ','F'+$80,'MT ','M','O'+$80,'VE',0
         lda #23
         ldx #0
         jsr setpos
@@ -3569,12 +4111,22 @@ dr_ret: lda #0
 kspec:  .byte 'K:',$9B
 exts:   .byte 'COMXEXOBX'
 ei:     .byte 0
-drv:    .byte 1,2
-cnt:    .byte 0,0
-sel:    .byte 0,0
-top:    .byte 0,0
-frb:    .byte ' ',' ',' ',' ','-',' ',' ',' ',' ','-'
-frbase: .byte 0,5
+drv:    .byte 1,2,0,0
+cnt:    .byte 0,0,0,0
+sel:    .byte 0,0,0,0
+top:    .byte 0,0,0,0
+frb:    .byte ' ',' ',' ',' ','-',' ',' ',' ',' ','-',' ',' ',' ',' ','-'
+frbase: .byte 0,5,10,10
+mvf:    .byte 0
+qmsg:   .byte 0
+cps:    .byte 0
+cpd:    .byte 0
+vz:     .byte 0
+lvl:    .byte 0
+idx:    .ds 8
+spp:    .byte 0
+dpp:    .byte 0
+apx:    .byte 0
 fi:     .byte 0
 fj:     .byte 0
 act:    .byte 0
@@ -3618,9 +4170,9 @@ fcnt:   .byte 0
 fs:     .byte 0
 fbuf:   .ds 8
 hs:     .byte 0
-plen:   .byte 0,0
-pbase:  .byte 0,24
-PATHS:  .ds 48
+plen:   .byte 0,0,0,0
+pbase:  .byte 0,40,80,120
+PATHS:  .ds 160
 xa1:    .byte 0
 dv:     .byte 0
 hp:     .byte 0

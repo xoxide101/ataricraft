@@ -102,7 +102,7 @@
         }
       } catch (e) { out.push(f); }
       zips++;
-      if (prog && zips % 5 === 0) await AC.Progress.yieldUI();
+      if (prog) await AC.Progress.yieldUI();
     }
     if (prog) prog.end();
     if (zips) log(`read ${zips} archive${zips > 1 ? 's' : ''}`);
@@ -1170,7 +1170,7 @@
   const SCAN_SKIP = /^(\$recycle\.bin|system volume information|node_modules|\.git|windows|program files.*)$/i;
   const SCAN_EXT = new Set([...Object.values(MEDIA_EXT).flat(), 'zip', '7z']);
   const scanWant = (name) => SCAN_EXT.has((name.split('.').pop() || '').toLowerCase()) || /^a(800|5200)[^/]*\.xml$/i.test(name);
-  const scanSt = { stop: false, seen: 0, keep: 0, errs: 0 };
+  const scanSt = { stop: false, seen: 0, keep: 0, errs: 0, tick: 0 };
   // Folder rules: {path/: true|false}. The nearest explicit rule on a folder or its ancestors wins; the default is include.
   let medRules = {};
   const ruleFor = (rules, path) => {
@@ -1193,16 +1193,24 @@
         }
         if (!inc) continue;
         scanSt.seen++;
+        if (Date.now() - scanSt.tick > 150) await scanTick(path, out.length);
         if (!scanWant(name)) continue;
         try {
           const f = await e.getFile();
           Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
           out.push(f);
         } catch (err) { scanSt.errs++; diag(`scan skipped file "${path + name}": ${err.name} ${err.message}`, 'warn'); continue; }
-        if (out.length % 50 === 0) { $('medcount').textContent = `scanning… ${out.length} found (${scanSt.seen} files checked)`; if (scanSt.prog) scanSt.prog.note(`${out.length} found, ${scanSt.seen} checked`); await new Promise((r) => setTimeout(r)); }
       }
     } catch (err) { scanSt.errs++; diag(`scan skipped folder "${path}": ${err.name} ${err.message}`, 'warn'); }
-  }  async function scanHandle(h, interactive) {
+  }
+  async function scanTick(path, found) {
+    scanSt.tick = Date.now();
+    const s = `${found} found, ${scanSt.seen} checked`;
+    $('medcount').textContent = `scanning… ${s} - ${path}`;
+    if (scanSt.prog) { scanSt.prog.text('Scanning ' + path); scanSt.prog.note(s); }
+    await new Promise((r) => setTimeout(r));
+  }
+  async function scanHandle(h, interactive) {
     let p = await h.queryPermission({ mode: 'read' });
     if (p !== 'granted' && interactive) p = await h.requestPermission({ mode: 'read' });
     if (p !== 'granted') { $('medcount').textContent = `"${h.name}" remembered: click Refresh to allow access`; return false; }
@@ -2491,18 +2499,20 @@
     const b = $('fnmcheck');
     b.disabled = true;
     $('fnhostmsg').textContent = 'checking…';
-    const q = FujiNet.publicHosts.slice();
-    let ok = 0;
+    const q = FujiNet.publicHosts.slice(), total = q.length;
+    let ok = 0, done = 0;
     const worker = async () => {
       for (let h; (h = q.shift());) {
         const ms = await FujiNet.probe(h);
         probed.set(h, ms);
         if (ms >= 0) ok++;
+        done++;
         renderMaster();
         if (ms === -2) { q.length = 0; $('fnhostmsg').textContent = 'relay not reachable - start it (see below)'; return; }
+        $('fnhostmsg').textContent = 'checking ' + done + '/' + total + '…';
       }
     };
-    await Promise.all([worker(), worker(), worker()]);
+    await Promise.all(Array.from({ length: 6 }, worker));
     b.disabled = false;
     if (!/relay not/.test($('fnhostmsg').textContent)) $('fnhostmsg').textContent = ok + ' of ' + FujiNet.publicHosts.length + ' answered';
   };
