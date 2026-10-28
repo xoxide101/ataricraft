@@ -261,7 +261,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
@@ -313,14 +313,14 @@
   function updateTb() {
     const a = W.panes[W.active], r = rec(a), o = rec(W.panes[1 - W.active]);
     const need = {
-      mkdir: r && C.caps(r.m).mkdir, az: r && C.caps(r.m).mkdir, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import, names: r && C.caps(r.m).longnames,
+      mkdir: r && C.caps(r.m).mkdir, az: r && C.caps(r.m).mkdir, dup: r && C.caps(r.m).write, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import, names: r && C.caps(r.m).longnames,
       copy: o ? C.caps(o.m).write : { ok: false, why: 'open a disk in the other pane first' },
       move: !o ? { ok: false, why: 'open a disk in the other pane first' } : !C.caps(o.m).write.ok ? C.caps(o.m).write : C.caps(r ? r.m : o.m).del,
     };
     for (const b of W.el.querySelectorAll('.wtb button')) {
       const k = b.dataset.a;
       if (b.dataset.t === undefined) b.dataset.t = b.title || '';
-      if (!['copy', 'move', 'mkdir', 'az', 'rename', 'del', 'props', 'view', 'export', 'import', 'all', 'names'].includes(k)) continue;
+      if (!['copy', 'move', 'mkdir', 'az', 'dup', 'rename', 'del', 'props', 'view', 'export', 'import', 'all', 'names'].includes(k)) continue;
       let ok = !!r, why = r ? '' : 'pick a disk first';
       if (r && need[k] && !need[k].ok) { ok = false; why = need[k].why; }
       if (r && (k === 'copy' || k === 'move') && !o) { ok = false; why = 'open a disk in the other pane first'; }
@@ -392,7 +392,7 @@
   }
   function ctxMenu(i, x, y) {
     W.active = i;
-    const items = [['Open / view', 'view'], ['Copy to other pane', 'copy'], ['Move to other pane', 'move'], ['Rename…', 'rename'], ['New folder…', 'mkdir'], ['A–Z / 0–9 folders…', 'az'], ['Delete…', 'del'], ['Save to PC', 'export'], ['Properties…', 'props']];
+    const items = [['Open / view', 'view'], ['Copy to other pane', 'copy'], ['Make a copy here…', 'dup'], ['Move to other pane', 'move'], ['Rename…', 'rename'], ['New folder…', 'mkdir'], ['A–Z / 0–9 folders…', 'az'], ['Delete…', 'del'], ['Save to PC', 'export'], ['Properties…', 'props']];
     const m = document.createElement('div');
     m.style.cssText = `position:fixed;z-index:9999;left:${Math.min(x, innerWidth - 200)}px;top:${Math.min(y, innerHeight - 260)}px;background:#1b1e24;border:1px solid #4a5160;border-radius:8px;box-shadow:0 6px 24px #000a;min-width:190px;overflow:hidden`;
     for (const [l, a] of items) { const d = document.createElement('div'); d.textContent = l; d.style.cssText = 'padding:8px 12px;cursor:pointer'; d.onmouseenter = () => (d.style.background = '#2a2f39'); d.onmouseleave = () => (d.style.background = ''); d.onclick = () => { m.remove(); act(a); }; m.append(d); }
@@ -404,7 +404,7 @@
   // ---------- actions ----------
   function act(a) {
     const A = W.panes[W.active];
-    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
+    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
       all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, compare: doCompare, names: () => makeNames(rec(A)), refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
@@ -541,6 +541,27 @@
       log('Disk renamed to ' + nm);
     } catch (e) { log('rename disk: ' + e.message); }
     render();
+  }
+  async function doDup() {
+    const p = W.panes[W.active], r = rec(p), items = selItems(p); if (!r) return;
+    if (r.m.vol.readOnly) return log('this disk is read-only here');
+    const all = C.entries(r.m), files = items.map((it) => all.find((x) => x.path === it)).filter((e) => e && !e.dir);
+    if (!files.length) return log('tag or select a file to copy first');
+    const label = (e) => { const n = e.long || e.name, i = n.lastIndexOf('.'); return i > 0 ? n.slice(0, i) + '_COPY' + n.slice(i) : n + '_COPY'; };
+    const names = new Map();
+    if (files.length === 1) {
+      const nm = await ask('Make a copy', `Name for the copy of "${files[0].long || files[0].name}" (made in this folder)`, label(files[0]), 'Names longer than 8.3 are shortened on the disk and the full name is kept in LONGNAME.TXT.'); if (!nm) return;
+      names.set(files[0].path, nm);
+    } else for (const e of files) names.set(e.path, label(e));
+    snapshot('make copy', [r]);
+    const made = [], bad = [];
+    for (const e of files) {
+      try { made.push(C.addHostFile(r.m, parentOf(e.path), names.get(e.path), r.m.vol.read(e.raw), { source: 'COPY', index: true })); } catch (er) { bad.push(e.name + ': ' + er.message); }
+    }
+    await afterWrite([r]);
+    if (made.length) { p.sel = new Set(made); p.cur = made[made.length - 1]; }
+    log(`Made ${made.length} cop${made.length === 1 ? 'y' : 'ies'}.`); render();
+    if (bad.length) msg('Some copies were not made', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
   }
   async function doDelete() {
     const p = W.panes[W.active], r = rec(p), items = selItems(p); if (!r || !items.length) return log('tag or select something first');
