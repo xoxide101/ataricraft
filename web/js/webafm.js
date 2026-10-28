@@ -531,40 +531,20 @@
   }
 
   // ---------- viewer / editor ----------
-  async function viewFile(i, path) {
+  async function viewFile(i, path, mode) {
     const p = W.panes[i], r = rec(p); path = path || selItems(p)[0]; if (!r || !path) return log('select a file first');
     const e = C.entries(r.m).find((x) => x.path === path); if (!e || e.dir) return;
-    const data = r.m.vol.read(e.raw);
-    const texty = data.every((b) => (b >= 32 && b < 127) || b === 0x9b || b === 10 || b === 13 || b === 9);
-    let hex = !texty;
-    const body = document.createElement('div'), area = document.createElement('div');
-    const tb = document.createElement('div'); tb.style.cssText = 'margin-bottom:6px;display:flex;gap:6px;align-items:center';
-    const tg = document.createElement('button'); tb.append(tg);
-    const note = document.createElement('span'); note.className = 'dim'; note.textContent = `${data.length} bytes${texty && !r.m.vol.readOnly ? ' · text can be edited' : ''}`; tb.append(note);
-    body.append(tb, area);
-    let ta = null;
-    const show = () => {
-      tg.textContent = hex ? 'Show as text' : 'Show as hex'; area.textContent = ''; ta = null;
-      if (hex) {
-        const pre = document.createElement('pre'), lim = Math.min(data.length, 16384); let s = '';
-        for (let o = 0; o < lim; o += 16) { const row = data.subarray(o, o + 16); s += o.toString(16).padStart(4, '0') + '  ' + [...row].map((b) => b.toString(16).padStart(2, '0')).join(' ').padEnd(48) + ' ' + [...row].map((b) => (b >= 32 && b < 127 ? String.fromCharCode(b) : '.')).join('') + '\n'; }
-        pre.textContent = s + (lim < data.length ? `… ${data.length - lim} more bytes` : ''); area.append(pre);
-      } else {
-        ta = document.createElement('textarea'); ta.readOnly = !texty || r.m.vol.readOnly;
-        ta.value = [...data].map((b) => (b === 0x9b || b === 13 ? '\n' : b === 10 ? '' : String.fromCharCode(b))).join(''); area.append(ta);
-      }
-    };
-    tg.onclick = () => { hex = !hex; show(); }; show();
-    const bt = [{ label: 'Close', value: false }];
-    if (texty && !r.m.vol.readOnly) bt.push({ label: 'Save changes', value: () => ta ? ta.value : false, pri: true });
-    const v = await dlg(e.long || e.name, body, bt);
-    if (typeof v === 'string') {
-      const out = new Uint8Array([...v].map((c) => (c === '\n' ? 0x9b : c.charCodeAt(0) & 0x7f)));
-      if (eq(out, data)) return log('no changes');
-      snapshot('edit ' + e.name, [r]);
-      try { r.m.vol.writeFile(e.path, out, true); await afterWrite([r]); log(`Saved ${e.name} (${out.length} bytes).`); } catch (er) { log('save: ' + er.message); }
-      render();
-    }
+    if (W.ed) return;
+    const data = r.m.vol.read(e.raw), ro = !!r.m.vol.readOnly;
+    await AC.WEdit.open({
+      parent: W.el, title: (e.long || e.name) + (e.long ? '  [' + e.name + ']' : ''), data, readOnly: ro, mode,
+      onReady: (a) => { W.ed = a; W.dlgKey = () => a.focus(); },
+      onClose: () => { W.ed = null; W.dlgKey = null; W.el.focus(); },
+      onSave: async (out) => {
+        snapshot('edit ' + e.name, [r]);
+        r.m.vol.writeFile(e.path, out, true); await afterWrite([r]); log(`Saved ${e.name} (${out.length} bytes).`); render();
+      },
+    });
   }
 
   // ---------- new disk / compare ----------
@@ -598,6 +578,8 @@
 
   // ---------- keyboard ----------
   function onKey(e) {
+    if (e.target.closest && e.target.closest('.wed')) return;
+    if (W.ed) { W.ed.focus(); e.preventDefault(); e.stopPropagation(); return; }
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') { if (e.key === 'Escape' && !W.el.querySelector('.wdlg')) e.target.blur(); return; }
     if (W.el.querySelector('.wdlg')) return;
     const p = W.panes[W.active], rows = rowsOf(p), k = e.key;
