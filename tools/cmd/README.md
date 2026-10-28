@@ -85,3 +85,7 @@ API table at `$3800` (version byte at `$3803`, currently 1), three bytes per ent
 ## LZH.COM (standalone LHA/LZH lister/extractor)
 Prompt: `L file.LZH` list, `X file.LZH [dest] [member]` extract, `T file.LZH` test (CRC-16). Methods -lh0-, -lh1-, -lh4-, -lh5- with level 0/1 headers; others report UNSUPPORTED METHOD (lh6/lh7 need 32K+ rings). Port of web/js/lzh.js; verified on all 69 sample entries (CRC OK). Works from CMD via the hand-off: `LZH X A.LZH`. lh4 is untested (no samples).
 
+
+## ALF.COM (standalone ALF lister/extractor)
+Prompt: `L file.ALF` list, `X file.ALF [dest] [member]` extract, `T file.ALF` test (16-bit additive checksum). ALF is the Atari LZ.COM/DZ.COM format: 29-byte ARC-like headers with LZW data (9-12 bit codes, MSB first). Port of web/js/alf.js; verified on all 264 entries of the 41 sample archives and byte-identical to the host decoder. Works from CMD via the hand-off: `ALF X A.ALF`. Decoding only (no compressor). Uses about 16K of tables at $6400-.
+
