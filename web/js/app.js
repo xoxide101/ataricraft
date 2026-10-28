@@ -876,11 +876,22 @@
   const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return tosecTitle(rel); };
   // CRC -> title from DAT files (ClrMamePro, RomCenter, Logiqx/MAME XML); kept in IndexedDB so it survives reloads.
   let DATCRC = {};
-  const parseDat = (text) => {
+  let DATSYS = {};
+  const parseDat = (text, sysTag) => {
     const out = {};
-    const put = (crc, t) => { crc = (crc || '').toLowerCase().padStart(8, '0'); if (/^[0-9a-f]{8}$/.test(crc) && t && !out[crc]) out[crc] = t; };
+    let sys = sysTag || '';
+    const put = (crc, t) => { crc = (crc || '').toLowerCase().padStart(8, '0'); if (/^[0-9a-f]{8}$/.test(crc) && t && !out[crc]) { out[crc] = t; if (sys) DATSYS[crc] = sys; } };
     if (/^\s*</.test(text)) {
       const doc = new DOMParser().parseFromString(text, 'text/xml');
+      const sl = doc.querySelector('softwarelist');
+      if (sl) {
+        const n = sl.getAttribute('name') || '';
+        sys = { a2600: 'Atari 2600', a2600_cass: 'Atari 2600', a5200: 'Atari 5200', a7800: 'Atari 7800', a800: 'Atari 8-bit', a800_cass: 'Atari 8-bit', a800_flop: 'Atari 8-bit' }[n] || (sl.getAttribute('description') || n).replace(/\s*(cartridges|cassettes|floppy disks?)$/i, '');
+      } else {
+        const h = doc.querySelector('header > name');
+        const hn = h ? h.textContent.replace(/^TOSEC\s*-?\s*/i, '').replace(/^"|"$/g, '').split(/\s+-\s+/)[0].trim() : '';
+        if (hn) sys = hn.replace(/^Atari 8bit$/i, 'Atari 8-bit').replace(/^Atari 8-bit Family$/i, 'Atari 8-bit').replace(/^Atari 2600 & VCS$/i, 'Atari 2600');
+      }
       doc.querySelectorAll('game, machine, software, resource').forEach((g) => {
         const d = g.querySelector(':scope > description');
         const t = (d && d.textContent.trim()) || g.getAttribute('name');
@@ -902,14 +913,15 @@
     return out;
   };
   const syncDats = () => { const n = Object.keys(DATCRC).length; if (n) $('medtitles').textContent += ` · ${n} DAT CRCs`; };
+  const sysFromName = (n) => n.split('/').pop().replace(/\.[^.]+$/, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^NoIntro\s*-\s*/i, '').replace(/^Atari\s*-\s*8-bit Family$/i, 'Atari 8-bit').trim();
   async function loadDats(files) {
     let n = 0;
-    for (const f of files) { const d = parseDat(await f.text()); n += Object.keys(d).length; Object.assign(DATCRC, d); }
-    try { await idbSet('datCrc', DATCRC); } catch (e) { log('DAT CRCs too large to remember, but active for this visit'); }
+    for (const f of files) { const d = parseDat(await f.text(), sysFromName(f.name)); n += Object.keys(d).length; Object.assign(DATCRC, d); }
+    try { await idbSet('datCrc', DATCRC); await idbSet('datSys', DATSYS); } catch (e) { log('DAT CRCs too large to remember, but active for this visit'); }
     syncTitles(); syncDats();
     log(`${n} CRCs loaded from ${files.length} DAT file(s)`);
   }
-  setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; syncDats(); } catch (e) { /* none saved */ } }, 0);
+  setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; DATSYS = (await idbGet('datSys')) || {}; syncDats(); } catch (e) { /* none saved */ } }, 0);
   async function loadTitlesXml(files) {
     const dats = files.filter((f) => /\.dat$/i.test(f.name));
     if (dats.length) await loadDats(dats);
@@ -918,7 +930,7 @@
     let n = 0;
     for (const f of files) {
       const txt = await f.text();
-      Object.assign(DATCRC, parseDat(txt));
+      Object.assign(DATCRC, parseDat(txt, sysFromName(f.name)));
       const doc = new DOMParser().parseFromString(txt, 'text/xml');
       doc.querySelectorAll('software').forEach((s) => {
         const name = (s.getAttribute('name') || '').toLowerCase();
@@ -931,7 +943,7 @@
       });
     }
     try { localStorage.setItem('ac.titles', JSON.stringify(TITLES)); } catch (e) { log('titles too large to remember, but active for this visit'); }
-    try { await idbSet('datCrc', DATCRC); } catch (e) { /* keep in memory */ }
+    try { await idbSet('datCrc', DATCRC); await idbSet('datSys', DATSYS); } catch (e) { /* keep in memory */ }
     syncTitles(); syncDats();
     MED.files.forEach((m) => (m.title = titleFor(m.name)));
     renderMed();
@@ -1504,9 +1516,10 @@
         const e = db[c1] || (c2 && db[c2]);
         const nm = (AC.CART_NAMES || {})[c1] || (c2 && (AC.CART_NAMES || {})[c2]);
         const dt = DATCRC[c1] || (c2 && DATCRC[c2]);
-        if (dt) { todo[i].title = dt; hit++; }
-        else if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : ''); hit++; }
-        else if (nm) { todo[i].title = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : ''); hit++; }
+        const tag = (s) => (s ? ` [${s}]` : '');
+        if (dt) { todo[i].title = dt + tag(DATSYS[c1] || (c2 && DATSYS[c2])); hit++; }
+        else if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : '') + tag('Atari 8-bit'); hit++; }
+        else if (nm) { todo[i].title = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : '') + tag('Atari 8-bit'); hit++; }
       } catch (err) { /* unreadable file: leave untitled */ }
       if (i % 50 === 49) { log(`identifying cartridges by CRC: ${i + 1}/${todo.length}`); await new Promise((r) => setTimeout(r, 0)); }
     }
