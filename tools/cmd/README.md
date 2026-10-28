@@ -31,9 +31,16 @@ Run `CMD.COM` from the DOS menu or prompt. `HELP` lists commands. `EXIT` returns
 
 Anything else is run as `NAME.CMX`, `NAME.COM` or `NAME.BAT` in the current folder. Batch files echo each line; `AUTOEXEC.BAT` runs at start.
 
+## Hardware diagnostics
+
+- `MEMTEST` (`RAMTEST`): pattern and address-line test of main RAM above $8000 and every extended bank (130XE, Rambo, Compy, up to 1088K). Contents are preserved; the tester runs from $0500 and uses the cassette buffer.
+- `KEYTEST` (`KEY`): shows keycode, name, Shift and Ctrl for every key, then lists the keys not pressed. Quit by holding START+SELECT+OPTION.
+- `INPUT` (`JOY`): live joysticks 1-2, 8 paddles and console keys. `INPUT 4` adds ports 3-4 (400/800 only). Any key quits.
+- `COLOR`: grey ramp and 16-hue palette in 8 luminance bands. `MONITOR`: geometry grid with circle, pixel checker, grey ramp and palette. Any key = next, ESC = quit. Needs RAMTOP of $BC00 or more.
+
 ## Not implemented yet
 
-These names are accepted but only print a message: ARC, ATR, BOOT, CAR, CHTD, CHVOL, CLR, COMP, CON, DATE, DELTREE, DEV, ED, FMT, FORMAT, KEY, MAP, MENU, RS232, SAVE, SETPATHS, SIOSET, SORTDIR, SWAP, TD, TIME, UNERASE, VERIFY.
+These names are accepted but only print a message: ARC, ATR, BOOT, CAR, CHTD, CHVOL, CLR, COMP, CON, DATE, DELTREE, DEV, ED, FMT, FORMAT, MAP, MENU, RS232, SAVE, SETPATHS, SIOSET, SORTDIR, SWAP, TD, TIME, UNERASE, VERIFY.
 
 ## Known limits
 

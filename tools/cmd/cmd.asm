@@ -282,7 +282,21 @@ cmdtab:
         .byte 'FORMAT',0
         .word cmd_stub
         .byte 'KEY',0
-        .word cmd_stub
+        .word cmd_keytest
+        .byte 'KEYTEST',0
+        .word cmd_keytest
+        .byte 'MEMTEST',0
+        .word cmd_memtest
+        .byte 'RAMTEST',0
+        .word cmd_memtest
+        .byte 'INPUT',0
+        .word cmd_input
+        .byte 'JOY',0
+        .word cmd_input
+        .byte 'COLOR',0
+        .word cmd_color
+        .byte 'MONITOR',0
+        .word cmd_monitor
         .byte 'MAP',0
         .word cmd_stub
         .byte 'MENU',0
@@ -312,6 +326,7 @@ cmdtab:
         icl 'cmds\file.asm'
         icl 'cmds\misc.asm'
         icl 'cmds\run.asm'
+        icl 'cmds\test.asm'
         icl 'lib\io.asm'
         icl 'lib\dos.asm'
         icl 'lib\path.asm'
