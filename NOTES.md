@@ -73,3 +73,4 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 - DCM export is not yet exposed in the UI (diskconv.atrToDcm exists, round-trip tested on 115 ATRs).
 
 - **Chip-doc archive path:** `I:\Online_Archives_A-Z` (mirror of 10 sites; still downloading). Richest area: `Atari_FTP\collections\Atari documents` (CPUs / Custom Chips Datasheets and Databooks, Schematics, Service Manuals, TT030 manuals, 8-bit internal docs). First-pass index: `node tools/index_chipdocs.cjs` -> `out/chipdocs_index.csv` (790 candidate docs; keyword match includes game manuals, needs filtering). Re-run when the download finishes.
+- **Reference archive policy:** the large Atari archive (millions of files: docs, books, software, disks) is private reference only and is never shipped or committed. Only the DOS images database (ACDOS.PAK, 101 items) is for runtime use and extraction.
