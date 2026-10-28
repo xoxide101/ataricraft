@@ -1,6 +1,24 @@
 ; cmd.asm - CMD, a DOS-style command shell for Atari DOS 2.x, MyDOS, SpartaDOS and BW-DOS.
+; Plug-ins (NAME.CMX, built with org PLUG) call the API table below; see README.md.
         icl 'lib\sys.asm'
         org CODE
+        jmp start
+        .byte API_VER
+api:    jmp putc
+        jmp putnl
+        jmp pstr
+        jmp putdec16
+        jmp nexttok
+        jmp mkspec
+        jmp fopen
+        jmp fclose
+        jmp bget
+        jmp bput
+        jmp rdrec
+        jmp wrrec
+        jmp getline
+        jmp getkey
+        jmp fnsio
 
 start:  jsr ioinit
         jsr dosdet
@@ -9,30 +27,58 @@ start:  jsr ioinit
         sta V_LNL
         sta V_LNL+1
         sta V_QUIT
+        sta V_BAT
+        sta ENVB
+        sta PATHV
+        sta PROMPTV
         jsr putsi
         .byte 'CMD 0.1  ',0
         jsr putdosname
         jsr putnl
         jsr putsi
         .byte 'TYPE HELP FOR COMMANDS',EOL,0
-loop:   jsr putnl
-        lda #<CWD
+        ldx #0
+st_a:   lda s_auto,x
+        sta TOK,x
+        inx
+        cpx #9
+        bcc st_a
+        jsr mkspec
+        lda #<s_bat
+        ldx #>s_bat
+        jsr tryext
+        bmi loop
+        jsr run_bat
+loop:   lda V_QUIT
+        bne bye
+        jsr putnl
+        lda PROMPTV
+        beq lp_d
+        lda #<PROMPTV
+        ldx #>PROMPTV
+        jsr pstr
+        jmp lp_g
+lp_d:   lda #<CWD
         ldx #>CWD
         jsr pstr
         lda #'>'
         jsr putc
-        jsr getline
+lp_g:   jsr getline
+        jsr runline
+        jmp loop
+bye:    jmp (DOSVEC)
+s_auto: .byte 'AUTOEXEC',0
+
+runline:
         lda #<LINE
         sta ARG
         lda #>LINE
         sta ARG+1
         jsr nexttok
-        beq loop
+        beq rl_r
         jsr upcmd
         jsr dispatch
-        lda V_QUIT
-        beq loop
-        jmp (DOSVEC)
+rl_r:   rts
 
 upcmd:  ldx #0
 uc_l:   lda TOK,x
@@ -83,9 +129,7 @@ dp_hit: iny
 dp_ok:  rts
 dojmp:  jmp (jmpv)
 jmpv:   .word 0
-dp_no:  jsr putsi
-        .byte 'BAD COMMAND',EOL,0
-        rts
+dp_no:  jmp runext
 
 err:    jsr putsi
         .byte 'ERROR ',0
@@ -100,8 +144,14 @@ err:    jsr putsi
 cmdtab:
         .byte 'DIR',0
         .word cmd_dir
+        .byte 'DIRS',0
+        .word cmd_dir
         .byte 'TYPE',0
         .word cmd_type
+        .byte 'MORE',0
+        .word cmd_more
+        .byte 'LESS',0
+        .word cmd_more
         .byte 'ECHO',0
         .word cmd_echo
         .byte 'VER',0
@@ -110,115 +160,152 @@ cmdtab:
         .word cmd_exit
         .byte 'QUIT',0
         .word cmd_exit
+        .byte 'COPY',0
+        .word cmd_copy
+        .byte 'APPEND',0
+        .word cmd_append
+        .byte 'DEL',0
+        .word cmd_del
+        .byte 'DELETE',0
+        .word cmd_del
+        .byte 'ERASE',0
+        .word cmd_del
+        .byte 'REN',0
+        .word cmd_ren
+        .byte 'RENAME',0
+        .word cmd_ren
+        .byte 'RENDIR',0
+        .word cmd_ren
+        .byte 'ATTRIB',0
+        .word cmd_attrib
+        .byte 'MD',0
+        .word cmd_md
+        .byte 'MKDIR',0
+        .word cmd_md
+        .byte 'CREDIR',0
+        .word cmd_md
+        .byte 'RD',0
+        .word cmd_rd
+        .byte 'RMDIR',0
+        .word cmd_rd
+        .byte 'DELDIR',0
+        .word cmd_rd
+        .byte 'CD',0
+        .word cmd_cd
+        .byte 'CHDIR',0
+        .word cmd_cd
+        .byte 'CWD',0
+        .word cmd_cd
+        .byte 'PWD',0
+        .word cmd_pwd
+        .byte 'DF',0
+        .word cmd_df
+        .byte 'CHKDSK',0
+        .word cmd_df
+        .byte 'FIND',0
+        .word cmd_find
+        .byte 'CLS',0
+        .word cmd_cls
+        .byte 'PAUSE',0
+        .word cmd_pause
+        .byte 'MEM',0
+        .word cmd_mem
+        .byte 'PEEK',0
+        .word cmd_peek
+        .byte 'POKE',0
+        .word cmd_poke
+        .byte 'DUMP',0
+        .word cmd_dump
+        .byte 'MDUMP',0
+        .word cmd_mdump
+        .byte 'SET',0
+        .word cmd_set
+        .byte 'PATH',0
+        .word cmd_path
+        .byte 'PROMPT',0
+        .word cmd_prompt
+        .byte 'COLD',0
+        .word cmd_cold
+        .byte 'BASIC',0
+        .word cmd_basic
+        .byte 'X',0
+        .word cmd_x
+        .byte 'LOAD',0
+        .word cmd_x
+        .byte 'BLOAD',0
+        .word cmd_x
+        .byte 'FN',0
+        .word cmd_fn
+        .byte 'NGET',0
+        .word cmd_copy
+        .byte 'HELP',0
+        .word cmd_help
+        .byte 'MAN',0
+        .word cmd_help
+        .byte 'ARC',0
+        .word cmd_stub
+        .byte 'ATR',0
+        .word cmd_stub
+        .byte 'BOOT',0
+        .word cmd_stub
+        .byte 'CAR',0
+        .word cmd_stub
+        .byte 'CHTD',0
+        .word cmd_stub
+        .byte 'CHVOL',0
+        .word cmd_stub
+        .byte 'CLR',0
+        .word cmd_stub
+        .byte 'COMP',0
+        .word cmd_stub
+        .byte 'CON',0
+        .word cmd_stub
+        .byte 'DATE',0
+        .word cmd_stub
+        .byte 'DELTREE',0
+        .word cmd_stub
+        .byte 'DEV',0
+        .word cmd_stub
+        .byte 'ED',0
+        .word cmd_stub
+        .byte 'FMT',0
+        .word cmd_stub
+        .byte 'FORMAT',0
+        .word cmd_stub
+        .byte 'KEY',0
+        .word cmd_stub
+        .byte 'MAP',0
+        .word cmd_stub
+        .byte 'MENU',0
+        .word cmd_stub
+        .byte 'RS232',0
+        .word cmd_stub
+        .byte 'SAVE',0
+        .word cmd_stub
+        .byte 'SETPATHS',0
+        .word cmd_stub
+        .byte 'SIOSET',0
+        .word cmd_stub
+        .byte 'SORTDIR',0
+        .word cmd_stub
+        .byte 'SWAP',0
+        .word cmd_stub
+        .byte 'TD',0
+        .word cmd_stub
+        .byte 'TIME',0
+        .word cmd_stub
+        .byte 'UNERASE',0
+        .word cmd_stub
+        .byte 'VERIFY',0
+        .word cmd_stub
         .byte 0
 
-cmd_exit:
-        lda #1
-        sta V_QUIT
-        clc
-        rts
-
-cmd_ver:
-        jsr putsi
-        .byte 'CMD 0.1 ON ',0
-        jsr putdosname
-        jsr putnl
-        clc
-        rts
-
-cmd_echo:
-        jsr argend
-        beq ce_d
-        lda ARG
-        ldx ARG+1
-        jsr pstr
-ce_d:   jsr putnl
-        clc
-        rts
-
-cmd_dir:
-        jsr nexttok
-        bne cd_a
-        lda #'*'
-        sta TOK
-        lda #'.'
-        sta TOK+1
-        lda #'*'
-        sta TOK+2
-        lda #0
-        sta TOK+3
-cd_a:   jsr mkspec
-        jsr lncwd
-        jsr dopen
-        bmi cd_fail
-cd_l:   jsr dnext
-        bcs cd_end
-        jsr dname
-        jsr lnshow
-        lda #<DREC
-        ldx #>DREC
-        jsr pstr
-        lda LNB
-        beq cd_nl
-        jsr putsi
-        .byte '  ',0
-        lda #<LNB
-        ldx #>LNB
-        jsr pstr
-cd_nl:  jsr putnl
-        jmp cd_l
-cd_end: jsr dclose
-        lda V_FREE
-        sta N0
-        lda V_FREE+1
-        sta N1
-        jsr putdec16
-        jsr putsi
-        .byte ' FREE SECTORS',EOL,0
-        clc
-        rts
-cd_fail:
-        jsr dclose
-        sec
-        rts
-
-cmd_type:
-        jsr nexttok
-        bne ct_a
-        lda #1
-        sta V_ERR
-        sec
-        rts
-ct_a:   jsr mkspec
-        lda #4
-        ldx #$10
-        jsr fopen1
-        bmi ct_fail
-ct_l:   lda #<IOBUF
-        sta V_SPL
-        lda #>IOBUF
-        sta V_SPH
-        ldx #$10
-        jsr rdrec
-        bmi ct_end
-        lda #<IOBUF
-        ldx #>IOBUF
-        jsr pstr
-        jsr putnl
-        jsr keyhit
-        bcc ct_l
-ct_end: ldx #$10
-        jsr fclose
-        clc
-        rts
-ct_fail:
-        ldx #$10
-        jsr fclose
-        sec
-        rts
-
+        icl 'cmds\file.asm'
+        icl 'cmds\misc.asm'
+        icl 'cmds\run.asm'
         icl 'lib\io.asm'
         icl 'lib\dos.asm'
         icl 'lib\path.asm'
+        icl 'lib\fn.asm'
 
         run start
