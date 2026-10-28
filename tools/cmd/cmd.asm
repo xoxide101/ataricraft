@@ -34,6 +34,7 @@ start:  jsr ioinit
         sta PROMPTV
         sta DATEB
         sta TIMEB
+        sta TABF
         jsr putsi
         .byte 'CMD 0.1  ',0
         jsr putdosname
@@ -75,7 +76,7 @@ lp_z:   dey
         beq lp_g
         lda #'>'
         jsr putc
-lp_g:   jsr getline
+lp_g:   jsr getlinet
         jsr runline
         jmp loop
 bye:    jmp (DOSVEC)
@@ -268,6 +269,8 @@ cmdtab:
         .word cmd_stub
         .byte 'COMP',0
         .word cmd_comp
+        .byte 'COMPLETE',0
+        .word cmd_complete
         .byte 'CON',0
         .word cmd_stub
         .byte 'DATE',0
@@ -328,6 +331,7 @@ cmdtab:
         icl 'cmds\misc.asm'
         icl 'cmds\run.asm'
         icl 'cmds\test.asm'
+        icl 'cmds\tab.asm'
         icl 'lib\io.asm'
         icl 'lib\dos.asm'
         icl 'lib\path.asm'

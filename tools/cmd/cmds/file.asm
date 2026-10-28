@@ -630,13 +630,13 @@ fmt_bad:
 TP      = IOBUF
 
 tpcopy: ldy #0
-tc_l:   lda TP,y
+tpc_l:  lda TP,y
         cmp #EOL
-        beq tc_d
+        beq tpc_d
         sta FSPEC,y
         iny
-        bne tc_l
-tc_d:   rts
+        bne tpc_l
+tpc_d:  rts
 
 cmd_deltree:
         jsr reqdirs
