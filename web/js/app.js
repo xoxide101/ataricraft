@@ -874,10 +874,52 @@
   // Lower is better: [!] verified first, bad dumps / cracks / hacks last.
   const flagRank = (n) => { const b = n.split('/').pop(); return /\[!\]/.test(b) ? 0 : /\[(b|m|t|o)\d*[ \]]|\[(b|m|t|o)\d*\]/.test(b) ? 3 : /\[(cr|h|f|tr)[^\]]*\]/.test(b) ? 2 : 1; };
   const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return tosecTitle(rel); };
+  // CRC -> title from DAT files (ClrMamePro, RomCenter, Logiqx/MAME XML); kept in IndexedDB so it survives reloads.
+  let DATCRC = {};
+  const parseDat = (text) => {
+    const out = {};
+    const put = (crc, t) => { crc = (crc || '').toLowerCase().padStart(8, '0'); if (/^[0-9a-f]{8}$/.test(crc) && t && !out[crc]) out[crc] = t; };
+    if (/^\s*</.test(text)) {
+      const doc = new DOMParser().parseFromString(text, 'text/xml');
+      doc.querySelectorAll('game, machine, software, resource').forEach((g) => {
+        const d = g.querySelector(':scope > description');
+        const t = (d && d.textContent.trim()) || g.getAttribute('name');
+        g.querySelectorAll('rom').forEach((r) => put(r.getAttribute('crc'), t));
+      });
+    } else if (text.includes('\u00AC')) {
+      for (const ln of text.split(/\r?\n/)) { const f = ln.split('\u00AC'); if (f.length > 7) put(f[6], f[4] || f[3]); }
+    } else {
+      const re = /\b(?:game|machine|resource)\s*\(([\s\S]*?)\n\)/g;
+      let m;
+      while ((m = re.exec(text))) {
+        const b = m[1];
+        const d = /\bdescription\s+"([^"]*)"/.exec(b) || /\bname\s+"([^"]*)"/.exec(b);
+        const rr = /\bcrc\s+([0-9a-fA-F]{1,8})/g;
+        let r;
+        while ((r = rr.exec(b))) put(r[1], d && d[1]);
+      }
+    }
+    return out;
+  };
+  const syncDats = () => { const n = Object.keys(DATCRC).length; if (n) $('medtitles').textContent += ` · ${n} DAT CRCs`; };
+  async function loadDats(files) {
+    let n = 0;
+    for (const f of files) { const d = parseDat(await f.text()); n += Object.keys(d).length; Object.assign(DATCRC, d); }
+    try { await idbSet('datCrc', DATCRC); } catch (e) { log('DAT CRCs too large to remember, but active for this visit'); }
+    syncTitles(); syncDats();
+    log(`${n} CRCs loaded from ${files.length} DAT file(s)`);
+  }
+  setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; syncDats(); } catch (e) { /* none saved */ } }, 0);
   async function loadTitlesXml(files) {
+    const dats = files.filter((f) => /\.dat$/i.test(f.name));
+    if (dats.length) await loadDats(dats);
+    files = files.filter((f) => !/\.dat$/i.test(f.name));
+    if (!files.length) return;
     let n = 0;
     for (const f of files) {
-      const doc = new DOMParser().parseFromString(await f.text(), 'text/xml');
+      const txt = await f.text();
+      Object.assign(DATCRC, parseDat(txt));
+      const doc = new DOMParser().parseFromString(txt, 'text/xml');
       doc.querySelectorAll('software').forEach((s) => {
         const name = (s.getAttribute('name') || '').toLowerCase();
         const d = s.querySelector(':scope > description');
@@ -889,7 +931,8 @@
       });
     }
     try { localStorage.setItem('ac.titles', JSON.stringify(TITLES)); } catch (e) { log('titles too large to remember, but active for this visit'); }
-    syncTitles();
+    try { await idbSet('datCrc', DATCRC); } catch (e) { /* keep in memory */ }
+    syncTitles(); syncDats();
     MED.files.forEach((m) => (m.title = titleFor(m.name)));
     renderMed();
     log(`${n} titles loaded`);
@@ -1460,7 +1503,9 @@
         const c1 = crc32(b), c2 = hdr ? crc32(b.subarray(16)) : null;
         const e = db[c1] || (c2 && db[c2]);
         const nm = (AC.CART_NAMES || {})[c1] || (c2 && (AC.CART_NAMES || {})[c2]);
-        if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : ''); hit++; }
+        const dt = DATCRC[c1] || (c2 && DATCRC[c2]);
+        if (dt) { todo[i].title = dt; hit++; }
+        else if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : ''); hit++; }
         else if (nm) { todo[i].title = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : ''); hit++; }
       } catch (err) { /* unreadable file: leave untitled */ }
       if (i % 50 === 49) { log(`identifying cartridges by CRC: ${i + 1}/${todo.length}`); await new Promise((r) => setTimeout(r, 0)); }
