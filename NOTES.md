@@ -66,3 +66,9 @@ Every disk in web/library/craftapps/Ready to run holds CMD, ARC, ZIP, DCM, LZH, 
 
 One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.5/XL, MyDOS, SuperDOS, SpartaDOS, BW-DOS) plus our tools (AFM, CMD, ARC, ZIP, DCM, LZH, ALF, DISC). Rebuild with `node tools/dospack/build.cjs` (reads `tools/dospack/manifest.json`). New items (more DOS versions, OS ROMs) go in `tools/dospack/extra/` with a sibling `<file>.json` giving kind/id/name/version. Runtime: `AC.DosPack.load()` then `pack.list('dos')` and `await pack.install(id, {tools:'all'|[ids]})` returns a ready ATR; tools that do not fit are reported in `skipped` (DOS XL is nearly full). No UI yet. Tested with `out/t_dospack.cjs`.
 
+
+## Pending
+
+- **Chip documentation archive (Atari Preservation Society):** 8-bit, 16-bit (ST/STE) and 32-bit (TT/Falcon/Jaguar) chip documents. The user is still downloading the whole archive; path to be supplied. Planned: one subfolder per generation, catalogue and audit, then feed the machine-profile / chip-database work (parked until the user says go).
+- DCM export is not yet exposed in the UI (diskconv.atrToDcm exists, round-trip tested on 115 ATRs).
+
