@@ -388,10 +388,44 @@
     'AFM.COM': 'Ataricraft File Manager', 'FMTDIR.COM': 'MyDOS directory formatter', 'RAMDISK.AR0': 'MyDOS RAM disk driver (130XE)',
     'COMMAND.COM': 'SpartaDOS command processor', 'DOS.SYS': '',
   };
-  function describe(m, name) {
-    const n = name.toUpperCase();
-    if (n === 'DOS.SYS') return m.kind === 'mydos' ? 'MyDOS system file (boot)' : m.kind === 'dos2' ? 'Atari DOS 2.x system file (boot)' : '';
-    return KNOWN[n] || '';
+  // Pull a version out of the file's own text (7-bit ATASCII); '' when the file carries none.
+  function textOf(b) { let s = ''; for (let i = 0; i < b.length; i++) { const x = b[i] & 127; s += x >= 32 && x < 127 ? String.fromCharCode(x) : '\n'; } return s; }
+  function dosVersion(m) {
+    const b = readFile(m, 'DUP.SYS'); if (!b) return '';
+    const s = textOf(b); let r;
+    if ((r = /MyDOS\s+(\d[\w.]*(?: Beta \d+)?)/i.exec(s))) return 'MyDOS ' + r[1];
+    if ((r = /DISK OPERATING SYSTEM II VERSION\s+(\d\.\d\w*)/i.exec(s))) return 'Atari DOS ' + r[1];
+    return '';
+  }
+  function versionOf(m, n) {
+    try {
+      if (n === 'AFM.COM') { const r = /V(\d+\.\d+) REV (\d+)/.exec(textOf(readFile(m, n))); return r ? 'V' + r[1] + ' REV ' + r[2] : ''; }
+      if (n === 'FMTDIR.COM') { const r = /Dir Formatter\s+(\d[\d.]*)/i.exec(textOf(readFile(m, n))); return r ? r[1] : ''; }
+    } catch (x) { /* unreadable: no version */ }
+    return '';
+  }
+  // Content signatures: identify a file by what is inside it, whatever it is called (e.g. AFM_1.COM is still AFM).
+  const SIGS = [
+    [/ATARICRAFT AFM V(\d+\.\d+) REV (\d+)/, (r) => 'Ataricraft File Manager V' + r[1] + ' REV ' + r[2]],
+    [/Dir Formatter\s+(\d[\d.]*)\s+By:\s*([\w ]+)/i, (r) => 'MyDOS directory formatter ' + r[1] + ' (' + r[2].trim() + ')'],
+    [/MyDOS\s+(\d[\w.]*(?: Beta \d+)?)\s+\(C\)/i, (r) => 'MyDOS ' + r[1] + ' disk utility package'],
+    [/DISK OPERATING SYSTEM II VERSION\s+(\d\.\d\w*)/i, (r) => 'Atari DOS ' + r[1] + ' disk utility package'],
+  ];
+  function sniff(m, path) {
+    try {
+      const b = readFile(m, path); if (!b || b.length > 262144) return '';
+      const s = textOf(b);
+      for (const [re, f] of SIGS) { const r = re.exec(s); if (r) return f(r); }
+    } catch (x) { /* unreadable */ }
+    return '';
+  }
+  function describe(m, name, path) {
+    const n = name.toUpperCase(), root = !path || path.indexOf('/') < 0 && path.indexOf('>') < 0;
+    if (!root) return sniff(m, path);
+    const v = n === 'DOS.SYS' || n === 'DUP.SYS' ? dosVersion(m) : '';
+    if (n === 'DOS.SYS') return (v ? v + ' ' : m.kind === 'mydos' ? 'MyDOS ' : m.kind === 'dos2' ? 'Atari DOS 2.x ' : '') + (v || m.kind !== 'sdfs' ? 'system file (boot)' : '');
+    if (n === 'DUP.SYS') return 'DOS menu / disk utility package' + (v ? ' (' + v + ')' : '');
+    return sniff(m, path) || KNOWN[n] || '';
   }
 
   // Make LONGNAME.TXT list every file/folder on the disk. Missing entries get opts.lookup(name, path) (e.g. the scan title database), then a built-in
@@ -412,12 +446,13 @@
       for (const e of kids) {
         const key = e.name.toUpperCase(), cur = side.get(key);
         let found = '', src = 'DB';
-        if (!cur || cur.long.toUpperCase() === key) {
-          try { found = (lookup(e.name, e.path) || '').trim(); } catch (x) { found = ''; }
-          if (!found && !e.dir && d === '' && opts.describe !== false) { found = describe(m, e.name); src = 'INFO'; }
+        const redo = cur && cur.source === 'INFO' && !e.dir && opts.describe !== false;
+        if (!cur || cur.long.toUpperCase() === key || redo) {
+          if (!redo) try { found = (lookup(e.name, e.path) || '').trim(); } catch (x) { found = ''; }
+          if (!found && !e.dir && opts.describe !== false) { found = describe(m, e.name, e.path); src = 'INFO'; }
         }
         if (!cur) { side.set(key, { short: key, long: found || e.name, added: stampNow(opts.now), size: e.size, source: found ? src : 'DISK' }); res.added++; changed = true; }
-        else if (found && found.toUpperCase() !== key) { cur.long = found; cur.source = cur.source || src; res.upgraded++; changed = true; }
+        else if (found && found.toUpperCase() !== key && found !== cur.long) { cur.long = found; cur.source = cur.source || src; res.upgraded++; changed = true; }
       }
       if (!changed) continue;
       try { writeSidecar(m, d, side); res.written++; touch(m); }
@@ -426,7 +461,9 @@
     return res;
   }
 
-  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
+  function readFile(m, path) { const e = findEntry(m, path); return e ? m.vol.read(e) : null; }
+
+  const api = { SIDECAR, readFile, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
   if (typeof AC !== 'undefined') AC.AfmCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
