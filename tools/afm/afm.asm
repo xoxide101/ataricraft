@@ -145,6 +145,7 @@ jup:    jmp k_up
 jpgu:   jmp k_pgup
 jpgd:   jmp k_pgdn
 main:
+        jsr drawpath
         jsr getkey
         cmp #30
         beq jpgu
@@ -3958,6 +3959,68 @@ pd_td:  pha
         pla
         ora #'0'
         jmp putc
+
+; row 21 while idle: full path of the active pane plus the file under the cursor (D1:>GAMES>PACMAN.COM)
+drawpath:
+        lda #0
+        sta inv
+        sta fi
+        lda #21
+        jsr clrrow
+        lda #'D'
+        jsr dpc
+        ldx act
+        lda drv,x
+        ora #'0'
+        jsr dpc
+        lda #':'
+        jsr dpc
+        lda #'>'
+        jsr dpc
+        ldx act
+        lda plen,x
+        beq dpt_f
+        sta apn
+        lda pbase,x
+        tay
+dpt_p:  lda PATHS,y
+        jsr dpc
+        iny
+        dec apn
+        bne dpt_p
+dpt_f:  ldx act
+        lda cnt,x
+        beq dpt_x
+        lda sel,x
+        jsr entp
+        ldy #2
+dpt_n:  lda (ZP),y
+        cmp #' '
+        beq dpt_e
+        jsr dpc
+        iny
+        cpy #10
+        bcc dpt_n
+dpt_e:  ldy #10
+        lda (ZP),y
+        cmp #' '
+        beq dpt_x
+        lda #'.'
+        jsr dpc
+dpt_x2: lda (ZP),y
+        cmp #' '
+        beq dpt_x
+        jsr dpc
+        iny
+        cpy #13
+        bcc dpt_x2
+dpt_x:  rts
+dpc:    ldx fi
+        cpx #CLRW
+        bcs dpc_r
+        inc fi
+        jmp putc
+dpc_r:  rts
 
 msgrow: lda #0
         sta inv
