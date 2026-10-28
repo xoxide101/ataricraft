@@ -261,7 +261,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
@@ -405,7 +405,7 @@
   function act(a) {
     const A = W.panes[W.active];
     ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
-      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, compare: doCompare, names: () => makeNames(rec(A)), refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
+      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
 
@@ -660,6 +660,73 @@
         r.m.vol.writeFile(e.path, out, true); await afterWrite([r]); log(`Saved ${e.name} (${out.length} bytes).`); render();
       },
     });
+  }
+
+  // ---------- folder -> disk(s) ----------
+  function doF2D() {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.webkitdirectory = true; inp.multiple = true;
+    inp.onchange = () => { const fl = [...inp.files]; if (fl.length) f2dDialog(fl); };
+    inp.click();
+  }
+  async function f2dDialog(fl) {
+    const items = fl.map((f) => ({ f, path: (f.webkitRelativePath || f.name).replace(/\\/g, '/'), size: f.size })).filter((x) => !/(^|\/)(LONGNAME\.TXT)$/i.test(x.path));
+    const root = (items[0].path.split('/')[0] || 'FOLDER'), total = items.reduce((a, x) => a + x.size, 0);
+    const dirs = new Set(); for (const x of items) for (let p = parentOf(x.path); p; p = parentOf(p)) dirs.add(p);
+    const kb = (b) => b >= 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.ceil(b / 1024) + ' KB';
+    const w = document.createElement('div');
+    const specOpts = C.SPECS.map((s) => `<option value="${s.id}">${esc(s.label)} (${kb(C.specBytes(s))})</option>`).join('');
+    w.innerHTML = `<div><b>${esc(root)}</b>: ${items.length} file(s), ${dirs.size} folder(s), ${kb(total)} of data</div>
+      <div class="dim" style="margin-top:8px">Disk layout</div>
+      <select class="mode" style="width:100%"><option value="single">One disk, smallest size that fits</option><option value="set">A set of disks of a chosen size (span)</option></select>
+      <div class="dim" style="margin-top:8px">Format</div><select class="fmt" style="width:100%"><option value="mydos">MyDOS</option><option value="sdfs">SpartaDOS (bigger directories)</option></select>
+      <div class="szrow"><div class="dim" style="margin-top:8px">Disk size</div><select class="sz" style="width:100%">${specOpts}<option value="custom">Custom (MB)…</option></select><input class="cu" type="number" min="0.1" max="16" step="0.1" value="1.4" style="width:100%;box-sizing:border-box;display:none;margin-top:4px"></div>
+      <div class="dim" style="margin-top:8px">Packing</div>
+      <select class="fit" style="width:100%"><option value="order">Keep folder order (like a backup span)</option><option value="tight">Fill each disk as full as possible</option></select>
+      <label style="display:block;margin-top:8px"><input type="checkbox" class="flat"> Flatten (no sub-folders)</label>
+      <label style="display:block;margin-top:4px"><input type="checkbox" class="zipit"> Also download everything as a .zip</label>
+      <div class="dim" style="margin-top:8px">Disk name</div><input class="nm" style="width:100%;box-sizing:border-box" value="${esc(root.toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 8) || 'FOLDER')}">
+      <div class="est" style="margin-top:10px"></div>`;
+    const q = (s) => w.querySelector(s);
+    let cur = null;
+    const calc = () => {
+      const fmt = q('.fmt').value, set = q('.mode').value === 'set';
+      q('.szrow').style.display = set ? '' : 'none';
+      for (const o of q('.sz').options) o.hidden = o.value !== 'custom' && C.SPECS.find((s) => s.id === o.value).fmt !== fmt;
+      if (set && q('.sz').selectedOptions[0].hidden) q('.sz').value = C.SPECS.find((s) => s.fmt === fmt && s.ss === 256 && s.sectors === 2880).id;
+      q('.cu').style.display = set && q('.sz').value === 'custom' ? '' : 'none';
+      const fl2 = items.map((x) => ({ path: x.path, size: x.size })), o = { fit: q('.fit').value, flatten: q('.flat').checked };
+      let plan = null;
+      try {
+        if (!set) plan = C.planSingle(fl2, fmt, o);
+        else plan = C.planSet(fl2, q('.sz').value === 'custom' ? C.customSpec(fmt, (+q('.cu').value || 1.4) * 1048576) : C.SPECS.find((s) => s.id === q('.sz').value), o);
+      } catch (e) { q('.est').innerHTML = `<span class="warn">${esc(e.message)}</span>`; cur = null; return; }
+      cur = plan; const est = q('.est');
+      if (!plan) { est.innerHTML = '<span class="warn">Does not fit on one disk (even 16 MB). Choose "A set of disks".</span>'; return; }
+      const sb = C.specBytes(plan.spec), n = plan.disks.length;
+      const used = plan.disks.map((d) => d.usedSectors * (plan.spec.ss - (fmt === 'sdfs' ? 0 : 3)));
+      est.innerHTML = `<b>${n} disk(s)</b> of ${esc(plan.spec.label)} (${kb(sb)} each, ${kb(sb * n)} total)`
+        + `<div class="dim">${plan.disks.slice(0, 8).map((d, k) => `Disk ${k + 1}: ${d.files.length} file(s), ${kb(used[k])} used, ${kb(d.freeSectors * plan.spec.ss)} free`).join('<br>')}${n > 8 ? '<br>…' : ''}</div>`
+        + (plan.tooBig.length ? `<div class="warn">${plan.tooBig.length} file(s) are too big for one disk and will be skipped: ${esc(plan.tooBig.slice(0, 4).map((i) => baseOf(items[i].path)).join(', '))}${plan.tooBig.length > 4 ? ', …' : ''}</div>` : '');
+    };
+    w.addEventListener('input', calc); w.addEventListener('change', calc); calc();
+    const ok = await dlg('Folder → disk(s)', w, [{ label: 'Cancel', value: null }, { label: 'Make disk(s)', value: () => (cur && cur.disks.length ? { plan: cur, name: q('.nm').value.trim() || 'FOLDER', flat: q('.flat').checked, zip: q('.zipit').checked } : undefined), pri: true }]);
+    if (!ok) return;
+    try {
+      const data = [];
+      for (const x of items) data.push({ path: x.path, size: x.size, data: await AC.Progress.read(x.f, 'Reading ' + x.path), lastModified: x.f.lastModified });
+      const set = C.buildSet(data, ok.plan, { label: ok.name, flatten: ok.flat });
+      if (!set.disks.length) return log('folder → disk: nothing could be written');
+      const base = ok.name.replace(/[^\w-]/g, '_'), out = [];
+      set.disks.forEach((d, k) => {
+        const nm = set.disks.length > 1 ? `${base}_${k + 1}of${set.disks.length}.atr` : base + '.atr', key = 'F' + (++W.seq);
+        W.mounts.set(key, { key, kind: 'file', name: nm, m: d.m, handle: null, unsaved: true }); out.push({ key, name: nm, data: d.bytes });
+      });
+      W.panes[0] && Object.assign(W.panes[0], { src: out[0].key, dir: '', sel: new Set() });
+      if (out[1]) Object.assign(W.panes[1], { src: out[1].key, dir: '', sel: new Set() });
+      if (ok.zip) host().save(base + '.zip', host().zip(out.map((o) => ({ name: o.name, data: o.data }))), 'application/zip');
+      log(`Made ${out.length} disk(s) from ${root}` + (set.failed.length ? `; ${set.failed.length} file(s) skipped (${set.failed.slice(0, 3).map((f) => baseOf(f.path) + ': ' + f.error).join('; ')})` : '') + '. Use Save as… on each pane to keep them.');
+      render();
+    } catch (e) { log('folder → disk: ' + e.message); }
   }
 
   // ---------- new disk / compare ----------

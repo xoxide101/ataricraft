@@ -470,9 +470,115 @@
     return res;
   }
 
+  // ---------- folder -> disk(s) ----------
+  // Standard disk sizes. MyDOS: 90K single density, or 256-byte sectors up to 16 MB. SpartaDOS: 256-byte sectors.
+  const SPECS = [
+    { id: 'my90', fmt: 'mydos', ss: 128, sectors: 720, label: 'MyDOS 90K' },
+    { id: 'my360', fmt: 'mydos', ss: 256, sectors: 1440, label: 'MyDOS 360K' },
+    { id: 'my720', fmt: 'mydos', ss: 256, sectors: 2880, label: 'MyDOS 720K' },
+    { id: 'my1440', fmt: 'mydos', ss: 256, sectors: 5760, label: 'MyDOS 1.44 MB' },
+    { id: 'my16', fmt: 'mydos', ss: 256, sectors: 65535, label: 'MyDOS 16 MB' },
+    { id: 'sd720', fmt: 'sdfs', ss: 256, sectors: 2880, label: 'SpartaDOS 720K' },
+    { id: 'sd1440', fmt: 'sdfs', ss: 256, sectors: 5760, label: 'SpartaDOS 1.44 MB' },
+    { id: 'sd16', fmt: 'sdfs', ss: 256, sectors: 65535, label: 'SpartaDOS 16 MB' },
+  ];
+  function customSpec(fmt, bytes) {
+    const sectors = Math.max(fmt === 'sdfs' ? 100 : 720, Math.min(65535, Math.floor(bytes / 256)));
+    return { id: 'custom', fmt, ss: 256, sectors, label: (fmt === 'sdfs' ? 'SpartaDOS ' : 'MyDOS ') + Math.round(sectors * 256 / 1024) + 'K' };
+  }
+  const specBytes = (s) => s.ss * s.sectors;
+  function blankDisk(spec, label) {
+    return spec.fmt === 'sdfs' ? DosFs.createSdfs({ sectorSize: spec.ss, sectors: spec.sectors, label: label || 'DISK' }) : DosFs.createMyDos({ sectorSize: spec.ss, sectors: spec.sectors });
+  }
+  const probes = new Map();
+  function probe(spec) {
+    const k = spec.fmt + spec.ss + 'x' + spec.sectors;
+    if (!probes.has(k)) {
+      const m = mount(blankDisk(spec, 'PROBE')), free = m.vol.freeSectors();
+      mkdir(m, '', 'PROBEDIR');
+      probes.set(k, { m, free, folder: free - m.vol.freeSectors(), limit: dirLimit(m) });
+    }
+    return probes.get(k);
+  }
+  // Try to place one file (with the folders it needs) on a simulated disk; only changes the disk when it fits.
+  function simPlace(d, f, P, flatten) {
+    const dp = flatten ? '' : parentOf(f.path), chain = [];
+    for (let p = dp; p; p = parentOf(p)) chain.unshift(p);
+    const touched = new Map();
+    const get = (p) => { if (!touched.has(p)) touched.set(p, Object.assign({ n: 0, bytes: 0, made: p === '' }, d.dirs.get(p))); return touched.get(p); };
+    let cost = sectorsFor(P.m, f.size);
+    for (const p of chain) {
+      const st = get(p);
+      if (!st.made) { st.made = true; cost += P.folder; const ps = get(parentOf(p)); ps.n++; ps.bytes += 60 + baseOf(p).length; }
+    }
+    const fs = get(dp); fs.n++; fs.bytes += 60 + baseOf(f.path).length;
+    const sc = (b) => (b ? sectorsFor(P.m, b) : 0);
+    for (const [p, st] of touched) {
+      if (st.n + 1 > P.limit) return false;
+      const old = d.dirs.get(p); cost += sc(st.bytes) - sc(old ? old.bytes : 0);
+    }
+    if (cost > d.free) return false;
+    d.free -= cost; for (const [p, st] of touched) d.dirs.set(p, st);
+    return true;
+  }
+  // files: [{path, size}]. opts: {fit: 'order' (keep folder order, like a backup span) | 'tight' (fill every disk as full as possible), flatten}
+  // Returns {disks:[{files:[index], usedSectors, freeSectors}], tooBig:[index], spec}
+  function planSet(files, spec, opts) {
+    opts = opts || {};
+    const P = probe(spec), disks = [], tooBig = [];
+    const order = files.map((f, i) => i).sort((a, b) => (opts.fit === 'tight' ? files[b].size - files[a].size : 0) || (files[a].path.toLowerCase() < files[b].path.toLowerCase() ? -1 : 1));
+    const fresh = () => ({ free: P.free - 4, dirs: new Map([['', { n: 0, bytes: 0, made: true }]]), files: [] });
+    for (const i of order) {
+      const f = files[i];
+      let placed = false;
+      for (const d of opts.fit === 'tight' ? disks : disks.slice(-1)) if (simPlace(d, f, P, opts.flatten)) { d.files.push(i); placed = true; break; }
+      if (placed) continue;
+      const d = fresh();
+      if (simPlace(d, f, P, opts.flatten)) { d.files.push(i); disks.push(d); } else tooBig.push(i);
+    }
+    return { spec, tooBig, disks: disks.map((d) => ({ files: d.files, freeSectors: Math.max(0, d.free), usedSectors: P.free - d.free })) };
+  }
+  // One disk, the smallest standard size (of this format) that holds everything; null when even 16 MB is not enough.
+  function planSingle(files, fmt, opts) {
+    for (const s of SPECS.filter((x) => x.fmt === fmt).sort((a, b) => specBytes(a) - specBytes(b))) {
+      const p = planSet(files, s, opts);
+      if (p.disks.length === 1 && !p.tooBig.length) return p;
+    }
+    return null;
+  }
+  // files: [{path, data, lastModified}] and a plan from planSet. Builds the real images (exact placement); returns {disks:[{bytes, m, paths}], failed:[{path, error}]}
+  function buildSet(files, plan, opts) {
+    opts = opts || {}; const spec = plan.spec, out = [], failed = [];
+    const lbl = (i) => ((opts.label || 'SET') + (plan.disks.length > 1 || (opts.total || 0) > 1 ? String(i + 1).padStart(2, '0') : '')).toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 8);
+    const fillDisk = (idxs, n) => {
+      const m = mount(blankDisk(spec, lbl(n)), ''), made = new Map([['', '']]), paths = [], left = [];
+      const dirFor = (p) => {
+        if (made.has(p)) return made.get(p);
+        const par = dirFor(parentOf(p)), sp = mkdir(m, par, baseOf(p)); made.set(p, sp); return sp;
+      };
+      // folders first: MyDOS needs contiguous sectors for each directory, which file data would fragment
+      if (!opts.flatten) for (const p of [...new Set(idxs.map((i) => parentOf(files[i].path)))].filter(Boolean).sort()) { try { dirFor(p); } catch (e) { /* files below report it */ } }
+      for (const i of idxs) {
+        const f = files[i];
+        try { const d = dirFor(opts.flatten ? '' : parentOf(f.path)); addHostFile(m, d, baseOf(f.path), f.data, { index: true, source: 'PC', now: new Date(f.lastModified || Date.now()) }); paths.push(f.path); }
+        catch (e) { left.push({ i, error: e.message }); }
+      }
+      return { m, paths, left };
+    };
+    let overflow = [];
+    plan.disks.forEach((d, n) => { const r = fillDisk(d.files, n); out.push({ m: r.m, bytes: r.m.bytes, paths: r.paths }); overflow = overflow.concat(r.left); });
+    while (overflow.length) {
+      const r = fillDisk(overflow.map((x) => x.i), out.length);
+      if (!r.paths.length) { for (const x of overflow) failed.push({ path: files[x.i].path, error: x.error }); break; }
+      out.push({ m: r.m, bytes: r.m.bytes, paths: r.paths }); overflow = r.left;
+    }
+    for (const i of plan.tooBig) failed.push({ path: files[i].path, error: 'larger than one ' + spec.label + ' disk' });
+    return { disks: out, failed };
+  }
+
   function readFile(m, path) { const e = findEntry(m, path); return e ? m.vol.read(e) : null; }
 
-  const api = { SIDECAR, readFile, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
+  const api = { SIDECAR, readFile, SPECS, customSpec, specBytes, planSet, planSingle, buildSet, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
   if (typeof AC !== 'undefined') AC.AfmCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
