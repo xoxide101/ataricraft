@@ -61,6 +61,15 @@ loop:   lda V_QUIT
 lp_d:   lda #<CWD
         ldx #>CWD
         jsr pstr
+        ldy #0
+lp_e:   lda CWD,y
+        beq lp_z
+        iny
+        bne lp_e
+lp_z:   dey
+        lda CWD,y
+        cmp #'>'
+        beq lp_g
         lda #'>'
         jsr putc
 lp_g:   jsr getline
