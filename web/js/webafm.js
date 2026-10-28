@@ -15,7 +15,8 @@
   const CSS = `
   #wafm{position:fixed;inset:0;z-index:9000;background:#14161a;color:#d8dce4;display:flex;flex-direction:column;font:13px system-ui,sans-serif}
   #wafm button,#wafm select,#wafm input{background:#2a2f39;color:#d8dce4;border:1px solid #2c313b;border-radius:5px;padding:4px 9px;font:inherit}
-  #wafm button{cursor:pointer}#wafm button:hover{background:#343a47}#wafm button:disabled{opacity:.4;cursor:default}
+  #wafm button{cursor:pointer}#wafm button:hover{background:#343a47}#wafm button:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through;text-decoration-color:#0000}#wafm button:disabled:hover{background:#2a2f39}
+  #wafm .caps{margin-top:4px;display:flex;flex-wrap:wrap;gap:3px 8px;font-size:11px}#wafm .cap.yes{color:#6fcf8a}#wafm .cap.no{color:#7d838f;opacity:.55;text-decoration:line-through}
   #wafm .wtb{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:#1e2128;border-bottom:1px solid #2c313b;align-items:center}
   #wafm .wtb h2{margin:0 10px 0 0;font-size:15px;color:#e8a33d}#wafm .sp{flex:1}
   #wafm .wpanes{flex:1;display:flex;gap:8px;padding:8px;min-height:0}
@@ -256,7 +257,7 @@
   function wirePane(d, i) {
     const p = W.panes[i];
     // Only flag the pane here; a full render would replace the row under the cursor and swallow the click.
-    d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); } }, true);
+    d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); updateTb(); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
       if (v === 'pc') pickFile(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
@@ -284,10 +285,25 @@
   function render() {
     if (!W.el) return;
     W.panes.forEach((p, i) => renderPane(i));
-    const a = W.panes[W.active], r = rec(a);
+    updateTb();
+  }
+  function updateTb() {
+    const a = W.panes[W.active], r = rec(a), o = rec(W.panes[1 - W.active]);
+    const need = {
+      mkdir: r && C.caps(r.m).mkdir, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import,
+      copy: o ? C.caps(o.m).write : { ok: false, why: 'open a disk in the other pane first' },
+      move: !o ? { ok: false, why: 'open a disk in the other pane first' } : !C.caps(o.m).write.ok ? C.caps(o.m).write : C.caps(r ? r.m : o.m).del,
+    };
     for (const b of W.el.querySelectorAll('.wtb button')) {
-      const k = b.dataset.a; if (['copy', 'move', 'mkdir', 'rename', 'del', 'props', 'view', 'export', 'import', 'all'].includes(k)) b.disabled = !r;
+      const k = b.dataset.a;
+      if (b.dataset.t === undefined) b.dataset.t = b.title || '';
+      if (!['copy', 'move', 'mkdir', 'rename', 'del', 'props', 'view', 'export', 'import', 'all'].includes(k)) continue;
+      let ok = !!r, why = r ? '' : 'pick a disk first';
+      if (r && need[k] && !need[k].ok) { ok = false; why = need[k].why; }
+      if (r && (k === 'copy' || k === 'move') && !o) { ok = false; why = 'open a disk in the other pane first'; }
+      b.disabled = !ok; b.title = ok ? b.dataset.t : (b.dataset.t ? b.dataset.t + ' — ' : '') + 'not available: ' + why;
     }
+    const ud = W.el.querySelector('.wtb [data-a="undo"]'); if (ud) ud.disabled = !W.undo.length;
   }
   function renderPane(i) {
     const p = W.panes[i], d = W.el.querySelector(`.wp[data-i="${i}"]`), r = rec(p);
@@ -299,6 +315,7 @@
     sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option>');
     sel.value = p.src || '';
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
+    { const tg = d.querySelector('.tg'), cp = r ? C.caps(r.m).tree : { ok: false, why: 'pick a disk first' }; tg.disabled = !cp.ok; tg.title = cp.ok ? '' : 'not available: ' + cp.why; }
     d.querySelector('.sv').style.display = r && r.kind === 'file' ? '' : 'none';
     d.querySelector('.sv').textContent = r && r.unsaved ? 'Save as… ●' : 'Save as…';
     const fl = d.querySelector('.flt'); if (fl.value !== p.filter) fl.value = p.filter;
@@ -308,6 +325,8 @@
     const inf = C.info(r.m), u = inf.usage;
     info.innerHTML = `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
     bar.firstChild.style.width = u.pct + '%';
+    const cc = C.caps(r.m), chips = ['write', 'folders', 'rename', 'del', 'import', 'edit', 'label', 'longnames'].map((k) => `<span class="cap ${cc[k].ok ? 'yes' : 'no'}" title="${esc(cc[k].ok ? 'available' : 'not available: ' + cc[k].why)}">${cc[k].ok ? '✔' : '✖'} ${esc(cc[k].label)}</span>`).join('');
+    info.innerHTML += `<div class="caps">${chips}</div>`;
     const pd = bar.lastChild; pd.style.width = '0'; bar.classList.remove('bad'); pd.title = '';
     if (W.active !== i) {
       const ap = W.panes[W.active], ar = rec(ap), items = ar ? selItems(ap) : [];
@@ -374,7 +393,7 @@
     items = items || selItems(sp);
     if (!items.length) return log('tag or select something first');
     toDir = toDir == null ? dp.dir : toDir;
-    let P, opts = { conflict: W.conflict === 'error' ? undefined : W.conflict, index: W.index !== false };
+    let P, opts = { conflict: W.conflict === 'error' ? undefined : W.conflict, index: W.index !== false, flatten: W.flatten !== false };
     const sum = document.createElement('div');
     const paint = () => {
       P = C.plan(sr.m, items, dr.m, toDir, opts);
@@ -383,6 +402,7 @@
       if (dr.kind === 'drive' && host().running()) warns.push(`D${dr.n}: is mounted in the running computer. The change is written to the mounted disk now; press Reset so the DOS rereads it.`);
       if (move && sr.kind === 'drive' && host().running()) warns.push(`Files will be removed from D${sr.n}: which is in the running computer.`);
       if (P.longNames.size) warns.push('Long names will be recorded in LONGNAME.TXT (cost included below).');
+      for (const w of P.warnings) warns.push(w);
       const free = P.free, need = P.sectors;
       sum.innerHTML = `<div><b>${move ? 'Move' : 'Copy'}</b> ${nf} file${nf === 1 ? '' : 's'}${nd ? ' and ' + nd + ' folder' + (nd === 1 ? '' : 's') : ''} from <b>${esc(sr.name)}</b> to <b>${esc(dr.name)}</b>${toDir ? ' / ' + esc(toDir) : ''}</div>
         <div style="margin:8px 0">Needs <b>${need}</b> sectors (${kb(need * (dr.m.vol.sectorSize - (dr.m.kind === 'sdfs' ? 0 : 3)))}); <b>${free}</b> free of ${dr.m.vol.sectors} on the target (${dr.m.vol.sectorSize}-byte sectors).
@@ -391,11 +411,14 @@
         ${P.conflicts.length ? `<div style="margin-top:8px">If a name already exists: <select class="cf"><option value="error">stop</option><option value="overwrite">overwrite</option><option value="skip">skip it</option><option value="rename">keep both (new name)</option></select></div>` : ''}`;
       const cf = sum.querySelector('.cf'); if (cf) { cf.value = opts.conflict || 'error'; cf.onchange = () => { opts.conflict = cf.value === 'error' ? undefined : cf.value; W.conflict = cf.value; paint(); }; }
       const go = sum.parentElement && sum.parentElement.querySelector('.pri'); if (go) go.disabled = !P.ok;
+      flat.style.display = !C.canDirs(dr.m) && sr.m.kind !== 'dos2' ? 'block' : 'none';
     };
     const verify = document.createElement('label'); verify.innerHTML = '<input type="checkbox" checked> Verify every file by reading it back'; verify.style.cssText = 'display:block;margin-top:8px';
     const idx = document.createElement('label'); idx.innerHTML = `<input type="checkbox" ${opts.index === false ? '' : 'checked'}> Record every name, date, size and source in LONGNAME.TXT`; idx.style.cssText = 'display:block;margin-top:4px';
     idx.querySelector('input').onchange = (e) => { opts.index = e.target.checked; W.index = opts.index; paint(); };
-    const wrap = document.createElement('div'); wrap.append(sum, verify, idx);
+    const flat = document.createElement('label'); flat.innerHTML = `<input type="checkbox" ${opts.flatten ? 'checked' : ''}> Flatten folders when the target has none (files go to the root, paths kept in LONGNAME.TXT)`; flat.style.cssText = 'display:block;margin-top:4px';
+    flat.querySelector('input').onchange = (e) => { opts.flatten = e.target.checked; W.flatten = opts.flatten; paint(); };
+    const wrap = document.createElement('div'); wrap.append(sum, verify, idx, flat);
     paint();
     const go = dlg(move ? 'Move' : 'Copy', wrap, [{ label: 'Cancel', value: false }, { label: move ? 'Move' : 'Copy', value: true, pri: true }]);
     paint();

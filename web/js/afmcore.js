@@ -36,6 +36,27 @@
     return { total, free, used: total - free, pct: total ? Math.round(((total - free) / total) * 100) : 0, bytesFree: free * dataPerSector(m), sectorBytes: m.vol.sectorSize };
   }
 
+  // What can be done with this disk, and why not when it can't (drives the dimmed buttons).
+  function caps(m) {
+    const ro = !!m.vol.readOnly, why = {};
+    const roWhy = `read-only here (${m.kind.toUpperCase()}, ${m.vol.sectorSize}-byte sectors${m.vol.sectors > 720 && m.vol.sectorSize === 128 ? ', enhanced density' : ''})`;
+    const c = {
+      read: { label: 'Read / view / save to PC', ok: true },
+      write: { label: 'Write files', ok: !ro, why: roWhy },
+      folders: { label: 'Folders', ok: canDirs(m), why: m.kind === 'dos2' ? 'DOS 2 has no folders (copies can be flattened into the root)' : 'this disk type has no folders' },
+      mkdir: { label: 'New folder', ok: !ro && canDirs(m), why: ro ? roWhy : 'DOS 2 has no folders' },
+      rename: { label: 'Rename', ok: !ro, why: roWhy },
+      del: { label: 'Delete', ok: !ro, why: roWhy },
+      import: { label: 'Add from PC', ok: !ro, why: roWhy },
+      edit: { label: 'Edit and save files', ok: !ro, why: roWhy },
+      label: { label: 'Disk label', ok: !ro && m.kind === 'sdfs', why: ro ? roWhy : 'only SpartaDOS volumes have a label' },
+      longnames: { label: 'Long names (LONGNAME.TXT)', ok: !ro, why: roWhy },
+      tree: { label: 'Folder tree', ok: canDirs(m), why: 'no folders on this disk' },
+    };
+    c.limit = { label: `Directory limit ${dirLimit(m)} entries`, ok: true };
+    return c;
+  }
+
   function info(m) {
     const u = usage(m);
     return { kind: m.kind, label: m.vol.label || '', sectorSize: m.vol.sectorSize, sectors: m.vol.sectors, density: m.vol.sectorSize === 128 ? (m.vol.sectors > 720 ? 'enhanced' : 'single') : (m.vol.sectorSize === 256 ? 'double' : 'quad'), writable: !m.vol.readOnly, folders: canDirs(m), usage: u };
@@ -149,11 +170,28 @@
     const bump = (d) => counted.set(d, (counted.get(d) || 0) + 1);
     const srcEntries = entries(src), sideCache = new Map();
     const longOf = (e) => { const d = parentOf(e.path); if (!sideCache.has(d)) sideCache.set(d, readSidecar(src, d)); const l = sideCache.get(d).get(e.name.toUpperCase()); return l ? l.long : ''; };
-    const mapped = new Map(); // src dir path -> dst dir path
-    const mapDir = (srcDirParent, name, isDir, forceDstParent) => name;
+    const note0 = (dir, short, long, size, from) => { if (opts.index === false || short.toUpperCase() === SIDECAR) return; if (!P.longNames.has(dir)) P.longNames.set(dir, new Map()); P.longNames.get(dir).set(short.toUpperCase(), { short: short.toUpperCase(), long: long || short, added: stampNow(opts.now), size, source: from }); };
     for (const top of items) {
       const te = srcEntries.find((x) => x.path === top);
       if (!te) { fail('not found: ' + top); continue; }
+      if (te.dir && !canDirs(dst)) {
+        if (!opts.flatten) { fail(`"${te.path}" is a folder but this disk type has no folders (tick "Flatten folders" to copy its files into the root)`); continue; }
+        const pre = te.path + '/', top = baseOf(te.path);
+        const kids = srcEntries.filter((y) => !y.dir && y.path.startsWith(pre) && y.name.toUpperCase() !== SIDECAR);
+        if (!kids.length) { P.warnings.push(`"${te.path}" is empty; nothing to copy`); continue; }
+        const used = usedFor('');
+        for (const x of kids) {
+          const rel = top + x.path.slice(te.path.length), flat = rel.replace(/\//g, '_');
+          const s = shortName(flat, used, false), ln = longOf(x) ? top + '_' + longOf(x) : flat;
+          if (slotsLeft('') <= 0) { fail(`directory "root" is full (${dirLimit(dst)} entries)`); break; }
+          bump('');
+          P.files.push({ from: x.path, to: s.short, size: x.size, long: ln });
+          note0('', s.short, ln, x.size, (src.name || '') + ':' + x.path);
+          P.sectors += sectorsFor(dst, x.size);
+        }
+        P.warnings.push(`"${te.path}" flattened into the root (${kids.length} file${kids.length > 1 ? 's' : ''}); original paths kept in ${SIDECAR}`);
+        continue;
+      }
       const topDst = (n) => {
         const s = shortName(n, null, te.dir), used = usedFor(dstDir);
         let sn = s.short, ln = s.long || longOf(te);
@@ -344,7 +382,7 @@
     return joinP(dir, s.short);
   }
 
-  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, refresh: touch };
+  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
   if (typeof AC !== 'undefined') AC.AfmCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
