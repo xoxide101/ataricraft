@@ -10,3 +10,4 @@ run('zip.asm', '-o:bin\\zip.com');
 run('dcm.asm', '-o:bin\\dcm.com');
 run('lzh.asm', '-o:bin\\lzh.com');
 run('alf.asm', '-o:bin\\alf.com');
+run('disc.asm', '-o:bin\\\\disc.com');
