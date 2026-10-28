@@ -1510,7 +1510,16 @@
       } catch (err) { /* unreadable file: leave untitled */ }
       if (i % 50 === 49) { log(`identifying cartridges by CRC: ${i + 1}/${todo.length}`); await new Promise((r) => setTimeout(r, 0)); }
     }
-    log(`cartridges identified by CRC: ${hit} of ${todo.length} untitled`);
+    let guess = 0;
+    for (const f of todo) {
+      if (f.title) continue;
+      const base = f.name.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
+      if (!base) continue;
+      const nice = base === base.toUpperCase() ? base.toLowerCase().replace(/\b[a-z]/g, (m) => m.toUpperCase()) : base;
+      f.title = nice + (f.file.size === 2048 || f.file.size === 4096 ? ' (2600?)' : '');
+      guess++;
+    }
+    log(`cartridges identified by CRC: ${hit} of ${todo.length} untitled; ${guess} named from filename`);
   }
   async function scanMedia(all, persist, root) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
