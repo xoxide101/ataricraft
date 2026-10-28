@@ -105,8 +105,22 @@ ks1:    lda kspec,x
 jdn:    jmp k_dn
 jtab:   jmp k_tab
 jup:    jmp k_up
+jpgu:   jmp k_pgup
+jpgd:   jmp k_pgdn
 main:
         jsr getkey
+        cmp #30
+        beq jpgu
+        cmp #','
+        beq jpgu
+        cmp #'<'
+        beq jpgu
+        cmp #31
+        beq jpgd
+        cmp #'.'
+        beq jpgd
+        cmp #'>'
+        beq jpgd
         cmp #28
         beq jup
         cmp #'-'
@@ -203,8 +217,75 @@ k_tab:
         lda act
         eor #1
         sta act
-        jsr redraw
+        ldx #0
+        jsr drawhdr
+        ldx #1
+        jsr drawhdr
+        lda act
+        eor #1
+        tax
+        lda sel,x
+        jsr drawrow
+        ldx act
+        lda sel,x
+        jsr drawrow
         jmp main
+
+k_pgup:
+        ldx act
+        lda sel,x
+        cmp top,x
+        beq pu_scr
+        lda top,x
+        sta sel,x
+        jmp pg_draw
+pu_scr: sec
+        sbc #VROWS-1
+        bcs pu_set
+        lda #0
+pu_set: sta sel,x
+        sta top,x
+pg_draw:
+        ldx act
+        jsr drawpane
+        jmp main
+
+k_pgdn:
+        ldx act
+        lda cnt,x
+        beq pd_end
+        sec
+        sbc #1
+        sta tmp
+        lda top,x
+        clc
+        adc #VROWS-1
+        bcs pd_btl
+        sta tmp+1
+        lda sel,x
+        cmp tmp+1
+        bcc pd_tob
+pd_scr: lda sel,x
+        clc
+        adc #VROWS-1
+        bcs pd_btl
+        cmp tmp
+        bcc pd_set
+pd_btl: lda tmp
+pd_set: sta sel,x
+        sec
+        sbc #VROWS-1
+        bcs pd_top
+        lda #0
+pd_top: sta top,x
+        jmp pg_draw
+pd_tob: lda tmp+1
+        cmp tmp
+        bcc pd_s2
+        lda tmp
+pd_s2:  sta sel,x
+        jmp pg_draw
+pd_end: jmp main
 
 k_up:
         ldx act
@@ -823,9 +904,18 @@ ed_k:   lda #0
         jsr drawui
         jmp main
 
-edkey:  cmp #$1B
+edkey:  ldx #6
+ekc:    cmp ctk,x
+        beq ekc_h
+        dex
+        bpl ekc
+        cmp #$1B
         bne ek1
         jmp edesc
+ekc_h:  lda ctl,x
+        jmp edcmd
+ctk:    .byte $13,$11,$08,$15,$04,$14,$05
+ctl:    .byte 'S','Q','H','U','D','T','E'
 ek1:    cmp #$1C
         bne ek2
         jsr edup
@@ -933,7 +1023,7 @@ eh_m:   lda #1
         rts
 
 edesc:  jsr getkey
-        cmp #'S'
+edcmd:  cmp #'S'
         bne es1
         jmp edsave
 es1:    cmp #'Q'
@@ -1139,7 +1229,7 @@ est5:   lda #23
         ldx #0
         jsr setpos
         jsr putsi
-        .byte 'ESC S)AVE Q)UIT H)EX U)P D)N T)OP E)ND',0
+        .byte 'ESC/CTRL: ','S'+$80,'AVE ','Q'+$80,'UIT ','H'+$80,'EX ','U'+$80,'P ','D'+$80,'N ','T'+$80,'OP ','E'+$80,'ND',0
         rts
 
 ; keep cursor on screen by adjusting the top-of-window pointer
@@ -2025,10 +2115,10 @@ dohelp: lda #125
         jsr putsi
         .byte ' ATARICRAFT AFM - KEYS',$9B,$9B
         .byte 'W/S OR -/=   MOVE CURSOR',$9B
+        .byte ', . OR < >   PAGE UP / DOWN',$9B
         .byte 'TAB OR SPACE SWITCH PANE',$9B
         .byte '1-8          CHANGE DRIVE',$9B
-        .byte 'RETURN       RUN / OPEN FOLDER',$9B
-        .byte '             (.. GOES UP)',$9B,$9B
+        .byte 'RETURN       RUN / OPEN (.. = UP)',$9B,$9B
         .byte 'C COPY  D DELETE  R RENAME',$9B
         .byte 'L LOCK  U UNLOCK  F FORMAT',$9B
         .byte 'X CLEAR DISK/FOLDER',$9B
@@ -2039,7 +2129,7 @@ dohelp: lda #125
         .byte 'P PROPERTIES (TAGGED FILES TOO)',$9B
         .byte '/ FIND NAME  N FIND NEXT',$9B
         .byte 'V VIEW FILE (H = HEX)',$9B
-        .byte 'E EDIT (ESC H = HEX: TYPE 0-9 A-F)',$9B
+        .byte 'E EDIT (ESC OR CTRL+KEY: S Q H U D T E)',$9B
         .byte 'I INFO  G NEW FILE  Q QUIT',$9B,$9B
         .byte 'COPY/DELETE/LOCK/UNLOCK USE TAGS',$9B
         .byte 'PRESS ANY KEY',0
@@ -2659,7 +2749,7 @@ rm_fin: jmp xioFin
 dobulk:
         jsr rowprompt
         jsr putsi
-        .byte 'BULK A)-Z 0)-9 B)OTH: ',0
+        .byte 'BULK ','A'+$80,'-Z ','0'+$80,'-9 ','B'+$80,'OTH: ',0
         jsr getkey
         ldx #1
         cmp #'A'
@@ -3298,12 +3388,12 @@ redraw: jsr rowprompt
         ldx #0
         jsr setpos
         jsr putsi
-        .byte 'C)OPY D)EL R)EN M)KDIR K)RMDIR P)ROPS',0
+        .byte 'C'+$80,'OPY ','D'+$80,'EL ','R'+$80,'EN ','M'+$80,'KDIR ','K'+$80,'RMDIR ','P'+$80,'ROPS ','F'+$80,'MT',0
         lda #23
         ldx #0
         jsr setpos
         jsr putsi
-        .byte 'T)AG A)LL /)FIND I)NFO ?)MORE Q)UIT',0
+        .byte 'T'+$80,'AG ','A'+$80,'LL ','/'+$80,'FIND ','I'+$80,'NFO ','?'+$80,'MORE ','Q'+$80,'UIT ','V'+$80,'IEW ','E'+$80,'DIT',0
         ldx #0
         jsr drawhdr
         ldx #1
