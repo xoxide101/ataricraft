@@ -49,3 +49,6 @@ web\js\rawdisk.js claims SIO $39/$3A through Module.acSio (libatari800 core only
 
 ### DISC.COM / UDF (6502)
 `tools\cmd\disc.asm` reads D9:/D10: via SIO ($48 high-word read): ISO 9660, UDF (AVDP@256, VDS -> partition + LVD -> FSD -> root ICB; 2048-byte sectors, UBUF=$7800), FAT12/16/32. Verified in `out\sim6502.cjs` against fat12/16/32/iso/joliet/udf images (23/0 files byte-identical). Host `discfs.js` LVD FSD lbn is at +252 (fixed). ARC.COM T mode no longer prints the "X " prefix. Not yet browser-tested with real RawDisk.
+
+### ROM auto-load and hooks
+On load the app fetches the `roms/` folder (tries `roms/` then `../roms/`; uses `roms/index.json` as a name list if present, else the server's directory listing; `roms/altirra` is skipped, already built in). Drop your own dumps there when serving over http. `?os=NAME&basic=NAME` selects ROMs by partial name (`basic=` = none). Hooks: `ataricraft.roms.{list,current,select(kind,name),rescan,addSource(fn)}` and the `ac-roms-changed` window event; `addSource` takes an async function returning File-like objects (server, FujiNet, cloud). Not available from file://.
