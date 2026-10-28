@@ -1775,6 +1775,65 @@
       if (props.length) reviewMatches(props);
     } finally { btn.disabled = false; }
   }
+  // File name -> DAT workbench: pick a cart on the left, search/assign from the DATs on the right.
+  function datManager() {
+    const bk = document.createElement('div');
+    bk.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0008;display:flex;align-items:center;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#1b1e24;border:1px solid #4a5160;border-radius:10px;padding:12px 14px;width:min(96vw,1100px);height:min(90vh,760px);display:flex;flex-direction:column;box-shadow:0 8px 32px #000b;font-size:13px';
+    const top = document.createElement('div'); top.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:8px';
+    const h = document.createElement('div'); h.textContent = 'DAT match: file names → DAT entries'; h.style.cssText = 'font-weight:600;color:#e8a33d;flex:1';
+    const close = document.createElement('button'); close.textContent = 'Close';
+    top.append(h, close);
+    const body = document.createElement('div'); body.style.cssText = 'display:flex;gap:12px;flex:1;min-height:0';
+    const left = document.createElement('div'); left.style.cssText = 'width:36%;display:flex;flex-direction:column;min-height:0';
+    const q = document.createElement('input'); q.type = 'text'; q.placeholder = 'filter file names…'; q.style.cssText = 'box-sizing:border-box;width:100%;margin-bottom:4px';
+    const onlyL = document.createElement('label'); onlyL.style.cssText = 'font-size:12px;display:flex;gap:4px;align-items:center;margin-bottom:4px';
+    const only = document.createElement('input'); only.type = 'checkbox'; only.checked = true; onlyL.append(only, 'only unidentified (guessed titles)');
+    const cnt = document.createElement('div'); cnt.className = 'dim'; cnt.style.cssText = 'font-size:11px;margin-bottom:4px';
+    const list = document.createElement('div'); list.style.cssText = 'overflow:auto;flex:1;border:1px solid #2c313b';
+    left.append(q, onlyL, cnt, list);
+    const right = document.createElement('div'); right.style.cssText = 'flex:1;overflow:auto;min-width:0';
+    right.innerHTML = '<div class="dim">Select a file on the left.</div>';
+    body.append(left, right); box.append(top, body); bk.append(box); document.body.append(bk);
+    let rows = [], cur = null;
+    const render = () => {
+      const t = q.value.trim().toLowerCase();
+      rows = MED.files.filter((f) => f.kind === 'cart' && CART_RE.test(f.name) && (!only.checked || (isGuess(f) && !MANUAL[f.name])) && (!t || f.name.toLowerCase().includes(t)));
+      cnt.textContent = `${rows.length.toLocaleString()} file${rows.length === 1 ? '' : 's'}${rows.length > 500 ? ' (first 500 shown: use the filter)' : ''}`;
+      list.innerHTML = '';
+      rows.slice(0, 500).forEach((f) => {
+        const d = document.createElement('div'); d.style.cssText = 'padding:3px 6px;cursor:pointer;border-bottom:1px solid #262a32;word-break:break-all';
+        d.style.background = f === cur ? '#2f3a4d' : '';
+        const a = document.createElement('div'); a.textContent = f.name.split('/').pop();
+        const b = document.createElement('div'); b.className = 'dim'; b.style.fontSize = '11px'; b.textContent = f.title || '(no title)';
+        d.title = `${f.name}\n${f.title || ''}`;
+        d.onclick = () => select(f); d.append(a, b); list.append(d);
+      });
+    };
+    const select = async (f) => {
+      cur = f; render();
+      const sec = findInDats(f, () => { const i = rows.indexOf(f); render(); if (only.checked && rows[i]) select(rows[i]); else if (!only.checked) select(f); else { cur = null; right.innerHTML = '<div class="dim">Done: no more files in this list.</div>'; } });
+      sec.style.borderTop = '0'; sec.style.marginTop = '0';
+      right.innerHTML = ''; right.append(sec);
+      try {
+        const fl = f.file || (await fileOf(f));
+        if (fl && cur === f) {
+          const b = new Uint8Array(await fl.arrayBuffer());
+          const hdr = b.length > 16 && b[0] === 67 && b[1] === 65 && b[2] === 82 && b[3] === 84;
+          const c1 = crc32(b), c2 = hdr ? crc32(b.subarray(16)) : null;
+          sec.setInfo({ size: b.length, crcs: [c1, c2].filter(Boolean) });
+        }
+      } catch (e) { /* suggestions fall back to name + size */ }
+    };
+    q.oninput = render; only.onchange = render;
+    const done = () => { bk.remove(); window.removeEventListener('keydown', onk, true); if (!MED.fromDb) saveCatalog(); };
+    const onk = (e) => { if (e.key === 'Escape' && e.target.tagName !== 'INPUT') { e.stopPropagation(); done(); } };
+    close.onclick = done; bk.onclick = (e) => { if (e.target === bk) done(); };
+    window.addEventListener('keydown', onk, true);
+    render(); if (rows[0]) select(rows[0]);
+  }
+  $('meddat').onclick = datManager;
   $('medmatch').onclick = autoMatch;
   async function scanMedia(all, persist, root) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
