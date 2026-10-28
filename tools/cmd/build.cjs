@@ -7,3 +7,4 @@ run('loader.asm', '-o:bin\\loader.bin');
 run('cmd.asm', '-o:bin\\cmd.com');
 run('arc.asm', '-o:bin\\arc.com');
 run('zip.asm', '-o:bin\\zip.com');
+run('dcm.asm', '-o:bin\\dcm.com');

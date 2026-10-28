@@ -41,6 +41,9 @@ Anything else is run as `NAME.CMX`, `NAME.COM` or `NAME.BAT` in the current fold
 ## ARC.COM (standalone archive tool)
 Run ARC.COM from DOS. Prompt: `L file.ARC` list, `T` test, `X file.ARC [dest] [member]` extract. Reads SEA ARC methods 1-4 (stored, RLE, squeezed) and 8 (crunched LZW); CRC16-checked. Methods 5-7 and 9 are not supported. Uses $3800-, so it is a separate program, not a CMD plug-in yet. Typing ARC or ZIP in CMD runs it (CMD does not come back afterwards).
 
+## DCM.COM (standalone DiskComm decoder)
+Prompt: `X file.DCM [dest.ATR]` converts a DiskComm (DCM) image to an ATR (dest defaults to the source name with `.ATR`). Streaming, port of `dcmToAtr` in web/js/diskconv.js (atari800 compfile.c); supports single/enhanced/double density and multi-part files. Output was verified byte-identical to the host decoder. The ATR needs a disk with enough space (a 90K disk is too small; use a 16MB MyDOS disk). Standalone like ARC.COM/ZIP.COM; run it from CMD by typing `DCM`.
+
 ## ZIP.COM (standalone PKZIP tool)
 Prompt: L file.ZIP list, T test, X file.ZIP [dest] [member] extract. Reads stored (0) and deflate (8) members, CRC32-checked, including data-descriptor entries. Names are cut to 8.3 (last path part, upper case, other characters become _). Other PKZIP methods (shrink, reduce, implode, deflate64, bzip2, LZMA) are listed and reported as unsupported; use the host side (web/js/archives.js, which falls back to 7-Zip) for those. Inflate keeps a 14336-byte window, so a deflate stream that refers back further than that stops with WINDOW TOO SMALL; small Atari-sized archives are fine, large highly repetitive ones may not be. Uses -, standalone like ARC.COM.
 
