@@ -1516,7 +1516,7 @@
         const e = db[c1] || (c2 && db[c2]);
         const nm = (AC.CART_NAMES || {})[c1] || (c2 && (AC.CART_NAMES || {})[c2]);
         const dt = DATCRC[c1] || (c2 && DATCRC[c2]);
-        const tag = (s) => (s ? ` [${s}]` : '');
+        const tag = (s) => (s ? ` [${s.replace(/^Atari\s+(8-bit|8bit)/i, '800').replace(/^Atari\s+/i, '')}]` : '');
         if (dt) { todo[i].title = dt + tag(DATSYS[c1] || (c2 && DATSYS[c2])); hit++; }
         else if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : '') + tag('Atari 8-bit'); hit++; }
         else if (nm) { todo[i].title = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : '') + tag('Atari 8-bit'); hit++; }
