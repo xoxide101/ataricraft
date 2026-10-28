@@ -718,8 +718,14 @@ ri_d:   rts
 
 ; ---- extract / test one member ----
 extract:
-        jsr putsi
-        .byte 'X ',0
+        lda #'X'
+        ldx mode
+        cpx #1
+        beq ex_x
+        lda #'T'
+ex_x:   jsr putc
+        lda #' '
+        jsr putc
         ldy #0
 ex_n:   lda NAMEB,y
         beq ex_p
