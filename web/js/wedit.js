@@ -270,6 +270,28 @@
     },
   };
 
+  // ====================== DISASSEMBLER MODE (read-only listing) ======================
+  modes.disasm = {
+    label: 'Disassemble',
+    build(A) {
+      const { S, tl, body } = A, WTl = AC.WTools;
+      const isBin = !!WTl.parseSegments(S.data);
+      tl.innerHTML = `<label>Origin $<input class="og" size="5" value="${isBin ? '(file)' : '0600'}" ${isBin ? 'disabled' : ''}></label><label><input type="checkbox" class="lb" checked> Atari labels</label><button class="cp">Copy listing</button><button class="sv2">Save .ASM to PC</button><span class="dim">6502 · Atari binary segments are split automatically</span>`;
+      body.innerHTML = '<textarea class="etx" spellcheck="false" readonly></textarea>';
+      const ta = body.firstChild, og = tl.querySelector('.og');
+      const run = () => {
+        const origin = isBin ? 0 : (parseInt(og.value, 16) || 0) & 0xffff;
+        ta.value = S.data.length > 262144 ? '; file too large to disassemble here (256 KB limit)' : WTl.disasmFile(S.data, origin, { labels: tl.querySelector('.lb').checked });
+        A.st('Disassembly', ta.value.split('\n').length + ' lines', 'read-only');
+      };
+      og.onchange = run; tl.querySelector('.lb').onchange = run;
+      tl.querySelector('.cp').onclick = () => navigator.clipboard.writeText(ta.value).then(() => A.st(null, 'Copied'), () => A.st(null, 'Clipboard not available'));
+      tl.querySelector('.sv2').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' })); a.download = 'listing.asm'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
+      run();
+      return { focus: () => ta.focus(), enter: run };
+    },
+  };
+
   window.AC = window.AC || {};
   AC.WEdit = { open, modes };
 })();
