@@ -36,3 +36,9 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 
 - MAME titles: #medxml / auto-load a800*.xml from scanned folder; TITLES in localStorage ac.titles; scripts/titles-test.cjs.
 
+
+## v0.4.0 (2026-10-28)
+
+- AFM/AFM80 (REV 13) with full Properties screen (long name, added date, DOS date on SDX/BW-DOS); WebAFM two-pane disk explorer; DAT/CRC cart identification; FujiNet TNFS browse via relay.
+- Release zip: web/ (with git-ignored web/ref cores, only library/craftapps/AFM from the library), roms/altirra, tools/altirra-core, docs, README, NOTES, LICENSE. Third-party DOS boot disks are not shipped.
+- Screenshots: scripts/screenshots.cjs, scripts/screenshots-webafm.cjs; AFM shots taken from the emulator.

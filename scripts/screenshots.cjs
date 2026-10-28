@@ -8,7 +8,6 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
     const p = await b.newPage({ viewport: { width: w, height: h } });
     p.on('pageerror', (e) => console.log('ERR', e.message));
     await p.goto('file:///' + R + 'web/index.html');
-    await p.setInputFiles('#romfiles', [R + 'software_n_roms/ATARIXL.ROM', R + 'software_n_roms/ATARIBAS.ROM']);
     await p.waitForTimeout(800);
     await p.click('#boot');
     await p.waitForTimeout(2500);
@@ -21,11 +20,12 @@ const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-co
   await p.close();
 
   p = await boot(1366, 900);
-  await p.setInputFiles('#medfolder', R + 'software_n_roms');
+  await p.click('#sidetabs [data-t=fm]');
+  await p.setInputFiles('#medfolder', R + 'web/library/craftapps/Ready to run');
   await p.waitForTimeout(1500);
   await p.fill('#medfilter', 'sparta');
   await p.evaluate(() => document.getElementById('medlist').scrollIntoView({ block: 'center' }));
-  await p.click('#medlist div >> nth=1');
+  await p.click('#medlist div >> nth=0');
   await p.waitForTimeout(9000);
   await p.screenshot({ path: O + '02-spartados-x.png' });
   await p.close();
