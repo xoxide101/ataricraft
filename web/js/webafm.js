@@ -261,7 +261,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
@@ -481,7 +481,51 @@
     await afterWrite([r]); log(`Added ${n} file(s)${bad.length ? '; ' + bad.length + ' failed' : ''}.`); render();
     if (bad.length) msg('Some files were not added', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
   }
-  function doImport() { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.onchange = () => addFiles(W.active, [...inp.files]); inp.click(); }
+  function doImport() {
+    const btn = W.el.querySelector('.wtb [data-a="import"]'); if (!btn) return importPC();
+    const old = W.el.querySelector('.wimpmenu'); if (old) { old.remove(); return; }
+    const mn = document.createElement('div'); mn.className = 'wimpmenu';
+    const rc = btn.getBoundingClientRect(), wr = W.el.getBoundingClientRect();
+    mn.style.cssText = `position:absolute;z-index:60;left:${rc.left - wr.left}px;top:${rc.bottom - wr.top + 2}px;background:#252a33;border:1px solid #4a5160;border-radius:6px;padding:4px 0;min-width:240px;box-shadow:0 6px 20px #000a`;
+    const off = () => { mn.remove(); document.removeEventListener('pointerdown', away, true); };
+    const away = (e) => { if (!mn.contains(e.target)) off(); };
+    for (const [t, fn] of [['From this PC…', importPC], ['From scanned media library…', importLib]]) {
+      const it = document.createElement('div'); it.textContent = t; it.style.cssText = 'padding:6px 14px;cursor:pointer;font-size:13px';
+      it.onmouseenter = () => { it.style.background = '#37404d'; }; it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { off(); fn(); }; mn.append(it);
+    }
+    W.el.append(mn); setTimeout(() => document.addEventListener('pointerdown', away, true));
+  }
+  function importPC() { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.onchange = () => addFiles(W.active, [...inp.files]); inp.click(); }
+  async function importLib() {
+    const r = rec(W.panes[W.active]); if (!r) return;
+    const all = host().library ? host().library() : [];
+    if (!all.length) return msg('Media library is empty', 'Scan a folder in the media library first (File manager → Scan folder), then add files from it here.');
+    const body = document.createElement('div');
+    body.innerHTML = '<input class="lq" placeholder="filter by name or title…" style="width:100%;box-sizing:border-box;margin-bottom:6px"><div class="lc dim" style="margin-bottom:4px"></div><div class="ll" style="max-height:340px;overflow:auto;border:1px solid #3a4150;border-radius:4px"></div>';
+    const q = body.querySelector('.lq'), lc = body.querySelector('.lc'), ll = body.querySelector('.ll'), pick = new Set();
+    const draw = () => {
+      const t = q.value.trim().toLowerCase(), hit = all.filter((f) => !t || (f.name + ' ' + (f.title || '')).toLowerCase().includes(t));
+      lc.textContent = `${hit.length} of ${all.length} files${hit.length > 300 ? ' (showing the first 300 — narrow the filter)' : ''} · ${pick.size} selected`;
+      ll.textContent = '';
+      for (const f of hit.slice(0, 300)) {
+        const row = document.createElement('label'); row.style.cssText = 'display:flex;gap:6px;padding:2px 6px;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden';
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = pick.has(f.name);
+        cb.onchange = () => { cb.checked ? pick.add(f.name) : pick.delete(f.name); lc.textContent = lc.textContent.replace(/\d+ selected$/, pick.size + ' selected'); };
+        const sp = document.createElement('span'); sp.textContent = f.name + (f.title ? '  —  ' + f.title : ''); sp.style.cssText = 'overflow:hidden;text-overflow:ellipsis';
+        row.append(cb, sp); ll.append(row);
+      }
+    };
+    q.oninput = draw; draw();
+    const go = await dlg('Add from scanned media library', body, [{ label: 'Cancel', value: false }, { label: 'Add selected', value: true, pri: true }]);
+    if (!go || !pick.size) return;
+    const files = [], bad = [];
+    for (const nm of pick) {
+      try { const f = await host().libraryFile(nm); if (f) files.push(f); else bad.push(nm); } catch (e) { bad.push(nm + ': ' + e.message); }
+    }
+    if (files.length) await addFiles(W.active, files);
+    if (bad.length) msg('Some files could not be read', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
+  }
   function doExport() {
     const p = W.panes[W.active], r = rec(p), items = selItems(p); if (!r || !items.length) return log('tag or select files first');
     const files = [];

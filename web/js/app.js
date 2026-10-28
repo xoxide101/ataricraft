@@ -2753,6 +2753,12 @@
     renameDisk: (n, name) => { const d = S.disks[n]; if (!d) return; d.name = name; S.dirty[n] = true; const el = $('d' + n); if (el) el.textContent = name; },
     running: () => !!(S.emu && !S.off),
     titleFor: (name) => titleFor(name),
+    library: () => MED.files.map((f) => ({ name: f.name, kind: f.kind, title: f.title || '' })),
+    libraryFile: async (name) => {
+      const m = MED.files.find((f) => f.name === name); if (!m) return null;
+      const fl = await fileOf(m); if (!fl) return null;
+      return new File([await fl.arrayBuffer()], fl.name || name.split('/').pop(), { lastModified: m.modified || (fl.lastModified) || Date.now() });
+    },
     save: (name, bytes, type) => saveBlob(name, [bytes], type),
     zip: (files) => storedZip(files),
     log: (s) => log(s),
