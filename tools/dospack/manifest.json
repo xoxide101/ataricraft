@@ -1,0 +1,28 @@
+{
+  "format": "ACDOSPK1",
+  "strip": ["AFM.COM", "AFM80.COM", "CMD.COM", "ARC.COM", "ZIP.COM", "DCM.COM", "LZH.COM", "ALF.COM", "DISC.COM", "TOOLS.TXT", "HELLO.COM", "AUTORUN.SYS"],
+  "entries": [
+    { "kind": "dos", "id": "dos2.0s", "family": "dos2", "name": "Atari DOS 2.0S", "version": "2.0S", "size": "90K SD", "file": "web/library/craftapps/DOS images/d20.atr", "strip": true },
+    { "kind": "dos", "id": "dos2.5", "family": "dos2", "name": "Atari DOS 2.5", "version": "2.5", "size": "130K ED", "file": "web/library/craftapps/DOS images/d25.atr" },
+    { "kind": "dos", "id": "dosxl", "family": "dosxl", "name": "Atari DOS XL", "version": "2.30", "size": "90K SD", "file": "web/library/craftapps/DOS images/dosxl.atr" },
+    { "kind": "dos", "id": "mydos4.55-90k", "family": "mydos", "name": "MyDOS", "version": "4.55 beta 4", "size": "90K SD", "file": "web/library/craftapps/DOS images/MyDos455Beta4.atr" },
+    { "kind": "dos", "id": "mydos4.55-720k", "family": "mydos", "name": "MyDOS", "version": "4.55", "size": "720K DD", "file": "web/library/craftapps/Ready to run/MyDOS 4.55 boot + AFM + AFM80.atr", "strip": true },
+    { "kind": "dos", "id": "mydos4.55-16m", "family": "mydos", "name": "MyDOS", "version": "4.55", "size": "16MB", "file": "web/library/craftapps/Ready to run/MyDOS 16MB blank + AFM + AFM80.atr", "strip": true },
+    { "kind": "dos", "id": "superdos5.1", "family": "dos2", "name": "SuperDOS", "version": "5.1", "size": "90K SD", "file": "web/library/craftapps/DOS images/SuperDOS_5.1.atr" },
+    { "kind": "dos", "id": "sparta3.3a", "family": "sparta", "name": "SpartaDOS", "version": "3.3a", "size": "1.44MB", "file": "web/library/craftapps/DOS images/SpD-5760-256.atr" },
+    { "kind": "dos", "id": "sparta4.43", "family": "sparta", "name": "SpartaDOS", "version": "4.43", "size": "90K SD", "file": "web/library/craftapps/DOS images/sparta443_boot_master_90k.atr" },
+    { "kind": "dos", "id": "sparta-720k", "family": "sparta", "name": "SpartaDOS", "version": "boot", "size": "720K DD", "file": "web/library/craftapps/Ready to run/SpartaDOS 720K boot + AFM + AFM80.atr", "strip": true },
+    { "kind": "dos", "id": "sparta-16m", "family": "sparta", "name": "SpartaDOS", "version": "boot", "size": "16MB", "file": "web/library/craftapps/Ready to run/SpartaDOS 16MB boot + AFM + AFM80.atr", "strip": true },
+    { "kind": "dos", "id": "bwdos1.30-360k", "family": "bwdos", "name": "BW-DOS", "version": "1.30", "size": "360K", "file": "web/library/craftapps/Ready to run/BW-DOS 1.30 boot + AFM + AFM80.atr", "strip": true },
+    { "kind": "tool", "id": "afm", "name": "AFM", "version": "", "dest": "AFM.COM", "file": "tools/afm/afm.com" },
+    { "kind": "tool", "id": "afm80", "name": "AFM 80-column", "version": "", "dest": "AFM80.COM", "file": "tools/afm/afm80.com" },
+    { "kind": "tool", "id": "cmd", "name": "CMD shell", "version": "", "dest": "CMD.COM", "file": "tools/cmd/bin/cmd.com" },
+    { "kind": "tool", "id": "arc", "name": "ARC", "version": "", "dest": "ARC.COM", "file": "tools/cmd/bin/arc.com" },
+    { "kind": "tool", "id": "zip", "name": "ZIP", "version": "", "dest": "ZIP.COM", "file": "tools/cmd/bin/zip.com" },
+    { "kind": "tool", "id": "dcm", "name": "DCM", "version": "", "dest": "DCM.COM", "file": "tools/cmd/bin/dcm.com" },
+    { "kind": "tool", "id": "lzh", "name": "LZH", "version": "", "dest": "LZH.COM", "file": "tools/cmd/bin/lzh.com" },
+    { "kind": "tool", "id": "alf", "name": "ALF", "version": "", "dest": "ALF.COM", "file": "tools/cmd/bin/alf.com" },
+    { "kind": "tool", "id": "disc", "name": "DISC", "version": "", "dest": "DISC.COM", "file": "tools/cmd/bin/disc.com" }
+  ],
+  "extraDir": "tools/dospack/extra"
+}

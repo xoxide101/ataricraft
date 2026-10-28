@@ -61,3 +61,8 @@ ROMs tab: Mode = Auto (recognised original ROM, else built-in Altirra) / Realist
 
 ## Ready-to-run disks
 Every disk in web/library/craftapps/Ready to run holds CMD, ARC, ZIP, DCM, LZH, ALF, DISC, AFM, AFM80 and TOOLS.TXT (usage summary, ATASCII). The MyDOS 4.55 boot disk is now a bootable 720K image (was 90K); DOS 2.5 stays 90K and fits everything; BW-DOS 360K, SpartaDOS 720K/16MB and MyDOS 16MB have room to spare.
+
+## ACDOS.PAK (DOS installer pack)
+
+One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.5/XL, MyDOS, SuperDOS, SpartaDOS, BW-DOS) plus our tools (AFM, CMD, ARC, ZIP, DCM, LZH, ALF, DISC). Rebuild with `node tools/dospack/build.cjs` (reads `tools/dospack/manifest.json`). New items (more DOS versions, OS ROMs) go in `tools/dospack/extra/` with a sibling `<file>.json` giving kind/id/name/version. Runtime: `AC.DosPack.load()` then `pack.list('dos')` and `await pack.install(id, {tools:'all'|[ids]})` returns a ready ATR; tools that do not fit are reported in `skipped` (DOS XL is nearly full). No UI yet. Tested with `out/t_dospack.cjs`.
+
