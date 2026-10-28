@@ -1,5 +1,6 @@
 ; cmd.asm - CMD, a DOS-style command shell for Atari DOS 2.x, MyDOS, SpartaDOS and BW-DOS.
 ; Plug-ins (NAME.CMX, built with org PLUG) call the API table below; see README.md.
+DB      = $6800
         icl 'lib\sys.asm'
         org CODE
         jmp start
@@ -31,6 +32,8 @@ start:  jsr ioinit
         sta ENVB
         sta PATHV
         sta PROMPTV
+        sta DATEB
+        sta TIMEB
         jsr putsi
         .byte 'CMD 0.1  ',0
         jsr putdosname
@@ -264,21 +267,21 @@ cmdtab:
         .byte 'CLR',0
         .word cmd_stub
         .byte 'COMP',0
-        .word cmd_stub
+        .word cmd_comp
         .byte 'CON',0
         .word cmd_stub
         .byte 'DATE',0
-        .word cmd_stub
+        .word cmd_date
         .byte 'DELTREE',0
-        .word cmd_stub
+        .word cmd_deltree
         .byte 'DEV',0
         .word cmd_stub
         .byte 'ED',0
         .word cmd_stub
         .byte 'FMT',0
-        .word cmd_stub
+        .word cmd_format
         .byte 'FORMAT',0
-        .word cmd_stub
+        .word cmd_format
         .byte 'KEY',0
         .word cmd_keytest
         .byte 'KEYTEST',0
@@ -314,7 +317,7 @@ cmdtab:
         .byte 'TD',0
         .word cmd_stub
         .byte 'TIME',0
-        .word cmd_stub
+        .word cmd_time
         .byte 'UNERASE',0
         .word cmd_stub
         .byte 'VERIFY',0
@@ -330,4 +333,5 @@ cmdtab:
         icl 'lib\path.asm'
         icl 'lib\fn.asm'
 
+        ert *>DB
         run start

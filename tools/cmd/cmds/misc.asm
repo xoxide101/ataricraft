@@ -506,3 +506,44 @@ cd_fail:
         jsr dclose
         sec
         rts
+
+; ---- DATE and TIME: kept in memory for this session (the 8-bit has no clock) ----
+cmd_date:
+        ldx #0
+        beq dtm_go
+cmd_time:
+        ldx #$10
+dtm_go: stx V_A0
+        jsr argend
+        bne dtm_set
+        ldx V_A0
+        lda DATEB,x
+        bne dtm_show
+        jsr putsi
+        .byte 'NOT SET. GIVE A VALUE, E.G. DATE 10-28-26',EOL,0
+        clc
+        rts
+dtm_show:
+        lda V_A0
+        clc
+        adc #<DATEB
+        ldx #>DATEB
+        jsr pstr
+        jsr putnl
+        clc
+        rts
+dtm_set:
+        ldx V_A0
+        ldy #0
+dtm_c:  lda (ARG),y
+        cmp #EOL
+        beq dtm_d
+        sta DATEB,x
+        inx
+        iny
+        cpy #15
+        bcc dtm_c
+dtm_d:  lda #0
+        sta DATEB,x
+        clc
+        rts
