@@ -350,7 +350,7 @@ hp_e:   lda #' '
 hp_d:   jsr putnl
         jsr putsi
         .byte 'ANYTHING ELSE RUNS NAME.CMX / .COM / .BAT',EOL
-        .byte 'TOOLS: ARC ZIP LZH ALF DCM DISC',EOL
+        .byte 'TOOLS: ARC ZIP LZH ALF ZOO ARJ DCM DISC',EOL
         .byte 'HELP TOOLNAME SHOWS ITS COMMANDS',EOL,0
         clc
         rts
@@ -424,6 +424,12 @@ topics:
         .byte 'ALF',0
         .byte 'ALF L|T|X FILE.ALF [DEST] [MEMBER]',EOL
         .byte 'ATARI LZ.COM ARCHIVES',EOL,0
+        .byte 'ZOO',0
+        .byte 'ZOO L|T|X FILE.ZOO [DEST] [MEMBER]',EOL
+        .byte 'STORED, LZW AND LZH (ZOO 2.X)',EOL,0
+        .byte 'ARJ',0
+        .byte 'ARJ L|T|X FILE.ARJ [DEST] [MEMBER]',EOL
+        .byte 'METHODS 0-4, 22K WINDOW',EOL,0
         .byte 'DCM',0
         .byte 'DCM X FILE.DCM [DEST.ATR]',EOL
         .byte 'DISKCOMM IMAGE TO ATR',EOL,0
