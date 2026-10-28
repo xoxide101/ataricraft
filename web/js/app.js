@@ -842,7 +842,14 @@
   // Click = default target (#1 of its kind); right-click / long-press = pick the target.
   function attachLoad(el, f, kind, getFile, after, onClick) {
     const getF = async () => { const fl = await getFile(); if (fl) histAdd(f); return fl; };
-    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), [...targetItems(kind, getF, after), { label: 'Properties…', run: () => mediaProps(f) }]);
+    const rematch = async () => {
+      if (!f.file) { log('Re-match needs the file loaded: rescan the folder first'); return; }
+      const was = f.title;
+      await identifyCarts([f], true);
+      if (f.title !== was && !isGuess(f)) { renderMed(); if (!MED.fromDb) await saveCatalog(); log(`Re-matched: ${f.title}`); }
+      else log(isGuess(f) ? 'No CRC match in the loaded DATs: use Properties… to search them' : `Already identified: ${f.title}`);
+    };
+    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), [...targetItems(kind, getF, after), ...(kind === 'cart' ? [{ label: 'Re-match from DATs', run: rematch }] : []), { label: 'Properties… (CRC / search DATs)', run: () => mediaProps(f) }]);
     el.onclick = async (e) => {
       if (Date.now() < PM.suppressClickUntil) return;
       const fl = await getF(); if (!fl) return;
