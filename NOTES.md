@@ -58,3 +58,6 @@ ROM roots are URLs (default `roms/`, `../roms/` resolved against the page). Each
 
 ### Ease of use (ROM modes, drop zone, HELP)
 ROMs tab: Mode = Auto (recognised original ROM, else built-in Altirra) / Realistic (originals first) / Symbolic (built-in first), stored in localStorage `ac.rommode`; Auto-pick clears manual choices; a line shows where the OS and BASIC came from. API: `ataricraft.roms.mode([m])`. Dropping files anywhere sends OS/BASIC ROMs to the library (8K files only if the CRC is known or the name has "bas") and everything else to drive 1. CMD: `HELP` lists commands and tools, `HELP ARC|ZIP|LZH|ALF|DCM|DISC` shows usage. DISC.COM verified in the real emulator with RawDisk D9: (UDF image: I and D correct). Tab completion is not done: CMD reads lines through the screen editor, so it would need its own key loop (losing cursor editing and history).
+
+## Ready-to-run disks
+Every disk in web/library/craftapps/Ready to run holds CMD, ARC, ZIP, DCM, LZH, ALF, DISC, AFM, AFM80 and TOOLS.TXT (usage summary, ATASCII). The MyDOS 4.55 boot disk is now a bootable 720K image (was 90K); DOS 2.5 stays 90K and fits everything; BW-DOS 360K, SpartaDOS 720K/16MB and MyDOS 16MB have room to spare.
