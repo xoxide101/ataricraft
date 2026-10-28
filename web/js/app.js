@@ -2412,11 +2412,21 @@
     const fl = (await expandZips([...e.target.files])).filter((f) => FN_IMG.test(f.name));
     setFnFiles(fl.map((f) => ({ name: f.webkitRelativePath || f.name, file: f })));
   };
-  async function scanFnHandle(h, path, out) {
-    for await (const [name, e] of h.entries()) {
-      if (e.kind === 'directory') await scanFnHandle(e, path + name + '/', out);
-      else if (FN_IMG.test(name)) { const file = await e.getFile(); Object.defineProperty(file, 'webkitRelativePath', { value: path + name }); out.push({ name: path + name, file }); }
-    }
+  // Pass 1 lists names only (fast); pass 2 opens the image files 8 at a time. Both report progress and skip unreadable entries.
+  async function scanFnHandle(h, path, out, st) {
+    try {
+      for await (const [name, e] of h.entries()) {
+        if (st.stop) return;
+        if (e.kind === 'directory') {
+          if (SCAN_SKIP.test(name) || name.startsWith('.')) continue;
+          await scanFnHandle(e, path + name + '/', out, st);
+        } else {
+          st.seen++;
+          if (FN_IMG.test(name)) out.push({ path: path + name, e });
+          if (Date.now() - st.tick > 150) { st.tick = Date.now(); st.prog.text('Listing ' + path); st.prog.note(`${out.length} images, ${st.seen} files checked`); $('fncount').textContent = `scanning… ${out.length} images - ${path}`; await new Promise((r) => setTimeout(r)); }
+        }
+      }
+    } catch (err) { st.errs++; diag(`SD scan skipped folder "${path}": ${err.name} ${err.message}`, 'warn'); }
   }
   async function loadFnHandle(h, ask) {
     if ((await h.queryPermission({ mode: 'read' })) !== 'granted') {
@@ -2424,8 +2434,28 @@
       if ((await h.requestPermission({ mode: 'read' })) !== 'granted') return;
     }
     $('fncount').textContent = 'scanning…';
-    const out = [];
-    await scanFnHandle(h, h.name + '/', out);
+    const st = { stop: false, seen: 0, errs: 0, tick: 0, prog: AC.Progress.begin('Scanning "' + h.name + '"…') };
+    const found = [], out = [];
+    try {
+      await scanFnHandle(h, h.name + '/', found, st);
+      st.prog.text('Opening image files'); st.prog.set(0, found.length);
+      let i = 0, done = 0;
+      const worker = async () => {
+        while (i < found.length) {
+          const it = found[i++];
+          try {
+            const file = await it.e.getFile();
+            Object.defineProperty(file, 'webkitRelativePath', { value: it.path });
+            out.push({ name: it.path, file });
+          } catch (err) { st.errs++; diag(`SD scan skipped "${it.path}": ${err.name} ${err.message}`, 'warn'); }
+          done++;
+          if (done % 20 === 0) { st.prog.set(done); st.prog.note(it.path.split('/').pop()); $('fncount').textContent = `scanning… ${done}/${found.length}`; await new Promise((r) => setTimeout(r)); }
+        }
+      };
+      await Promise.all(Array.from({ length: 8 }, worker));
+    } finally { st.prog.end(); }
+    out.sort((a, b) => (a.name < b.name ? -1 : 1));
+    if (st.errs) log(`${st.errs} unreadable SD entries skipped`);
     setFnFiles(out);
   }
   if (window.showDirectoryPicker) {
@@ -3427,6 +3457,7 @@
     copyText: () => S.emu.screenText(),
     press: (fields, frames) => S.emu.tap(fields, frames || 4),
     scanDir: (handle) => scanHandle(handle, false),
+    scanFn: (handle) => loadFnHandle(handle, false),
     mediaList: () => MED.files.map((f) => ({ name: f.name, kind: f.kind })),
     loadEntry: async (name, drive) => {
       const m = MED.files.find((f) => f.name === name);
