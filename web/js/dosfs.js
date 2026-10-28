@@ -234,10 +234,28 @@
       throw new Error('not found: ' + path);
     }
     function mkdir(path) { findDir(path.split('/').filter(Boolean), true); }
+    function rename(path, newName) {
+      const parts = path.split('/').filter(Boolean), fname = parts.pop();
+      const dir = findDir(parts, false), p = packName(fname), np = packName(newName);
+      let d = readMap(dir.map, rd24(readMap(dir.map, 6), 3)), hit = -1;
+      for (let o = 23; o + 23 <= d.length; o += 23) {
+        if (!(d[o] & 0x08) || (d[o] & 0x10)) continue;
+        if (sameName(d, o, np) && !sameName(d, o, p)) throw new Error('already exists: ' + newName);
+        if (sameName(d, o, p)) hit = o;
+      }
+      if (hit < 0) throw new Error('not found: ' + path);
+      d.set(np, hit + 6);
+      dirWrite(dir.map, d);
+      if (d[hit] & 0x20) sec(mapSectors(rd16(d, hit + 1)).data[0]).set(np, 6);
+    }
+    function setLabel(label) {
+      const s = boot(), t = label.toUpperCase().replace(/[^A-Z0-9_ ]/g, '_').slice(0, 8);
+      for (let i = 0; i < 8; i++) s[22 + i] = i < t.length ? t.charCodeAt(i) : 0x20;
+    }
 
     return {
       kind: 'sdfs', label: str(boot(), 22, 8), sectorSize: ss, sectors: L.nsec, layoutUniform: L.uniform,
-      freeSectors,
+      freeSectors, setLabel, rename,
       list: () => dirEntries(rd16(boot(), 9), '', []),
       read: (e) => readMap(e.map, e.size),
       writeFile, remove, mkdir,
@@ -383,8 +401,17 @@
       for (let k = 0; k < 8; k++) release(first + k);
       d.s[d.o] = 0x80;
     }
+    function rename(path, newName) {
+      const [dirParts, name] = splitPath(path), dir = findDir(dirParts, false);
+      if (dir == null) throw new Error('no such path: ' + path);
+      const packed = pack(name), np = pack(newName);
+      const e = lookup(dir, packed, false) || lookup(dir, packed, true);
+      if (!e) throw new Error('not found: ' + path);
+      if (np !== packed && (lookup(dir, np, false) || lookup(dir, np, true))) throw new Error('already exists: ' + newName);
+      for (let k = 0; k < 11; k++) e.s[e.o + 5 + k] = np.charCodeAt(k);
+    }
     return {
-      kind, label: '', sectorSize: ss, sectors: nsec, layoutUniform: L.uniform,
+      kind, label: '', sectorSize: ss, sectors: nsec, layoutUniform: L.uniform, rename,
       list: () => { const out = []; dir(361, '', out, 0); for (const e of out) if (!e.dir) { try { e.size = exactSize(e); e.approxSize = false; } catch (x) { /* keep estimate */ } } return out; },
       read, readOnly: !writable, writeFile, remove, mkdir: (p) => { if (!writable) throw new Error('read-only geometry'); findDir(p.split('/').filter(Boolean), true); }, freeSectors,
     };

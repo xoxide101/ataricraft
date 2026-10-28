@@ -353,7 +353,7 @@
   }).catch((e) => log('clipboard: ' + e.message));
   $('hostimport').onchange = async (e) => {
     if (!S.emu) { log('boot first'); return; }
-    for (const f of e.target.files) S.emu.hostWrite(hostName(f.name) || 'FILE', new Uint8Array(await f.arrayBuffer()));
+    for (const f of e.target.files) S.emu.hostWrite(hostName(f.name) || 'FILE', await AC.Progress.read(f, 'Importing ' + f.name));
     e.target.value = '';
     renderHost(true);
   };
@@ -2772,10 +2772,15 @@
     if (list.length > 1000) box.append('… ' + (list.length - 1000) + ' more (use Save all .zip)');
   }
   $('fsbrowse').onclick = fsShow;
-  $('fszip').onclick = () => {
+  $('fszip').onclick = async () => {
     const o = fsOpen(); if (!o) return;
-    const files = o.v.list().filter((e) => !e.dir).map((e) => ({ name: e.path, data: o.v.read(e) }));
-    saveBlob(`D${o.n}_files.zip`, storedZip(files), 'application/zip');
+    const list = o.v.list().filter((e) => !e.dir), files = [];
+    const p = AC.Progress.begin(`Building D${o.n}_files.zip…`, list.length);
+    try {
+      for (const e of list) { files.push({ name: e.path, data: o.v.read(e) }); p.set(files.length); if (files.length % 20 === 0) await AC.Progress.yieldUI(); }
+      p.text('Saving zip…'); await AC.Progress.yieldUI();
+      await saveBlob(`D${o.n}_files.zip`, storedZip(files), 'application/zip');
+    } finally { p.end(); }
     log(`D${o.n}: saved ${files.length} files as zip`);
   };
   const to83 = (name) => {
@@ -2788,16 +2793,18 @@
     const o = fsOpen(); if (!o) return;
     if (o.v.readOnly) { log(`D${o.n}: adding files is not possible on this disk (${o.v.kind}, ${o.v.sectorSize}-byte sectors)`); return; }
     const dir = $('fspath').value.trim().toUpperCase().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-    const added = [];
+    const added = [], prog = AC.Progress.begin(`Adding files to D${o.n}…`, files.length);
     try {
       for (const f of files) {
-        const data = new Uint8Array(await f.arrayBuffer()), nm = to83(f.name);
+        prog.text('Adding ' + f.name); prog.set(added.length);
+        const data = await AC.Progress.read(f), nm = to83(f.name);
         o.v.writeFile(dir ? dir + '/' + nm : nm, data);
         const back = o.v.list().find((e) => e.path === (dir ? dir + '/' + nm : nm));
         if (!back || Buffer_eq(o.v.read(back), data) === false) throw new Error('read-back check failed for ' + nm);
         added.push(nm + (nm !== f.name ? ` (from ${f.name})` : ''));
       }
     } catch (e) { log('add files: ' + e.message + (added.length ? '; added before the error: ' + added.join(', ') : '')); }
+    finally { prog.end(); }
     if (added.length) {
       const name = (S.disks[o.n] && S.disks[o.n].name) || `d${o.n}.atr`;
       S.emu.mountDisk(o.n, name, o.bytes); S.disks[o.n] = { name, bytes: o.bytes }; S.dirty[o.n] = true;
@@ -2813,7 +2820,11 @@
       if (name.startsWith('.')) continue;
       const p = prefix ? prefix + '/' + name : name;
       if (h.kind === 'directory') await readFolder(h, p, out, st);
-      else { const f = await h.getFile(); st.total += f.size; if (st.total > (16 << 20)) throw new Error('folder is larger than a 16 MB SDFS image'); out.push({ path: p, data: new Uint8Array(await f.arrayBuffer()) }); }
+      else {
+        const f = await h.getFile(); st.total += f.size; if (st.total > (16 << 20)) throw new Error('folder is larger than a 16 MB SDFS image');
+        if (st.prog) { st.prog.text('Reading ' + p); st.prog.note(out.length + ' files'); }
+        out.push({ path: p, data: await AC.Progress.read(f) });
+      }
     }
   }
   async function hostFile(root, path, create) {
@@ -2827,8 +2838,8 @@
     let h; try { h = await showDirectoryPicker({ id: 'ataricraft-folder', mode: 'readwrite' }); } catch (e) { return; }
     const n = +$('fsdrv').value;
     try {
-      const files = [], st = { total: 0 };
-      await readFolder(h, '', files, st);
+      const files = [], st = { total: 0, prog: AC.Progress.begin('Reading folder "' + h.name + '"…') };
+      try { await readFolder(h, '', files, st); } finally { st.prog.end(); }
       const free = Math.max(0, +$('fsfree').value || 0) << 20;
       let r; try { r = AC.DosFs.buildSdfs(files, { freeBytes: free, label: h.name.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 8) || 'FOLDER' }); }
       catch (e) { if (!free) throw e; r = AC.DosFs.buildSdfs(files, { freeBytes: 0, label: 'FOLDER' }); log('not enough room for spare space; mounted without it'); }
@@ -2846,8 +2857,9 @@
     try {
       if ((await F.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') { log('write permission to the folder was denied'); return; }
       let wrote = 0, same = 0; const seen = new Set();
-      for (const e of o.v.list()) {
-        if (e.dir) continue;
+      const all = o.v.list().filter((e) => !e.dir), sp = AC.Progress.begin(`Syncing D${o.n} to "${F.handle.name}"…`, all.length);
+      try { for (const e of all) {
+        sp.set(seen.size); sp.text('Syncing ' + e.path);
         seen.add(e.path);
         const data = o.v.read(e), old = F.orig.get(e.path);
         if (old && Buffer_eq(old.data, data)) { same++; continue; }
@@ -2855,7 +2867,7 @@
         const fh = await hostFile(F.handle, host, true), w = await fh.createWritable();
         await w.write(data); await w.close();
         F.orig.set(e.path, { host, data }); wrote++;
-      }
+      } } finally { sp.end(); }
       const gone = [...F.orig.keys()].filter((p) => !seen.has(p));
       log(`D${o.n}: synced to folder "${F.handle.name}": ${wrote} written, ${same} unchanged${gone.length ? `, ${gone.length} deleted on the disk but left in the folder (${gone.slice(0, 5).join(', ')}${gone.length > 5 ? ', …' : ''})` : ''}`);
     } catch (e) { log('sync back: ' + e.message); }
@@ -2905,12 +2917,15 @@
   // Cartridges are only changed with the power off: warn, then switch the computer off.
   // ---- File-menu equivalents: boot image, state save/load, detach/rotate disks, save cartridge, full screen ----
   async function saveBytes(name, bytes) {
-    const blob = new Blob([bytes]);
-    if (window.showSaveFilePicker) {
-      try { const fh = await showSaveFilePicker({ suggestedName: name }); const w = await fh.createWritable(); await w.write(blob); await w.close(); return fh.name; } catch (e) { if (e.name === 'AbortError') return null; }
-    }
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
-    return name;
+    const p = AC.Progress.begin('Saving ' + name + '…', 0);
+    try {
+      const blob = new Blob([bytes]);
+      if (window.showSaveFilePicker) {
+        try { const fh = await showSaveFilePicker({ suggestedName: name }); p.text('Writing ' + fh.name + '…'); const w = await fh.createWritable(); await w.write(blob); await w.close(); return fh.name; } catch (e) { if (e.name === 'AbortError') return null; }
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+      return name;
+    } finally { p.end(); }
   }
   const running = () => { if (S.emu && !S.off) return true; log('Power on first (press Boot)'); return false; };
   function stateBytes() {
@@ -2933,7 +2948,7 @@
   $('loadstate').onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = '';
     if (!f || !running()) return;
-    try { applyState(new Uint8Array(await f.arrayBuffer())); log('state loaded: ' + f.name); } catch (err) { log('Could not load state: ' + err.message); }
+    try { applyState(await AC.Progress.read(f, 'Loading ' + f.name)); log('state loaded: ' + f.name); } catch (err) { log('Could not load state: ' + err.message); }
   };
   $('detachall').onclick = () => { for (let n = 1; n <= 8; n++) $('de' + n).click(); log('all disks detached'); };
   function rotateDisks(dir) {
