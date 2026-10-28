@@ -98,3 +98,5 @@ Commands: `D`/`L` list, `T file` type, `X file` extract to the current DOS disk,
 Names with spaces must be quoted: `T "A LONG FILE NAME.TXT"`.
 Limits: no Rock Ridge/Joliet names on the 6502 side; UDF allocation descriptors past 255 bytes,
 extended ADs and continuation extents are not followed.
+
+`HELP` lists commands and tools; `HELP ARC` (or ZIP, LZH, ALF, DCM, DISC) shows that tool's usage.

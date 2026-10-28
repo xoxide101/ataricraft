@@ -320,7 +320,10 @@ cmd_basic:
         jmp $E477
 
 cmd_help:
-        lda #<cmdtab
+        jsr nexttok
+        beq hp_all
+        jmp hp_topic
+hp_all: lda #<cmdtab
         sta T0
         lda #>cmdtab
         sta T0+1
@@ -346,9 +349,86 @@ hp_e:   lda #' '
         jmp hp_n
 hp_d:   jsr putnl
         jsr putsi
-        .byte 'ANYTHING ELSE RUNS NAME.CMX / .COM / .BAT',EOL,0
+        .byte 'ANYTHING ELSE RUNS NAME.CMX / .COM / .BAT',EOL
+        .byte 'TOOLS: ARC ZIP LZH ALF DCM DISC',EOL
+        .byte 'HELP TOOLNAME SHOWS ITS COMMANDS',EOL,0
         clc
         rts
+
+hp_topic:
+        lda #<topics
+        sta T0
+        lda #>topics
+        sta T0+1
+tp_n:   ldy #0
+        lda (T0),y
+        beq tp_no
+tp_c:   lda TOK,y
+        cmp #'a'
+        bcc tp_u
+        cmp #'z'+1
+        bcs tp_u
+        and #$DF
+tp_u:   cmp (T0),y
+        bne tp_nx
+        cmp #0
+        beq tp_hit
+        iny
+        bne tp_c
+tp_nx:  ldy #0
+tp_s1:  lda (T0),y
+        iny
+        cmp #0
+        bne tp_s1
+tp_s2:  lda (T0),y
+        iny
+        cmp #0
+        bne tp_s2
+        tya
+        clc
+        adc T0
+        sta T0
+        bcc tp_n
+        inc T0+1
+        jmp tp_n
+tp_hit: iny
+tp_p:   lda (T0),y
+        beq tp_d
+        jsr putc
+        iny
+        bne tp_p
+tp_d:   clc
+        rts
+tp_no:  jsr putsi
+        .byte 'NO HELP FOR THAT. TRY HELP',EOL,0
+        clc
+        rts
+
+; HELP name: name,0,text,0 (name+text must stay under 250 bytes)
+topics:
+        .byte 'ARC',0
+        .byte 'ARC L FILE.ARC   LIST',EOL
+        .byte 'ARC T FILE.ARC   TEST',EOL
+        .byte 'ARC X FILE.ARC [DEST] [MEMBER]',EOL
+        .byte 'SEA ARC METHODS 1-4 AND 8',EOL,0
+        .byte 'ZIP',0
+        .byte 'ZIP L|T|X FILE.ZIP [DEST] [MEMBER]',EOL
+        .byte 'STORED AND DEFLATE MEMBERS',EOL,0
+        .byte 'LZH',0
+        .byte 'LZH L|T|X FILE.LZH [DEST] [MEMBER]',EOL
+        .byte 'LHA METHODS LH0 LH1 LH4 LH5',EOL,0
+        .byte 'ALF',0
+        .byte 'ALF L|T|X FILE.ALF [DEST] [MEMBER]',EOL
+        .byte 'ATARI LZ.COM ARCHIVES',EOL,0
+        .byte 'DCM',0
+        .byte 'DCM X FILE.DCM [DEST.ATR]',EOL
+        .byte 'DISKCOMM IMAGE TO ATR',EOL,0
+        .byte 'DISC',0
+        .byte 'DISC D9:   (OR D10:)  CD/HDD IMAGE',EOL
+        .byte 'D LIST  T FILE  X FILE  I INFO  Q',EOL
+        .byte 'QUOTE NAMES WITH SPACES',EOL
+        .byte 'ISO 9660, UDF, FAT12/16/32',EOL,0
+        .byte 0
 
 cmd_stub:
         jsr putsi
