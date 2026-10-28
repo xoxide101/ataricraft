@@ -806,20 +806,38 @@
     const bk = document.createElement('div');
     bk.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0008;display:flex;align-items:center;justify-content:center';
     const box = document.createElement('div');
-    box.style.cssText = 'background:#1b1e24;border:1px solid #4a5160;border-radius:10px;padding:14px 16px;min-width:300px;max-width:min(92vw,560px);box-shadow:0 8px 32px #000b;font-size:13px';
+    box.style.cssText = 'background:#1b1e24;border:1px solid #4a5160;border-radius:10px;padding:14px 16px;min-width:300px;max-width:min(92vw,620px);max-height:90vh;overflow:auto;box-shadow:0 8px 32px #000b;font-size:13px';
     const h = document.createElement('div'); h.textContent = 'Properties'; h.style.cssText = 'font-weight:600;margin-bottom:8px;color:#e8a33d'; box.append(h);
-    for (const [k, v] of rows) {
-      if (!v) continue;
+    const list = document.createElement('div'); box.append(list);
+    const addRow = (k, v) => {
+      if (!v) return;
       const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:10px;padding:3px 0;border-bottom:1px solid #262a32';
       const a = document.createElement('span'); a.textContent = k; a.className = 'dim'; a.style.cssText = 'width:130px;flex:none';
       const b = document.createElement('span'); b.textContent = v; b.style.cssText = 'word-break:break-all;user-select:text';
-      r.append(a, b); box.append(r);
-    }
+      r.append(a, b); list.append(r);
+    };
+    for (const [k, v] of rows) addRow(k, v);
+    const datSec = findInDats(f, () => done());
+    (async () => {
+      try {
+        const fl = await fileOf(f);
+        if (!fl) { addRow('CRC32', 'file not available (re-pick the folder)'); return; }
+        const b = new Uint8Array(await fl.arrayBuffer());
+        const hdr = b.length > 16 && b[0] === 67 && b[1] === 65 && b[2] === 82 && b[3] === 84;
+        const c1 = crc32(b), c2 = hdr ? crc32(b.subarray(16)) : null;
+        addRow('CRC32', c1.toUpperCase() + (c2 ? `  (without CART header: ${c2.toUpperCase()})` : ''));
+        datSec.setInfo({ size: b.length, crcs: [c1, c2].filter(Boolean) });
+        try { const h = await crypto.subtle.digest('SHA-1', b); const sh = [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, '0')).join(''); addRow('SHA-1', sh); datSec.setInfo({ sha1: sh }); } catch (e) { /* no subtle crypto */ }
+        const db = AC.CART_DB || {}, nm = AC.CART_NAMES || {};
+        const hit = [c1, c2].filter(Boolean).map((c) => (DATCRC[c] ? `${DATCRC[c]}${DATSYS[c] ? ' [' + DATSYS[c] + ']' : ''} (loaded DATs)` : db[c] ? `${db[c][2]} (built-in cart database)` : nm[c] ? `${nm[c][0]} (pitfalljones list)` : '')).find(Boolean);
+        addRow('Database match', hit || 'none: use the DAT search below to look by name');
+      } catch (e) { addRow('CRC32', 'could not read the file'); }
+    })();
     const ok = document.createElement('button'); ok.textContent = 'OK'; ok.style.cssText = 'margin-top:10px;float:right';
     const done = () => { bk.remove(); window.removeEventListener('keydown', onk, true); };
-    const onk = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.stopPropagation(); e.preventDefault(); done(); } };
+    const onk = (e) => { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName !== 'INPUT')) { e.stopPropagation(); e.preventDefault(); done(); } };
     ok.onclick = done; bk.onclick = (e) => { if (e.target === bk) done(); };
-    box.append(ok); bk.append(box); document.body.append(bk); window.addEventListener('keydown', onk, true); ok.focus();
+    box.append(datSec, ok); bk.append(box); document.body.append(bk); window.addEventListener('keydown', onk, true); ok.focus();
   }
   // Click = default target (#1 of its kind); right-click / long-press = pick the target.
   function attachLoad(el, f, kind, getFile, after, onClick) {
@@ -877,11 +895,127 @@
   const titleFor = (rel) => { for (const k of setKey(rel)) { if (TITLES[k]) return TITLES[k]; if ((AC.TITLES_BUILTIN || {})[k]) return AC.TITLES_BUILTIN[k]; } return tosecTitle(rel); };
   // CRC -> title from DAT files (ClrMamePro, RomCenter, Logiqx/MAME XML); kept in IndexedDB so it survives reloads.
   let DATCRC = {};
-  let DATSYS = {};
-  const parseDat = (text, sysTag) => {
+  let DATSYS = {}, MANUAL = {};
+  setTimeout(async () => { try { MANUAL = (await idbGet('manualTitles')) || {}; } catch (e) { /* none saved */ } }, 0);
+  const tagOf = (s) => (s ? ` [${s.replace(/^Atari\s+(8-bit|8bit)/i, '800').replace(/^Atari\s+/i, '')}]` : '');
+  // Browsable DAT index: one entry per ROM {t title, s system, c crc, h sha1, z size, r rom name, y year, p publisher, d DAT file}.
+  let DATIDX = [];
+  const sqz = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const subseq = (a, b) => { let i = 0; for (let j = 0; j < b.length && i < a.length; j++) if (a[i] === b[j]) i++; return i === a.length; };
+  // Manual match: search the DAT index and give a file the chosen title (remembered by path). Returns a section for the Properties box.
+  function findInDats(f, onPick) {
+    const sec = document.createElement('div');
+    sec.style.cssText = 'margin-top:10px;padding-top:8px;border-top:1px solid #4a5160';
+    const base = f.name.split('/').pop().replace(/\.[^.]+$/, '');
+    const fq = sqz(base), ftoks = base.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+    let fi = { crcs: [], sha1: '', size: f.size || (f.file && f.file.size) || 0 };
+    const h = document.createElement('div'); h.textContent = 'Find in DAT files'; h.style.cssText = 'font-weight:600;margin-bottom:4px;color:#e8a33d';
+    const fileLine = document.createElement('div'); fileLine.className = 'dim'; fileLine.style.cssText = 'font-size:11px;margin-bottom:6px;word-break:break-all';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.style.cssText = 'width:100%;box-sizing:border-box;margin-bottom:6px';
+    inp.placeholder = 'title words, ROM name, or crc:… sha1:… size:… sys:… dat:…  (empty = suggestions for this file)';
+    const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap';
+    const sysS = document.createElement('select'); sysS.style.cssText = 'max-width:55%';
+    const sameL = document.createElement('label'); sameL.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px';
+    const sameC = document.createElement('input'); sameC.type = 'checkbox'; sameL.append(sameC, 'same size as this file');
+    bar.append(sysS, sameL);
+    const info = document.createElement('div'); info.className = 'dim'; info.style.cssText = 'font-size:11px;margin-bottom:4px';
+    const res = document.createElement('div'); res.style.cssText = 'overflow:auto;max-height:260px;min-height:40px';
+    const pick = async (title) => {
+      f.title = title; MANUAL[f.name] = title;
+      try { await idbSet('manualTitles', MANUAL); } catch (e) { /* kept for this visit */ }
+      renderMed(); onPick(); log(`${f.name.split('/').pop()} titled: ${title}`);
+    };
+    const fillSys = () => {
+      const c = {};
+      DATIDX.forEach((e) => { if (e.s) c[e.s] = (c[e.s] || 0) + 1; });
+      sysS.innerHTML = '';
+      const o0 = document.createElement('option'); o0.value = ''; o0.textContent = `All systems (${DATIDX.length.toLocaleString()} entries)`; sysS.append(o0);
+      Object.keys(c).sort().forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = `${s} (${c[s].toLocaleString()})`; sysS.append(o); });
+    };
+    const search = () => {
+      res.innerHTML = '';
+      if (!DATIDX.length) {
+        info.textContent = Object.keys(DATCRC).length ? 'The DATs were loaded before the browsable index existed: add them again with 🏷 to build it.' : 'No DATs loaded: use 🏷 to add DAT / MAME list files first.';
+        return;
+      }
+      const words = [], flt = {};
+      for (const w of inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean)) {
+        const m = /^(crc|sha1|size|sys|dat):(.+)$/.exec(w);
+        if (m) flt[m[1]] = m[2];
+        else if (/^[0-9a-f]{8}$/.test(w)) flt.crc = w;
+        else if (/^[0-9a-f]{40}$/.test(w)) flt.sha1 = w;
+        else words.push(w);
+      }
+      const sysSel = sysS.value, same = sameC.checked, sizes = fi.size ? [fi.size, fi.size - 16] : [];
+      const found = [], seen = new Set();
+      for (const e of DATIDX) {
+        if (sysSel && e.s !== sysSel) continue;
+        if (flt.sys && !(e.s || '').toLowerCase().includes(flt.sys)) continue;
+        if (flt.dat && !(e.d || '').toLowerCase().includes(flt.dat)) continue;
+        if (flt.crc && e.c !== flt.crc) continue;
+        if (flt.sha1 && e.h !== flt.sha1) continue;
+        if (flt.size && String(e.z) !== flt.size) continue;
+        const sameSize = !!e.z && sizes.includes(e.z);
+        if (same && !sameSize) continue;
+        const tl = e.t.toLowerCase();
+        const exact = fi.crcs.includes(e.c) || (!!fi.sha1 && e.h === fi.sha1);
+        let s = (exact ? 1000 : 0) + (sameSize ? 30 : 0);
+        if (words.length) {
+          const hay = `${tl} ${(e.r || '').toLowerCase()}`;
+          if (!words.every((w) => hay.includes(w))) continue;
+          s += 20 + (tl.startsWith(words[0]) ? 10 : 0) - Math.min(tl.length, 100) * 0.05;
+        } else if (!(flt.crc || flt.sha1 || flt.size || flt.sys || flt.dat)) {
+          const st = sqz(e.t);
+          let n = 0;
+          if (fq.length >= 3) {
+            if (st.startsWith(fq)) n += 50;
+            else if (fq[0] === st[0] && subseq(fq, st)) n += 25 * Math.min(1, (fq.length / Math.max(st.length, 1)) * 2);
+          }
+          if (ftoks.length) n += (40 * ftoks.filter((w) => st.includes(w)).length) / ftoks.length;
+          if (!exact && n < 20) continue;
+          s += n;
+        }
+        const k = `${e.c}|${e.t}|${e.s}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        found.push([s, e, exact, sameSize]);
+      }
+      found.sort((a, b) => b[0] - a[0] || a[1].t.localeCompare(b[1].t));
+      info.textContent = `${found.length.toLocaleString()} match${found.length === 1 ? '' : 'es'}${found.length > 100 ? ' (best 100 shown: narrow the search)' : ''}. Click one to use it as this file's title.`;
+      found.slice(0, 100).forEach(([, e, exact, sameSize]) => {
+        const d = document.createElement('div');
+        d.style.cssText = 'padding:4px;cursor:pointer;border-bottom:1px solid #2c313b;word-break:break-all';
+        const l1 = document.createElement('div'); l1.textContent = `${exact ? '✔ ' : ''}${e.t}${tagOf(e.s)}`; if (exact) l1.style.color = '#7ddc8a';
+        const l2 = document.createElement('div'); l2.className = 'dim'; l2.style.fontSize = '11px';
+        l2.textContent = [e.r, e.z ? `${e.z.toLocaleString()} B${sameSize ? ' (same size)' : ''}` : '', `CRC ${e.c.toUpperCase()}`, e.h ? `SHA-1 ${e.h.slice(0, 12)}…` : '', [e.y, e.p].filter(Boolean).join(' '), e.d].filter(Boolean).join('  ·  ');
+        d.title = [e.t, e.r, `CRC ${e.c}`, e.h && `SHA-1 ${e.h}`, e.d].filter(Boolean).join('\n');
+        d.onmouseenter = () => (d.style.background = '#2a2f39'); d.onmouseleave = () => (d.style.background = '');
+        d.onclick = () => pick(e.t + (!/\(\d{4}/.test(e.t) && (e.y || e.p) ? ` (${[e.y, e.p].filter(Boolean).join(', ')})` : '') + tagOf(e.s));
+        d.append(l1, l2); res.append(d);
+      });
+    };
+    sec.setInfo = (o) => {
+      fi = { ...fi, ...o };
+      fileLine.textContent = `This file: ${fi.size.toLocaleString()} bytes${fi.crcs[0] ? `, CRC ${fi.crcs[0].toUpperCase()}` : ''}${fi.sha1 ? `, SHA-1 ${fi.sha1.slice(0, 12)}…` : ''}`;
+      search();
+    };
+    let tm; inp.oninput = () => { clearTimeout(tm); tm = setTimeout(search, 150); };
+    sysS.onchange = sameC.onchange = search;
+    fileLine.textContent = `This file: ${fi.size.toLocaleString()} bytes (reading CRC…)`;
+    sec.append(h, fileLine, inp, bar, info, res);
+    fillSys();
+    setTimeout(search, 0);
+    return sec;
+  }
+  const parseDat = (text, sysTag, datName) => {
     const out = {};
     let sys = sysTag || '';
-    const put = (crc, t) => { crc = (crc || '').toLowerCase().padStart(8, '0'); if (/^[0-9a-f]{8}$/.test(crc) && t && !out[crc]) { out[crc] = t; if (sys) DATSYS[crc] = sys; } };
+    const put = (crc, t, x) => {
+      crc = (crc || '').toLowerCase().padStart(8, '0');
+      if (!/^[0-9a-f]{8}$/.test(crc) || !t) return;
+      if (!out[crc]) { out[crc] = t; if (sys) DATSYS[crc] = sys; }
+      if (datName) DATIDX.push({ t, s: sys, c: crc, h: ((x && x.h) || '').toLowerCase(), z: (x && +x.z) || 0, r: (x && x.r) || '', y: (x && x.y) || '', p: (x && x.p) || '', d: datName });
+    };
     if (/^\s*</.test(text)) {
       const doc = new DOMParser().parseFromString(text, 'text/xml');
       const sl = doc.querySelector('softwarelist');
@@ -896,10 +1030,12 @@
       doc.querySelectorAll('game, machine, software, resource').forEach((g) => {
         const d = g.querySelector(':scope > description');
         const t = (d && d.textContent.trim()) || g.getAttribute('name');
-        g.querySelectorAll('rom').forEach((r) => put(r.getAttribute('crc'), t));
+        const yv = g.querySelector(':scope > year'), pv = g.querySelector(':scope > publisher');
+        const y = yv && yv.textContent !== '????' ? yv.textContent : '', p = pv && !/unknown/i.test(pv.textContent) ? pv.textContent : '';
+        g.querySelectorAll('rom').forEach((r) => put(r.getAttribute('crc'), t, { h: r.getAttribute('sha1'), z: r.getAttribute('size'), r: r.getAttribute('name'), y, p }));
       });
     } else if (text.includes('\u00AC')) {
-      for (const ln of text.split(/\r?\n/)) { const f = ln.split('\u00AC'); if (f.length > 7) put(f[6], f[4] || f[3]); }
+      for (const ln of text.split(/\r?\n/)) { const f = ln.split('\u00AC'); if (f.length > 7) put(f[6], f[4] || f[3], { z: f[7], r: f[5] }); }
     } else {
       const re = /\b(?:game|machine|resource)\s*\(([\s\S]*?)\n\)/g;
       let m;
@@ -908,21 +1044,27 @@
         const d = /\bdescription\s+"([^"]*)"/.exec(b) || /\bname\s+"([^"]*)"/.exec(b);
         const rr = /\bcrc\s+([0-9a-fA-F]{1,8})/g;
         let r;
-        while ((r = rr.exec(b))) put(r[1], d && d[1]);
+        while ((r = rr.exec(b))) {
+          const line = b.slice(Math.max(0, b.lastIndexOf('rom', r.index)), b.indexOf('\n', r.index) < 0 ? undefined : b.indexOf('\n', r.index));
+          const nm = /\bname\s+"([^"]*)"/.exec(line), sz = /\bsize\s+(\d+)/.exec(line), sh = /\bsha1\s+([0-9a-fA-F]{40})/.exec(line);
+          put(r[1], d && d[1], { r: nm && nm[1], z: sz && sz[1], h: sh && sh[1] });
+        }
       }
     }
     return out;
   };
   const syncDats = () => { const n = Object.keys(DATCRC).length; if (n) $('medtitles').textContent += ` · ${n} DAT CRCs`; };
   const sysFromName = (n) => n.split('/').pop().replace(/\.[^.]+$/, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^NoIntro\s*-\s*/i, '').replace(/^Atari\s*-\s*8-bit Family$/i, 'Atari 8-bit').trim();
+  const dropDat = (name) => { DATIDX = DATIDX.filter((e) => e.d !== name); };
+  const saveDats = () => idbSet('datCrc', DATCRC).then(() => idbSet('datSys', DATSYS)).then(() => idbSet('datIdx', DATIDX));
   async function loadDats(files) {
     let n = 0;
-    for (const f of files) { const d = parseDat(await f.text(), sysFromName(f.name)); n += Object.keys(d).length; Object.assign(DATCRC, d); }
-    try { await idbSet('datCrc', DATCRC); await idbSet('datSys', DATSYS); } catch (e) { log('DAT CRCs too large to remember, but active for this visit'); }
+    for (const f of files) { dropDat(f.name); const d = parseDat(await f.text(), sysFromName(f.name), f.name); n += Object.keys(d).length; Object.assign(DATCRC, d); }
+    try { await saveDats(); } catch (e) { log('DAT data too large to remember, but active for this visit'); }
     syncTitles(); syncDats();
     log(`${n} CRCs loaded from ${files.length} DAT file(s)`);
   }
-  setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; DATSYS = (await idbGet('datSys')) || {}; syncDats(); } catch (e) { /* none saved */ } }, 0);
+  setTimeout(async () => { try { DATCRC = (await idbGet('datCrc')) || {}; DATSYS = (await idbGet('datSys')) || {}; DATIDX = (await idbGet('datIdx')) || []; syncDats(); } catch (e) { /* none saved */ } }, 0);
   async function loadTitlesXml(files) {
     const dats = files.filter((f) => /\.dat$/i.test(f.name));
     if (dats.length) await loadDats(dats);
@@ -931,7 +1073,8 @@
     let n = 0;
     for (const f of files) {
       const txt = await f.text();
-      Object.assign(DATCRC, parseDat(txt, sysFromName(f.name)));
+      dropDat(f.name);
+      Object.assign(DATCRC, parseDat(txt, sysFromName(f.name), f.name));
       const doc = new DOMParser().parseFromString(txt, 'text/xml');
       doc.querySelectorAll('software').forEach((s) => {
         const name = (s.getAttribute('name') || '').toLowerCase();
@@ -944,9 +1087,9 @@
       });
     }
     try { localStorage.setItem('ac.titles', JSON.stringify(TITLES)); } catch (e) { log('titles too large to remember, but active for this visit'); }
-    try { await idbSet('datCrc', DATCRC); await idbSet('datSys', DATSYS); } catch (e) { /* keep in memory */ }
+    try { await saveDats(); } catch (e) { /* keep in memory */ }
     syncTitles(); syncDats();
-    MED.files.forEach((m) => (m.title = titleFor(m.name)));
+    MED.files.forEach((m) => (m.title = MANUAL[m.name] || titleFor(m.name)));
     renderMed();
     log(`${n} titles loaded`);
   }
@@ -1270,7 +1413,7 @@
     const rows = await AC.Catalog.rows('SELECT path, kind, size, title, modified FROM files');
     const meta = Object.fromEntries((await AC.Catalog.rows('SELECT k, v FROM meta')).map((r) => [r.k, r.v]));
     if (!rows.length) return false;
-    MED.files = rows.map((r) => ({ name: r.path, file: null, kind: r.kind, size: r.size, modified: r.modified || 0, title: titleFor(r.path) || r.title }));
+    MED.files = rows.map((r) => ({ name: r.path, file: null, kind: r.kind, size: r.size, modified: r.modified || 0, title: MANUAL[r.path] || titleFor(r.path) || r.title }));
     MED.fromDb = true;
     renderMed();
     log(`library loaded from saved catalog: ${rows.length} items${meta.scanned ? ' (scanned ' + meta.scanned.slice(0, 16).replace('T', ' ') + ')' : ''}. Rescan to rebuild.`);
@@ -1541,6 +1684,7 @@
     const files = await expandZips(all);
     const fresh = files.map((f) => { const name = f.webkitRelativePath || f.name; return { name, file: f, kind: extKind(f.name), title: titleFor(name) }; }).filter((f) => f.kind);
     await identifyCarts(fresh);
+    fresh.forEach((f) => { if (MANUAL[f.name]) f.title = MANUAL[f.name]; });
     // A saved scan of one folder replaces only that folder's rows; other scanned folders stay in the catalog.
     MED.files = persist && root ? MED.files.filter((f) => !f.name.startsWith(root + '/')).concat(fresh) : fresh;
     MED.fromDb = false;
