@@ -3371,7 +3371,10 @@
     return c.toDataURL(format || 'image/png');
   }
 
+  const VERSION = '0.4.0-dev', BUILD = '2026-10-27 18:05';
+  { const h = $('appver'); if (h) { h.title = `Ataricraft v${VERSION}, built ${BUILD}`; h.querySelector('small').textContent = `v${VERSION} · ${BUILD}`; } console.log(`Ataricraft v${VERSION} (${BUILD})`); }
   window.ataricraft = {
+    version: `${VERSION} (${BUILD})`,
     diskState: () => Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].filter((n) => S.disks[n]).map((n) => [n, { rev: S.disks[n].rev || 0, orig: !!S.disks[n].orig, pend: !!S.pend[n], idle: Math.round(performance.now() - (S.io[n] || 0)) }])),
     describe: () => ({
       name: 'ataricraft', core: S.emu && S.emu.core === 'altirra' ? 'AltirraSDL (WASM)' : 'libatari800 (WASM reference)',
