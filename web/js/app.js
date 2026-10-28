@@ -791,10 +791,39 @@
     if (kind === 'tape') return [{ label: 'Cassette', run: () => go((fl) => loadAny(fl, false, 'tape')) }];
     return [{ label: 'Run program', run: () => go((fl) => loadAny(fl, false, kind)) }];
   };
+  // Properties for a media file: name, size and the date it was written/updated (from the scan; files inside an archive show the archive's date).
+  function mediaProps(f) {
+    const parts = f.name.split('/'), base = parts[parts.length - 1];
+    const ci = parts.findIndex((s, i) => i < parts.length - 1 && /\.(zip|7z)$/i.test(s));
+    const size = f.size || (f.file && f.file.size) || 0, mod = f.modified || (f.file && f.file.lastModified) || 0;
+    const fmtDate = (t) => { const d = new Date(t), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+    const sz = size >= 1048576 ? ` (${(size / 1048576).toFixed(2)} MB)` : size >= 1024 ? ` (${(size / 1024).toFixed(1)} KB)` : '';
+    const rows = [['File name', base], ['Title', f.title || ''], ['Type', f.kind || ''], ['Size', size.toLocaleString() + ' bytes' + sz],
+      ['Written / updated', mod ? fmtDate(mod) + (ci >= 0 ? ' (archive date)' : '') : 'unknown — rescan the library to record dates'], ['Location', parts.slice(0, -1).join('/') || '(root)']];
+    if (ci >= 0) rows.push(['Inside archive', parts[ci]]);
+    closePick();
+    const bk = document.createElement('div');
+    bk.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0008;display:flex;align-items:center;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#1b1e24;border:1px solid #4a5160;border-radius:10px;padding:14px 16px;min-width:300px;max-width:min(92vw,560px);box-shadow:0 8px 32px #000b;font-size:13px';
+    const h = document.createElement('div'); h.textContent = 'Properties'; h.style.cssText = 'font-weight:600;margin-bottom:8px;color:#e8a33d'; box.append(h);
+    for (const [k, v] of rows) {
+      if (!v) continue;
+      const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:10px;padding:3px 0;border-bottom:1px solid #262a32';
+      const a = document.createElement('span'); a.textContent = k; a.className = 'dim'; a.style.cssText = 'width:130px;flex:none';
+      const b = document.createElement('span'); b.textContent = v; b.style.cssText = 'word-break:break-all;user-select:text';
+      r.append(a, b); box.append(r);
+    }
+    const ok = document.createElement('button'); ok.textContent = 'OK'; ok.style.cssText = 'margin-top:10px;float:right';
+    const done = () => { bk.remove(); window.removeEventListener('keydown', onk, true); };
+    const onk = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.stopPropagation(); e.preventDefault(); done(); } };
+    ok.onclick = done; bk.onclick = (e) => { if (e.target === bk) done(); };
+    box.append(ok); bk.append(box); document.body.append(bk); window.addEventListener('keydown', onk, true); ok.focus();
+  }
   // Click = default target (#1 of its kind); right-click / long-press = pick the target.
   function attachLoad(el, f, kind, getFile, after, onClick) {
     const getF = async () => { const fl = await getFile(); if (fl) histAdd(f); return fl; };
-    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), targetItems(kind, getF, after));
+    const menu = (x, y) => openPick(x, y, f.name.split('/').pop(), [...targetItems(kind, getF, after), { label: 'Properties…', run: () => mediaProps(f) }]);
     el.onclick = async (e) => {
       if (Date.now() < PM.suppressClickUntil) return;
       const fl = await getF(); if (!fl) return;
@@ -1161,7 +1190,7 @@
   const catRow = (f) => {
     const parts = f.name.split('/');
     const ci = parts.findIndex((s, i) => i < parts.length - 1 && /\.(zip|7z)$/i.test(s));
-    return { path: f.name, name: parts[parts.length - 1], ext: (parts[parts.length - 1].split('.').pop() || '').toLowerCase(), kind: f.kind, size: f.size || (f.file && f.file.size) || 0, modified: f.file && f.file.lastModified, container: ci >= 0 ? parts.slice(0, ci + 1).join('/') : '', title: f.title || '', grp: groupKey(f) };
+    return { path: f.name, name: parts[parts.length - 1], ext: (parts[parts.length - 1].split('.').pop() || '').toLowerCase(), kind: f.kind, size: f.size || (f.file && f.file.size) || 0, modified: f.modified || (f.file && f.file.lastModified), container: ci >= 0 ? parts.slice(0, ci + 1).join('/') : '', title: f.title || '', grp: groupKey(f) };
   };
   async function saveCatalog() {
     const sp = AC.Progress.begin('Saving catalog…', MED.files.length);
@@ -1182,10 +1211,10 @@
     return useCatalog();
   }
   async function useCatalog() {
-    const rows = await AC.Catalog.rows('SELECT path, kind, size, title FROM files');
+    const rows = await AC.Catalog.rows('SELECT path, kind, size, title, modified FROM files');
     const meta = Object.fromEntries((await AC.Catalog.rows('SELECT k, v FROM meta')).map((r) => [r.k, r.v]));
     if (!rows.length) return false;
-    MED.files = rows.map((r) => ({ name: r.path, file: null, kind: r.kind, size: r.size, title: titleFor(r.path) || r.title }));
+    MED.files = rows.map((r) => ({ name: r.path, file: null, kind: r.kind, size: r.size, modified: r.modified || 0, title: titleFor(r.path) || r.title }));
     MED.fromDb = true;
     renderMed();
     log(`library loaded from saved catalog: ${rows.length} items${meta.scanned ? ' (scanned ' + meta.scanned.slice(0, 16).replace('T', ' ') + ')' : ''}. Rescan to rebuild.`);
