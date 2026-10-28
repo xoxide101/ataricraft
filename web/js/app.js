@@ -173,6 +173,25 @@
     return e.builtin ? e.label : e.label ? `${e.label} - ${file}` : file;
   }
 
+  // Default ROM for a list, by mode: auto = recognised original ROM, else built-in Altirra, else any file; realistic = originals first; symbolic = built-in first.
+  function pickDefault(list) {
+    const idx = list.map((e, i) => i);
+    const stock = idx.filter((i) => !list[i].builtin && (romLabel(list[i]), list[i].label));
+    const other = idx.filter((i) => !list[i].builtin && !stock.includes(i));
+    const built = idx.filter((i) => list[i].builtin);
+    const mode = $('rommode').value;
+    const pref = mode === 'symbolic' ? [built, stock, other] : mode === 'realistic' ? [stock, other, built] : [stock, built, other];
+    for (const g of pref) if (g.length) return g[0];
+    return 0;
+  }
+  const romSource = (e) => !e ? '' : e.builtin ? 'built-in' : /[\\/]/.test(e.name) ? 'folder ' + e.name.replace(/[\\/][^\\/]*$/, '') : 'picked file';
+  function showRomInfo() {
+    const os = S.lib[$('model').value === '800' ? 'os800' : 'osxl'][+$('osrom').value];
+    const bs = $('basicrom').value === '' ? null : S.basicList[+$('basicrom').value];
+    $('rominfo').textContent = `OS from ${romSource(os) || 'none'}${os && !os.builtin ? (os.label ? ' (recognised)' : ' (unrecognised)') : ''} · BASIC ${bs ? 'from ' + romSource(bs) : 'off'}`;
+  }
+  function resetRomChoice() { localStorage.removeItem('ac.romsel'); S.basicTouched = false; $('osrom').innerHTML = ''; $('basicrom').innerHTML = ''; fillRomSelects(); }
+
   function fillRomSelects() {
     ensureBuiltinRoms();
     fillRam();
@@ -188,7 +207,7 @@
       const si = key in sel_ ? (sel_[key] === '' ? '' : String(list.findIndex((e) => e.name === sel_[key]))) : null;
       if (si !== null && si !== '-1' && [...sel.options].some((o) => o.value === si)) { sel.value = si; if (key === 'basic') S.basicTouched = true; }
       else if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
-      else { const f = order.find((i) => !list[i].builtin); sel.value = f !== undefined ? String(f) : String(order[0]); }
+      else sel.value = String(pickDefault(list));
       const q = $('romfilter').value.trim().toLowerCase();
       if (q) [...sel.options].forEach((o) => { if (o.value !== '' && o.value !== sel.value && !o.text.toLowerCase().includes(q)) o.remove(); });
     };
@@ -196,12 +215,13 @@
     const bas = [...S.lib.basic].sort((a, b) => /bas/i.test(b.name) - /bas/i.test(a.name));
     S.basicList = bas;
     fill($('basicrom'), bas, true, 'basic');
-    if (bas.length && $('basicrom').value === '' && !S.basicTouched) $('basicrom').value = '0';
+    if (bas.length && $('basicrom').value === '' && !S.basicTouched) $('basicrom').value = String(pickDefault(bas));
     S.roms.os800 = S.lib.os800[0] ? S.lib.os800[0].bytes : null;
     S.roms.osxl = S.lib.osxl[0] ? S.lib.osxl[0].bytes : null;
     S.roms.basic = bas[0] ? bas[0].bytes : null;
     $('romstate').textContent = `OS800 ${S.lib.os800.length} · XL/XE ${S.lib.osxl.length} · BASIC ${S.lib.basic.length}`;
     updateCharset();
+    showRomInfo();
     window.dispatchEvent(new CustomEvent('ac-roms-changed', { detail: { os800: S.lib.os800.length, osxl: S.lib.osxl.length, basic: S.lib.basic.length } }));
   }
 
@@ -3720,6 +3740,7 @@
   });
   $('boot').addEventListener('click', () => { if (phone()) document.body.classList.add('nosb'); });
 
+  $('rommode').value = localStorage.getItem('ac.rommode') || 'auto';
   fillRomSelects();
   loadSavedRoms().then(autoLoadRoms).then(romUrlParams);
 
@@ -3740,8 +3761,10 @@
     s.basic = $('basicrom').value === '' ? '' : (S.basicList[+$('basicrom').value] || {}).name || '';
     localStorage.setItem('ac.romsel', JSON.stringify(s));
   }
-  $('osrom').onchange = () => { updateCharset(); saveRomSel(); };
-  $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); };
+  $('osrom').onchange = () => { updateCharset(); saveRomSel(); showRomInfo(); };
+  $('rommode').onchange = () => { localStorage.setItem('ac.rommode', $('rommode').value); resetRomChoice(); };
+  $('romauto').onclick = resetRomChoice;
+  $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); showRomInfo(); };
   $('romfolder').onchange = (e) => addRoms(e.target.files);
 
   // The ROM folder is remembered (Chromium) and rescanned on every page load; if the browser wants the permission again, the first click or key press re-grants it.
@@ -3989,8 +4012,28 @@
   for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
     $('f' + n).onchange = (e) => loadMedia(e.target.files, n);
   }
+  // One drop target for everything: Atari OS/BASIC ROMs go to the ROM library, the rest (disks, tapes, carts, programs, archives) to drive 1 as before.
+  const dropHint = document.createElement('div');
+  dropHint.textContent = 'Drop ROMs, disks, tapes, carts, programs or archives';
+  dropHint.style.cssText = 'position:fixed;inset:0;z-index:9998;display:none;align-items:center;justify-content:center;background:#0b0d10cc;color:#d8dce4;font-size:22px;border:3px dashed #4a90ff;pointer-events:none';
+  document.body.append(dropHint);
+  let dragDepth = 0;
+  const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  document.body.addEventListener('dragenter', (e) => { if (hasFiles(e)) { dragDepth++; dropHint.style.display = 'flex'; } });
+  document.body.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; dropHint.style.display = 'none'; } });
   document.body.addEventListener('dragover', (e) => e.preventDefault());
-  document.body.addEventListener('drop', (e) => { e.preventDefault(); loadMedia(e.dataTransfer.files, 1); });
+  const isRomFile = async (f) => {
+    if (![8192, 10240, 16384].includes(f.size) || !/\.(rom|bin|rm)$/i.test(f.name)) return false;
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    return !!classify(f.name, bytes) && (f.size !== 8192 || !!(AC.OS_DB || {})[crc32(bytes)] || /bas/i.test(f.name));
+  };
+  async function dropAll(files) {
+    const roms = [], rest = [];
+    for (const f of Array.from(files)) (await isRomFile(f) ? roms : rest).push(f);
+    if (roms.length) { await addRoms(roms); log(`${roms.length} ROM${roms.length > 1 ? 's' : ''} added to the library (Auto-pick or the lists choose which to use)`); }
+    if (rest.length) await loadMedia(rest, 1);
+  }
+  document.body.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; dropHint.style.display = 'none'; dropAll(e.dataTransfer.files); });
   requestAnimationFrame(loop);
 
   // ---- clipboard ----
@@ -4063,6 +4106,7 @@
     roms: {
       list: () => ({ os800: S.lib.os800.map((e) => e.name), osxl: S.lib.osxl.map((e) => e.name), basic: S.lib.basic.map((e) => e.name) }),
       select: selectRom,
+      mode: (m) => { if (m) { $('rommode').value = m; $('rommode').onchange(); } return $('rommode').value; },
       current: () => ({ os: ($('osrom').selectedOptions[0] || {}).text || null, basic: ($('basicrom').selectedOptions[0] || {}).text || null }),
       rescan: autoLoadRoms,
       addSource: (fn) => { ROM_SOURCES.push(fn); return autoLoadRoms(); },
