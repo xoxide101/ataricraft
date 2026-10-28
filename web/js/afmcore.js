@@ -382,7 +382,51 @@
     return joinP(dir, s.short);
   }
 
-  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
+  // Descriptions for well-known system/utility files; anything not listed gets none.
+  const KNOWN = {
+    'DUP.SYS': 'DOS menu (disk utility package)', 'AUTORUN.SYS': 'Runs automatically at boot', 'MEM.SAV': 'DOS menu memory-save file',
+    'AFM.COM': 'Ataricraft File Manager', 'FMTDIR.COM': 'MyDOS directory formatter', 'RAMDISK.AR0': 'MyDOS RAM disk driver (130XE)',
+    'COMMAND.COM': 'SpartaDOS command processor', 'DOS.SYS': '',
+  };
+  function describe(m, name) {
+    const n = name.toUpperCase();
+    if (n === 'DOS.SYS') return m.kind === 'mydos' ? 'MyDOS system file (boot)' : m.kind === 'dos2' ? 'Atari DOS 2.x system file (boot)' : '';
+    return KNOWN[n] || '';
+  }
+
+  // Make LONGNAME.TXT list every file/folder on the disk. Missing entries get opts.lookup(name, path) (e.g. the scan title database), then a built-in
+  // description of known system files, else the short name; entries whose long name is just the short name are upgraded when something is found;
+  // entries for files that no longer exist are dropped.
+  function syncLongNames(m, opts) {
+    opts = opts || {};
+    const res = { added: 0, upgraded: 0, pruned: 0, written: 0, skipped: '' };
+    if (m.vol.readOnly) { res.skipped = 'disk is read-only'; return res; }
+    const lookup = opts.lookup || (() => '');
+    const dirs = [''].concat(entries(m).filter((e) => e.dir).map((e) => e.path));
+    for (const d of dirs) {
+      const kids = entries(m).filter((e) => parentOf(e.path) === d && e.name.toUpperCase() !== SIDECAR);
+      const side = readSidecar(m, d);
+      let changed = false;
+      const names = new Set(kids.map((e) => e.name.toUpperCase()));
+      for (const k of [...side.keys()]) if (!names.has(k)) { side.delete(k); res.pruned++; changed = true; }
+      for (const e of kids) {
+        const key = e.name.toUpperCase(), cur = side.get(key);
+        let found = '', src = 'DB';
+        if (!cur || cur.long.toUpperCase() === key) {
+          try { found = (lookup(e.name, e.path) || '').trim(); } catch (x) { found = ''; }
+          if (!found && !e.dir && d === '' && opts.describe !== false) { found = describe(m, e.name); src = 'INFO'; }
+        }
+        if (!cur) { side.set(key, { short: key, long: found || e.name, added: stampNow(opts.now), size: e.size, source: found ? src : 'DISK' }); res.added++; changed = true; }
+        else if (found && found.toUpperCase() !== key) { cur.long = found; cur.source = cur.source || src; res.upgraded++; changed = true; }
+      }
+      if (!changed) continue;
+      try { writeSidecar(m, d, side); res.written++; touch(m); }
+      catch (x) { res.skipped = 'no room for ' + SIDECAR + ' (' + x.message + ')'; break; }
+    }
+    return res;
+  }
+
+  const api = { SIDECAR, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
   if (typeof AC !== 'undefined') AC.AfmCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -1,7 +1,7 @@
 // WebAFM: two-pane file explorer for Atari disk images. All disk logic lives in afmcore.js; this file is only the page.
 (() => {
   const AC = window.AC, C = AC.AfmCore, host = () => AC.WebAfmHost;
-  const W = { el: null, mounts: new Map(), panes: [], active: 0, undo: [], seq: 0, drag: null, conflict: 'error' };
+  const W = { el: null, mounts: new Map(), panes: [], active: 0, undo: [], seq: 0, drag: null, conflict: 'error', lnLoad: localStorage.getItem('ac.wafm.lnLoad') !== '0', lnSave: localStorage.getItem('ac.wafm.lnSave') !== '0' };
   const newPane = () => ({ src: null, dir: '', sel: new Set(), cur: '', anchor: '', sort: { k: 'name', asc: true }, filter: '', tree: false, collapsed: new Set() });
   W.panes = [newPane(), newPane()];
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -18,7 +18,7 @@
   #wafm button{cursor:pointer}#wafm button:hover{background:#343a47}#wafm button:disabled{opacity:.35;cursor:not-allowed;text-decoration:line-through;text-decoration-color:#0000}#wafm button:disabled:hover{background:#2a2f39}
   #wafm .caps{margin-top:4px;display:flex;flex-wrap:wrap;gap:3px 8px;font-size:11px}#wafm .cap.yes{color:#6fcf8a}#wafm .cap.no{color:#7d838f;opacity:.55;text-decoration:line-through}
   #wafm .wtb{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:#1e2128;border-bottom:1px solid #2c313b;align-items:center}
-  #wafm .wtb h2{margin:0 10px 0 0;font-size:15px;color:#e8a33d}#wafm .sp{flex:1}
+  #wafm .wtb h2{margin:0 10px 0 0;font-size:15px;color:#e8a33d}#wafm .sp{flex:1}#wafm .lnc{font-size:12px;color:#aab;display:flex;align-items:center;gap:3px;white-space:nowrap}
   #wafm .wpanes{flex:1;display:flex;gap:8px;padding:8px;min-height:0}
   #wafm .wp{flex:1;min-width:0;display:flex;flex-direction:column;border:2px solid #2c313b;border-radius:8px;background:#1b1e24}
   #wafm .wp.act{border-color:#e8a33d}
@@ -137,15 +137,18 @@
     W.mounts.set(r.key, r);
     Object.assign(p, { src: r.key, dir: '', sel: new Set(), cur: '', filter: '' });
     render();
+    if (W.lnLoad) makeNames(r, true);
   }
   async function openFile(i, file, handle) {
     const bytes = AC.Progress ? await AC.Progress.read(file, 'Loading ' + file.name) : new Uint8Array(await file.arrayBuffer());
     const m = C.mount(bytes, file.name);
     if (!m) { log(`${file.name}: no DOS 2.x / MyDOS / SpartaDOS-family file system found`); return; }
     const key = 'F' + (++W.seq);
-    W.mounts.set(key, { key, kind: 'file', name: file.name, m, handle: handle || null, unsaved: false });
+    const nr = { key, kind: 'file', name: file.name, m, handle: handle || null, unsaved: false };
+    W.mounts.set(key, nr);
     Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
     render();
+    if (W.lnLoad) makeNames(nr, true);
   }
   async function pickFile(i) {
     try {
@@ -166,7 +169,10 @@
     else if (!W.panes[0].src) { for (let n = 1; n <= 8; n++) if (host().disk(n)) { setDrive(0, n); break; } }
     render(); W.el.focus();
   }
-  const close = () => { if (W.el) W.el.style.display = 'none'; };
+  async function close() {
+    if (W.lnSave) for (const r of new Set(W.panes.map(rec))) if (r) await makeNames(r, true);
+    if (W.el) W.el.style.display = 'none';
+  }
   function refreshDrives() {
     for (const [k, r] of [...W.mounts]) if (r.kind === 'drive') {
       const nr = mountDrive(r.n);
@@ -205,7 +211,23 @@
     for (const p of W.panes) { p.sel = new Set(); }
     log('undone: ' + u.label); render();
   }
-  async function afterWrite(recs) { const seen = new Set(); for (const r of recs) if (r && !seen.has(r.key)) { seen.add(r.key); C.refresh(r.m); await commit(r); } }
+  async function afterWrite(recs) { const seen = new Set(); for (const r of recs) if (r && !seen.has(r.key)) { seen.add(r.key); if (W.lnSave) fillNames(r, true); C.refresh(r.m); await commit(r); } }
+
+  // Fill LONGNAME.TXT from the scan title database (host.titleFor); returns a one-line summary or '' when nothing changed.
+  function fillNames(r, quiet) {
+    const res = C.syncLongNames(r.m, { lookup: (n) => (host().titleFor ? host().titleFor(n) : '') });
+    const bits = [res.added && res.added + ' added', res.upgraded && res.upgraded + ' titled', res.pruned && res.pruned + ' removed'].filter(Boolean);
+    const s = bits.length ? `${r.name}: LONGNAME.TXT ${bits.join(', ')}` : '';
+    if (res.skipped) log(`${r.name}: LONGNAME.TXT not updated — ${res.skipped}`);
+    else if (s && !quiet) log(s);
+    return { res, s };
+  }
+  async function makeNames(r, auto) {
+    if (!r) return;
+    const { res, s } = fillNames(r, true);
+    if (!res.written) { if (!auto) log(res.skipped ? `${r.name}: LONGNAME.TXT not updated — ${res.skipped}` : `${r.name}: LONGNAME.TXT already lists every file`); return; }
+    C.refresh(r.m); await commit(r); log(s); render();
+  }
 
   // ---------- listing ----------
   const sorters = {
@@ -240,7 +262,8 @@
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
       <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button><button data-a="mkdir" title="F7">New folder</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC">Add from PC…</button>
-      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button>
+      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="compare">Compare panes</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div>`;
     document.body.append(el);
@@ -252,6 +275,7 @@
       pn.append(d); wirePane(d, i);
     });
     el.querySelector('.wtb').onclick = (e) => { const b = e.target.closest('button'); if (b) act(b.dataset.a); };
+    for (const c of el.querySelectorAll('.wtb input[data-k]')) { c.checked = !!W[c.dataset.k]; c.onchange = () => { W[c.dataset.k] = c.checked; localStorage.setItem('ac.wafm.' + c.dataset.k, c.checked ? '1' : '0'); }; }
     el.addEventListener('keydown', onKey);
   }
   function wirePane(d, i) {
@@ -290,14 +314,14 @@
   function updateTb() {
     const a = W.panes[W.active], r = rec(a), o = rec(W.panes[1 - W.active]);
     const need = {
-      mkdir: r && C.caps(r.m).mkdir, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import,
+      mkdir: r && C.caps(r.m).mkdir, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import, names: r && C.caps(r.m).longnames,
       copy: o ? C.caps(o.m).write : { ok: false, why: 'open a disk in the other pane first' },
       move: !o ? { ok: false, why: 'open a disk in the other pane first' } : !C.caps(o.m).write.ok ? C.caps(o.m).write : C.caps(r ? r.m : o.m).del,
     };
     for (const b of W.el.querySelectorAll('.wtb button')) {
       const k = b.dataset.a;
       if (b.dataset.t === undefined) b.dataset.t = b.title || '';
-      if (!['copy', 'move', 'mkdir', 'rename', 'del', 'props', 'view', 'export', 'import', 'all'].includes(k)) continue;
+      if (!['copy', 'move', 'mkdir', 'rename', 'del', 'props', 'view', 'export', 'import', 'all', 'names'].includes(k)) continue;
       let ok = !!r, why = r ? '' : 'pick a disk first';
       if (r && need[k] && !need[k].ok) { ok = false; why = need[k].why; }
       if (r && (k === 'copy' || k === 'move') && !o) { ok = false; why = 'open a disk in the other pane first'; }
@@ -368,12 +392,13 @@
     viewFile(i, path);
   }
   function ctxMenu(i, x, y) {
+    W.active = i;
     const items = [['Open / view', 'view'], ['Copy to other pane', 'copy'], ['Move to other pane', 'move'], ['Rename…', 'rename'], ['New folder…', 'mkdir'], ['Delete…', 'del'], ['Save to PC', 'export'], ['Properties…', 'props']];
     const m = document.createElement('div');
     m.style.cssText = `position:fixed;z-index:9999;left:${Math.min(x, innerWidth - 200)}px;top:${Math.min(y, innerHeight - 260)}px;background:#1b1e24;border:1px solid #4a5160;border-radius:8px;box-shadow:0 6px 24px #000a;min-width:190px;overflow:hidden`;
     for (const [l, a] of items) { const d = document.createElement('div'); d.textContent = l; d.style.cssText = 'padding:8px 12px;cursor:pointer'; d.onmouseenter = () => (d.style.background = '#2a2f39'); d.onmouseleave = () => (d.style.background = ''); d.onclick = () => { m.remove(); act(a); }; m.append(d); }
     document.body.append(m);
-    const off = () => { m.remove(); window.removeEventListener('pointerdown', off, true); };
+    const off = (e) => { if (e && m.contains(e.target)) return; m.remove(); window.removeEventListener('pointerdown', off, true); };
     setTimeout(() => window.addEventListener('pointerdown', off, true), 0);
   }
 
@@ -381,7 +406,7 @@
   function act(a) {
     const A = W.panes[W.active];
     ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
-      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, compare: doCompare, refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
+      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, compare: doCompare, names: () => makeNames(rec(A)), refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
 

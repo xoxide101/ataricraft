@@ -2723,6 +2723,7 @@
     commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes); S.disks[n] = { name: d.name, bytes }; S.dirty[n] = true; },
     renameDisk: (n, name) => { const d = S.disks[n]; if (!d) return; d.name = name; S.dirty[n] = true; const el = $('d' + n); if (el) el.textContent = name; },
     running: () => !!(S.emu && !S.off),
+    titleFor: (name) => titleFor(name),
     save: (name, bytes, type) => saveBlob(name, [bytes], type),
     zip: (files) => storedZip(files),
     log: (s) => log(s),
