@@ -1457,8 +1457,11 @@
       try {
         const b = new Uint8Array(await todo[i].file.arrayBuffer());
         const hdr = b.length > 16 && b[0] === 67 && b[1] === 65 && b[2] === 82 && b[3] === 84;
-        const e = db[crc32(b)] || (hdr && db[crc32(b.subarray(16))]);
+        const c1 = crc32(b), c2 = hdr ? crc32(b.subarray(16)) : null;
+        const e = db[c1] || (c2 && db[c2]);
+        const nm = (AC.CART_NAMES || {})[c1] || (c2 && (AC.CART_NAMES || {})[c2]);
         if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : ''); hit++; }
+        else if (nm) { todo[i].title = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : ''); hit++; }
       } catch (err) { /* unreadable file: leave untitled */ }
       if (i % 50 === 49) { log(`identifying cartridges by CRC: ${i + 1}/${todo.length}`); await new Promise((r) => setTimeout(r, 0)); }
     }
