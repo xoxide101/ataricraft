@@ -182,7 +182,14 @@ fopen2: pha
         lda #>FSPEC2
         sta V_SPH
         pla
-fopen:  sta ICAX1,x
+fopen:  pha
+        stx V_PSX
+        lda #12
+        sta ICCOM,x
+        jsr CIOV
+        ldx V_PSX
+        pla
+        sta ICAX1,x
         lda #3
         sta ICCOM,x
         lda V_SPL
