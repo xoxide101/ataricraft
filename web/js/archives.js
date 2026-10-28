@@ -24,6 +24,7 @@
 //        mirrors the 6502 ARC.COM. Methods 5-7 (old hashed crunch) and 9 (squashed) are reported as unsupported.
 //   zip  PKZIP. Stored/Deflate/zstd go through zip.js (fast, browser-native). Every other PKZIP method -
 //        Shrink, Reduce, Implode, Deflate64, BZip2, LZMA, PPMd, AES - and ZIP64 are handed to 7-Zip per entry.
+//   lzh  LZH/LHA, level 0/1 headers, -lh0-/-lh1-/-lh4-..-lh7- (Pure JS lzh.js, mirrors the 6502 LZH.COM), rest via 7-Zip.
 //   7z   7-Zip WASM (web/js/7z, LGPL + unRAR licence): 7z, RAR/RAR5, LZH/LHA, ARJ, CAB, GZ, BZ2, XZ, TAR, ZOO and more.
 //
 // NOT SUPPORTED YET (ideas for later): SpartaDOS X .SDX archives, CP/M .LBR/.SQ/.CRU (squeeze/crunch), Atari
@@ -74,6 +75,25 @@
     async extract(file, ent) {
       if (ent._z && ZIP_NATIVE.has(ent._z.method)) return AC.Zip.extract(file, ent._z);
       return AC.SevenZip.extract(file, ent._7 || { name: ent.name, size: ent.size });
+    },
+  });
+
+  // ---- LZH / LHA ----
+  // Native for level 0/1 headers with -lh0-, -lh1-, -lh4- .. -lh7- (lzh.js, mirrors the 6502 LZH.COM); anything else (level 2
+  // headers, -lzs-, -pm2- ...) is handed to 7-Zip.
+  const LZH_NATIVE = new Set(['lh0', 'lh1', 'lh4', 'lh5', 'lh6', 'lh7']);
+  register({
+    id: 'lzh', name: 'LZH / LHA', exts: ['lzh', 'lha'],
+    sniff: (h) => h.length > 6 && h[2] === 0x2d && h[3] === 0x6c && (h[4] === 0x68 || h[4] === 0x7a) && h[6] === 0x2d,
+    async list(file) {
+      const n = AC.Lzh.list(await readBytes(file));
+      if (n.length) return n.map((e) => ({ name: e.name, size: e.size, modified: e.modified, method: 'lzh:' + e.method, _l: e }));
+      return (await AC.SevenZip.list(file)).map((x) => ({ name: x.name, size: x.size, _7: x }));
+    },
+    async extract(file, ent) {
+      if (ent._l && LZH_NATIVE.has(ent._l.method)) return AC.Lzh.extract(await readBytes(file), ent._l);
+      if (ent._l) return AC.SevenZip.extract(file, { name: ent.name, size: ent.size });
+      return AC.SevenZip.extract(file, ent._7);
     },
   });
 
