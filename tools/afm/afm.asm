@@ -35,6 +35,8 @@ PC1     = 40
 PW      = 24
 CLRW    = 80
 TW      = 80
+DS      = $0400
+PROPORG = $5700
 SP      = $CC
         .else
 SH      = 0
@@ -42,22 +44,24 @@ PC1     = 20
 PW      = 5
 CLRW    = 39
 TW      = 40
+DS      = 0
+PROPORG = $5200
         .endif
 
 MAXE    = 120
 PANE0   = $5C00+SH
 PANE1   = $6400+SH
 MARKS   = $6C00+SH
-LINE    = $5100+SH
-FSPEC   = $5140+SH
-FSPEC2  = $5180+SH
-INBUF   = $51C0+SH
+LINE    = $5100+SH+DS
+FSPEC   = $5140+SH+DS
+FSPEC2  = $5180+SH+DS
+INBUF   = $51C0+SH+DS
 IOBUF   = $5800+SH
 VROWS   = 18
 MAXLV   = 6
 SDLSTL  = $0230
-DLB     = $5000+SH
-RULE    = $5030+SH
+DLB     = $5000+SH+DS
+RULE    = $5030+SH+DS
 VBUF    = $7500+SH
 
 ; editor / viewer
@@ -667,34 +671,13 @@ pr_tok: jsr msgrow
         jsr putfs
         jmp main
 pr_nt:
-        jsr msgrow
         lda bsing
         beq pr_multi
-        lda bcu
-        ldx act
-        jsr mkspec
-        lda tdir
-        beq pr_f
-        jsr putsi
-        .byte 'FOLDER ',0
-        jmp pr_sz
-pr_f:   jsr putsi
-        .byte 'FILE ',0
-pr_sz:  lda tsec
-        sta pvl
-        lda tsec+1
-        sta pvh
-        jsr putd16
-        jsr putsi
-        .byte ' SECTORS',0
-        lda tlk
-        beq pr_nlk
-        jsr putsi
-        .byte ' LOCKED',0
-pr_nlk: jsr rowprompt
-        jsr putfs
+        jsr propscr
+        jsr drawui
         jmp main
 pr_multi:
+        jsr msgrow
         lda bn
         sta pvl
         lda #0
@@ -5025,3 +5008,257 @@ ld_fin: ldx #$10
         beq ld_dos
         jsr ld_run
 ld_dos: jmp (DOSVEC)
+
+; props routines live in the free gap above the data buffers
+        org PROPORG
+; ---------- single item properties screen ----------
+propscr:
+        lda #125
+        jsr putraw
+        jsr putsi
+        .byte ' ATARICRAFT AFM - PROPERTIES',$9B,$9B,'NAME:  ',0
+        jsr prnm
+        ldx act
+        lda bcu
+        jsr entp
+        ldy #0
+        lda (ZP),y
+        cmp #'*'
+        bne pp_nl
+        jsr putsi
+        .byte '  (LOCKED)',0
+pp_nl:  jsr putsi
+        .byte $9B,'PATH:  ',0
+        lda bcu
+        ldx act
+        jsr mkspec
+        jsr putfs
+        jsr putsi
+        .byte $9B,'KIND:  ',0
+        lda tdir
+        beq pp_k1
+        jsr putsi
+        .byte 'FOLDER',0
+        jmp pp_k2
+pp_k1:  jsr putsi
+        .byte 'FILE',0
+pp_k2:  jsr putsi
+        .byte $9B,'SIZE:  ',0
+        lda tsec
+        sta pvl
+        lda tsec+1
+        sta pvh
+        jsr putd16
+        jsr putsi
+        .byte ' SECTORS',$9B,0
+        lda tdir
+        bne pp_nd
+        jsr getdate
+        bcc pp_nd
+        jsr putsi
+        .byte 'DOS:   ',0
+        ldy #12
+pp_d1:  lda IOBUF,y
+        cmp #' '
+        bne pp_d2
+        iny
+        bne pp_d1
+pp_d2:  lda IOBUF,y
+        cmp #$9B
+        beq pp_d3
+        jsr putc
+        iny
+        bne pp_d2
+pp_d3:  lda #$9B
+        jsr putc
+pp_nd:  jsr getlong
+        bcc pp_nol
+        jsr putsi
+        .byte 'LONG:  ',0
+        lda #13
+        sta ppy
+        jsr ppfld
+        jsr putsi
+        .byte $9B,'ADDED: ',0
+        jsr ppfld
+        jsr putsi
+        .byte $9B,'BYTES: ',0
+        jsr ppfld
+        jsr putsi
+        .byte $9B,'FROM:  ',0
+        jsr ppfld
+        lda #$9B
+        jsr putc
+pp_nol: jsr putsi
+        .byte $9B,'PRESS ANY KEY',0
+        jmp getkey
+
+ppfld:  ldy ppy
+pf_l:   lda IOBUF,y
+        cmp #$9B
+        beq pf_r
+        iny
+        cmp #'|'
+        beq pf_r
+        jsr putc
+        jmp pf_l
+pf_r:   sty ppy
+        rts
+ppy:    .byte 0
+
+; build the dotted name (padded to 12) in pnm and print it
+prnm:   ldx act
+        lda bcu
+        jsr entp
+        ldy #11
+        lda #' '
+pn_c:   sta pnm,y
+        dey
+        bpl pn_c
+        ldx #0
+        ldy #2
+pn_a:   lda (ZP),y
+        cmp #' '
+        beq pn_b
+        sta pnm,x
+        inx
+        iny
+        cpy #10
+        bcc pn_a
+pn_b:   ldy #10
+        lda (ZP),y
+        cmp #' '
+        beq pn_z
+        lda #'.'
+        sta pnm,x
+        inx
+pn_e:   lda (ZP),y
+        cmp #' '
+        beq pn_z
+        sta pnm,x
+        inx
+        iny
+        cpy #13
+        bcc pn_e
+pn_z:   stx pnl
+        ldy #0
+pn_p:   cpy pnl
+        bcs pn_r
+        lda pnm,y
+        jsr putc
+        iny
+        bne pn_p
+pn_r:   rts
+
+rdrec:  ldx #$10
+        lda #5
+        sta ICCOM,x
+        lda #<IOBUF
+        sta ICBAL,x
+        lda #>IOBUF
+        sta ICBAH,x
+        lda #127
+        sta ICBLL,x
+        lda #0
+        sta ICBLH,x
+        jmp CIOV
+
+; SpartaDOS-style dir record (open aux2=128) for the selected file; carry set if found, record in IOBUF
+getdate:
+        lda bcu
+        ldx act
+        jsr mkspec
+        jsr usef1
+        ldx #$10
+        lda #3
+        sta ICCOM,x
+        lda spl
+        sta ICBAL,x
+        lda sph
+        sta ICBAH,x
+        lda #6
+        sta ICAX1,x
+        lda #128
+        sta ICAX2,x
+        jsr CIOV
+        bmi gd_no
+gd_l:   jsr rdrec
+        bmi gd_end
+        ldx act
+        lda bcu
+        jsr entp
+        ldx #0
+gd_c1:  txa
+        clc
+        adc #2
+        tay
+        lda (ZP),y
+        cmp IOBUF,x
+        bne gd_l
+        inx
+        cpx #8
+        bcc gd_c1
+        ldx #9
+gd_c2:  txa
+        tay
+        iny
+        lda (ZP),y
+        cmp IOBUF,x
+        bne gd_l
+        inx
+        cpx #12
+        bcc gd_c2
+        ldx #$10
+        jsr closeF
+        sec
+        rts
+gd_end: ldx #$10
+        jsr closeF
+gd_no:  clc
+        rts
+
+; find the LONGNAME.TXT record for pnm in the pane's folder; carry set if found, record in IOBUF
+getlong:
+        ldx act
+        jsr mkdrvspec
+        ldx #0
+gl_s:   lda FSPEC,x
+        cmp #'*'
+        beq gl_f
+        inx
+        bne gl_s
+gl_f:   ldy #0
+gl_c:   lda lnm,y
+        sta FSPEC,x
+        inx
+        iny
+        cpy #13
+        bcc gl_c
+        jsr usef1
+        ldx #$10
+        lda #4
+        jsr openF
+        bmi gl_no
+gl_l:   jsr rdrec
+        bmi gl_end
+        ldy #11
+gl_m:   lda IOBUF,y
+        cmp pnm,y
+        bne gl_l
+        dey
+        bpl gl_m
+        lda IOBUF+12
+        cmp #'|'
+        bne gl_l
+        ldx #$10
+        jsr closeF
+        sec
+        rts
+gl_end: ldx #$10
+        jsr closeF
+gl_no:  clc
+        rts
+lnm:    .byte 'LONGNAME.TXT',$9B
+pnm:    .ds 12
+pnl:    .byte 0
+

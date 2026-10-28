@@ -13,7 +13,7 @@ Two-pane 6502 file manager for DOS 2.0/2.5, MyDOS and SpartaDOS X. Load `AFM.COM
 | L U F X | lock, unlock, format, clear disk/folder |
 | M K B | mkdir, rmdir, bulk mkdir (A-Z, 0-9 or both) |
 | T A | tag file, tag all / clear |
-| P | properties (tagged files too) |
+| P | properties: full screen with name, path, kind, size, the DOS date/time and byte size (SpartaDOS X / BW-DOS), plus long name, added date, bytes and source from LONGNAME.TXT; tagged files give a one-line summary |
 | / N | find name, find next |
 | V | view file (H toggles hex dump) |
 | E | edit text file (up to ~16 KB) |
