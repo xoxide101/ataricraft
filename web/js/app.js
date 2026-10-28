@@ -1103,7 +1103,7 @@
     return out;
   };
   const syncDats = () => { const n = Object.keys(DATCRC).length; if (n) $('medtitles').textContent += ` · ${n} DAT CRCs`; };
-  const sysFromName = (n) => n.split('/').pop().replace(/\.[^.]+$/, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^NoIntro\s*-\s*/i, '').replace(/^Atari\s*-\s*8-bit Family$/i, 'Atari 8-bit').trim();
+  const sysFromName = (n) => n.split('/').pop().replace(/\.[^.]+$/, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/^NoIntro\s*-\s*/i, '').replace(/^Atari\s*-\s*8-bit Family$/i, 'Atari 8-bit').replace(/^Atari\s*-\s*/i, 'Atari ').trim();
   const dropDat = (name) => { DATIDX = DATIDX.filter((e) => e.d !== name); };
   const saveDats = () => idbSet('datCrc', DATCRC).then(() => idbSet('datSys', DATSYS)).then(() => idbSet('datIdx', DATIDX));
   async function loadDats(files) {
