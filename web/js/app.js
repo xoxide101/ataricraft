@@ -902,6 +902,16 @@
   let DATIDX = [];
   const sqz = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
   const subseq = (a, b) => { let i = 0; for (let j = 0; j < b.length && i < a.length; j++) if (a[i] === b[j]) i++; return i === a.length; };
+  // How well a squashed title st fits a file name: fq = squashed name, ftoks = its words. Prefix 50, abbreviation (letters in order) up to 25, word hits up to 40.
+  const nameScore = (st, fq, ftoks) => {
+    let n = 0;
+    if (fq.length >= 3) {
+      if (st.startsWith(fq)) n += 50;
+      else if (fq[0] === st[0] && subseq(fq, st)) n += 25 * Math.min(1, (fq.length / Math.max(st.length, 1)) * 2);
+    }
+    if (ftoks.length) n += (40 * ftoks.filter((w) => st.includes(w)).length) / ftoks.length;
+    return n;
+  };
   // Manual match: search the DAT index and give a file the chosen title (remembered by path). Returns a section for the Properties box.
   function findInDats(f, onPick) {
     const sec = document.createElement('div');
@@ -965,13 +975,7 @@
           if (!words.every((w) => hay.includes(w))) continue;
           s += 20 + (tl.startsWith(words[0]) ? 10 : 0) - Math.min(tl.length, 100) * 0.05;
         } else if (!(flt.crc || flt.sha1 || flt.size || flt.sys || flt.dat)) {
-          const st = sqz(e.t);
-          let n = 0;
-          if (fq.length >= 3) {
-            if (st.startsWith(fq)) n += 50;
-            else if (fq[0] === st[0] && subseq(fq, st)) n += 25 * Math.min(1, (fq.length / Math.max(st.length, 1)) * 2);
-          }
-          if (ftoks.length) n += (40 * ftoks.filter((w) => st.includes(w)).length) / ftoks.length;
+          const n = nameScore(sqz(e.t), fq, ftoks);
           if (!exact && n < 20) continue;
           s += n;
         }
@@ -990,7 +994,7 @@
         l2.textContent = [e.r, e.z ? `${e.z.toLocaleString()} B${sameSize ? ' (same size)' : ''}` : '', `CRC ${e.c.toUpperCase()}`, e.h ? `SHA-1 ${e.h.slice(0, 12)}…` : '', [e.y, e.p].filter(Boolean).join(' '), e.d].filter(Boolean).join('  ·  ');
         d.title = [e.t, e.r, `CRC ${e.c}`, e.h && `SHA-1 ${e.h}`, e.d].filter(Boolean).join('\n');
         d.onmouseenter = () => (d.style.background = '#2a2f39'); d.onmouseleave = () => (d.style.background = '');
-        d.onclick = () => pick(e.t + (!/\(\d{4}/.test(e.t) && (e.y || e.p) ? ` (${[e.y, e.p].filter(Boolean).join(', ')})` : '') + tagOf(e.s));
+        d.onclick = () => pick(datTitle(e));
         d.append(l1, l2); res.append(d);
       });
     };
@@ -1039,7 +1043,7 @@
       if (sm) sys = /^\d{4}$/.test(sm[1]) ? `Atari ${sm[1]}` : 'Atari 8-bit';
       for (const ln of text.split(/\r?\n/)) {
         const m = /^\s*([0-9A-Fa-f]{8})\s+[0-9A-Fa-f]{4}\s+[0-9A-Fa-f]{4}\s+(\d+)\s+(.+?)\s*$/.exec(ln);
-        if (m) put(m[1], m[3].replace(/\.[A-Za-z0-9]{1,4}$/, '').replace(/_/g, ' '), { z: m[2], r: m[3] });
+        if (m && !/^ZZZ[_ ]UNK/i.test(m[3])) put(m[1], m[3].replace(/\.[A-Za-z0-9]{1,4}$/, '').replace(/_/g, ' '), { z: m[2], r: m[3] });
       }
     } else if (text.includes('\u00AC')) {
       for (const ln of text.split(/\r?\n/)) { const f = ln.split('\u00AC'); if (f.length > 7) put(f[6], f[4] || f[3], { z: f[7], r: f[5] }); }
@@ -1048,7 +1052,7 @@
       let m;
       while ((m = re.exec(text))) {
         const b = m[1];
-        const d = /\bdescription\s+"([^"]*)"/.exec(b) || /\bname\s+"([^"]*)"/.exec(b);
+        const d = /\bdescription\s+"([^"]*)"/.exec(b) || /\bcomment\s+"([^"]*)"/.exec(b) || /\bname\s+"([^"]*)"/.exec(b);
         const rr = /\bcrc\s+([0-9a-fA-F]{1,8})/g;
         let r;
         while ((r = rr.exec(b))) {
@@ -1653,40 +1657,118 @@
       await idbSet('catalogDb', bytes);
     } catch (err) { log('import failed: ' + err.message); }
   };  $('medfolder').onchange = (e) => scanMedia([...e.target.files]);
-  // Cartridges with no title from names/MAME: identify by CRC32 of the ROM (header-less, or after a 16-byte CART header).
-  async function identifyCarts(list) {
+  const CRCOF = new WeakMap();
+  // Name taken from the file name when nothing identifies it; the extension or size hints at the system.
+  const guessTitle = (f) => {
+    const base = f.name.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
+    if (!base) return '';
+    const nice = base === base.toUpperCase() ? base.toLowerCase().replace(/\b[a-z]/g, (m) => m.toUpperCase()) : base;
+    const ext = (f.name.match(/\.([^.\/]+)$/) || [])[1] || '', size = f.size || (f.file && f.file.size) || 0;
+    const hint = { a26: '2600', a52: '5200', a78: '7800' }[ext.toLowerCase()] || (/^(bin|rom)$/i.test(ext) && (size === 2048 || size === 4096) ? '2600?' : '');
+    return nice + (hint ? ` [${hint}]` : '');
+  };
+  const isGuess = (f) => !f.title || f.title === guessTitle(f);
+  const CART_RE = /\.(bin|rom|car|a26|a52|a78)$/i;
+  // Cartridges with no title from names/MAME: identify by CRC32 of the ROM (header-less, or after a 16-byte CART header). redo = also retry ones that only have a filename-derived title.
+  async function identifyCarts(list, redo) {
     const db = AC.CART_DB || {};
-    const todo = list.filter((f) => f.kind === 'cart' && !f.title && f.file && f.file.size <= 1048576 && /\.(bin|rom|car|a26|a52|a78)$/i.test(f.name));
-    if (!todo.length) return;
+    const todo = list.filter((f) => f.kind === 'cart' && (redo ? isGuess(f) && !MANUAL[f.name] : !f.title) && f.file && f.file.size <= 1048576 && CART_RE.test(f.name));
+    if (!todo.length) return 0;
     let hit = 0;
     for (let i = 0; i < todo.length; i++) {
       try {
         const b = new Uint8Array(await todo[i].file.arrayBuffer());
         const hdr = b.length > 16 && b[0] === 67 && b[1] === 65 && b[2] === 82 && b[3] === 84;
         const c1 = crc32(b), c2 = hdr ? crc32(b.subarray(16)) : null;
+        CRCOF.set(todo[i], { size: b.length, crcs: [c1, c2].filter(Boolean) });
         const e = db[c1] || (c2 && db[c2]);
         const nm = (AC.CART_NAMES || {})[c1] || (c2 && (AC.CART_NAMES || {})[c2]);
         const dt = DATCRC[c1] || (c2 && DATCRC[c2]);
-        const tag = (s) => (s ? ` [${s.replace(/^Atari\s+(8-bit|8bit)/i, '800').replace(/^Atari\s+/i, '')}]` : '');
-        if (dt) { todo[i].title = dt + tag(DATSYS[c1] || (c2 && DATSYS[c2])); hit++; }
-        else if (e) { todo[i].title = e[2] + (e[3] ? ` (${e[3]})` : '') + tag('Atari 8-bit'); hit++; }
-        else if (nm) { todo[i].title = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : '') + tag('Atari 8-bit'); hit++; }
+        let nt = '';
+        if (dt) nt = dt + tagOf(DATSYS[c1] || (c2 && DATSYS[c2]));
+        else if (e) nt = e[2] + (e[3] ? ` (${e[3]})` : '') + tagOf('Atari 8-bit');
+        else if (nm) nt = nm[0] + (nm[1] || nm[2] ? ` (${[nm[2], nm[1]].filter(Boolean).join(', ')})` : '') + tagOf('Atari 8-bit');
+        if (nt) { todo[i].title = nt; hit++; }
       } catch (err) { /* unreadable file: leave untitled */ }
       if (i % 50 === 49) { log(`identifying cartridges by CRC: ${i + 1}/${todo.length}`); await new Promise((r) => setTimeout(r, 0)); }
     }
     let guess = 0;
     for (const f of todo) {
       if (f.title) continue;
-      const base = f.name.split('/').pop().replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
-      if (!base) continue;
-      const nice = base === base.toUpperCase() ? base.toLowerCase().replace(/\b[a-z]/g, (m) => m.toUpperCase()) : base;
-      const ext = (f.name.match(/\.([^.\/]+)$/) || [])[1] || '';
-      const hint = { a26: '2600', a52: '5200', a78: '7800' }[ext.toLowerCase()] || (/^(bin|rom)$/i.test(ext) && (f.file.size === 2048 || f.file.size === 4096) ? '2600?' : '');
-      f.title = nice + (hint ? ` [${hint}]` : '');
-      guess++;
+      const g = guessTitle(f);
+      if (g) { f.title = g; guess++; }
     }
     log(`cartridges identified by CRC: ${hit} of ${todo.length} untitled; ${guess} named from filename`);
+    return hit;
   }
+  const datTitle = (e) => e.t + (!/\(\d{4}/.test(e.t) && (e.y || e.p) ? ` (${[e.y, e.p].filter(Boolean).join(', ')})` : '') + tagOf(e.s);
+  // Exact CRC identification is the primary signal; this only offers same-size name matches, for the user to confirm.
+  function reviewMatches(props) {
+    const bk = document.createElement('div');
+    bk.style.cssText = 'position:fixed;inset:0;z-index:10000;background:#0008;display:flex;align-items:center;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#1b1e24;border:1px solid #4a5160;border-radius:10px;padding:14px 16px;width:min(94vw,760px);max-height:86vh;display:flex;flex-direction:column;box-shadow:0 8px 32px #000b;font-size:13px';
+    const h = document.createElement('div'); h.textContent = `Name suggestions (${props.length})`; h.style.cssText = 'font-weight:600;color:#e8a33d';
+    const sub = document.createElement('div'); sub.className = 'dim'; sub.style.cssText = 'font-size:11px;margin:2px 0 6px';
+    sub.textContent = 'No exact CRC match for these, but a DAT entry of the same size has a very similar name. Untick any that are wrong.';
+    const list = document.createElement('div'); list.style.cssText = 'overflow:auto;flex:1;min-height:80px';
+    const rows = props.map((p) => {
+      const l = document.createElement('label'); l.style.cssText = 'display:flex;gap:8px;align-items:flex-start;padding:3px 0;border-bottom:1px solid #2c313b;cursor:pointer';
+      const c = document.createElement('input'); c.type = 'checkbox'; c.checked = true; c.style.marginTop = '3px';
+      const d = document.createElement('div'); d.style.wordBreak = 'break-all';
+      const a = document.createElement('div'); a.textContent = `${p.f.name.split('/').pop()}  →  ${datTitle(p.e)}`;
+      const b = document.createElement('div'); b.className = 'dim'; b.style.fontSize = '11px'; b.textContent = [p.e.r, `${p.e.z.toLocaleString()} B`, `CRC ${p.e.c.toUpperCase()}`, p.e.d].filter(Boolean).join('  ·  ');
+      d.append(a, b); l.append(c, d); list.append(l);
+      return [c, p];
+    });
+    const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:8px';
+    const ap = document.createElement('button'), cl = document.createElement('button');
+    ap.textContent = 'Apply checked'; cl.textContent = 'Cancel';
+    const done = () => bk.remove();
+    cl.onclick = done; bk.onclick = (e) => { if (e.target === bk) done(); };
+    ap.onclick = async () => {
+      let n = 0;
+      for (const [c, p] of rows) if (c.checked) { p.f.title = datTitle(p.e); MANUAL[p.f.name] = p.f.title; n++; }
+      try { await idbSet('manualTitles', MANUAL); } catch (e) { /* kept for this visit */ }
+      done(); renderMed();
+      if (n && !MED.fromDb) await saveCatalog();
+      log(`Auto-match: ${n} name suggestions applied`);
+    };
+    bar.append(cl, ap); box.append(h, sub, list, bar); bk.append(box); document.body.append(bk);
+  }
+  async function autoMatch() {
+    const cand = MED.files.filter((f) => f.kind === 'cart' && CART_RE.test(f.name) && isGuess(f) && !MANUAL[f.name]);
+    const have = cand.filter((f) => f.file);
+    if (!cand.length) { log('Auto-match: no unidentified cartridges'); return; }
+    if (!have.length) { log(`Auto-match: ${cand.length} unidentified, but the files aren't loaded: rescan the folder first`); return; }
+    if (!Object.keys(DATCRC).length) { log('Auto-match: load DAT files with 🏷 first'); return; }
+    const btn = $('medmatch'); btn.disabled = true;
+    try {
+      const hit = await identifyCarts(have, true);
+      const bySize = new Map();
+      DATIDX.forEach((e) => { if (e.z) { if (!bySize.has(e.z)) bySize.set(e.z, []); bySize.get(e.z).push(e); } });
+      const sqc = new Map(), props = [];
+      for (const f of have.filter(isGuess)) {
+        const info = CRCOF.get(f);
+        const base = f.name.split('/').pop().replace(/\.[^.]+$/, '');
+        const fq = sqz(base), ftoks = base.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+        if (!info || fq.length < 5) continue;
+        const best = new Map();
+        for (const e of [...(bySize.get(info.size) || []), ...(bySize.get(info.size - 16) || [])]) {
+          let st = sqc.get(e); if (st === undefined) { st = sqz(e.t); sqc.set(e, st); }
+          const n = nameScore(st, fq, ftoks);
+          const k = `${e.t}|${e.s}`;
+          if (n >= 25 && (!best.has(k) || best.get(k)[0] < n)) best.set(k, [n, e]);
+        }
+        const arr = [...best.values()].sort((a, b) => b[0] - a[0]);
+        if (arr.length && (arr.length === 1 || arr[0][0] - arr[1][0] >= 10)) props.push({ f, e: arr[0][1], n: arr[0][0] });
+      }
+      if (hit) { renderMed(); if (!MED.fromDb) await saveCatalog(); }
+      log(`Auto-match: ${hit} identified by CRC, ${props.length} name suggestions to review${cand.length > have.length ? `, ${cand.length - have.length} skipped (files not loaded)` : ''}`);
+      if (props.length) reviewMatches(props);
+    } finally { btn.disabled = false; }
+  }
+  $('medmatch').onclick = autoMatch;
   async function scanMedia(all, persist, root) {
     const xmls = all.filter((f) => /(^|[\\/])a(800|5200)[^\\/]*\.xml$/i.test(f.webkitRelativePath || f.name));
     if (xmls.length) await loadTitlesXml(xmls);
