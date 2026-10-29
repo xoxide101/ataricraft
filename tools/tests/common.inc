@@ -50,11 +50,18 @@ eput    tax
         jmp CIOV
 
 ; X = column, Y = row -> sp
-locate  lda SAVMSC
+locate  lda sbase+1
+        bne lcb
+        lda SAVMSC
         sta sp
         lda SAVMSC+1
         sta sp+1
-        cpy #0
+        jmp lca
+lcb     lda sbase
+        sta sp
+        lda sbase+1
+        sta sp+1
+lca     cpy #0
         beq loc2
 loc1    clc
         lda sp
@@ -151,6 +158,39 @@ pd5     inx
         rts
 declo   .byte <10000,<1000,<100,<10,1
 dechi   .byte >10000,>1000,>100,>10,0
+
+sbase   .word 0         ; custom text buffer (cscreen.inc); 0 = the OS screen
+
+; CPU type -> A: 0 = 6502, 1 = 65C02, 2 = 65C816. Call before any NMI-driven screen is set up.
+cpudet  sei
+        lda #0
+        sta NMIEN
+        sed
+        lda #$99
+        clc
+        adc #1
+        cld
+        beq cd1
+        lda #$40
+        sta NMIEN
+        cli
+        lda #0
+        rts
+cd1     lda #$FF
+        .byte $EB       ; XBA on a 65C816, NOP on a 65C02
+        lda #0
+        .byte $EB
+        pha
+        lda #$40
+        sta NMIEN
+        cli
+        pla
+        cmp #$FF
+        beq cd2
+        lda #1
+        rts
+cd2     lda #2
+        rts
 
 ; wait for the next frame
 vsync   lda RTCLOK+2
