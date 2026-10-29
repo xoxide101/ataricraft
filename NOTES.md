@@ -93,6 +93,7 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
   - MEMTEST: RAM size and total, bank map, burn-in (B), aliasing check.
 - Verified on both cores: MEMTEST (128K only since the colour rewrite), CPUTEST on all Altirra CPU options and Atari800, SNDTEST mono and stereo on both, KEYTEST, GFXTEST all screens. Audio itself not heard; stereo left/right separation not listened to. Joystick/paddle rows not exercised by real input.
 - Archive tools (ARC ZIP DCM LZH ALF DISC ZOO ARJ): Q at the prompt quits (blank line too).
+- Archive tools checked on real archives in the 6502 simulator (out/t_bulk.cjs, byte-compared with the host decoders): ARC 21/25 (the 4 failures are damaged archives, even stored members fail CRC, host decoder agrees), LZH 11/11, ALF 19/19, ZIP 29/39 (the other 10 need a deflate window over 14K: WINDOW TOO SMALL), ZOO and ARJ 9/12 samples (ARJ methods 1-3 beyond the 22K ring). Fixed: ZIP/ZOO/ARJ/LZH members whose long names shorten to the same 8.3 name silently overwrote each other; lib/uniq.asm now renames the later one (base cut to 6 chars plus a 2-digit member number, e.g. K_RAZY02.ROM).
 - Packaged: added to ACDOS.PAK (manifest tool entries + strip list), to the Ready-to-run disks (except the 90K DOS 2.5 disk, which is full), and a new 'Hardware tests (DOS 2.0S boot).atr'.
 
 ## Menu disk builder

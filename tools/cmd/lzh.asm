@@ -1639,6 +1639,7 @@ members:
 mem:    jsr rdlh
         jcs mem_d
         jsr conv83
+        jsr uniq
         ldx #3
 mem_s:  lda HDR+7,x
         sta s0,x
@@ -1731,6 +1732,8 @@ c8:     lda ec
 c9:     lda #0
         sta NAMEB,x
         rts
+
+        icl 'lib\uniq.asm'
 
 ; A = char -> upper case letter, digit or underscore
 fixc:   jsr toupper
