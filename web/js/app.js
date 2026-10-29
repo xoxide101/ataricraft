@@ -3678,6 +3678,9 @@
   // (a real ROM ignores those writes). Run each cart in a hidden machine and see whether its RAM copy survives.
   let cartTester = null;
   async function cartSurvives(item) {
+    try { return await cartSurvives1(item); } catch (e) { cartTester = null; return false; }
+  }
+  async function cartSurvives1(item) {
     const os = chosenOs();
     if (!os) return null;
     const d = item.data, rom = d[0] === 0x43 && d[1] === 0x41 && d[2] === 0x52 && d[3] === 0x54 ? d.subarray(16) : d;
@@ -3693,14 +3696,24 @@
   // The "slot" entries post 'ACRT' + size at $06F0 once loaded: insert the real cartridge and cold start.
   function cartRequest() {
     const m = S.emu.mem();
-    if (m[0x6f0] !== 0x41 || m[0x6f1] !== 0x43 || m[0x6f2] !== 0x52 || m[0x6f3] !== 0x54 || (m[0x6f4] !== 8 && m[0x6f4] !== 16)) return;
-    const kb = m[0x6f4], rom = m.slice(0xc000 - kb * 1024, 0xc000), car = new Uint8Array(16 + rom.length);
-    m[0x6f0] = 0;
-    car.set([0x43, 0x41, 0x52, 0x54, 0, 0, 0, kb === 8 ? 1 : 2], 0);
-    let sum = 0; for (const b of rom) sum += b;
-    car.set([sum >>> 24, (sum >> 16) & 255, (sum >> 8) & 255, sum & 255], 8);
-    car.set(rom, 16);
-    log('menu disk: this cartridge needs a real cartridge slot, inserting it and restarting');
+    if (m[0x6f0] !== 0x41 || m[0x6f1] !== 0x43 || m[0x6f2] !== 0x52 || m[0x6f3] !== 0x54) return;
+    let car;
+    if (m[0x6f4] === 0) {
+      const sec = m[0x6f5] | (m[0x6f6] << 8), len = m[0x6f7] | (m[0x6f8] << 8) | (m[0x6f9] << 16);
+      const img = (S.emu.diskPaths && S.emu.diskPaths[1] && S.emu.readDisk(1)) || (S.disks[1] && S.disks[1].bytes);
+      if (!img || len < 16 || 16 + (sec - 1) * 128 + len > img.length) return;
+      m[0x6f0] = 0;
+      car = img.slice(16 + (sec - 1) * 128, 16 + (sec - 1) * 128 + len);
+    } else {
+      if (m[0x6f4] !== 8 && m[0x6f4] !== 16) return;
+      const kb = m[0x6f4], rom = m.slice(0xc000 - kb * 1024, 0xc000);
+      car = new Uint8Array(16 + rom.length);
+      m[0x6f0] = 0;
+      car.set([0x43, 0x41, 0x52, 0x54, 0, 0, 0, kb === 8 ? 1 : 2], 0);
+      let sum = 0; for (const b of rom) sum += b;
+      car.set([sum >>> 24, (sum >> 16) & 255, (sum >> 8) & 255, sum & 255], 8);
+      car.set(rom, 16);
+    }    log('menu disk: this cartridge needs a real cartridge slot, inserting it and restarting');
     insertCart(1, { name: 'menu-disk cartridge.car' }, car).then(() => S.emu.coldStart());
   }
   // Several XEX/COM files or cartridges -> one boot disk with a 1-9, 0, A-Z menu (no DOS).
@@ -3712,6 +3725,8 @@
       for (const [i, it] of items.entries()) {
         if (it.data[0] === 0xff && it.data[1] === 0xff) continue;
         let plain = true;
+        const isCar = it.data[0] === 0x43 && it.data[1] === 0x41 && it.data[2] === 0x52 && it.data[3] === 0x54;
+        if (isCar && it.data[7] !== 1 && it.data[7] !== 2) { it.needsSlot = true; slotted.push(it.name); continue; }
         try { AC.DiskConv.cartToXex(it.data); } catch (e) { throw new Error(`${it.name}: ${e.message}`); }
         log(`menu disk: testing ${it.name} (${i + 1}/${items.length})`);
         const ok = await cartSurvives(it);
