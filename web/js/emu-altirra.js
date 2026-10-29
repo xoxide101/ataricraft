@@ -77,6 +77,8 @@ window.AC = window.AC || {};
       if (opt.basic) fwFile('basic', opt.basic);
       else o('basic_firmware', 'internal');
       o('sio_patch', opt.fastSio === false ? 'disabled' : 'enabled');
+      o('stereo_pokey', opt.stereo ? 'enabled' : 'disabled');
+      o('cpu', opt.cpu || '6502c');
       for (const [k, v] of Object.entries(opt.altirra || {})) o(k, v);
       if (!a.boot()) throw new Error('Altirra boot failed');
       try { m.FS.mkdir('/host'); } catch (e) { /* exists */ }
@@ -185,22 +187,26 @@ window.AC = window.AC || {};
       if (this.onAudio) this.pushAudio();
     }
 
-    // Altirra gives stereo 48 kHz; the page's audio path takes mono 44.1 kHz, so mix down and resample.
+    // Altirra gives stereo 48 kHz; resample to 44.1 kHz, keeping both channels when stereo POKEY is on and mixing down otherwise.
     pushAudio() {
       const a = this.aw, n = a.afr();
       if (!n) return;
       const src = new Int16Array(this.m.HEAPU8.buffer, this.aw.audio(), n * 2);
-      const step = 48000 / 44100;
+      const step = 48000 / 44100, st = !!this.opt.stereo;
       const out = [];
       let pos = this.resPos;
       while (pos < n - 1) {
         const i = pos | 0, fr = pos - i;
-        const s0 = (src[i * 2] + src[i * 2 + 1]) * 0.5, s1 = (src[i * 2 + 2] + src[i * 2 + 3]) * 0.5;
-        out.push(s0 + (s1 - s0) * fr);
+        if (st) {
+          for (let c = 0; c < 2; c++) out.push(src[i * 2 + c] + (src[i * 2 + 2 + c] - src[i * 2 + c]) * fr);
+        } else {
+          const s0 = (src[i * 2] + src[i * 2 + 1]) * 0.5, s1 = (src[i * 2 + 2] + src[i * 2 + 3]) * 0.5;
+          out.push(s0 + (s1 - s0) * fr);
+        }
         pos += step;
       }
       this.resPos = pos - n;
-      this.onAudio(Int16Array.from(out));
+      this.onAudio(Int16Array.from(out), st ? 2 : 1);
     }
 
     screenHash() {
