@@ -1,8 +1,14 @@
-; MEMTEST.COM - sizes main RAM, detects extended (banked) RAM on XL/XE, and pattern-tests every distinct 16K bank
-; through the $4000-$7FFF window. Program stays below $4000.
+; MEMTEST.COM - sizes main RAM, finds extended (banked) RAM on XL/XE and tests every distinct 16K bank through the
+; $4000-$7FFF window with four phases (address pattern, fixed 55/AA, random data, random read/write) plus a
+; cross-bank check. Colour block map: grey idle, yellow testing, green good, red bad. B at the prompt = burn-in
+; (repeat passes until a key is pressed). Program and screen buffers stay below $4000.
         org $2000
         jmp start
         icl 'common.inc'
+NA      = 7
+NMAP    = 4
+NB      = 6
+        icl 'cscreen.inc'
 
 ptr     = $90           ; low byte kept at 0
 idx     = $92
@@ -20,260 +26,291 @@ selft   = $9F
 vf      = $A0
 romram  = $A1
 kb      = $A2
-sigerr  = $A4
 fbk     = $A5
+rs      = $A6
+rs0     = $A7
+pstart  = $A8
+pend    = $A9
+burn    = $AA
+passn   = $AB
+stopf   = $AD
+cell    = $AE
+hz      = $AF
+tacc    = $B0
+lastt   = $B1
+ss      = $B2
+mm      = $B3
+hh      = $B4
+bad     = $B5
+pv      = $B6
+cputype = $BA
+pv2     = $BB
+scnt    = $BC
+lastss  = $BE
+patx    = $BF
+phase   = $C0
+ncell   = $C1
+bx      = $C2
+aborted = $C3
 
-start   lda #$7D
-        jsr eput
-        lda #1
+start   lda #1
         sta CRSINH
+        ldx #$33
         lda #0
-        sta ptr
-        sta errs
-        sta errs+1
-        sta ff
-        sta nrep
-        sta xl
-        sta romram
+zl      sta $90,x
+        dex
+        bpl zl
+        jsr cpudet
+        sta cputype
         lda PORTB
         sta pbsave
+        lda PALNTS
+        and #$0E
+        beq ispal
+        lda #60
+        bne sethz
+ispal   lda #50
+sethz   sta hz
+        jsr gs_init
+        lda RTCLOK+2
+        sta lastt
         ldx #0
-        ldy #0
-        jsr locate
-        lda #<s_title
-        ldy #>s_title
-        jsr puts
+        lda #1
+        jsr bar
+        loc 0,0
+        say s_title
 
         ; OS-visible RAM
         lda RAMTOP
         lsr
         lsr
         sta kb
-        lda #0
-        sta kb+1
-        ldx #0
-        ldy #2
-        jsr locate
-        lda #<s_main
-        ldy #>s_main
-        jsr puts
-        lda kb
-        sta v16
-        lda kb+1
-        sta v16+1
-        jsr putdec
-        lda #<s_kbr
-        ldy #>s_kbr
-        jsr puts
-        lda RAMTOP
-        jsr puthex
-
-        ; XL/XE detection: the 400/800 has nothing readable in $C000-$C00F
         jsr detxl
-        ldx #0
-        ldy #3
-        jsr locate
+        loc 0,1
         lda xl
         bne isxl
-        lda #<s_800
-        ldy #>s_800
-        jsr puts
+        say s_800
         lda #$FF
         sta pbsave
         jmp noxl
-isxl    lda #<s_xl
-        ldy #>s_xl
-        jsr puts
-
-        ; RAM under the OS ROM
+isxl    say s_xl
         jsr romtest
-        ldx #0
-        ldy #4
-        jsr locate
-        lda #<s_rom
-        ldy #>s_rom
-        jsr puts
+noxl    loc 0,2
+        say s_main
+        lda kb
+        sta v16
+        lda #0
+        sta v16+1
+        jsr putdec
+        say s_kbr
+        lda RAMTOP
+        jsr puthex
+        lda xl
+        beq nx1
+        say s_rom
         lda romram
         beq rom_no
-        lda #<s_yes
-        ldy #>s_yes
-        jsr puts
+        say s_yes
         lda RAMTOP
         cmp #$C0
-        bcc noxl
+        bcc nx1
         lda #64
         sta kb
-        jmp noxl
-rom_no  lda #<s_no
-        ldy #>s_no
-        jsr puts
-
-noxl    lda RAMTOP
+        jmp nx1
+rom_no  say s_no
+nx1     lda RAMTOP
         cmp #$40
-        bcs big
-        jmp finish
-big     lda xl
+        bcc nobanks
+        lda xl
         beq nobanks
         jsr findbanks
-nobanks ldx #0
-        ldy #5
-        jsr locate
-        lda #<s_ext
-        ldy #>s_ext
-        jsr puts
+nobanks loc 0,3
+        say s_ext
         lda nrep
+        beq noext
         sta v16
         lda #0
         sta v16+1
         jsr putdec
-        lda #<s_banks
-        ldy #>s_banks
-        jsr puts
-
-        ; test main RAM then each distinct bank
-        lda #0
-        sta bankno
-        lda pbsave
-        sta curpb
-        ldx #0
-        ldy #7
-        jsr locate
-        lda #<s_tm
-        ldy #>s_tm
-        jsr puts
-        jsr testbank
-        ldx #0
-tloop   cpx nrep
-        beq tdone
-        stx t4
-        inx
-        stx bankno
-        dex
-        lda reps,x
-        sta curpb
-        ldx #0
-        ldy #8
-        jsr locate
-        lda #<s_tb
-        ldy #>s_tb
-        jsr puts
-        lda bankno
-        sta v16
-        lda #0
-        sta v16+1
+        say s_banks
+        jsr nrep16
         jsr putdec
-        lda #<s_of
-        ldy #>s_of
-        jsr puts
-        lda nrep
-        sta v16
-        lda #0
-        sta v16+1
-        jsr putdec
-        lda #<s_sp
-        ldy #>s_sp
-        jsr puts
-        jsr testbank
-        ldx t4
-        inx
-        bne tloop
-tdone   ldx #0
-        ldy #8
-        jsr locate
-        lda #<s_blank
-        ldy #>s_blank
-        jsr puts
-
-finish  ldx #0
-        ldy #10
-        jsr locate
-        lda #<s_err
-        ldy #>s_err
-        jsr puts
-        lda errs
-        sta v16
-        lda errs+1
-        sta v16+1
-        jsr putdec
-        lda errs
-        ora errs+1
-        beq nofirst
-        ldx #0
-        ldy #11
-        jsr locate
-        lda #<s_first
-        ldy #>s_first
-        jsr puts
-        lda fbk
-        sta v16
-        lda #0
-        sta v16+1
-        jsr putdec
-        lda #<s_at
-        ldy #>s_at
-        jsr puts
-        lda fad+1
-        jsr puthex
-        lda fad
-        jsr puthex
-        lda #<s_pb
-        ldy #>s_pb
-        jsr puts
-        lda fpb
-        jsr puthex
-nofirst ldx #0
-        ldy #13
-        jsr locate
-        lda #<s_total
-        ldy #>s_total
+        say s_kb
+        jmp ext9
+noext   say s_none
+ext9    loc 0,4
+        say s_cpu
+        ldx cputype
+        lda cpnl,x
+        ldy cpnh,x
         jsr puts
         ; total = main + 16 * banks
-        lda nrep
-        sta v16
-        lda #0
-        sta v16+1
-        asl v16
-        rol v16+1
-        asl v16
-        rol v16+1
-        asl v16
-        rol v16+1
-        asl v16
-        rol v16+1
+        jsr nrep16
         clc
         lda v16
         adc kb
         sta v16
         lda v16+1
-        adc kb+1
+        adc #0
         sta v16+1
+        loc 0,5
+        say s_total
         jsr putdec
-        lda #<s_kb
-        ldy #>s_kb
-        jsr puts
+        say s_kb
+        ldx #5
+        lda #2
+        jsr bar
+        loc 0,6
+        say s_leg
+        ; block map, one cell for main RAM plus one per bank
+        lda nrep
+        clc
+        adc #1
+        sta ncell
         ldx #0
-        ldy #14
-        jsr locate
+mp1     lda #1
+        sta cst,x
+        jsr mapset
+        inx
+        cpx ncell
+        bne mp1
+        loc 0,12
+        say s_ask
+        jsr getkey
+        cmp #$15
+        bne single
+        lda #1
+        sta burn
+single  ldx #12
+        jsr clrrow
+        lda burn
+        beq nostop
+        loc 0,12
+        say s_stop
+nostop  loc 22,9
+        say s_el
+        ldx #11
+        lda #3
+        jsr bar
+        loc 0,11
+        say s_run
+        lda RTCLOK+2
+        sta lastt
+
+passlp  inc passn
+        bne pn1
+        inc passn+1
+pn1     ldx #0
+rc1     lda cst,x
+        cmp #2
+        beq rc2
+        lda #1
+        sta cst,x
+rc2     lda cst,x
+        jsr mapset
+        inx
+        cpx ncell
+        bne rc1
+        ; main RAM
+        lda #0
+        sta cell
+        sta bankno
+        lda pbsave
+        sta curpb
+        lda #$40
+        sta pstart
+        lda RAMTOP
+        sec
+        sbc #5
+        cmp #$80
+        bcc m1
+        lda #$80
+m1      sta pend
+        cmp #$41
+        bcc skipm
+        jsr testcell
+skipm   lda #$80
+        sta pend
+        ldx #0
+bl1     cpx nrep
+        beq bldone
+        stx bx
+        inx
+        stx cell
+        stx bankno
+        dex
+        lda reps,x
+        sta curpb
+        jsr testcell
+        lda stopf
+        bne abort
+        ldx bx
+        inx
+        jmp bl1
+bldone  jsr xbank
+        lda burn
+        beq endrun
+        lda stopf
+        bne endrun
+        jmp passlp
+abort   lda #1
+        sta aborted
+endrun  jsr showerr
         lda errs
         ora errs+1
-        beq pass
-        lda #<s_fail
-        ldy #>s_fail
-        jmp pr
-pass    lda #<s_pass
-        ldy #>s_pass
-pr      jsr puts
-        ldx #0
-        ldy #16
-        jsr locate
-        lda #<s_any
-        ldy #>s_any
-        jsr puts
+        bne rfail
+        ldx #11
+        lda #2
+        jsr bar
+        ldx #11
+        jsr clrrow
+        loc 0,11
+        say s_pass
+        jmp rdone
+rfail   ldx #11
+        lda #4
+        jsr bar
+        ldx #11
+        jsr clrrow
+        loc 0,11
+        say s_fail
+rdone   lda errs
+        ora errs+1
+        bne rd2
+        ldx #10
+        jsr clrrow
+        loc 0,10
+        say s_done
+        lda passn
+        sec
+        sbc aborted
+        sta v16
+        lda #0
+        sta v16+1
+        jsr putdec
+        say s_ps
+rd2     ldx #12
+        jsr clrrow
+        loc 0,12
+        say s_any
         jsr getkey
         lda #0
         sta CRSINH
-        lda #$7D
-        jmp eput
+        jmp gs_off
+
+nrep16  lda nrep
+        sta v16
+        lda #0
+        sta v16+1
+        asl v16
+        rol v16+1
+        asl v16
+        rol v16+1
+        asl v16
+        rol v16+1
+        asl v16
+        rol v16+1
+        rts
 
 ; XL/XE has ROM at $C000: a non-constant 16-byte window means ROM present
 detxl   lda #0
@@ -316,7 +353,7 @@ rt1     lda t2
         sta $C000
         lda pbsave
         sta PORTB
-        lda #$40
+        lda #$C0
         sta NMIEN
         cli
         rts
@@ -403,22 +440,216 @@ fb3     inx
         sta $4000
 fb_end  lda pbsave
         sta PORTB
-        lda #$40
+        lda #$C0
         sta NMIEN
         cli
         rts
 
-; fill and verify $4000-$7FFF with a pattern and its complement
-testbank
-        sei
+; test one cell (main RAM or a bank): cell, curpb, bankno, pstart, pend set by the caller
+testcell
+        ldx cell
         lda #0
-        sta NMIEN
+        jsr mapset
+        ldx #8
+        jsr clrrow
+        loc 0,8
+        lda cell
+        bne tc_b
+        say s_tm
+        jmp tc_go
+tc_b    say s_tb
+        lda cell
+        sta v16
+        lda #0
+        sta v16+1
+        jsr putdec
+        say s_of
+        lda nrep
+        sta v16
+        lda #0
+        sta v16+1
+        jsr putdec
+tc_go   lda #0
+        sta bad
         lda curpb
-        sta PORTB
         and #$80
         eor #$80
         sta selft
-        lda bankno
+        lda RANDOM
+        ora #1
+        sta rs0
+        lda curpb
+        sta PORTB
+        lda #0
+        sta phase
+        jsr showphase
+        jsr dopass4
+        inc phase
+        jsr showphase
+        jsr dopat
+        inc phase
+        jsr showphase
+        jsr dorand
+        inc phase
+        jsr showphase
+        jsr dostress
+        lda pbsave
+        sta PORTB
+        ldx cell
+        lda bad
+        beq tc_ok
+        lda #2
+        sta cst,x
+        bne tc_dr
+tc_ok   lda cst,x
+        cmp #2
+        beq tc_dr
+        lda #3
+        sta cst,x
+tc_dr   lda cst,x
+        jsr mapset
+        jmp showerr
+
+showphase
+        ldx #7
+        jsr clrrow
+        loc 0,7
+        say s_passn
+        lda passn
+        sta v16
+        lda #0
+        sta v16+1
+        jsr putdec
+        say s_ph
+        lda phase
+        clc
+        adc #'1'
+        jsr putc
+        lda #'/'
+        jsr putc
+        lda #'5'
+        jsr putc
+        lda #' '
+        jsr putc
+        ldx phase
+        lda pnl,x
+        ldy pnh,x
+        jmp puts
+
+showerr loc 0,9
+        say s_err
+        lda errs
+        sta v16
+        lda errs+1
+        sta v16+1
+        jsr putdec
+        say s_sp6
+        lda ff
+        beq se9
+        ldx #10
+        lda #4
+        jsr bar
+        ldx #10
+        jsr clrrow
+        loc 0,10
+        say s_first
+        lda fbk
+        sta v16
+        lda #0
+        sta v16+1
+        jsr putdec
+        say s_at
+        lda fad+1
+        jsr puthex
+        lda fad
+        jsr puthex
+        say s_pb
+        lda fpb
+        jsr puthex
+se9     rts
+
+; seconds clock from RTCLOK, a key stops a burn-in, redraws the elapsed time when it changes
+tick    lda #0
+        sta ATRACT
+        lda burn
+        beq tk0
+        lda CH
+        cmp #$FF
+        beq tk0
+        lda #1
+        sta stopf
+tk0     lda RTCLOK+2
+        tax
+        sec
+        sbc lastt
+        stx lastt
+        clc
+        adc tacc
+        sta tacc
+tk1     lda tacc
+        cmp hz
+        bcc tk9
+        sec
+        sbc hz
+        sta tacc
+        inc ss
+        lda ss
+        cmp #60
+        bcc tk1
+        lda #0
+        sta ss
+        inc mm
+        lda mm
+        cmp #60
+        bcc tk1
+        lda #0
+        sta mm
+        inc hh
+        jmp tk1
+tk9     lda ss
+        cmp lastss
+        beq tk10
+        sta lastss
+        loc 31,9
+        lda hh
+        jsr put2
+        lda #':'
+        jsr putc
+        lda mm
+        jsr put2
+        lda #':'
+        jsr putc
+        lda ss
+        jsr put2
+tk10    rts
+
+put2    ldx #'0'
+p2a     cmp #10
+        bcc p2b
+        sbc #10
+        inx
+        bne p2a
+p2b     pha
+        txa
+        jsr putc
+        pla
+        clc
+        adc #'0'
+        jmp putc
+
+; page is skipped (A=1) when it falls in the self-test ROM window
+chkpg   lda selft
+        beq cp_ok
+        lda ptr+1
+        and #$F8
+        cmp #$50
+        bne cp_ok
+        lda #1
+        rts
+cp_ok   lda #0
+        rts
+
+dopass4 lda bankno
         sta idx
         lda #0
         sta vf
@@ -432,23 +663,14 @@ testbank
         sta vf
         jsr dopass
         inc vf
-        jsr dopass
-        lda pbsave
-        sta PORTB
-        lda #$40
-        sta NMIEN
-        cli
-        rts
+        jmp dopass
 
-dopass  lda #$40
+dopass  lda pstart
         sta ptr+1
-pgl     lda selft
-        beq pgok
-        lda ptr+1
-        and #$F8
-        cmp #$50
-        beq pgskip
-pgok    ldy #0
+pgl     jsr tick
+        jsr chkpg
+        bne pgskip
+        ldy #0
 bl      tya
         eor ptr+1
         eor idx
@@ -464,14 +686,218 @@ nx      iny
         bne bl
 pgskip  inc ptr+1
         lda ptr+1
-        cmp #$80
+        cmp pend
         bne pgl
         rts
+
+dopat   lda #$55
+        sta pv
+        jsr dofc
+        jsr dovc
+        lda #$AA
+        sta pv
+        jsr dofc
+        jmp dovc
+
+dofc    lda pstart
+        sta ptr+1
+dfc1    jsr tick
+        jsr chkpg
+        bne dfc3
+        ldy #0
+        lda pv
+dfc2    sta (ptr),y
+        iny
+        bne dfc2
+dfc3    inc ptr+1
+        lda ptr+1
+        cmp pend
+        bne dfc1
+        rts
+
+dovc    lda pstart
+        sta ptr+1
+dvc1    jsr tick
+        jsr chkpg
+        bne dvc3
+        ldy #0
+dvc2    lda (ptr),y
+        cmp pv
+        beq dvc2a
+        jsr err
+dvc2a   iny
+        bne dvc2
+dvc3    inc ptr+1
+        lda ptr+1
+        cmp pend
+        bne dvc1
+        rts
+
+; pseudo-random fill and verify (seed from POKEY RANDOM, x = 5x+$3D, mixed with the page number)
+dorand  lda rs0
+        sta rs
+        lda pstart
+        sta ptr+1
+drf1    jsr tick
+        jsr chkpg
+        bne drf3
+        lda rs
+        eor ptr+1
+        sta rs
+        ldy #0
+drf2    lda rs
+        asl
+        asl
+        clc
+        adc rs
+        clc
+        adc #$3D
+        sta rs
+        sta (ptr),y
+        iny
+        bne drf2
+drf3    inc ptr+1
+        lda ptr+1
+        cmp pend
+        bne drf1
+        lda rs0
+        sta rs
+        lda pstart
+        sta ptr+1
+drv1    jsr tick
+        jsr chkpg
+        bne drv3
+        lda rs
+        eor ptr+1
+        sta rs
+        ldy #0
+drv2    lda rs
+        asl
+        asl
+        clc
+        adc rs
+        clc
+        adc #$3D
+        sta rs
+        cmp (ptr),y
+        beq drv2a
+        jsr err
+drv2a   iny
+        bne drv2
+drv3    inc ptr+1
+        lda ptr+1
+        cmp pend
+        bne drv1
+        rts
+
+; random address, random value: write, read back, write the complement, read back
+dostress
+        lda #0
+        sta scnt
+        sta scnt+1
+st1     lda RANDOM
+        and #$3F
+        clc
+        adc pstart
+        cmp pend
+        bcs st1
+        sta ptr+1
+        jsr chkpg
+        bne st1
+        lda RANDOM
+        tay
+        lda RANDOM
+        sta pv
+        sta (ptr),y
+        lda (ptr),y
+        cmp pv
+        beq st2
+        jsr err
+st2     lda pv
+        eor #$FF
+        sta pv2
+        sta (ptr),y
+        lda (ptr),y
+        cmp pv2
+        beq st3
+        jsr err
+st3     inc scnt
+        bne st1
+        jsr tick
+        inc scnt+1
+        lda scnt+1
+        cmp #$20
+        bne st1
+        rts
+
+; every bank gets a signature; then all signatures must still be intact (catches aliased banks)
+xbank   lda nrep
+        bne xb0
+        rts
+xb0     lda #4
+        sta phase
+        jsr showphase
+        ldx #8
+        jsr clrrow
+        loc 0,8
+        say s_xb
+        ldx #0
+xb1     lda reps,x
+        sta PORTB
+        txa
+        clc
+        adc #$5A
+        sta $4010
+        sta $6123
+        sta $7FF0
+        inx
+        cpx nrep
+        bne xb1
+        ldx #0
+xb2     lda reps,x
+        sta PORTB
+        sta curpb
+        txa
+        clc
+        adc #$5A
+        sta pv
+        inx
+        stx bankno
+        dex
+        lda $4010
+        cmp pv
+        bne xbe
+        lda $6123
+        cmp pv
+        bne xbe
+        lda $7FF0
+        cmp pv
+        bne xbe
+xb3     inx
+        cpx nrep
+        bne xb2
+        lda pbsave
+        sta PORTB
+        rts
+xbe     lda pbsave
+        sta PORTB
+        lda #$40
+        sta ptr+1
+        ldy #0
+        jsr err
+        inx
+        lda #2
+        sta cst,x
+        jsr mapset
+        dex
+        jmp xb3
 
 err     inc errs
         bne e1
         inc errs+1
-e1      lda ff
+e1      lda #1
+        sta bad
+        lda ff
         bne e2
         lda #1
         sta ff
@@ -484,29 +910,53 @@ e1      lda ff
         sta fbk
 e2      rts
 
+cpnl    .byte <s_c0,<s_c1,<s_c2
+cpnh    .byte >s_c0,>s_c1,>s_c2
+pnl     .byte <s_p0,<s_p1,<s_p2,<s_p3,<s_p4
+pnh     .byte >s_p0,>s_p1,>s_p2,>s_p3,>s_p4
+cst     .ds 80
 reps    .ds 64
-s_title .byte 'MEMTEST  RAM size and bank test',0
+s_title .byte 'MEMTEST  RAM size, bank map and burn-in',0
 s_main  .byte 'OS-visible RAM: ',0
 s_kbr   .byte ' KB  RAMTOP $',0
 s_800   .byte 'Machine: 400/800 class (no OS ROM at $C000)',0
 s_xl    .byte 'Machine: XL/XE class (OS ROM at $C000)',0
-s_rom   .byte 'RAM under OS ROM: ',0
-s_yes   .byte 'yes (64K)',0
+s_rom   .byte '  ROM-RAM: ',0
+s_yes   .byte 'yes',0
 s_no    .byte 'no',0
 s_ext   .byte 'Extended banks: ',0
-s_banks .byte ' x 16K distinct',0
-s_tm    .byte 'Testing main RAM $4000-$7FFF...',0
-s_tb    .byte 'Testing bank ',0
-s_of    .byte ' of ',0
-s_sp    .byte '        ',0
-s_blank .byte '                                        ',0
-s_err   .byte 'Errors: ',0
-s_first .byte 'First error: bank ',0
-s_at    .byte ' addr $',0
-s_pb    .byte ' PORTB $',0
+s_banks .byte ' x 16K = ',0
+s_none  .byte 'none',0
+s_cpu   .byte 'CPU: ',0
+s_c0    .byte '6502 / 6502C (NMOS)',0
+s_c1    .byte '65C02 (CMOS)',0
+s_c2    .byte '65C816 (16-bit)',0
 s_total .byte 'TOTAL RAM: ',0
 s_kb    .byte ' KB',0
+s_leg   .byte 'grey=idle yellow=test green=ok red=bad',0
+s_ask   .byte 'B = burn-in loop, other key = one pass',0
+s_stop  .byte 'Burn-in running: press any key to stop',0
+s_el    .byte 'Elapsed:',0
+s_run   .byte 'RUNNING',0
 s_pass  .byte 'RESULT: PASS',0
 s_fail  .byte 'RESULT: FAIL',0
-s_any   .byte 'Press any key.',0
+s_done  .byte 'Passes completed: ',0
+s_ps    .byte ' (0 errors)',0
+s_passn .byte 'Pass ',0
+s_ph    .byte '  Phase ',0
+s_p0    .byte 'Address pattern',0
+s_p1    .byte 'Fixed 55/AA',0
+s_p2    .byte 'Random data',0
+s_p3    .byte 'Random read/write',0
+s_p4    .byte 'Cross-bank check',0
+s_tm    .byte 'Testing main RAM $4000-$7FFF',0
+s_tb    .byte 'Testing bank ',0
+s_of    .byte ' of ',0
+s_xb    .byte 'Checking all banks for aliasing',0
+s_err   .byte 'Errors: ',0
+s_sp6   .byte '      ',0
+s_first .byte 'First error: bank ',0
+s_at    .byte ' $',0
+s_pb    .byte ' PB $',0
+s_any   .byte 'Press any key to exit.',0
         run start
