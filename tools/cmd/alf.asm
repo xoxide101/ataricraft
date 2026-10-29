@@ -85,7 +85,7 @@ start:  lda #0
         jsr putsi
         .byte 'ALF 0.1  ATARI LZ/DZ ALF LISTER/EXTRACTOR',EOL
         .byte 'L ALF | X ALF [DEST] [MEMBER] | T ALF',EOL
-        .byte 'BLANK LINE EXITS',EOL,0
+        .byte 'Q QUITS',EOL,0
 prompt: tsx
         stx psp
         jsr putnl
@@ -100,6 +100,8 @@ prompt: tsx
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         ldx #0
         cmp #'L'
         beq pm

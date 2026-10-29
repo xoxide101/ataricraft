@@ -157,7 +157,7 @@ start:  jsr crctab
         jsr putsi
         .byte 'ZOO 0.1  ZOO LISTER/EXTRACTOR',EOL
         .byte 'L ZOO | X ZOO [DEST] [MEMBER] | T ZOO',EOL
-        .byte 'STORED, LZW, LZH. BLANK LINE EXITS',EOL,0
+        .byte 'STORED, LZW, LZH. Q QUITS',EOL,0
 prompt: tsx
         stx psp
         jsr putnl
@@ -172,6 +172,8 @@ prompt: tsx
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         ldx #0
         cmp #'L'
         beq pm

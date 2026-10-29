@@ -86,7 +86,7 @@ start:  jsr crctab
         jsr putsi
         .byte 'ARC 0.1  SEA ARC LISTER/EXTRACTOR',EOL
         .byte 'L ARC | X ARC [DEST] [MEMBER] | T ARC',EOL
-        .byte 'BLANK LINE EXITS',EOL,0
+        .byte 'Q QUITS',EOL,0
 prompt: jsr putnl
         jsr putsi
         .byte 'ARC>',0
@@ -99,6 +99,8 @@ prompt: jsr putnl
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         ldx #0
         cmp #'L'
         beq pm

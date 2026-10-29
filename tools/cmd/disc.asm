@@ -235,7 +235,7 @@ start:  lda #9
         .byte 'DISC 0.1  READ-ONLY D9:/D10: (ISO 9660, UDF, FAT)',EOL
         .byte 'D [PATH] | T PATH | X PATH [DEST] | I',EOL
         .byte 'PREFIX D9: OR D10: PICKS THE DRIVE',EOL
-        .byte 'BLANK LINE EXITS',EOL,0
+        .byte 'Q QUITS',EOL,0
 prompt: tsx
         stx psp
         jsr putnl
@@ -250,6 +250,8 @@ prompt: tsx
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         ldx #0
         cmp #'D'
         beq pm

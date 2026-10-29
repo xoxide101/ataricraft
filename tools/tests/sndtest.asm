@@ -389,13 +389,34 @@ pkok    lda #1
 ; stereo present when POKEY #2 runs its own random generator while #1 is held in init mode
 detect  lda #0
         sta stereo
+        lda #0
+        ldx #3
+        jsr dprobe
+        lda t3
+        bne dB
+        lda t4
+        bne dyes
+dB      lda #3
+        ldx #0
+        jsr dprobe
+        lda t4
+        bne dend
+        lda t3
+        beq dend
+dyes    lda #1
+        sta stereo
+dend    lda #3
+        sta SKCTL
+        sta R_SKCTL
+        rts
+
+; A = SKCTL for POKEY 1, X = SKCTL for POKEY 2; counts random changes in t3 (P1) and t4 (P2)
+dprobe  sei
+        sta SKCTL
+        stx R_SKCTL
+        lda #0
         sta t3
         sta t4
-        sei
-        lda #0
-        sta SKCTL
-        lda #3
-        sta R_SKCTL
         ldx #30
 dl1     dex
         bne dl1
@@ -418,17 +439,8 @@ dl4     lda R_RANDOM
 dl5     inx
         cpx #8
         bne dl2
-        lda #3
-        sta SKCTL
         cli
-        lda t3
-        bne dend
-        lda t4
-        beq dend
-        lda #1
-        sta stereo
-dend    rts
-
+        rts
 shownow ldx #11
         jsr clrrow
         loc 0,11

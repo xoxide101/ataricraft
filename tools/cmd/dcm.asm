@@ -50,7 +50,7 @@ AH      = VARS+32       ; ATR header (16 bytes)
 start:  jsr putsi
         .byte 'DCM 0.1  DISKCOMM TO ATR',EOL
         .byte 'X FILE.DCM [DEST.ATR]',EOL
-        .byte 'BLANK LINE EXITS',EOL,0
+        .byte 'Q QUITS',EOL,0
 prompt: tsx
         stx psp
         jsr putnl
@@ -65,6 +65,8 @@ prompt: tsx
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         cmp #'X'
         beq pm
         jsr putsi
