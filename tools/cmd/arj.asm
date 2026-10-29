@@ -1297,6 +1297,7 @@ mm_s:   lda HDR+12,x
         bne mm_k
 mm_f:   jsr getname
         jsr conv83
+        jsr uniq
         lda NAMEB
         beq mm_k
         jsr domember
@@ -1401,6 +1402,8 @@ c8:     lda ec
 c9:     lda #0
         sta NAMEB,x
         rts
+
+        icl 'lib\uniq.asm'
 
 ; A = char -> upper case letter, digit or underscore
 fixc:   jsr toupper
