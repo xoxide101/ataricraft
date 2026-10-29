@@ -103,6 +103,7 @@ gi3     sta TXTBUF,x
         lda #$87
         jsr dlrep
         .endif
+        .if NB>0
         lda #$C2
         sta DLIST,y
         iny
@@ -115,6 +116,7 @@ gi3     sta TXTBUF,x
         ldx #NB-1
         lda #$82
         jsr dlrep
+        .endif
         lda #$41
         sta DLIST,y
         iny
@@ -297,3 +299,27 @@ oscol   .ds 5
 tc1     .ds NDLI
 tc2     .ds NDLI
 tch     .ds NDLI
+
+; A = 0 PASS, 1 FAIL, 2 n/a, 3 skipped ; X = text row. Writes the label at column 33 and colours the row.
+setres  sta r_v
+        stx r_row
+        ldy r_row
+        ldx #33
+        jsr locate
+        ldx r_v
+        lda rtl,x
+        ldy rth,x
+        jsr puts
+        ldx r_v
+        lda rsch,x
+        ldx r_row
+        jmp bar
+rtl     .byte <rs_pass,<rs_fail,<rs_na,<rs_skip
+rth     .byte >rs_pass,>rs_fail,>rs_na,>rs_skip
+rsch    .byte 2,4,0,0
+rs_pass .byte 'PASS',0
+rs_fail .byte 'FAIL',0
+rs_na   .byte 'n/a ',0
+rs_skip .byte 'skip',0
+r_v     .byte 0
+r_row   .byte 0
