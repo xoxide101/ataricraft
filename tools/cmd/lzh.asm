@@ -215,7 +215,7 @@ start:  jsr crctab
         jsr putsi
         .byte 'LZH 0.1  LHA/LZH LISTER/EXTRACTOR',EOL
         .byte 'L LZH | X LZH [DEST] [MEMBER] | T LZH',EOL
-        .byte 'LH0 LH1 LH4 LH5 ONLY. BLANK LINE EXITS',EOL,0
+        .byte 'LH0 LH1 LH4 LH5 ONLY. Q QUITS',EOL,0
 prompt: tsx
         stx psp
         jsr putnl
@@ -230,6 +230,8 @@ prompt: tsx
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         ldx #0
         cmp #'L'
         beq pm

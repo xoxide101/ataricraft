@@ -1,6 +1,6 @@
 {
   "format": "ACDOSPK1",
-  "strip": ["AFM.COM", "AFM80.COM", "CMD.COM", "ARC.COM", "ZIP.COM", "DCM.COM", "LZH.COM", "ALF.COM", "DISC.COM", "ZOO.COM", "ARJ.COM", "KEYTEST.COM", "SNDTEST.COM", "GFXTEST.COM", "MEMTEST.COM", "TOOLS.TXT", "HELLO.COM", "AUTORUN.SYS"],
+  "strip": ["AFM.COM", "AFM80.COM", "CMD.COM", "ARC.COM", "ZIP.COM", "DCM.COM", "LZH.COM", "ALF.COM", "DISC.COM", "ZOO.COM", "ARJ.COM", "KEYTEST.COM", "SNDTEST.COM", "GFXTEST.COM", "MEMTEST.COM", "CPUTEST.COM", "TOOLS.TXT", "HELLO.COM", "AUTORUN.SYS"],
   "entries": [
     { "kind": "dos", "id": "dos2.0s", "family": "dos2", "name": "Atari DOS 2.0S", "version": "2.0S", "size": "90K SD", "file": "web/library/craftapps/DOS images/d20.atr", "strip": true },
     { "kind": "dos", "id": "dos2.5", "family": "dos2", "name": "Atari DOS 2.5", "version": "2.5", "size": "130K ED", "file": "web/library/craftapps/DOS images/d25.atr" },
@@ -44,7 +44,8 @@
     { "kind": "tool", "id": "keytest", "name": "KEYTEST", "version": "", "dest": "KEYTEST.COM", "file": "tools/tests/bin/KEYTEST.COM" },
     { "kind": "tool", "id": "sndtest", "name": "SNDTEST", "version": "", "dest": "SNDTEST.COM", "file": "tools/tests/bin/SNDTEST.COM" },
     { "kind": "tool", "id": "gfxtest", "name": "GFXTEST", "version": "", "dest": "GFXTEST.COM", "file": "tools/tests/bin/GFXTEST.COM" },
-    { "kind": "tool", "id": "memtest", "name": "MEMTEST", "version": "", "dest": "MEMTEST.COM", "file": "tools/tests/bin/MEMTEST.COM" }
+    { "kind": "tool", "id": "memtest", "name": "MEMTEST", "version": "", "dest": "MEMTEST.COM", "file": "tools/tests/bin/MEMTEST.COM" },
+    { "kind": "tool", "id": "cputest", "name": "CPUTEST", "version": "", "dest": "CPUTEST.COM", "file": "tools/tests/bin/CPUTEST.COM" }
   ],
   "extraDir": "tools/dospack/extra"
 }

@@ -130,7 +130,7 @@ start:  jsr crctab
         jsr putsi
         .byte 'ARJ 0.1  ARJ LISTER/EXTRACTOR',EOL
         .byte 'L ARJ | X ARJ [DEST] [MEMBER] | T ARJ',EOL
-        .byte 'STORED, METHODS 1-4. BLANK LINE EXITS',EOL,0
+        .byte 'STORED, METHODS 1-4. Q QUITS',EOL,0
 prompt: tsx
         stx psp
         jsr putnl
@@ -145,6 +145,8 @@ prompt: tsx
         jeq bye
         lda TOK
         jsr toupper
+        cmp #'Q'
+        jeq bye
         ldx #0
         cmp #'L'
         beq pm
