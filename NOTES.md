@@ -111,3 +111,6 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 - **Make ZIP**: packs the selected files into a stored ZIP on the same disk.
 - **Cartridge...** (web/js/cartool.js): reads the CART header, strips it to a raw ROM or adds one (13 common types), saves to the PC or the active disk.
 - MEMTEST detection checked at 64/320/576/1088 KB on both cores; bank colouring checked at 576 KB.
+
+## Tools 130K boot disk
+"Tools 130K (DOS 2.5 ED boot).atr" (library, not in git) is a bootable DOS 2.5 enhanced-density disk (1040 x 128 B) with AFM, AFM80, CMD, the 8 archive tools, the 5 hardware tests and READ.ME. It has no games, BASIC or productivity programs. The 90K DOS 2.5 and Hardware tests disks are full; use the 130K disk for the complete tool set. ED volumes use 10-bit sector links with a file ID (fixed in dosfs.js; they were wrongly written as 16-bit links before).
