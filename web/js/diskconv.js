@@ -309,7 +309,20 @@
   // items: [{name, data}] of Atari binaries or plain cartridges -> menu ATR. Names are shown as 16 upper-case characters.
   function menuToAtr(items) {
     if (!items.length || items.length > 36) throw new Error('a menu disk holds 1 to 36 programs');
-    items = items.map((it) => (it.data[0] === 0xff && it.data[1] === 0xff ? it : { name: it.name, needsSlot: it.needsSlot, data: (() => { try { return cartToXex(it.data, it.needsSlot); } catch (e) { throw new Error(it.name + ': ' + e.message); } })() }));
+    const isCar = (d) => d[0] === 0x43 && d[1] === 0x41 && d[2] === 0x52 && d[3] === 0x54;
+    // A CAR marked needsSlot (bank-switched or otherwise) is stored whole after the programs; its stub posts 'ACRT',0,start sector,length for Ataricraft to extract and insert.
+    const cars = [];
+    items = items.map((it) => {
+      if (it.data[0] === 0xff && it.data[1] === 0xff) return it;
+      if (it.needsSlot && isCar(it.data)) { cars.push(it.data); return { name: it.name, needsSlot: true, car: it.data, data: null }; }
+      try { return { name: it.name, needsSlot: it.needsSlot, data: cartToXex(it.data, it.needsSlot) }; } catch (e) { throw new Error(it.name + ': ' + e.message); }
+    });
+    const seg = (a, b) => [a & 255, a >> 8, b & 255, b >> 8];
+    const stubFor = (sec, len) => Uint8Array.from([0xff, 0xff, ...seg(0x600, 0x602), 0x4c, 0, 6, ...seg(0x6f0, 0x6f9), 0x41, 0x43, 0x52, 0x54, 0, sec & 255, sec >> 8, len & 255, (len >> 8) & 255, len >> 16, ...seg(0x2e0, 0x2e1), 0, 6]);
+    const stubLen = stubFor(0, 0).length;
+    let carSec = 14;
+    for (const it of items) carSec += Math.ceil((it.car ? stubLen : it.data.length) / 128);
+    for (const it of items) if (it.car) { it.carSec = carSec; carSec += Math.ceil(it.car.length / 128); it.data = stubFor(it.carSec, it.car.length); }
     const loader = new Uint8Array(768);
     for (let i = 0; i < MENU_LOADER.length; i += 2) loader[i / 2] = parseInt(MENU_LOADER.substr(i, 2), 16);
     loader[9] = items.length;
@@ -324,14 +337,14 @@
       dir[o + 18] = x.length & 255; dir[o + 19] = (x.length >> 8) & 255; dir[o + 20] = x.length >> 16;
       sec += Math.ceil(x.length / 128);
     });
-    const last = sec - 1, nsec = last <= 720 ? 720 : last <= 1040 ? 1040 : last;
+    const last = carSec - 1, nsec = last <= 720 ? 720 : last <= 1040 ? 1040 : last;
     if (nsec > 65535) throw new Error('programs too large for one disk');
     const out = new Uint8Array(16 + nsec * 128);
     out.set(atrHeader(nsec, 128));
     out.set(loader, 16);
     out.set(dir, 16 + 6 * 128);
     sec = 14;
-    for (const it of items) { out.set(it.data, 16 + (sec - 1) * 128); sec += Math.ceil(it.data.length / 128); }
+    for (const it of items) { out.set(it.data, 16 + (sec - 1) * 128); sec += Math.ceil(it.data.length / 128); if (it.car) out.set(it.car, 16 + (it.carSec - 1) * 128); }
     return out;
   }
 
