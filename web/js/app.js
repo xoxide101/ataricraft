@@ -350,15 +350,18 @@
     }
   };
   ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach((e) => window.addEventListener(e, unlockAudio, true));
-  function pushAudio(s16) {
+  function pushAudio(s16, nch = 1) {
     const c = SND.ctx;
     if (!c || !SND.on || !S.running || Math.abs(S.speed - 1) > 0.01) return;
     const t = c.currentTime;
     if (SND.next < t) SND.next = t + 0.06;
     if (SND.next > t + 0.3) return;
-    const buf = c.createBuffer(1, s16.length, 44100);
-    const ch = buf.getChannelData(0);
-    for (let i = 0; i < s16.length; i++) ch[i] = s16[i] / 32768;
+    const frames = (s16.length / nch) | 0;
+    const buf = c.createBuffer(nch, frames, 44100);
+    for (let k = 0; k < nch; k++) {
+      const ch = buf.getChannelData(k);
+      for (let i = 0; i < frames; i++) ch[i] = s16[i * nch + k] / 32768;
+    }
     const src = c.createBufferSource();
     src.buffer = buf;
     src.connect(SND.gain);
@@ -387,9 +390,16 @@
 
   S.carts = {};
   S.disks = {};
+  $('stereo').checked = localStorage.getItem('ac.stereo') === '1';
+  $('cpu').value = localStorage.getItem('ac.cpu') || '6502c';
+  const syncCpuUi = () => { $('cpu').disabled = $('core').value !== 'altirra'; };
+  $('stereo').onchange = () => { localStorage.setItem('ac.stereo', $('stereo').checked ? '1' : '0'); if (S.running) boot(); };
+  $('cpu').onchange = () => { localStorage.setItem('ac.cpu', $('cpu').value); $('cpu').blur(); if (S.running) boot(); };
   $('core').value = localStorage.getItem('ac.core') === 'altirra' ? 'altirra' : 'atari800';
+  syncCpuUi();
   $('core').onchange = () => {
     localStorage.setItem('ac.core', $('core').value);
+    syncCpuUi();
     $('core').blur();
     if (S.running) boot();
   };
@@ -401,7 +411,7 @@
     log('booting…');
     if (S.emu) { syncDisks(true); S.host = Object.assign(S.host || {}, S.emu.hostFiles()); }
     try {
-      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked,     tv: $('tv').value, host: S.host });
+      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked, stereo: $('stereo').checked, cpu: $('cpu').value, tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     RawDisk.attach(S.emu);

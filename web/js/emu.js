@@ -48,6 +48,7 @@ window.AC = window.AC || {};
         args.push('-basic_rom', '/basic.rom', opt.basicOn ? '-basic' : '-nobasic');
       }
       if (opt.fastSio === false) args.push('-nopatch');
+      if (opt.stereo) args.push('-stereo');
       if (opt.xep80) {
         m.FS.writeFile('/xep80.chr', Uint8Array.from(atob(AC.XEP80_CHR), (c) => c.charCodeAt(0)));
         args.push('-xep80', '-xep80port', '1');
@@ -133,7 +134,7 @@ window.AC = window.AC || {};
         const n = this.m._libatari800_get_sound_buffer_len() & ~1;
         if (n) {
           const p = this.m._libatari800_get_sound_buffer();
-          this.onAudio(new Int16Array(this.m.HEAPU8.slice(p, p + n).buffer));
+          this.onAudio(new Int16Array(this.m.HEAPU8.slice(p, p + n).buffer), this.audioCh || 1);
         }
       }
     }
