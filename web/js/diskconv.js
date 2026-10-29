@@ -219,6 +219,44 @@
     return b.slice(16 + 384, 16 + 384 + len);
   }
 
+  // VAPI ATX (copy-protected disk image) -> plain ATR. Keeps the sector data only; weak bits, timing and
+  // duplicate/phantom sectors are lost, so protected disks will not boot from the result.
+  function atxToAtr(b) {
+    if (b.length < 48 || String.fromCharCode(b[0], b[1], b[2], b[3]) !== 'AT8X') throw new Error('not an ATX image');
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    const density = b[0x12], ss = density === 2 ? 256 : 128, spt = density === 1 ? 26 : 18;
+    const sectors = [];
+    let tp = dv.getUint32(0x1c, true);
+    while (tp + 32 <= b.length) {
+      const size = dv.getUint32(tp, true), type = dv.getUint16(tp + 4, true);
+      if (size < 32) break;
+      if (type === 0) {
+        const track = b[tp + 8], count = dv.getUint16(tp + 10, true), hs = dv.getUint32(tp + 20, true);
+        let cp = tp + hs, list = null;
+        while (cp + 8 <= tp + size) {
+          const cs = dv.getUint32(cp, true), ct = b[cp + 4];
+          if (cs < 8) break;
+          if (ct === 1) list = cp + 8;
+          cp += cs;
+        }
+        if (list !== null) for (let i = 0; i < count; i++) {
+          const e = list + i * 8, num = b[e], st = b[e + 1], off = dv.getUint32(e + 4, true);
+          if (!num || num > spt) continue;
+          const idx = track * spt + num - 1;
+          if (sectors[idx]) continue;
+          const s = new Uint8Array(ss);
+          if (!(st & 0x10) && tp + off + ss <= b.length) s.set(b.subarray(tp + off, tp + off + ss));
+          sectors[idx] = s;
+        }
+      }
+      tp += size;
+    }
+    if (!sectors.length) throw new Error('ATX: no sector data found');
+    let n = sectors.length;
+    for (let i = 0; i < n; i++) if (!sectors[i]) sectors[i] = new Uint8Array(ss);
+    return buildAtr(sectors, ss);
+  }
+
   // Identify by content (names lie): returns 'atr' | 'dcm' | 'pro' | 'xfd' | null.
   function detect(b, name) {
     if (isAtr(b)) return 'atr';
@@ -240,5 +278,5 @@
     }
   }
 
-  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, buildAtr };
+  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, atxToAtr, buildAtr };
 });
