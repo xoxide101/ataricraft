@@ -298,7 +298,7 @@
         }
       }
     }
-    const use16 = nsec > 1023;
+    const use16 = nsec > 1023 && !(ss === 128 && nsec === 1040);
     const nextOf = (s) => { const l = s.length; return use16 ? (s[l - 3] << 8) | s[l - 2] : ((s[l - 3] & 3) << 8) | s[l - 2]; };
     function chain(start) {
       const out = []; let n = start;
