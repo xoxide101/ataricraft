@@ -36,6 +36,7 @@
     if (db) db.close();
     db = new S.Database(bytes || undefined);
     db.run(SCHEMA);
+    if (window.AC && AC.ChipDB) AC.ChipDB.seed(db);
     return db;
   }
 
