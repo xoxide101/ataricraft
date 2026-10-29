@@ -262,7 +262,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="unarc" title="List and unpack the archive (ZIP, ARC, LZH, ALF, 7z...) selected on this disk into the other pane's disk, or into this folder">Unpack archive</button><button data-a="mkzip" title="Pack the selected files into a ZIP on this disk">Make ZIP</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="unarc" title="List and unpack the archive (ZIP, ARC, LZH, ALF, 7z...) selected on this disk into the other pane's disk, or into this folder">Unpack archive</button><button data-a="cart" title="Cartridge images: see the CAR header, strip it to a raw ROM, or add one. Uses the selected file, or asks for one from the PC">Cartridge…</button><button data-a="mkzip" title="Pack the selected files into a ZIP on this disk">Make ZIP</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div><div class="wpt" title="Where you are"></div>`;
@@ -416,7 +416,7 @@
   // ---------- actions ----------
   function act(a) {
     const A = W.panes[W.active];
-    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, mkzip: doMkZip,
+    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, cart: doCart, mkzip: doMkZip,
       all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
@@ -538,6 +538,27 @@
     const nm = await ask('Make ZIP', 'Name of the ZIP file', 'FILES.ZIP'); if (!nm) return;
     const z = host().zip(files);
     await addFiles(W.active, [new File([new Blob(z)], /\.zip$/i.test(nm) ? nm : nm + '.zip')], p.dir);
+  }  // Cartridge image tool: inspect, strip the CART header, add one, and move the result to the PC or onto the active disk.
+  async function doCart() {
+    const p = W.panes[W.active], r = rec(p), CT = AC.CartTool;
+    let name, bytes; const sel = r && C.entries(r.m).find((x) => selItems(p).includes(x.path) && !x.dir && /\.(car|rom|bin)$/i.test(x.name));
+    if (sel) { name = sel.long || sel.name; bytes = r.m.vol.read(sel.raw); }
+    else {
+      const f = await new Promise((ok) => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.car,.rom,.bin'; i.onchange = () => ok(i.files[0]); i.oncancel = () => ok(null); i.click(); });
+      if (!f) return; name = f.name; bytes = new Uint8Array(await f.arrayBuffer());
+    }
+    const c = CT.parse(bytes), base = name.replace(/\.[^.]*$/, '');
+    const tys = CT.typesFor(c.kb), pre = c.hasHeader ? c.type : c.known ? c.known.type : tys.length ? tys[0][0] : 1;
+    const body = document.createElement('div');
+    body.innerHTML = `<div><b>${esc(name)}</b></div><div class="dim" style="margin:6px 0">${c.hasHeader ? 'CART header: type ' + c.type + (c.checksumOk ? ', checksum OK' : ', <span class="bad">checksum does not match</span>') : 'Raw ROM, no header'} · ${c.kb} KB · CRC32 ${c.crc}${c.known ? ' · known: ' + esc(c.known.name) : ''}</div>
+      <div class="dim">Cartridge type for a header</div><select class="ct" style="width:100%">${CT.TYPES.map((t) => `<option value="${t[0]}" ${t[0] === pre ? 'selected' : ''}>${t[0]} - ${esc(t[2])}</option>`).join('')}</select>
+      <div style="margin-top:8px"><label><input type="radio" name="wca" value="rom" checked> Strip header → raw ROM</label><br><label><input type="radio" name="wca" value="car"> Add / replace header → .CAR</label></div>
+      <div style="margin-top:8px"><label><input type="radio" name="wcd" value="pc" checked> Save to the PC</label><br><label><input type="radio" name="wcd" value="disk" ${r ? '' : 'disabled'}> Put on the disk in the active pane</label></div>`;
+    const v = await dlg('Cartridge', body, [{ label: 'Cancel', value: null }, { label: 'Go', pri: true, value: () => ({ a: body.querySelector('[name=wca]:checked').value, d: body.querySelector('[name=wcd]:checked').value, t: +body.querySelector('.ct').value }) }]);
+    if (!v) return;
+    const out = v.a === 'rom' ? c.rom.slice() : CT.addHeader(c.rom, v.t), on = base + (v.a === 'rom' ? '.ROM' : '.CAR');
+    if (v.d === 'pc') { host().save(on, out); return log(`Saved ${on} (${out.length} bytes).`); }
+    await addFiles(W.active, [new File([out], on)], p.dir);
   }  function doImport() {
     const btn = W.el.querySelector('.wtb [data-a="import"]'); if (!btn) return importPC();
     const old = W.el.querySelector('.wimpmenu'); if (old) { old.remove(); return; }
