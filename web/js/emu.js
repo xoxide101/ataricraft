@@ -59,6 +59,7 @@ window.AC = window.AC || {};
       args.forEach((a, i) => dv.setUint32(argv + i * 4, emu.cstr(a), true));
       const ok = m._libatari800_init(args.length, argv);
       if (!ok) throw new Error('libatari800_init failed');
+      emu.audioCh = m._libatari800_get_num_sound_channels ? m._libatari800_get_num_sound_channels() : 1;
       emu.clearInput();
       return emu;
     }
