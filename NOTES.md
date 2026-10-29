@@ -105,3 +105,9 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 - Machine/chip database: web/js/chipdb.js seeds chips, chip_variants, machines, machine_slots into the catalog SQLite (versioned via meta chipdb_version); Debugging tab shows it. Only the parts remembered from the user's LSI list are seeded (verified=0 are unchecked); the full pasted list and the chip-doc archive still need to be loaded.
 
 - Stereo POKEY: the ST header toggle reboots with a second POKEY on both cores. Altirra uses `altirra_stereo_pokey`; libatari800 needs `STEREO_SOUND` in build/config.h (rebuild web/ref with scripts/build-reference.ps1, EMSDK_DIR=C:\Users\raver\emsdk) and `-stereo`, giving interleaved 2-channel 44.1 kHz output. The CPU select (6502C/65C02/65C816) is Altirra-only. Verified with SNDTEST (FOUND stereo with ST on, mono with it off) on both cores.
+
+## WebAFM archive and cartridge tools
+- **Unpack archive**: lists an archive that is on a disk (ZIP, ARC, LZH, ALF, 7z...) and unpacks it into the same folder, the other pane's disk, or a ZIP on the PC.
+- **Make ZIP**: packs the selected files into a stored ZIP on the same disk.
+- **Cartridge...** (web/js/cartool.js): reads the CART header, strips it to a raw ROM or adds one (13 common types), saves to the PC or the active disk.
+- MEMTEST detection checked at 64/320/576/1088 KB on both cores; bank colouring checked at 576 KB.
