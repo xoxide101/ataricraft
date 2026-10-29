@@ -118,3 +118,5 @@ WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack
 
 ## Tools 130K boot disk
 "Tools 130K (DOS 2.5 ED boot).atr" (library, not in git) is a bootable DOS 2.5 enhanced-density disk (1040 x 128 B) with AFM, AFM80, CMD, the 8 archive tools, the 5 hardware tests and READ.ME. It has no games, BASIC or productivity programs. The 90K DOS 2.5 and Hardware tests disks are full; use the 130K disk for the complete tool set. ED volumes use 10-bit sector links with a file ID (fixed in dosfs.js; they were wrongly written as 16-bit links before).
+
+- **VIEW.COM** (	ools/cmd/view.asm): plain scrolling text viewer for any Atari DOS (W/S or Ctrl+arrows, SPACE/B page, T/E, ESC). Reads up to ~27K / 2048 lines. Tested on both cores from the DOS 2.5 menu. Every Ready to run disk now carries VIEW.COM and TOOLS.TXT (what each file does); the AFM D2 90K disk is in the refresh again but only holds as many tools as fit (priority: TOOLS.TXT, VIEW, AFM, AFM80, CMD).
