@@ -18,7 +18,8 @@ fnl     = $92
 fnh     = $93
 pv      = $94
 stp     = $95
-ntest   = 18
+ntest   = 19
+dp      = $96           ; display list pointer (fine-scroll page)
 
         .macro band
         lda #:1
@@ -41,15 +42,19 @@ next    jsr openmode
         cmp #16
         bcc nfill
         beq nhires
+        cmp #18
+        beq nscrl
         jsr mixed
         jmp nask
+nscrl   jsr scroll
+        jmp nk
 nhires  jsr hires
         jsr label
         jmp nask
 nfill   jsr fill
         jsr label
 nask    jsr getkey
-        cmp #$1C
+nk      cmp #$1C
         beq done
         ldx #3
         cmp #$2B
@@ -375,7 +380,7 @@ lb2     lda tw
         sta sp+1
         lda ltab,x
         pha
-        lda ltab+18,x
+        lda ltab+19,x
         tay
         pla
         jsr puts
@@ -478,12 +483,184 @@ num     sta v16
         lda #' '
         jmp putc
 
+; fine-scroll page: 40-column ANTIC 2 window scrolled diagonally with HSCROL / VSCROL (fine) and LMS changes (coarse).
+; Two display lists alternate so the hidden one is rebuilt while the other is shown. Any key ends it and is the answer.
+SCRBUF  = $6000         ; 32 rows x 128 bytes, pattern repeats every 64 columns and 16 rows
+HSCROL  = $D404
+VSCROL  = $D405
+scroll  lda #0
+        sta ptr
+        sta sr
+        lda #$60
+        sta ptr+1
+sc_r    ldy #0
+sc_c    tya
+        and #63
+        sta t1
+        lda sr
+        and #15
+        clc
+        adc t1
+        and #63
+        sta t1
+        tya
+        and #7
+        beq sc_i
+        lda sr
+        and #7
+        bne sc_s
+sc_i    lda t1
+        ora #$80
+        sta t1
+sc_s    lda t1
+        sta (ptr),y
+        iny
+        bpl sc_c
+        lda ptr
+        eor #$80
+        sta ptr
+        bne sc_n
+        inc ptr+1
+sc_n    inc sr
+        lda sr
+        cmp #32
+        bne sc_r
+        lda #0
+        sta sp
+        lda #$5E
+        sta sp+1
+        say s_sc
+        lda #0
+        sta dp
+        lda #$5C
+        jsr mkdl
+        lda #$5D
+        jsr mkdl
+        lda #$5C
+        sta dp+1
+        lda #0
+        sta xpos
+        sta ypos
+        lda #$FF
+        sta CH
+sc_l    jsr upd
+        lda dp+1
+        sta $0231
+        lda #0
+        sta $0230
+        sta ATRACT
+        lda dp+1
+        eor #1
+        sta dp+1
+        jsr vsync
+        sec
+        lda #0
+        sbc xpos
+        and #3
+        sta HSCROL
+        lda ypos
+        and #7
+        sta VSCROL
+        inc xpos
+        lda ypos
+        clc
+        adc #1
+        and #$7F
+        sta ypos
+        lda CH
+        cmp #$FF
+        beq sc_l
+        lda #0
+        sta HSCROL
+        sta VSCROL
+        lda CH
+        pha
+        lda #$FF
+        sta CH
+        pla
+        rts
+
+mkdl    sta dp+1
+        ldy #2
+        lda #$70
+mk1     sta (dp),y
+        dey
+        bpl mk1
+        ldy #3
+        ldx #14
+mk2     lda #$72
+        sta (dp),y
+        iny
+        iny
+        iny
+        dex
+        bne mk2
+        lda #$42
+        sta (dp),y
+        iny
+        lda #0
+        sta (dp),y
+        iny
+        lda #$5E
+        sta (dp),y
+        iny
+        lda #$41
+        sta (dp),y
+        iny
+        lda dp
+        sta (dp),y
+        iny
+        lda dp+1
+        sta (dp),y
+        rts
+
+; point the 14 scroll lines at row (ypos/8)+i, column (xpos+3)/4
+upd     lda ypos
+        lsr
+        lsr
+        lsr
+        sta ay
+        lda xpos
+        clc
+        adc #3
+        lsr
+        lsr
+        sta scx
+        ldy #4
+        lda #14
+        sta nl
+up1     lda ay
+        lsr
+        tax
+        lda #0
+        ror
+        clc
+        adc scx
+        sta (dp),y
+        iny
+        txa
+        clc
+        adc #$60
+        sta (dp),y
+        iny
+        iny
+        inc ay
+        dec nl
+        bne up1
+        rts
+sr      .byte 0
+xpos    .byte 0
+ypos    .byte 0
+ay      .byte 0
+scx     .byte 0
+nl      .byte 0
+s_sc    .byte 'FINE SCROLL  Y=ok N=bad S=skip ESC=end',0
 scr     .byte 'S:',155
-mmap    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,8,0
+mmap    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,8,0,0
 szlo    .byte <960,<400,<200,<200,<400,<800,<1600,<3200,<6400,<6400,<6400,<6400,<800,<400,<3200,<6400
 szhi    .byte >960,>400,>200,>200,>400,>800,>1600,>3200,>6400,>6400,>6400,>6400,>800,>400,>3200,>6400
-ltab    .byte <l0,<l1,<l2,<l3,<l4,<l5,<l6,<l7,<l8,<l9,<l10,<l11,<l12,<l13,<l14,<l15,<l16,<l17
-        .byte >l0,>l1,>l2,>l3,>l4,>l5,>l6,>l7,>l8,>l9,>l10,>l11,>l12,>l13,>l14,>l15,>l16,>l17
+ltab    .byte <l0,<l1,<l2,<l3,<l4,<l5,<l6,<l7,<l8,<l9,<l10,<l11,<l12,<l13,<l14,<l15,<l16,<l17,<l17
+        .byte >l0,>l1,>l2,>l3,>l4,>l5,>l6,>l7,>l8,>l9,>l10,>l11,>l12,>l13,>l14,>l15,>l16,>l17,>l17
 l0      .byte 'GR.0  text 40x24, 2 colours (ANTIC 2)',0
 l1      .byte 'GR.1  text 20x24, 5 colours',0
 l2      .byte 'GR.2  text 20x12, 5 colours',0
@@ -509,7 +686,7 @@ s_m7    .byte 'ANTIC 7 BIG',0
 s_stitle .byte 'GFXTEST  results',0
 s_leg   .byte 'green=ok  red=bad  grey=skipped',0
 s_k1    .byte '0-9 A-F = GR.0 - GR.15',0
-s_k2    .byte 'G = GR.8 1-bit mono   H = mixed modes',0
+s_k2    .byte 'G=GR.8 mono  H=mixed  I=fine scroll',0
 s_okn   .byte 'OK ',0
 s_badn  .byte 'BAD ',0
 s_skn   .byte 'SKIPPED ',0
@@ -517,7 +694,7 @@ s_pass  .byte 'RESULT: PASS - no bad modes',0
 s_fail  .byte 'RESULT: FAIL - see the red cells',0
 s_none  .byte 'RESULT: nothing was tested',0
 s_any   .byte 'Press any key to exit.',0
-lbl     .byte '0123456789ABCDEFGH'
+lbl     .byte '0123456789ABCDEFGHI'
 smst    .byte 3,2,1,1
 res     .ds ntest
 c_ok    .byte 0
