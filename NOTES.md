@@ -85,8 +85,14 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 
 ## Hardware test programs
 
-- tools/tests/ (MADS; shared common.inc; `node tools/tests/build.cjs` -> tools/tests/bin/*.COM). KEYTEST (keyboard, console keys, joysticks 1-4, paddles), SNDTEST (POKEY tones, stereo detection via second POKEY at $D210, modes 0-9), GFXTEST (OS graphics modes 0-15, split screen with label in text window; any key next, ESC exit), MEMTEST (main RAM size, XL vs 800, RAM under OS ROM, extended bank detection, pattern test of every bank).
-- Verified on both cores (Atari800 and Altirra): MEMTEST PASS and correct total at 64K, 128K, 320K Rambo and Compy-Shop (atari800 only), 576K, 1088K; KEYTEST shows key codes; GFXTEST modes 3, 5, 9 and 15 shown. SNDTEST reports mono on both (neither core exposes a second POKEY in the UI); audio itself not heard/verified. Joystick/paddle rows not exercised by real input.
+- tools/tests/ (MADS; shared common.inc and cscreen.inc colour framework: per-row DLI colour bars, mode-7 block map, VBI-reset; `node tools/tests/build.cjs` -> tools/tests/bin/*.COM). All tests show colour PASS/FAIL rows and a RESULT bar.
+  - CPUTEST: detects 6502/65C02/65C816, instruction self-checks, speed estimate (approx).
+  - SNDTEST: POKEY1 random check, stereo detection (second POKEY at $D210, probed both ways), guided listening test (G, then Y/N/S) for left/right/both/noise/sweep, free-play keys 0-9.
+  - KEYTEST: visual keyboard, grey untested / yellow held / green tested; Start/Select/Option, Break, Shift, Ctrl; joystick and paddle readout; hold Start+Select+Option to exit. Emulators only report Shift together with another key.
+  - GFXTEST: GR.0-15, GR.8 1-bit mono pattern, mixed ANTIC modes screen; Y/N/S per screen and a colour summary.
+  - MEMTEST: RAM size and total, bank map, burn-in (B), aliasing check.
+- Verified on both cores: MEMTEST (128K only since the colour rewrite), CPUTEST on all Altirra CPU options and Atari800, SNDTEST mono and stereo on both, KEYTEST, GFXTEST all screens. Audio itself not heard; stereo left/right separation not listened to. Joystick/paddle rows not exercised by real input.
+- Archive tools (ARC ZIP DCM LZH ALF DISC ZOO ARJ): Q at the prompt quits (blank line too).
 - Packaged: added to ACDOS.PAK (manifest tool entries + strip list), to the Ready-to-run disks (except the 90K DOS 2.5 disk, which is full), and a new 'Hardware tests (DOS 2.0S boot).atr'.
 
 ## Menu disk builder
