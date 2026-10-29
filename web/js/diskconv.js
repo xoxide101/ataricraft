@@ -257,6 +257,35 @@
     return buildAtr(sectors, ss);
   }
 
+  // What copy protection an ATX carries: statuses other than 0, repeated sector numbers, and weak-bit or extended chunks.
+  function atxInfo(b) {
+    if (b.length < 48 || String.fromCharCode(b[0], b[1], b[2], b[3]) !== 'AT8X') throw new Error('not an ATX image');
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), r = { badStatus: 0, duplicates: 0, weak: 0, tracks: 0 };
+    let tp = dv.getUint32(0x1c, true);
+    while (tp + 32 <= b.length) {
+      const size = dv.getUint32(tp, true);
+      if (size < 32) break;
+      if (dv.getUint16(tp + 4, true) === 0) {
+        r.tracks++;
+        const count = dv.getUint16(tp + 10, true), hs = dv.getUint32(tp + 20, true), seen = new Set();
+        for (let cp = tp + hs; cp + 8 <= tp + size;) {
+          const cs = dv.getUint32(cp, true), ct = b[cp + 4];
+          if (cs < 8) break;
+          if (ct === 1) for (let i = 0; i < count; i++) {
+            const e = cp + 8 + i * 8;
+            if (b[e + 1]) r.badStatus++;
+            if (seen.has(b[e])) r.duplicates++; else seen.add(b[e]);
+          }
+          if (ct === 0x10) r.weak++;
+          cp += cs;
+        }
+      }
+      tp += size;
+    }
+    r.protected = !!(r.badStatus || r.duplicates || r.weak);
+    return r;
+  }
+
   // Identify by content (names lie): returns 'atr' | 'dcm' | 'pro' | 'xfd' | null.
   function detect(b, name) {
     if (isAtr(b)) return 'atr';
@@ -278,5 +307,5 @@
     }
   }
 
-  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, atxToAtr, buildAtr };
+  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, atxToAtr, atxInfo, buildAtr };
 });
