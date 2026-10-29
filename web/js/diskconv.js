@@ -290,9 +290,24 @@
   // Layout: sectors 1-6 loader, 7-13 directory (24-byte entries), programs from sector 14, 128-byte sectors.
   const MENU_LOADER = '0006000706074c0a0700d8a9078d840aa9008d850a8de0028de1028de2028de302a9008d8d0aa90b8d8e0aa9078d900a202d09ad8d0a1869808d8d0a9003ee8e0ace900ad0eaa97f8d4403a9098d4503a916201b09a9008d8f0aa90085e2a90b85e3ad8f0acd0907b04bc9099008f00c1869374c7e071869314c7e07a9308da00aa9208da10aa00fb1e299a20a8810f8a99b8db20aa9a08d4403a90a8d4503a913201b09a5e218691885e29002e6e3ee8f0a4c6207a9038d5203a97c8d5403a9098d5503a9048d5a03a9008d5b03a2102056e4a9078d5203a9008d58038d5903a2102056e4c9619002e920c93090e4c93ab00fc930f00638e9314c0d08a9094c0d08c94190cdc95bb0c938e937cd0907b0c18d8f0aa90c8d5203a2102056e4a90085e2a90b85e3ae8f0af00ea5e218691885e29002e6e3cad0f2a010b1e28d840ac8b1e28d850ac8b1e28d8a0ac8b1e28d8b0ac8b1e28d8c0aa9008d800a8d810a8d820aa9808d830aa9008d8d0aa90a8d8e0aad800acd8a0aad810aed8b0aad820aed8c0ab06520fa088d860a20fa088d870a2d860ac9fff0d920fa088d880a20fa088d890aad860a85e0ad870a85e120fa08a00091e0a5e0cd880ad007a5e1cd890af009e6e0d0e7e6e14cb008ad860ac9e2d09ead870ac902d097ad880ac9e3d09020e9084c73086ce202ade0020de102f0036ce0026c0a00ae830ae0809005202d09a200bd000ae88e830aee800ad008ee810ad003ee820a608d4803a9008d4903a9098d4203a2004c56e4a9318d0003a9018d0103a9528d0203a9408d0303ad8d0a8d0403ad8e0a8d0503a9078d0603a9808d0803a9008d0903ad840a8d0a03ad850a8d0b032059e43009ee840ad003ee850a60ee1ad04c2d094b3a9b415441524943524146542047414d45204d454e559b9b';
 
-  // items: [{name, data}] of Atari binaries -> menu ATR. Names are shown as 16 upper-case characters.
+  // Plain 8K/16K cartridge (.car or raw .rom) -> Atari binary: ROM copied into RAM at $A000/$8000, BASIC ROM banked out, then the cart's own init and run vectors. Bank-switched carts are not supported.
+  function cartToXex(d) {
+    let rom = d, type = d.length === 8192 ? 1 : d.length === 16384 ? 2 : 0;
+    if (d[0] === 0x43 && d[1] === 0x41 && d[2] === 0x52 && d[3] === 0x54) {
+      type = d[7]; rom = d.subarray(16);
+      if (type !== 1 && type !== 2) throw new Error('only plain 8K/16K cartridges can go on a menu disk (CAR type ' + type + ')');
+    }
+    if (!type || rom.length !== (type === 1 ? 8192 : 16384)) throw new Error('not an Atari binary or a plain 8K/16K cartridge');
+    const start = 0xc000 - rom.length, run = [rom[rom.length - 6], rom[rom.length - 5]];
+    const stub = [0xad, 1, 0xd3, 9, 2, 0x8d, 1, 0xd3, 0x20, 0x0c, 6, 0x60, 0x6c, 0xfe, 0xbf];
+    const seg = (a, b) => [a & 255, a >> 8, b & 255, b >> 8];
+    return Uint8Array.from([0xff, 0xff, ...seg(start, 0xbfff), ...rom, ...seg(0x600, 0x60e), ...stub, ...seg(0x2e2, 0x2e3), 0, 6, ...seg(0x2e0, 0x2e1), ...run]);
+  }
+
+  // items: [{name, data}] of Atari binaries or plain cartridges -> menu ATR. Names are shown as 16 upper-case characters.
   function menuToAtr(items) {
     if (!items.length || items.length > 36) throw new Error('a menu disk holds 1 to 36 programs');
+    items = items.map((it) => (it.data[0] === 0xff && it.data[1] === 0xff ? it : { name: it.name, data: (() => { try { return cartToXex(it.data); } catch (e) { throw new Error(it.name + ': ' + e.message); } })() }));
     const loader = new Uint8Array(768);
     for (let i = 0; i < MENU_LOADER.length; i += 2) loader[i / 2] = parseInt(MENU_LOADER.substr(i, 2), 16);
     loader[9] = items.length;
@@ -339,5 +354,5 @@
     }
   }
 
-  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, menuToAtr, atxToAtr, atxInfo, buildAtr };
+  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, menuToAtr, cartToXex, atxToAtr, atxInfo, buildAtr };
 });

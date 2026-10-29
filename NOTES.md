@@ -87,3 +87,4 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 
 - menuToAtr(items) in diskconv.js builds a no-DOS boot disk (loader: tools/xexboot/menuboot.asm, 661 bytes) with up to 36 XEX/COM programs on a 1-9, 0, A-Z menu. UI: 'Build menu disk from XEX/COM...'. Verified: menu shows, key 2 runs program 2. Not done: cart wrappers, template-loader mode (trigger unknown), return-to-menu after a program exits.
 
+- Menu disk also accepts plain 8K/16K carts (.car/.rom) via cartToXex: ROM is copied to RAM, BASIC banked out, cart init/run vectors used. Verified with Jr. Pac-Man. Bank-switched carts are rejected.
