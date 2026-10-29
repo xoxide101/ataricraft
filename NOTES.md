@@ -97,7 +97,7 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 - WebAFM copy / move / undo / delete-undo between two MyDOS disks and Unpack-to-PC-as-ZIP checked byte for byte (out/t_wafm3.cjs, 13 checks). Found and fixed: every ZIP saved from WebAFM (Unpack to PC, Make ZIP download, folder export) downloaded as the text "[object ArrayBuffer]..." because storedZip returns blob parts and the host save wrapper wrapped them again.
 
 WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack into the 130K ED disk, Cartridge dialog adding a CAR header onto the ED disk; files compared byte for byte. Found and fixed: dosfs.js read() still used its own 'nsec > 1023 = 16-bit links' test, so every file on a DOS 2.5 ED disk except the first read back as 125 bytes (the earlier fix only changed the writer and chain). Both now share nextOf/use16.
-- Packaged: added to ACDOS.PAK (manifest tool entries + strip list), to the Ready-to-run disks (except the 90K DOS 2.5 disk, which is full), and a new 'Hardware tests (DOS 2.0S boot).atr'.
+- Packaged: added to ACDOS.PAK (manifest tool entries + strip list), and to the Ready-to-run disks. The old 90K disks (DOS 2.5 boot + AFM + tools, Hardware tests DOS 2.0S) were retired; the 130K disk replaces both.
 
 ## Menu disk builder
 
