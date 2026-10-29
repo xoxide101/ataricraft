@@ -1,0 +1,203 @@
+ATARICRAFT TOOLS MANUAL
+View with: VIEW MANUAL.TXT
+W/S line, SPACE/B page, ESC quit
+========================================
+
+1. STARTING A PROGRAM
+---------------------
+DOS 2.x menu: L (binary load), type the
+  file name, RETURN. Or M / run at addr.
+BW-DOS / SpartaDOS: type the name.
+From CMD: type the name, then arguments:
+  ZIP X A.ZIP   ARC L A.ARC
+When a program ends you are back at DOS.
+Type CMD again to return to the shell.
+Numbers: decimal, or $hex ($E000).
+Drive names: D1: D2: ... Folder DOSes
+(MyDOS, BW-DOS, SpartaDOS) use > or \
+as the folder separator.
+
+2. VIEW.COM  - read a text file
+-------------------------------
+  VIEW FILE.TXT
+  VIEW D2:README.TXT
+No name given: it asks "VIEW FILE?".
+Blank answer quits.
+ W or Ctrl+Up    up one line
+ S or Ctrl+Down  down one line
+ - and =         same as W and S
+ SPACE           page down
+ B               page up
+ T / E           top / end of file
+ ESC or Q        quit
+Bottom row: line number / total lines.
+Limit: about 27K and 2048 lines.
+Lines over 40 characters wrap.
+
+3. CMD.COM  - command shell
+---------------------------
+Start it, then type commands. HELP
+lists them, HELP ARC (ZIP LZH ALF ZOO
+ARJ DCM DISC) shows a tool's usage.
+EXIT returns to DOS.
+
+FILES
+ DIR [spec]       directory + free space
+ TYPE file        show a file
+ MORE file        page every 20 lines
+ LESS file        same, ESC quits
+ COPY a b         copy (wildcards ok)
+ APPEND a b       add a to end of b
+ DEL spec         delete (ERASE, DELETE)
+ REN old new      rename
+ ATTRIB +R file   lock    -R unlock
+ COMP a b         compare two files
+ FIND text file   search, any case
+ DF / CHKDSK      files and free sectors
+FOLDERS (not on DOS 2.x)
+ MD name          make folder
+ RD name          remove empty folder
+ DELTREE name     remove folder + files
+ CD name          enter folder
+ CD ..            up      CD \  root
+ PWD              show current folder
+DISKS
+ FORMAT D2:       format (asks Y/N)
+MEMORY
+ MDUMP $E000 64   hex dump of memory
+ PEEK addr        read a byte
+ POKE addr val    write a byte
+ MEM              memory info
+OTHER
+ CLS  PAUSE  ECHO text  VER
+ SET name=value   SET alone lists
+ PROMPT text      change the prompt
+ COMPLETE ON      Tab completion
+ X name           run a file by name
+ NGET N:URL file  FujiNet download
+ FN               FujiNet status
+Programs: NAME.COM, .CMX or .BAT in the
+current folder run by typing NAME.
+AUTOEXEC.BAT runs at start.
+No pipes, no redirection.
+
+4. ARCHIVE TOOLS
+----------------
+All have the same style. Type the tool
+name for a prompt, or give the command
+on the line: TOOL X FILE [dest] [member]
+ L file   list the members
+ T file   test (checksum), no files
+ X file [dest] [member]
+          extract all, or one member
+ Q        quit from the prompt
+dest = a drive or folder, e.g. D2:
+Names are cut to 8.3, upper case.
+
+ ARC   .ARC/.PAK  stored, RLE, squeeze,
+                  crunch (LZW)
+ ZIP   .ZIP       stored and deflate
+ LZH   .LZH/.LHA  lh0 lh1 lh4 lh5
+ ALF   .ALF       Atari LZ/DZ archives
+ ZOO   .ZOO       stored, LZW, LZH
+ ARJ   .ARJ       methods 0-4. Members
+                  over 22K that look far
+                  back: WINDOW TOO SMALL
+ DCM   .DCM       X file.DCM [out.ATR]
+                  DiskComm to ATR. The
+                  disk needs room: use a
+                  big disk, not 90K.
+Unsupported methods are listed and
+skipped. Examples:
+  ZIP L GAMES.ZIP
+  ARC X GAMES.ARC D2:
+  LZH X A.LZH D2: README.TXT
+  DCM X DISK.DCM D2:DISK.ATR
+
+5. DISC.COM  - CD / hard disk images
+------------------------------------
+Reads the raw drives D9: and D10:
+(ISO 9660, UDF, FAT12/16/32).
+  DISC        pick a drive
+  DISC D9:    use drive 9
+ D or L       list the folder
+ T file       show a file
+ X file       copy it to the DOS disk
+ I            drive info
+ Q            quit
+Names with spaces need quotes:
+  T "A LONG NAME.TXT"
+
+6. AFM.COM / AFM80.COM - file manager
+-------------------------------------
+Two panes. AFM is 40 columns, AFM80 is
+80 columns (needs an 80 column display).
+ W S or - =   move the cursor
+ TAB / SPACE  switch pane
+ 1-8          change drive
+ RETURN       run file / open folder
+              (.. goes up). Archives
+              open like folders.
+ C D R        copy delete rename
+              (tagged files if any)
+ T A          tag a file / tag all
+ L U          lock / unlock
+ F X          format / clear disk
+ M K B        make / remove / bulk
+              make folders
+ P            properties
+ / N          find name / find next
+ V            view (H = hex dump)
+ E            edit text (to 16K)
+ G            new file, ESC S saves
+ I            system info
+ ?            help          Q quit
+Editor: ESC then S save, Q quit, H hex,
+U/D page, T/E top / end.
+
+7. HARDWARE TESTS
+-----------------
+Run any of them like a program. Each
+shows PASS/FAIL colours.
+
+KEYTEST  every key: code, name, Shift,
+  Ctrl; then the keys not pressed.
+  Quit: hold START+SELECT+OPTION.
+  Joystick/paddle rows show live.
+SNDTEST  POKEY check, stereo detect,
+  guided listening test (G, then Y/N/S),
+  free play keys 0-9.
+GFXTEST  every graphics mode, one per
+  page; I = fine scroll page; keys
+  move on, ESC quits.
+MEMTEST  main RAM above $8000 and all
+  extended banks (130XE, Rambo, Compy,
+  up to 1088K). Contents are kept.
+  B = burn-in loop (any key stops it)
+  any other key = one pass.
+  Idle screen is not a failure: it is
+  waiting for the key.
+CPUTEST  6502 / 65C816 instruction
+  check with a PASS/FAIL result.
+CMD also has MEMTEST KEYTEST INPUT
+(joysticks) COLOR MONITOR built in.
+
+8. READING FILES ON PLAIN DOS
+-----------------------------
+Plain DOS 2.x has no TYPE. Use:
+ VIEW FILE.TXT        (scrolls)
+ DOS menu C (copy):   D1:FILE.TXT,E:
+   Ctrl+1 pauses and resumes the text.
+ BASIC: OPEN #1,4,0,"D:FILE.TXT"
+   then INPUT #1,A$ and PRINT A$.
+SpartaDOS / BW-DOS have TYPE built in.
+
+9. TIPS
+-------
+Boot with BASIC off: hold OPTION.
+No file name given: tools show a prompt.
+ESC or Q quits most things.
+90K disk: only the main tools fit. The
+130K and bigger disks hold everything.
+Tools were tested in the emulator, not
+on real hardware.
