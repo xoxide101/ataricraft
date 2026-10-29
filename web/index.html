@@ -321,6 +321,12 @@
       <div class="dim">Checks that the selected RAM size really has the right number of 16 KB banks and that every bank holds its own data. $5000-$57FF is skipped (Self-Test ROM).</div>
     </div>
     <div class="box" data-tab="dbg">
+      <h3>Machines &amp; chips</h3>
+      <div class="row"><select id="chipmach"></select><span id="chipsrc" class="dim"></span></div>
+      <pre id="chipout" style="margin:4px 0;white-space:pre-wrap;font-size:12px"></pre>
+      <div class="dim">Chip reference from the built-in database. A "?" means the part number is not yet checked against a primary document.</div>
+    </div>
+    <div class="box" data-tab="dbg">
       <h3>Diagnostics</h3>
       <div class="row"><button id="diagsave" title="Save everything logged (status messages, loads, errors) to a text file">Save log…</button><button id="diagclear">Clear</button><span id="diagcount" class="dim"></span></div>
       <div class="dim">Hit a problem? Click Save log and put the file in the project's <code>diag</code> folder.</div>
@@ -444,7 +450,8 @@
 <script src="js/lzh.js?v=20261028a"></script>
 <script src="js/alf.js?v=20261028b"></script>
 <script src="js/archives.js?v=20261028a"></script>
-<script src="js/catalog.js?v=20261027e"></script>
+<script src="js/chipdb.js?v=20261028a"></script>
+<script src="js/catalog.js?v=20261028a"></script>
 <script src="js/romdb.js?v=20261023d"></script>
 <script src="js/cartnames.js?v=20261028a"></script>
 <script src="js/xep80chr.js?v=20261023d"></script>

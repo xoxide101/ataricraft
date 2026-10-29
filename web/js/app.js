@@ -3267,6 +3267,22 @@
   };
   // ---- RAM bank test ----
   let memTimer = 0;
+  // Machines & chips panel (data seeded from chipdb.js into the catalog).
+  (async () => {
+    const sel = $('chipmach'); if (!sel) return;
+    const show = async () => {
+      const id = sel.value, esc = (s) => String(s == null ? '' : s);
+      const [m] = await AC.Catalog.rows('SELECT * FROM machines WHERE id=?', [id]);
+      const rs = await AC.Catalog.rows('SELECT s.slot, c.name, c.role, v.part_no, v.variant, v.verified, v.notes FROM machine_slots s JOIN chips c ON c.id=s.chip_id LEFT JOIN chip_variants v ON v.chip_id=s.chip_id AND v.variant=s.variant WHERE s.machine_id=? ORDER BY s.rowid', [id]);
+      $('chipsrc').textContent = m ? `${m.year}, ${m.ram_kb} KB` : '';
+      $('chipout').textContent = (m ? m.notes + '\n\n' : '') + rs.map((r) => `${esc(r.slot).padEnd(11)}${esc(r.variant)}${r.part_no ? ' (' + r.part_no + (r.verified ? '' : '?') + ')' : ''}\n${' '.repeat(11)}${esc(r.role)}${r.notes ? ' - ' + r.notes : ''}`).join('\n');
+    };
+    try {
+      for (const r of await AC.Catalog.rows('SELECT id, name FROM machines ORDER BY year, name')) sel.add(new Option(r.name, r.id));
+      sel.value = $('model').value in { '800': 1, '1200xl': 1, '800xl': 1, '65xe': 1, '130xe': 1 } ? $('model').value : '130xe';
+      sel.onchange = show; show();
+    } catch (e) { $('chipout').textContent = 'chip database unavailable: ' + e.message; }
+  })();
   $('memtest').onclick = () => {
     if (!S.emu) { $('memout').textContent = 'boot first (press Boot)'; return; }
     clearInterval(memTimer);
