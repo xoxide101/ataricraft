@@ -13,14 +13,14 @@
   button, select, label.btn { background:#2a2f39; color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:5px 10px; font:inherit; cursor:pointer; }
   button:hover, label.btn:hover { background:#343a47; }
   input[type=file] { display:none; }
-  main { display:flex; gap:12px; padding:10px 12px; align-items:flex-start; height:calc(100vh - var(--hh,50px)); }
+  main { display:flex; gap:12px; padding:10px 12px; align-items:flex-start; height:calc(var(--uh,100vh) - var(--hh,50px)); }
   .center { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:10px; max-height:100%; overflow:auto; }
   #stage { position:relative; background:#000; border:1px solid var(--line); border-radius:6px; padding:4px; flex:none; }
   #infobar { flex-basis:100%; display:flex; align-items:center; gap:14px; font-size:12px; min-height:16px; }
   #infobar .stats { display:flex !important; }
   #toast { position:absolute; top:10px; left:50%; transform:translateX(-50%); max-width:90%; background:rgba(20,24,32,.92); color:var(--acc); border:1px solid var(--acc); border-radius:14px; padding:6px 14px; font-size:13px; pointer-events:none; opacity:0; transition:opacity .4s; text-align:center; z-index:5; }
   #toast.show { opacity:1; }
-  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - var(--hh,50px)) * .9 - 150px)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
+  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - var(--hh,50px)) * .9 - 150px), var(--scrmax,9999px)); min-width:min(336px,var(--scrmax,336px)); aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
   .side { width:300px; flex:none; max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
   body { --sbw:370px; }
   body.nosb { --sbw:70px; }
@@ -473,6 +473,24 @@
 <script src="js/fujinet.js"></script>
 <script src="js/rawdisk.js"></script>
 <script src="js/drivesets.js?v=1"></script>
-<script src="js/app.js?v=20261029d"></script>
+<script src="js/app.js?v=20261029e"></script>
+<script>
+(function(){
+  var root=document.documentElement;
+  function fit(){
+    var vv=window.visualViewport, h=Math.floor(vv?vv.height:innerHeight);
+    root.style.setProperty('--uh',h+'px');
+    root.style.removeProperty('--scrmax');
+    var c=document.querySelector('.center'), s=document.getElementById('screen');
+    if(!c||!s||innerWidth<=900) return;
+    var w=s.getBoundingClientRect().width, n=0;
+    while(c.scrollHeight>c.clientHeight+1 && w>200 && n++<60){ w-=16; root.style.setProperty('--scrmax',w+'px'); }
+  }
+  var tm; function later(){ clearTimeout(tm); tm=setTimeout(fit,60); }
+  addEventListener('resize',later); if(window.visualViewport) visualViewport.addEventListener('resize',later);
+  addEventListener('load',function(){ fit(); setTimeout(fit,800); });
+  window.acFitView=fit;
+})();
+</script>
 </body>
 </html>
