@@ -89,7 +89,7 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
   - CPUTEST: detects 6502/65C02/65C816, instruction self-checks, speed estimate (approx).
   - SNDTEST: POKEY1 random check, stereo detection (second POKEY at $D210, probed both ways), guided listening test (G, then Y/N/S) for left/right/both/noise/sweep, free-play keys 0-9.
   - KEYTEST: visual keyboard, grey untested / yellow held / green tested; Start/Select/Option, Break, Shift, Ctrl; joystick and paddle readout; hold Start+Select+Option to exit. Emulators only report Shift together with another key.
-  - GFXTEST: GR.0-15, GR.8 1-bit mono pattern, mixed ANTIC modes screen; Y/N/S per screen and a colour summary.
+  - GFXTEST: GR.0-15, GR.8 1-bit mono pattern, mixed ANTIC modes screen, and a diagonal fine-scroll page (HSCROL/VSCROL plus LMS coarse steps, double-buffered display lists; key I on the summary); Y/N/S per screen and a colour summary.
   - MEMTEST: RAM size and total, bank map, burn-in (B), aliasing check.
 - Verified on both cores: MEMTEST (128K only since the colour rewrite), CPUTEST on all Altirra CPU options and Atari800, SNDTEST mono and stereo on both, KEYTEST, GFXTEST all screens. Audio itself not heard; stereo left/right separation not listened to. Joystick/paddle rows not exercised by real input.
 - Archive tools (ARC ZIP DCM LZH ALF DISC ZOO ARJ): Q at the prompt quits (blank line too).
