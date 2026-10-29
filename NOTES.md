@@ -83,6 +83,12 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 
 - Protected ATX: kept as ATX (ATR cannot hold timing/duplicate sectors); Convert file refuses them and says to load the .atx directly. atxInfo() flags duplicates, bad statuses and weak-bit chunks: 298 of 450 ATX in the library are protected. A.E. (8 duplicate sectors) boots natively as ATX in the browser. Not done: ATX writing, ATX -> PRO with status flags.
 
+## Hardware test programs
+
+- tools/tests/ (MADS; shared common.inc; `node tools/tests/build.cjs` -> tools/tests/bin/*.COM). KEYTEST (keyboard, console keys, joysticks 1-4, paddles), SNDTEST (POKEY tones, stereo detection via second POKEY at $D210, modes 0-9), GFXTEST (OS graphics modes 0-15, split screen with label in text window; any key next, ESC exit), MEMTEST (main RAM size, XL vs 800, RAM under OS ROM, extended bank detection, pattern test of every bank).
+- Verified on both cores (Atari800 and Altirra): MEMTEST PASS and correct total at 64K, 128K, 320K Rambo and Compy-Shop (atari800 only), 576K, 1088K; KEYTEST shows key codes; GFXTEST modes 3, 5, 9 and 15 shown. SNDTEST reports mono on both (neither core exposes a second POKEY in the UI); audio itself not heard/verified. Joystick/paddle rows not exercised by real input.
+- Packaged: added to ACDOS.PAK (manifest tool entries + strip list), to the Ready-to-run disks (except the 90K DOS 2.5 disk, which is full), and a new 'Hardware tests (DOS 2.0S boot).atr'.
+
 ## Menu disk builder
 
 - menuToAtr(items) in diskconv.js builds a no-DOS boot disk (loader: tools/xexboot/menuboot.asm, 661 bytes) with up to 36 XEX/COM programs on a 1-9, 0, A-Z menu. UI: 'Build menu disk from XEX/COM...'. Verified: menu shows, key 2 runs program 2. Not done: cart wrappers, template-loader mode (trigger unknown), return-to-menu after a program exits.
