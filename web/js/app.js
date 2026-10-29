@@ -3659,7 +3659,11 @@
       try {
         const b = new Uint8Array(await f.arrayBuffer()), base = f.name.replace(/\.[^.]*$/, '');
         let atr, how;
-        if (b[0] === 0x41 && b[1] === 0x54 && b[2] === 0x38 && b[3] === 0x58) { atr = AC.DiskConv.atxToAtr(b); how = 'ATX (sector data only; copy protection is not kept)'; }
+        if (b[0] === 0x41 && b[1] === 0x54 && b[2] === 0x38 && b[3] === 0x58) {
+          const info = AC.DiskConv.atxInfo(b);
+          if (info.protected) { log(`: copy-protected ATX (${info.duplicates} duplicate sectors, ${info.badStatus} bad-status, ${info.weak} weak-bit); an ATR would lose that, so it is left as ATX. Load the .atx directly (the Altirra core reads it natively).`); continue; }
+          atr = AC.DiskConv.atxToAtr(b); how = 'ATX, no copy protection found';
+        }
         else if (b[0] === 0xff && b[1] === 0xff) { atr = AC.DiskConv.xexToAtr(b); how = 'boot disk for the binary'; }
         else if (AC.DiskConv.detect(b, f.name) && !AC.DiskConv.isAtr(b)) { atr = AC.DiskConv.toAtr(b, f.name); how = AC.DiskConv.detect(b, f.name).toUpperCase(); }
         else { log(`${f.name}: not a format I can convert (already ATR, or unknown)`); continue; }
