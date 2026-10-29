@@ -82,3 +82,8 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 - UI: Cartridges & drives has Save as .dcm/.xfd/.pro/.xex plus 'Convert file to ATR...' (DCM, PRO, XFD, ATX, XEX/COM); browser-tested (XEX -> ATR -> boot -> .xex identical, ATX -> ATR, .xfd/.pro download). arc.js already handled ARC method 8 (checked on uue.arc: 3 files, CRC OK); added method 9 (squashed = 13-bit LZW, no RLE) UNTESTED (no sample); methods 5-7 still unsupported.
 
 - Protected ATX: kept as ATX (ATR cannot hold timing/duplicate sectors); Convert file refuses them and says to load the .atx directly. atxInfo() flags duplicates, bad statuses and weak-bit chunks: 298 of 450 ATX in the library are protected. A.E. (8 duplicate sectors) boots natively as ATX in the browser. Not done: ATX writing, ATX -> PRO with status flags.
+
+## Menu disk builder
+
+- menuToAtr(items) in diskconv.js builds a no-DOS boot disk (loader: tools/xexboot/menuboot.asm, 661 bytes) with up to 36 XEX/COM programs on a 1-9, 0, A-Z menu. UI: 'Build menu disk from XEX/COM...'. Verified: menu shows, key 2 runs program 2. Not done: cart wrappers, template-loader mode (trigger unknown), return-to-menu after a program exits.
+
