@@ -195,6 +195,30 @@
     return out;
   }
 
+  // Boot-sector XEX loader (source: tools/xexboot/xexboot.asm). 3 boot sectors, stream from sector 4, length at +9.
+  const XEX_LOADER = '0003000706074c0c07000000d8a9008d000a8d010a8d020a8d050aa9048d040aa9808d030aad000acd0907ad010aed0a07ad020aed0b07b06520ac078d060a20ac078d070a2d060ac9fff0d920ac078d080a20ac078d090aad060a85e0ad070a85e120ac07a00091e0a5e0cd080ad007a5e1cd090af009e6e0d0e7e6e14c6207ad060ac9e2d09ead070ac902d097ad080ac9e3d090209b074c25076ce202ade0020de102f0036ce0026c0a00ae030ae080900520cd07a200bd8008e88e030aee000ad008ee010ad003ee020a60a9318d0003a9018d0103a9528d0203a9408d0303a9808d0403a9088d0503a9078d0603a9808d0803a9008d0903ad040a8d0a03ad050a8d0b032059e43009ee040ad003ee050a60ee1ad04ccd07';
+
+  // Atari binary (XEX/COM/OBJ) -> self-booting single-density ATR (no DOS needed; 720 sectors, or 1040 when larger).
+  function xexToAtr(x) {
+    if (x.length < 6 || x[0] !== 0xff || x[1] !== 0xff) throw new Error('not an Atari binary (no $FFFF header)');
+    const n = Math.ceil(x.length / 128), nsec = n + 3 <= 720 ? 720 : 1040;
+    if (n + 3 > nsec) throw new Error('binary too large for a 130K boot disk (max ' + (1040 - 3) * 128 + ' bytes)');
+    const out = new Uint8Array(16 + nsec * 128);
+    out.set(atrHeader(nsec, 128));
+    for (let i = 0; i < XEX_LOADER.length; i += 2) out[16 + i / 2] = parseInt(XEX_LOADER.substr(i, 2), 16);
+    out[16 + 9] = x.length & 255; out[16 + 10] = (x.length >> 8) & 255; out[16 + 11] = x.length >> 16;
+    out.set(x, 16 + 384);
+    return out;
+  }
+
+  // Inverse of xexToAtr for disks it made.
+  function atrToXex(b) {
+    const hex = (o, k) => Array.from(b.subarray(16 + o, 16 + o + k), (v) => v.toString(16).padStart(2, '0')).join('');
+    if (!isAtr(b) || hex(0, 9) !== XEX_LOADER.slice(0, 18) || hex(12, 270) !== XEX_LOADER.slice(24)) throw new Error('not a disk made by xexToAtr');
+    const len = b[16 + 9] | (b[16 + 10] << 8) | (b[16 + 11] << 16);
+    return b.slice(16 + 384, 16 + 384 + len);
+  }
+
   // Identify by content (names lie): returns 'atr' | 'dcm' | 'pro' | 'xfd' | null.
   function detect(b, name) {
     if (isAtr(b)) return 'atr';
@@ -216,5 +240,5 @@
     }
   }
 
-  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, buildAtr };
+  return { isAtr, detect, toAtr, dcmToAtr, atrToDcm, proToAtr, atrToPro, xfdToAtr, atrToXfd, xexToAtr, atrToXex, buildAtr };
 });
