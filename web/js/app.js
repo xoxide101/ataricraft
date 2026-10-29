@@ -599,6 +599,7 @@
 
   // After Return the Atari may be busy (ENTER, RUN, disk I/O) and drops keys, so wait for the screen to go still.
   function stepFrames(n) {
+    if (S.disks[1] && S.emu.mem) cartRequest();
     for (let i = 0; i < n; i++) {
       if (S.typeQ.length && --S.typeWait <= 0) {
         if (S.settle > 0) {
@@ -3673,18 +3674,56 @@
     }
     $('convfile').value = '';
   };
-  // Several XEX/COM files -> one boot disk with a 1-9, 0, A-Z menu (no DOS).
+  // A plain cart wrapped for a disk runs from RAM, so any game that writes into its own address range destroys itself
+  // (a real ROM ignores those writes). Run each cart in a hidden machine and see whether its RAM copy survives.
+  let cartTester = null;
+  async function cartSurvives(item) {
+    const os = chosenOs();
+    if (!os) return null;
+    const d = item.data, rom = d[0] === 0x43 && d[1] === 0x41 && d[2] === 0x52 && d[3] === 0x54 ? d.subarray(16) : d;
+    if (!cartTester) cartTester = await AC.Emu.boot({ model: '130xe', os, ram: '128', basic: chosenBasic(), basicOn: false, tv: 'ntsc', fastSio: true, host: {} });
+    const e = cartTester;
+    e.mountDisk(1, 'test.atr', AC.DiskConv.menuToAtr([{ name: item.name, data: d }]));
+    e.coldStart(); e.run(450);
+    e.tap({ keychar: 0x31 }, 3); e.run(1500);
+    const m = e.mem(), base = 0xc000 - rom.length;
+    for (let i = 0; i < rom.length; i++) if (m[base + i] !== rom[i]) return false;
+    return true;
+  }
+  // The "slot" entries post 'ACRT' + size at $06F0 once loaded: insert the real cartridge and cold start.
+  function cartRequest() {
+    const m = S.emu.mem();
+    if (m[0x6f0] !== 0x41 || m[0x6f1] !== 0x43 || m[0x6f2] !== 0x52 || m[0x6f3] !== 0x54 || (m[0x6f4] !== 8 && m[0x6f4] !== 16)) return;
+    const kb = m[0x6f4], rom = m.slice(0xc000 - kb * 1024, 0xc000), car = new Uint8Array(16 + rom.length);
+    m[0x6f0] = 0;
+    car.set([0x43, 0x41, 0x52, 0x54, 0, 0, 0, kb === 8 ? 1 : 2], 0);
+    let sum = 0; for (const b of rom) sum += b;
+    car.set([sum >>> 24, (sum >> 16) & 255, (sum >> 8) & 255, sum & 255], 8);
+    car.set(rom, 16);
+    log('menu disk: this cartridge needs a real cartridge slot, inserting it and restarting');
+    insertCart(1, { name: 'menu-disk cartridge.car' }, car).then(() => S.emu.coldStart());
+  }
+  // Several XEX/COM files or cartridges -> one boot disk with a 1-9, 0, A-Z menu (no DOS).
   $('menufile').onchange = async () => {
     try {
       const items = [];
       for (const f of $('menufile').files) items.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+      const slotted = [];
+      for (const [i, it] of items.entries()) {
+        if (it.data[0] === 0xff && it.data[1] === 0xff) continue;
+        let plain = true;
+        try { AC.DiskConv.cartToXex(it.data); } catch (e) { throw new Error(`${it.name}: ${e.message}`); }
+        log(`menu disk: testing ${it.name} (${i + 1}/${items.length})`);
+        const ok = await cartSurvives(it);
+        if (ok === null) { log('menu disk: no OS ROM loaded, cannot test cartridges'); break; }
+        if (!ok) { it.needsSlot = true; slotted.push(it.name); }
+      }
       const atr = AC.DiskConv.menuToAtr(items);
       saveBlob('menu-disk.atr', [atr]);
-      log(`menu-disk.atr: ${items.length} programs, ${atr.length} bytes`);
+      log(`menu-disk.atr: ${items.length} programs, ${atr.length} bytes${slotted.length ? `. Marked * (need Ataricraft's real cartridge slot, so they only start in Ataricraft): ${slotted.join(', ')}` : ''}`);
     } catch (e) { log('menu disk: ' + e.message); }
     $('menufile').value = '';
-  };
-  // Save all / Load all: every mounted disk and cartridge as one .zip (with a slot manifest), or many files at once.
+  };  // Save all / Load all: every mounted disk and cartridge as one .zip (with a slot manifest), or many files at once.
   const SETMAN = 'ataricraft-set.json';
   $('saveall').onclick = () => {
     const files = [], man = { disks: {}, carts: {} };
