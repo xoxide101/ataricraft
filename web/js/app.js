@@ -3640,14 +3640,34 @@
     S.dirty[n] = false;
     log(`D${n}: saved ${name} (${bytes.length} bytes) to your Downloads`);
   };
-  $('savedcm').onclick = () => {
+  $('savedcm').onclick = () => saveAs('dcm', AC.DiskConv.atrToDcm, 'DiskComm');
+  $('savexfd').onclick = () => saveAs('xfd', AC.DiskConv.atrToXfd, 'XFD');
+  $('savepro').onclick = () => saveAs('pro', AC.DiskConv.atrToPro, 'PRO');
+  $('savexex').onclick = () => saveAs('xex', AC.DiskConv.atrToXex, 'XEX');
+  function saveAs(ext, fn, label) {
     const n = +$('savedrv').value, bytes = S.disks[n] && ((S.emu && S.emu.readDisk(n)) || S.disks[n].bytes);
     if (!bytes) { log(`D${n}: no disk mounted`); return; }
     try {
-      const dcm = AC.DiskConv.atrToDcm(bytes), name = ((S.disks[n].name || `d${n}`).replace(/\.[^.]*$/, '')) + '.dcm';
-      saveBlob(name, [dcm]);
-      log(`D${n}: saved ${name} (${dcm.length} bytes, DiskComm) to your Downloads`);
-    } catch (e) { log(`D${n}: cannot save as DCM: ${e.message}`); }
+      const out = fn(bytes), name = ((S.disks[n].name || `d${n}`).replace(/\.[^.]*$/, '')) + '.' + ext;
+      saveBlob(name, [out]);
+      log(`D${n}: saved ${name} (${out.length} bytes, ${label}) to your Downloads`);
+    } catch (e) { log(`D${n}: cannot save as ${label}: ${e.message}`); }
+  }
+  // Any supported container (DCM, PRO, XFD, ATX) or an Atari binary (XEX/COM -> self-booting disk) -> ATR download.
+  $('convfile').onchange = async () => {
+    for (const f of $('convfile').files) {
+      try {
+        const b = new Uint8Array(await f.arrayBuffer()), base = f.name.replace(/\.[^.]*$/, '');
+        let atr, how;
+        if (b[0] === 0x41 && b[1] === 0x54 && b[2] === 0x38 && b[3] === 0x58) { atr = AC.DiskConv.atxToAtr(b); how = 'ATX (sector data only; copy protection is not kept)'; }
+        else if (b[0] === 0xff && b[1] === 0xff) { atr = AC.DiskConv.xexToAtr(b); how = 'boot disk for the binary'; }
+        else if (AC.DiskConv.detect(b, f.name) && !AC.DiskConv.isAtr(b)) { atr = AC.DiskConv.toAtr(b, f.name); how = AC.DiskConv.detect(b, f.name).toUpperCase(); }
+        else { log(`${f.name}: not a format I can convert (already ATR, or unknown)`); continue; }
+        saveBlob(base + '.atr', [atr]);
+        log(`${f.name} -> ${base}.atr (${atr.length} bytes, ${how})`);
+      } catch (e) { log(`${f.name}: ${e.message}`); }
+    }
+    $('convfile').value = '';
   };
   // Save all / Load all: every mounted disk and cartridge as one .zip (with a slot manifest), or many files at once.
   const SETMAN = 'ataricraft-set.json';

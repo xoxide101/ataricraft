@@ -149,6 +149,7 @@
       case 3: d = unrle(s); break;
       case 4: d = unrle(unsqueeze(s)); break;
       case 8: d = unrle(unlzw(s, 0)); break;
+      case 9: d = unlzw(s, 13); break;
       default: throw new Error('unsupported ARC method ' + e.method);
     }
     d = d.slice(0, e.size);
