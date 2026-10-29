@@ -262,7 +262,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="unarc" title="List and unpack the archive (ZIP, ARC, LZH, ALF, 7z...) selected on this disk into the other pane's disk, or into this folder">Unpack archive</button><button data-a="mkzip" title="Pack the selected files into a ZIP on this disk">Make ZIP</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div><div class="wpt" title="Where you are"></div>`;
@@ -416,7 +416,7 @@
   // ---------- actions ----------
   function act(a) {
     const A = W.panes[W.active];
-    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport,
+    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, mkzip: doMkZip,
       all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
@@ -507,7 +507,38 @@
     await afterWrite([r]); log(`Added ${n} file(s)${bad.length ? '; ' + bad.length + ' failed' : ''}.`); render();
     if (bad.length) msg('Some files were not added', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
   }
-  function doImport() {
+  // Archive that already lives on a disk: show what is inside, then unpack into the other pane's disk (or this folder).
+  async function doUnarc() {
+    const p = W.panes[W.active], r = rec(p), items = selItems(p); if (!r || !items.length) return log('select an archive file first');
+    const ents = C.entries(r.m), e = ents.find((x) => items.includes(x.path) && !x.dir && AC.Archives.looksLikeArchive(x.name)) || ents.find((x) => x.path === items[0]);
+    if (!e || e.dir) return log('select an archive file first');
+    const file = new File([r.m.vol.read(e.raw)], e.long || e.name);
+    let ex; try { ex = await AC.Archives.expand(file); } catch (err) { return msg('Cannot read archive', esc(file.name + ': ' + err.message)); }
+    if (!ex.length) return msg('Empty archive', esc(file.name) + ' has no files.');
+    const tot = ex.reduce((a, x) => a + (x.size || 0), 0), o = rec(W.panes[1 - W.active]);
+    const body = document.createElement('div');
+    body.innerHTML = `<div><b>${esc(file.name)}</b>: ${ex.length} file(s), ${kb(tot)} unpacked</div><div style="max-height:220px;overflow:auto;margin:8px 0;font-family:monospace">${ex.map((x) => esc(x.path || x.name) + '  <span class="dim">' + (x.size || 0) + '</span>').join('<br>')}</div>
+      <label><input type="radio" name="wut" value="here" checked> Unpack into this folder of ${esc(r.name)}</label><br><label><input type="radio" name="wut" value="other" ${o ? '' : 'disabled'}> Unpack into the other pane${o ? ' (' + esc(o.name) + ')' : ' (no disk there)'}</label><br><label><input type="radio" name="wut" value="pc"> Save the unpacked files to the PC as a ZIP</label>`;
+    const v = await dlg('Unpack archive', body, [{ label: 'Cancel', value: null }, { label: 'Unpack', pri: true, value: () => body.querySelector('input[name=wut]:checked').value }]);
+    if (!v) return;
+    const files = []; for (const x of ex) files.push(await x.get());
+    if (v === 'pc') { const z = []; for (const f of files) z.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }); host().save(file.name.replace(/\.[^.]*$/, '') + '.zip', host().zip(z), 'application/zip'); return log('Saved to the PC.'); }
+    const ti = v === 'other' ? 1 - W.active : W.active, tp = W.panes[ti];
+    const keep = AC.Archives.looksLikeArchive; AC.Archives.looksLikeArchive = () => false;
+    try { await addFiles(ti, files, tp.dir); } finally { AC.Archives.looksLikeArchive = keep; }
+  }
+  async function doMkZip() {
+    const p = W.panes[W.active], r = rec(p), items = selItems(p); if (!r || !items.length) return log('tag or select files first');
+    if (r.m.vol.readOnly) return log('this disk is read-only here');
+    const files = [];
+    for (const path of items) {
+      const e = C.entries(r.m).find((x) => x.path === path);
+      if (e.dir) { for (const x of C.entries(r.m)) if (!x.dir && x.path.startsWith(path + '/')) files.push({ name: x.path, data: r.m.vol.read(x.raw) }); } else files.push({ name: e.long || e.name, data: r.m.vol.read(e.raw) });
+    }
+    const nm = await ask('Make ZIP', 'Name of the ZIP file', 'FILES.ZIP'); if (!nm) return;
+    const z = host().zip(files);
+    await addFiles(W.active, [new File([new Blob(z)], /\.zip$/i.test(nm) ? nm : nm + '.zip')], p.dir);
+  }  function doImport() {
     const btn = W.el.querySelector('.wtb [data-a="import"]'); if (!btn) return importPC();
     const old = W.el.querySelector('.wimpmenu'); if (old) { old.remove(); return; }
     const mn = document.createElement('div'); mn.className = 'wimpmenu';
