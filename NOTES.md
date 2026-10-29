@@ -70,7 +70,7 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 ## Pending
 
 - **Chip documentation archive (Atari Preservation Society):** 8-bit, 16-bit (ST/STE) and 32-bit (TT/Falcon/Jaguar) chip documents. The user is still downloading the whole archive; path to be supplied. Planned: one subfolder per generation, catalogue and audit, then feed the machine-profile / chip-database work (parked until the user says go).
-- DCM export: "Save as .dcm" next to Save disk (round-trip tested on 115 ATRs and through the browser button). No real DCM sample to cross-check other decoders.
+- DCM: decoder now verified on 7 real Hobby-Tronic DCM disks (hobby89a/b, 90, 91a/b, 92a/b: 720 and 1040 sectors, all mount as DOS 2.x with sane directories); our encoder re-encodes them and decodes back byte-identical (sizes differ slightly from the originals' encoder, as expected). "Save as .dcm" is next to Save disk (browser-tested). Samples kept locally in web/library/craftapps/Samples/DCM (gitignored).
 - DOS 2.0S/2.5 blank creator (`DosFs.createDos2`, "Pre-format as Atari DOS 2.0S / 2.5" checkbox): 1040-sector enhanced density verified under real DOS 2.5 (directory of D2 reads, 1010 free) and read/write in Node. Note a blank can only be inserted after Boot.
 - **Unverified, no samples:** UDF with non-zero FSD lbn / fragmented / embedded files; Rock Ridge/Joliet ignored on the 6502 side; Altirra core not claiming D9/D10; SpartaDOS XIO 43; CMD FORMAT Y path; ARJ hand-off form and multi-volume; ZOO comments and version suffixes. `?os=` is verified (picks from saved ROMs only).
 
