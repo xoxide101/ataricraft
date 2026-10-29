@@ -3673,6 +3673,17 @@
     }
     $('convfile').value = '';
   };
+  // Several XEX/COM files -> one boot disk with a 1-9, 0, A-Z menu (no DOS).
+  $('menufile').onchange = async () => {
+    try {
+      const items = [];
+      for (const f of $('menufile').files) items.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) });
+      const atr = AC.DiskConv.menuToAtr(items);
+      saveBlob('menu-disk.atr', [atr]);
+      log(`menu-disk.atr: ${items.length} programs, ${atr.length} bytes`);
+    } catch (e) { log('menu disk: ' + e.message); }
+    $('menufile').value = '';
+  };
   // Save all / Load all: every mounted disk and cartridge as one .zip (with a slot manifest), or many files at once.
   const SETMAN = 'ataricraft-set.json';
   $('saveall').onclick = () => {
