@@ -20,7 +20,7 @@
   #infobar .stats { display:flex !important; }
   #toast { position:absolute; top:10px; left:50%; transform:translateX(-50%); max-width:90%; background:rgba(20,24,32,.92); color:var(--acc); border:1px solid var(--acc); border-radius:14px; padding:6px 14px; font-size:13px; pointer-events:none; opacity:0; transition:opacity .4s; text-align:center; z-index:5; }
   #toast.show { opacity:1; }
-  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - 325px - var(--hh,50px)) * 1.4)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
+  #screen { width:min(calc(100vw - var(--sbw)), calc((100vh - var(--hh,50px)) * .9 - 150px)); min-width:336px; aspect-ratio:672/480; image-rendering:pixelated; display:block; background:#000; }
   .side { width:300px; flex:none; max-height:100%; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
   body { --sbw:370px; }
   body.nosb { --sbw:70px; }
@@ -72,7 +72,7 @@
   .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:4px 0; }
   .dim { color:var(--dim); font-size:12px; }
   #status { color:var(--acc); }
-  #kbdwrap { width:100%; min-width:min(65vw,100%); max-width:1500px; background:linear-gradient(#484a4e,#3a3c40); border:1px solid #23252a; border-radius:12px; padding:12px; box-shadow:inset 0 1px 0 #ffffff22, 0 4px 18px #0008; }
+  #kbdwrap { width:100%; min-width:min(25vw,100%); max-width:min(1500px, calc((100vh - var(--hh,50px)) * .9)); background:linear-gradient(#484a4e,#3a3c40); border:1px solid #23252a; border-radius:12px; padding:12px; box-shadow:inset 0 1px 0 #ffffff22, 0 4px 18px #0008; }
   #kbd .kmain { background:#1a1b1e; border:1px solid #101113; border-radius:10px; padding:12px 12px 8px; box-shadow:inset 0 2px 10px #000c; }
   .krow { display:flex; gap:4px; margin-bottom:4px; }
   .key { position:relative; height:clamp(38px, 4.8cqw, 68px); min-width:0; padding:0; background:linear-gradient(#3a3c42,#26282d); color:#e8e8ea; border:1px solid #0d0e10; border-radius:7px; box-shadow:inset 0 1px 0 #ffffff26, 0 3px 0 #08090b, 0 4px 6px #000a; display:flex; align-items:center; justify-content:center; user-select:none; touch-action:none; transition:transform .05s, box-shadow .05s; }
@@ -177,9 +177,9 @@
   #kpad { --padw:300px; display:flex; gap:10px; align-items:flex-start; width:100%; } #kpad[hidden] { display:none; } .padleft { flex:none; width:128px; display:flex; flex-direction:column; gap:6px; } .padleft #padhead { font-size:11px; padding:0 2px; user-select:none; cursor:context-menu; -webkit-touch-callout:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .padmid { flex:1; min-width:0; display:flex; justify-content:center; } .padmid .padsurf { width:var(--padw); flex:none; }
   #padsize { font-size:12px; }
 .padbtns { display:flex; flex-direction:column; gap:8px; margin-top:4px; } .padbtns small { font-weight:400; font-size:10px; opacity:.8; } .padbtns button { height:46px; line-height:1.15; transition:transform .05s; } .padbtns button.down { transform:translateY(3px); box-shadow:0 0 12px var(--acc); } .padbtns button { font-size:15px; font-weight:700; touch-action:none; user-select:none; } .padbtns button.down { background:var(--acc); color:#000; }
-  @media (max-width:900px) { .center { overflow:auto; max-height:calc(100dvh - var(--hh,50px)); } #stage { position:sticky; top:0; z-index:5; } #screen { width:min(calc(100vw - 20px), calc((100dvh - var(--hh,50px) - 20px) * 1.2)); min-width:0; } }
+  @media (max-width:900px) { .center { overflow:visible; max-height:none; } #stage { position:sticky; top:0; z-index:5; } #screen { width:min(calc(100vw - 20px), calc((100dvh - var(--hh,50px) - 20px) * 1.2)); min-width:0; } }
   @media (max-width:900px) and (orientation:landscape) {
-    .center { flex-direction:row; flex-wrap:nowrap; align-items:flex-start; gap:8px; overflow:auto; }
+    .center { max-height:calc(100dvh - var(--hh,50px)); flex-direction:row; flex-wrap:nowrap; align-items:flex-start; gap:8px; overflow:auto; }
     #stage { position:sticky; top:0; flex:none; }
     #screen { width:min(42vw, calc((100dvh - var(--hh,50px) - 16px) * 1.4)); }
     #kbdwrap { flex:1; min-width:0; max-width:none; min-width:0; }
@@ -473,6 +473,6 @@
 <script src="js/fujinet.js"></script>
 <script src="js/rawdisk.js"></script>
 <script src="js/drivesets.js?v=1"></script>
-<script src="js/app.js?v=20261029c"></script>
+<script src="js/app.js?v=20261029d"></script>
 </body>
 </html>
