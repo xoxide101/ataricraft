@@ -268,15 +268,16 @@
   // ---------------- DOS 2.x / MyDOS ----------------
   function dosVol(b, L, kind) {
     const { ss, sec, nsec } = L;
+    // MyDOS volumes over 1023 sectors use full 16-bit links; DOS 2.5 enhanced density (1040 x 128) keeps 10-bit links.
+    const use16 = nsec > 1023 && !(ss === 128 && nsec === 1040);
+    const nextOf = (s) => { const l = s.length; return use16 ? (s[l - 3] << 8) | s[l - 2] : ((s[l - 3] & 3) << 8) | s[l - 2]; };
     function read(e) {
       const parts = [];
       let n = e.start, g = 0;
       while (n && n <= nsec && g++ < nsec + 8) {
         const s = sec(n), l = s.length, cnt = s[l - 1];
         parts.push(s.subarray(0, Math.min(cnt, l - 3)));
-        const hi = s[l - 3], lo = s[l - 2];
-        // Large MyDOS volumes: if the top 6 bits are not this file's directory index the link is a full 16 bits.
-        n = nsec > 1023 ? (hi << 8) | lo : ((hi & 3) << 8) | lo;
+        n = nextOf(s);
       }
       let t = 0; for (const p of parts) t += p.length;
       const out = new Uint8Array(t); t = 0; for (const p of parts) { out.set(p, t); t += p.length; }
@@ -298,8 +299,6 @@
         }
       }
     }
-    const use16 = nsec > 1023 && !(ss === 128 && nsec === 1040);
-    const nextOf = (s) => { const l = s.length; return use16 ? (s[l - 3] << 8) | s[l - 2] : ((s[l - 3] & 3) << 8) | s[l - 2]; };
     function chain(start) {
       const out = []; let n = start;
       while (n && n <= nsec && out.length <= nsec) { out.push(n); n = nextOf(sec(n)); }
