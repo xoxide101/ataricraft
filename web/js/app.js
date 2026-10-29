@@ -3353,7 +3353,7 @@
       const fl = await fileOf(m); if (!fl) return null;
       return new File([await fl.arrayBuffer()], fl.name || name.split('/').pop(), { lastModified: m.modified || (fl.lastModified) || Date.now() });
     },
-    save: (name, bytes, type) => saveBlob(name, [bytes], type),
+    save: (name, bytes, type) => saveBlob(name, Array.isArray(bytes) ? bytes : [bytes], type),
     zip: (files) => storedZip(files),
     log: (s) => log(s),
   };
