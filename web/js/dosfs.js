@@ -437,6 +437,22 @@
     };
   }
 
+  // Guards against copy-protected disks whose sector 361 holds text/junk: every used 16-byte entry must have a sane flag, start sector and name.
+  function dirSane(L) {
+    for (let s = 361; s <= 368 && s <= L.nsec; s++) {
+      const d = L.sec(s);
+      for (let o = 0; o + 16 <= d.length; o += 16) {
+        const fl = d[o];
+        if (fl === 0) { if (s === 361 && o === 0) continue; break; }
+        if (fl & 0x80) continue;
+        const start = d[o + 3] | (d[o + 4] << 8);
+        if (start < 1 || start > L.nsec) return false;
+        for (let k = 5; k < 16; k++) if (d[o + k] < 0x20 || d[o + k] > 0x7e) return false;
+      }
+    }
+    return true;
+  }
+
   function open(bytes) {
     const L = layout(bytes);
     if (L.nsec < 4) return null;
@@ -444,7 +460,7 @@
       if (looksSdfs(L)) return sdfsVol(bytes, L);
       if (L.nsec >= 369) {
         const v = L.sec(360)[0], f0 = L.sec(361)[0];
-        if (v !== 0xff && (f0 === 0 || (f0 & 0x40) || (f0 & 0x10)) && !((f0 & 0x20) && !(f0 & 0x40)) && (f0 & 0x80) === 0) {
+        if (v <= 3 && dirSane(L) && (f0 === 0 || (f0 & 0x40) || (f0 & 0x10)) && !((f0 & 0x20) && !(f0 & 0x40)) && (f0 & 0x80) === 0) {
           const nv = 1 + Math.floor((L.nsec + 80) / (L.ss * 8));
           const myTotal = rd16(L.sec(360), 1) === L.nsec - 11 - nv;
           return dosVol(bytes, L, (v === 2 || v === 0) && !myTotal && !(f0 & 0x10) ? 'dos2' : 'mydos');
