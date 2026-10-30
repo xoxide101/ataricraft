@@ -378,7 +378,15 @@
     up: (id) => S.emu && S.emu.up(id),
   };
 
+  // 400/800/5200 have no built-in BASIC: it was a cartridge, so the toggle only applies to the XL family.
+  function syncBasicUi() {
+    const xl = osKindOf($('model').value) === 'osxl';
+    $('basic').disabled = !xl;
+    $('basic').parentElement.style.opacity = xl ? '' : '.4';
+    $('basic').parentElement.title = xl ? 'BASIC ROM on/off. Applies immediately (reboots). Turn off for SpartaDOS X.' : 'No built-in BASIC on this model; insert a BASIC cartridge in the left slot instead.';
+  }
   $('basic').checked = localStorage.getItem('ac.basicOn') !== '0';
+  syncBasicUi();
   $('basic').onchange = () => {
     localStorage.setItem('ac.basicOn', $('basic').checked ? '1' : '0');
     if (S.running) boot();
@@ -413,7 +421,7 @@
     log('booting…');
     if (S.emu) { syncDisks(true); S.host = Object.assign(S.host || {}, S.emu.hostFiles()); }
     try {
-      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, osA: osIsA(os), ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked, stereo: $('stereo').checked, cpu: $('cpu').value, tv: $('tv').value, host: S.host });
+      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, osA: osIsA(os), ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked && osKindOf($('model').value) === 'osxl', xep80: $('xep80').checked, fastSio: $('fastsio').checked, stereo: $('stereo').checked, cpu: $('cpu').value, tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     RawDisk.attach(S.emu);
@@ -3756,7 +3764,7 @@
   window.AC_setKbMode(['keys', 'arrows', 'pad', 'joy', 'paddle', 'drive'].includes(localStorage.getItem('ac.kbmode')) ? localStorage.getItem('ac.kbmode') : 'keys');
   $('kblayout').onchange = (e) => AC.keyboard.build($('kbd'), handle, e.target.value);
   $('romfiles').onchange = (e) => addRoms(e.target.files);
-  $('model').onchange = () => { fillRomSelects(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
+  $('model').onchange = () => { fillRomSelects(); syncBasicUi(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
   function saveRomSel() {
     const kind = osKindOf($('model').value);
     const s = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
