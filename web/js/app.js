@@ -36,9 +36,11 @@
     toastT = setTimeout(() => t.classList.remove('show'), 4500);
   };
 
+  const osKindOf = (m) => ({ '800': 'os800', xl: 'osxl', '5200': 'os5200' })[(AC.MODELS[m] || {}).osKind] || 'osxl';
+  const osIsA = (b) => /^SYSROM_A_/.test(((AC.OS_DB || {})[crc32(b)] || [])[1] || '');
   function classify(name, bytes) {
     const id = (AC.OS_DB || {})[crc32(bytes)];
-    if (id) return /BASIC/i.test(id[0]) ? 'basic' : bytes.length === 10240 ? 'os800' : bytes.length === 16384 ? 'osxl' : null;
+    if (id) return /BASIC/i.test(id[0]) ? 'basic' : bytes.length === 2048 && /BIOS/i.test(id[0]) ? 'os5200' : bytes.length === 10240 ? 'os800' : bytes.length === 16384 ? 'osxl' : null;
     if ((AC.CART_DB || {})[crc32(bytes)]) return null;
     // An OS ROM carries the DISKIV/DSKINV/CIOV/SIOV JMP table at $E450; MIO, Black Box, Speedy and DOS cart images do not.
     const hasJumpTable = (o) => [0, 3, 6, 9].every((i) => bytes[o + i] === 0x4c);
@@ -49,7 +51,7 @@
   }
 
   // ROM library: every scanned/picked file classified by size; the dropdowns choose which to use.
-  S.lib = { os800: [], osxl: [], basic: [] };
+  S.lib = { os800: [], osxl: [], os5200: [], basic: [] };
 
   // Persist found ROMs in IndexedDB so they survive reloads.
   const romDb = new Promise((res) => {
@@ -78,7 +80,7 @@
     if (ev && ev.shiftKey) {
       const db = await romDb;
       if (db) db.transaction('roms', 'readwrite').objectStore('roms').clear();
-      S.lib = { os800: [], osxl: [], basic: [] };
+      S.lib = { os800: [], osxl: [], os5200: [], basic: [] };
       log('saved ROMs cleared');
     } else log('ROM selection reset; all ROMs stay listed (Shift-click to forget stored ROMs)');
     fillRomSelects();
@@ -133,7 +135,7 @@
   async function addRoms(files) {
     files = await expandZips(files);
     for (const f of files) {
-      if (![8192, 10240, 16384].includes(f.size)) continue;
+      if (![2048, 8192, 10240, 16384].includes(f.size)) continue;
       const bytes = new Uint8Array(await f.arrayBuffer());
       const k = classify(f.name, bytes);
       const name = f.webkitRelativePath || f.name;
@@ -186,7 +188,7 @@
   }
   const romSource = (e) => !e ? '' : e.builtin ? 'built-in' : /[\\/]/.test(e.name) ? 'folder ' + e.name.replace(/[\\/][^\\/]*$/, '') : 'picked file';
   function showRomInfo() {
-    const os = S.lib[$('model').value === '800' ? 'os800' : 'osxl'][+$('osrom').value];
+    const os = S.lib[osKindOf($('model').value)][+$('osrom').value];
     const bs = $('basicrom').value === '' ? null : S.basicList[+$('basicrom').value];
     $('rominfo').textContent = `OS from ${romSource(os) || 'none'}${os && !os.builtin ? (os.label ? ' (recognised)' : ' (unrecognised)') : ''} · BASIC ${bs ? 'from ' + romSource(bs) : 'off'}`;
   }
@@ -195,7 +197,7 @@
   function fillRomSelects() {
     ensureBuiltinRoms();
     fillRam();
-    const kind = $('model').value === '800' ? 'os800' : 'osxl';
+    const kind = osKindOf($('model').value);
     const sel_ = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
     const fill = (sel, list, none, key) => {
       const prev = sel.value;
@@ -219,15 +221,15 @@
     S.roms.os800 = S.lib.os800[0] ? S.lib.os800[0].bytes : null;
     S.roms.osxl = S.lib.osxl[0] ? S.lib.osxl[0].bytes : null;
     S.roms.basic = bas[0] ? bas[0].bytes : null;
-    $('romstate').textContent = `OS800 ${S.lib.os800.length} · XL/XE ${S.lib.osxl.length} · BASIC ${S.lib.basic.length}`;
+    $('romstate').textContent = `OS800 ${S.lib.os800.length} · XL/XE ${S.lib.osxl.length} · 5200 ${S.lib.os5200.length} · BASIC ${S.lib.basic.length}`;
     updateCharset();
     showRomInfo();
-    window.dispatchEvent(new CustomEvent('ac-roms-changed', { detail: { os800: S.lib.os800.length, osxl: S.lib.osxl.length, basic: S.lib.basic.length } }));
+    window.dispatchEvent(new CustomEvent('ac-roms-changed', { detail: { os800: S.lib.os800.length, osxl: S.lib.osxl.length, os5200: S.lib.os5200.length, basic: S.lib.basic.length } }));
   }
 
   // Pick a ROM by (part of) its name: kind 'os' (current model), 'os800', 'osxl' or 'basic' ('' = no BASIC). The choice is remembered like a manual pick.
   function selectRom(kind, name) {
-    const k = kind === 'os' ? ($('model').value === '800' ? 'os800' : 'osxl') : kind;
+    const k = kind === 'os' ? (osKindOf($('model').value)) : kind;
     if (!S.lib[k]) return false;
     const s = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
     if (k === 'basic' && name === '') s.basic = '';
@@ -319,13 +321,13 @@
     if (q.has('basic')) selectRom('basic', q.get('basic'));
   }
 
-  const chosenOs = () => { const l = S.lib[$('model').value === '800' ? 'os800' : 'osxl']; const e = l[+$('osrom').value]; return e ? e.bytes : null; };
+  const chosenOs = () => { const l = S.lib[osKindOf($('model').value)]; const e = l[+$('osrom').value]; return e ? e.bytes : null; };
   const chosenBasic = () => { const e = $('basicrom').value === '' ? null : S.basicList[+$('basicrom').value]; return e ? e.bytes : null; };
 
   function updateCharset() {
     const m = $('model').value;
     const os = chosenOs();
-    if (os) AC.keyboard.setCharset(os.subarray(m === '800' ? 0x0800 : 0x2000, (m === '800' ? 0x0800 : 0x2000) + 1024));
+    if (os) AC.keyboard.setCharset(os.subarray(AC.MODELS[m].osKind === '800' ? 0x0800 : AC.MODELS[m].osKind === '5200' ? 0 : 0x2000, (AC.MODELS[m].osKind === '800' ? 0x0800 : AC.MODELS[m].osKind === '5200' ? 0 : 0x2000) + 1024));
   }
 
   // ---- sound: libatari800 delivers 16-bit mono 44.1 kHz per frame; queue each frame as a scheduled buffer ----
@@ -411,7 +413,7 @@
     log('booting…');
     if (S.emu) { syncDisks(true); S.host = Object.assign(S.host || {}, S.emu.hostFiles()); }
     try {
-      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked, stereo: $('stereo').checked, cpu: $('cpu').value, tv: $('tv').value, host: S.host });
+      S.emu = await (alt ? AC.AltEmu : AC.Emu).boot({ model, os, osA: osIsA(os), ram: $('ram').value, basic: chosenBasic(), basicOn: $('basic').checked, xep80: $('xep80').checked, fastSio: $('fastsio').checked, stereo: $('stereo').checked, cpu: $('cpu').value, tv: $('tv').value, host: S.host });
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     RawDisk.attach(S.emu);
@@ -3756,7 +3758,7 @@
   $('romfiles').onchange = (e) => addRoms(e.target.files);
   $('model').onchange = () => { fillRomSelects(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
   function saveRomSel() {
-    const kind = $('model').value === '800' ? 'os800' : 'osxl';
+    const kind = osKindOf($('model').value);
     const s = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
     const o = S.lib[kind][+$('osrom').value];
     if (o) s[kind] = o.name;
@@ -3778,7 +3780,7 @@
         if (!/\.(rom|bin|rm|zip|7z)$/i.test(name)) continue;
         try {
           const f = await e.getFile();
-          if (/\.(zip|7z)$/i.test(name) ? f.size > 4e6 : ![8192, 10240, 16384].includes(f.size)) continue;
+          if (/\.(zip|7z)$/i.test(name) ? f.size > 4e6 : ![2048, 8192, 10240, 16384].includes(f.size)) continue;
           Object.defineProperty(f, 'webkitRelativePath', { value: path + name });
           out.push(f);
         } catch (err) { /* unreadable */ }
@@ -4025,7 +4027,7 @@
   document.body.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; dropHint.style.display = 'none'; } });
   document.body.addEventListener('dragover', (e) => e.preventDefault());
   const isRomFile = async (f) => {
-    if (![8192, 10240, 16384].includes(f.size) || !/\.(rom|bin|rm)$/i.test(f.name)) return false;
+    if (![2048, 8192, 10240, 16384].includes(f.size) || !/\.(rom|bin|rm)$/i.test(f.name)) return false;
     const bytes = new Uint8Array(await f.arrayBuffer());
     return !!classify(f.name, bytes) && (f.size !== 8192 || !!(AC.OS_DB || {})[crc32(bytes)] || /bas/i.test(f.name));
   };
