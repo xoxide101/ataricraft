@@ -460,7 +460,7 @@
       if (looksSdfs(L)) return sdfsVol(bytes, L);
       if (L.nsec >= 369) {
         const v = L.sec(360)[0], f0 = L.sec(361)[0];
-        if (v <= 3 && dirSane(L) && (f0 === 0 || (f0 & 0x40) || (f0 & 0x10)) && !((f0 & 0x20) && !(f0 & 0x40)) && (f0 & 0x80) === 0) {
+        if ((v <= 3 || v === 2 + 1 + Math.floor((L.nsec + 80) / (L.ss * 8))) && dirSane(L) && (f0 === 0 || (f0 & 0x40) || (f0 & 0x10)) && !((f0 & 0x20) && !(f0 & 0x40)) && (f0 & 0x80) === 0) {
           const nv = 1 + Math.floor((L.nsec + 80) / (L.ss * 8));
           const myTotal = rd16(L.sec(360), 1) === L.nsec - 11 - nv;
           return dosVol(bytes, L, (v === 2 || v === 0) && !myTotal && !(f0 & 0x10) ? 'dos2' : 'mydos');
