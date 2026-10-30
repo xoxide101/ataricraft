@@ -199,6 +199,9 @@ Ctrl+arrows move. ^O write, ^X exit,
 ^W search, ^K cut line, ^U paste,
 ^A/^E line start/end, ^V/^Y page,
 ^D delete, BackSpace, Tab, ^G help.
+^R insert a file (up to 2K at the cursor),
+^T go to line number,
+^L replace: Y/N/A for each match.
 Text area about 23K. A missing file
 is opened as a new file.
 
