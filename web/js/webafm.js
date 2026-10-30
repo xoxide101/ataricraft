@@ -140,10 +140,68 @@
     render();
     if (W.lnLoad) makeNames(r, true);
   }
-  // A disk with no DOS directory (boot/protected/custom-loader/data disk): show what can be read from it instead of refusing.
+  // Print Shop data disk: thumbnails of every graphic, border and font on it, with PNG / raw extraction.
+  async function psViewer(file, b) {
+    const P = AC.PrintShop, info = P.parse(b), base = file.name.replace(/\.[^.]*$/, '');
+    const items = info.entries.map((e) => { const r = P.read(b, e); return Object.assign({}, e, r); });
+    const gfx = items.filter((e) => e.kind === 'graphic').map((e) => Object.assign(e, { px: P.gfxPixels(e.data) }));
+    const bor = items.filter((e) => e.kind === 'border'), fon = items.filter((e) => e.kind === 'font'), oth = items.filter((e) => e.kind === 'data');
+    const safe = (s) => s.replace(/[^A-Za-z0-9._ -]/g, '_').trim() || 'item';
+    const w = document.createElement('div'); w.style.width = 'min(88vw,760px)';
+    w.innerHTML = `<div><b>${esc(file.name)}</b> · Print Shop disk: ${gfx.length} graphic(s), ${bor.length} border(s), ${fon.length} font(s), ${oth.length} other file(s)</div>
+      <div class="dim" style="margin:4px 0 6px">Click a picture to tag it. Nothing on the disk is changed.</div>
+      <div class="pst" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <span class="dim">PNG size</span><select class="psz"><option value="1">1× (88×52)</option><option value="2">2×</option><option value="4" selected>4× (352×208)</option><option value="8">8×</option></select>
+        <button class="p1">Save tagged PNG(s)</button><button class="pa">All PNGs (ZIP)</button><button class="pc">Contact sheet PNG</button><button class="pr">Raw files (ZIP)</button><button class="pt">Tag all</button></div>
+      <div class="pgrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:8px;max-height:46vh;overflow:auto"></div>
+      <div class="pother"></div>`;
+    const q = (s) => w.querySelector(s), grid = q('.pgrid'), tag = new Set();
+    gfx.forEach((g, i) => {
+      const card = document.createElement('div');
+      card.style.cssText = 'background:#fff;color:#000;border:2px solid #555;border-radius:4px;padding:3px;text-align:center;cursor:pointer;font-size:12px';
+      const c = P.canvasOf(g.px, P.GW, P.GH, 2); c.style.display = 'block'; c.style.margin = '0 auto';
+      card.append(c, Object.assign(document.createElement('div'), { textContent: g.name + (g.short ? ' (incomplete)' : '') }));
+      card.onclick = () => { if (tag.has(i)) tag.delete(i); else tag.add(i); card.style.borderColor = tag.has(i) ? '#e8a33d' : '#555'; card.style.background = tag.has(i) ? '#ffe9bf' : '#fff'; };
+      card.dataset.i = i; grid.append(card);
+    });
+    if (!gfx.length) grid.innerHTML = '<div class="dim">No 88×52 graphics on this disk.</div>';
+    const oq = q('.pother'), rows = [];
+    const addRow = (title, list, describe) => {
+      if (!list.length) return;
+      const h = document.createElement('div'); h.className = 'dim'; h.style.marginTop = '10px'; h.textContent = title; oq.append(h);
+      for (const e of list) {
+        const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:8px;align-items:center;margin:2px 0';
+        const nm = Object.assign(document.createElement('span'), { textContent: `${e.name} · ${describe(e)}${e.short ? ' · incomplete' : ''}` }); nm.style.flex = '1';
+        r.append(nm);
+        if (e.kind === 'border') { const bp = P.borderPixels(e.data), c = P.canvasOf(bp.px, bp.w, bp.h, 2); c.style.cssText = 'background:#fff;height:48px;width:auto;image-rendering:pixelated'; r.append(c); }
+        const sv = document.createElement('button'); sv.textContent = 'Save raw'; sv.onclick = () => host().save(safe(e.name) + '.bin', e.data); r.append(sv);
+        oq.append(r); rows.push(r);
+      }
+    };
+    addRow('Borders (tiled strips, 8 pixels wide)', bor, (e) => `${e.len} bytes`);
+    addRow('Fonts (saved as raw data)', fon, (e) => `${e.len} bytes`);
+    addRow('Other files (program code, menus, picture data: saved as raw data)', oth, (e) => `${e.len} bytes, load address $${e.addr.toString(16).toUpperCase().padStart(4, '0')}`);
+    const scale = () => +q('.psz').value;
+    const sel = () => (tag.size ? [...tag].map((i) => gfx[i]) : gfx);
+    const one = async (g) => P.png(P.canvasOf(g.px, P.GW, P.GH, scale()));
+    q('.pt').onclick = () => { const all = tag.size < gfx.length; tag.clear(); if (all) gfx.forEach((_, i) => tag.add(i)); [...grid.children].forEach((c) => { const on = tag.has(+c.dataset.i); c.style.borderColor = on ? '#e8a33d' : '#555'; c.style.background = on ? '#ffe9bf' : '#fff'; }); };
+    q('.p1').onclick = async () => {
+      if (!tag.size) return log('tag one or more pictures first (click them)');
+      const l = sel(); if (l.length === 1) return host().save(safe(l[0].name) + '.png', await one(l[0]), 'image/png');
+      const z = []; for (const g of l) z.push({ name: safe(g.name) + '.png', data: await one(g) }); host().save(base + '-tagged.zip', host().zip(z), 'application/zip');
+    };
+    q('.pa').onclick = async () => { const z = []; for (const g of gfx) z.push({ name: safe(g.name) + '.png', data: await one(g) }); host().save(base + '-pngs.zip', host().zip(z), 'application/zip'); };
+    q('.pc').onclick = async () => host().save(base + '-sheet.png', await P.png(P.sheet(sel(), Math.min(scale(), 3), 5)), 'image/png');
+    q('.pr').onclick = () => host().save(base + '-raw.zip', host().zip(items.map((e) => ({ name: safe(e.name) + (e.kind === 'graphic' ? '.gfx' : '.bin'), data: e.data }))), 'application/zip');
+    const p = dlg('Print Shop disk', w, [{ label: 'Close', value: null, pri: true }, { label: 'Put in emulator drive', value: 'drive' }]);
+    const box = W.el.querySelector('.wdlg:last-child .wdb'); if (box) box.style.maxWidth = '94vw';
+    const v = await p;
+    if (v === 'drive' && host().insert) { let n = 1; while (n < 8 && host().disk(n)) n++; return host().insert(file, n); }
+  }  // A disk with no DOS directory (boot/protected/custom-loader/data disk): show what can be read from it instead of refusing.
   async function rawInfo(file, bytes) {
     let b = bytes, kind = 'raw', note = '';
     try { const f = AC.DiskConv && AC.DiskConv.detect ? AC.DiskConv.detect(bytes, file.name) : null; if (f) kind = f; if (f && f !== 'atr' && f !== 'xfd') { b = AC.DiskConv.toAtr(bytes, file.name); note = ' (shown as converted ATR)'; } } catch (e) { note = ' (could not convert: ' + e.message + ')'; }
+    if (window.AC && AC.PrintShop && AC.PrintShop.parse(b)) return psViewer(file, b);
     const atr = b[0] === 0x96 && b[1] === 0x02, off = atr ? 16 : 0, ss = atr ? b[4] | (b[5] << 8) : 128;
     const secs = atr ? Math.ceil(Math.max(0, b.length - 16 + (ss === 256 ? 384 : 0)) / ss) : Math.ceil(b.length / 128);
     const hx = (v, n) => v.toString(16).toUpperCase().padStart(n, '0');
