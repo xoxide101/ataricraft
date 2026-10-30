@@ -222,7 +222,7 @@
   async function eject(i) {
     const r = rec(W.panes[i]); if (!r) return;
     if (r.kind !== 'drive' && r.kind !== 'archive' && r.unsaved) {
-      const go = await dlg('Eject ' + r.name, `<div>${esc(r.name)} has changes that are not saved${r.kind === 'file' ? ' (use Save as… first)' : ''}. Eject anyway?</div>`, [{ label: 'Cancel', value: false }, { label: 'Eject', value: true, pri: true }]);
+      const go = await dlg('Eject ' + r.name, `<div>${esc(r.name)} has changes that are not saved${r.kind === 'file' ? ' (use Save disk… first)' : ''}. Eject anyway?</div>`, [{ label: 'Cancel', value: false }, { label: 'Eject', value: true, pri: true }]);
       if (!go) return;
     }
     const free = r.kind !== 'drive' && ![...W.panes].some((p, k) => k !== i && p.src === r.key);
@@ -299,7 +299,7 @@
         const w = await r.handle.createWritable(); await w.write(r.m.bytes); await w.close();
         r.unsaved = false; if (!quiet) log('saved ' + r.name); return;
       }
-    } catch (e) { log('could not write ' + r.name + ' in place (' + e.message + '); use Save as…'); }
+    } catch (e) { log('could not write ' + r.name + ' in place (' + e.message + '); use Save disk…'); }
     if (!r.handle) { host().save(r.name, r.m.bytes); r.unsaved = false; log('downloaded ' + r.name); }
   }
   async function saveAs(r) {
@@ -396,7 +396,7 @@
     const pn = el.querySelector('.wpanes');
     W.panes.forEach((p, i) => {
       const d = document.createElement('div'); d.className = 'wp'; d.dataset.i = i;
-      d.innerHTML = `<div class="wph"><select class="src"></select><button class="up" title="Up one folder (Backspace)">⬆</button><button class="tg" title="Switch between folder view and full tree">Tree</button><button class="sv" title="Write the disk image to the PC">Save as…</button><button class="ej" title="Eject: unmount this disk or folder from the pane">Eject</button><input class="flt" placeholder="find in disk…" style="flex:1;min-width:80px"></div>
+      d.innerHTML = `<div class="wph"><select class="src"></select><button class="up" title="Up one folder (Backspace)">⬆</button><button class="tg" title="Switch between folder view and full tree">Tree</button><button class="sv" title="Save this disk image to the PC (choose the folder)">Save disk…</button><button class="cm" title="Write the changes back to where this disk came from">Commit disk</button><button class="ej" title="Eject: unmount this disk or folder from the pane">Eject</button><input class="flt" placeholder="find in disk…" style="flex:1;min-width:80px"></div>
         <div class="wcrumb"></div><div class="winfo"></div><div class="bar"><i class="u"></i><i class="pd"></i></div><div class="wl"></div>`;
       pn.append(d); wirePane(d, i);
     });
@@ -415,6 +415,7 @@
     d.querySelector('.up').onclick = () => { p.dir = parentOf(p.dir); p.sel = new Set(); render(); };
     d.querySelector('.tg').onclick = () => { p.tree = !p.tree; render(); };
     d.querySelector('.sv').onclick = () => { const r = rec(p); if (r) saveAs(r); };
+    d.querySelector('.cm').onclick = async () => { const r = rec(p); if (!r) return; if (r.kind === 'drive') { host().commit(r.n, r.m.bytes); log('committed to D' + r.n + ':'); } else if (r.handle) await saveFile(r); else return saveAs(r); r.unsaved = false; render(); };
     d.querySelector('.ej').onclick = () => eject(i);
     d.querySelector('.flt').oninput = (e) => { p.filter = e.target.value; render(); };
     const l = d.querySelector('.wl');
@@ -489,7 +490,9 @@
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
     { const tg = d.querySelector('.tg'), cp = r ? C.caps(r.m).tree : { ok: false, why: 'pick a disk first' }; tg.disabled = !cp.ok; tg.title = cp.ok ? '' : 'not available: ' + cp.why; }
     d.querySelector('.sv').style.display = r && (r.kind === 'file' || r.kind === 'drive') ? '' : 'none';
-    d.querySelector('.sv').textContent = r && r.unsaved ? 'Save as… ●' : 'Save as…';
+    d.querySelector('.sv').textContent = 'Save disk…';
+    const cm = d.querySelector('.cm'); cm.style.display = r && (r.kind === 'file' || r.kind === 'drive') ? '' : 'none';
+    cm.textContent = r && r.kind === 'drive' ? 'Commit to D' + r.n + ':' + (r.unsaved ? ' ●' : '') : (r && r.handle ? 'Commit disk' : 'Commit (save)') + (r && r.unsaved ? ' ●' : '');
     d.querySelector('.ej').style.display = r ? '' : 'none';
     const fl = d.querySelector('.flt'); if (fl.value !== p.filter) fl.value = p.filter;
     const info = d.querySelector('.winfo'), bar = d.querySelector('.bar'), crumb = d.querySelector('.wcrumb'), l = d.querySelector('.wl');
@@ -1002,7 +1005,7 @@
       W.panes[0] && Object.assign(W.panes[0], { src: out[0].key, dir: '', sel: new Set() });
       if (out[1]) Object.assign(W.panes[1], { src: out[1].key, dir: '', sel: new Set() });
       if (ok.zip) host().save(base + '.zip', host().zip(out.map((o) => ({ name: o.name, data: o.data }))), 'application/zip');
-      log(`Made ${out.length} disk(s) from ${root}` + (set.failed.length ? `; ${set.failed.length} file(s) skipped (${set.failed.slice(0, 3).map((f) => baseOf(f.path) + ': ' + f.error).join('; ')})` : '') + '. Use Save as… on each pane to keep them.');
+      log(`Made ${out.length} disk(s) from ${root}` + (set.failed.length ? `; ${set.failed.length} file(s) skipped (${set.failed.slice(0, 3).map((f) => baseOf(f.path) + ': ' + f.error).join('; ')})` : '') + '. Use Save disk… on each pane to keep them.');
       render();
     } catch (e) { log('folder → disk: ' + e.message); }
   }
