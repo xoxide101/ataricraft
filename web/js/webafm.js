@@ -378,7 +378,7 @@
       return;
     }
     r.unsaved = true;
-    if (r.handle) await saveFile(r, true);
+    if (r.handle) await saveFile(r, true); else if (r.kind === 'file') histAdd('file', r.name, null, r.m.bytes);
   }
   async function saveFile(r, quiet) {
     try {

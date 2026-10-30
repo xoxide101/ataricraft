@@ -3353,7 +3353,7 @@
   const crcNum = (b) => parseInt(crc32(b), 16);
   AC.WebAfmHost = {
     disk: (n) => { const d = S.disks[n]; if (!d) return null; return { name: d.name, bytes: (S.emu && S.emu.readDisk(n)) || d.bytes }; },
-    commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes); S.disks[n] = { name: d.name, bytes }; S.dirty[n] = true; },
+    commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes);     S.disks[n] = { name: d.name, bytes, orig: d.orig || d.bytes, rev: (d.rev || 0) + 1 }; S.dirty[n] = true; },
     renameDisk: (n, name) => { const d = S.disks[n]; if (!d) return; d.name = name; S.dirty[n] = true; const el = $('d' + n); if (el) el.textContent = name; },
     running: () => !!(S.emu && !S.off),
     insert: (file, n) => loadAny(file, n, 'disk'),
