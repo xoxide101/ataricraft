@@ -14,3 +14,4 @@ run('disc.asm', '-o:bin\\\\disc.com');
 run('zoo.asm', '-o:bin\\zoo.com');
 run('arj.asm', '-o:bin\\arj.com');
 run('view.asm', '-o:bin\\view.com');
+run('nano.asm', '-o:bin\\nano.com');
