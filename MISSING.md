@@ -53,3 +53,5 @@ All four are already covered by the cores (ATR, XEX, XFD, CAS, SIO patch, high-s
 - Not yet verified: stereo left/right audio, KEYTEST joystick/paddle rows, SNDTEST, WebAFM tests on Altirra.
 - Not tested: a BASIC cartridge in slot 1 with built-in BASIC on (a cart should take priority).
 - Layout on a real Pixel phone in portrait.
+
+- **WebAFM extras:** Save disk / Commit disk buttons per pane; non-DOS disks get an info dialog instead of junk files; **Print Shop data-disk viewer** (psdisk.js). Graphics (88x52) are decoded and verified on 74 clip-art disks, with PNG/ZIP/contact-sheet/raw export. Borders are an unconfirmed guess (thin strip preview). Fonts and the holmes program disks (menus, MAINPICS) are raw extract only, not decoded.
