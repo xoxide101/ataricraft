@@ -26,6 +26,8 @@ Research verdicts come from web research and were not tested in this project.
 |---|---|
 | 80COL.COM (software 80-column E: handler with /ON /OFF) | NO. Feasible, about 8-10 KB RAM. |
 | nano-style full-screen editor | built: NANO.COM, tested Atari800 only |
+| calculator | built: CALC.COM (infix, FP ROM, ~9 digits), tested Atari800 + Altirra |
+| 80col.com /on /off | not started |
 | Calculator | NO |
 | 5200 controller analog stick / keypad mapping | PART (keypad only) |
 

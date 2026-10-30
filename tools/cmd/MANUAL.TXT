@@ -205,7 +205,15 @@ Ctrl+arrows move. ^O write, ^X exit,
 Text area about 23K. A missing file
 is opened as a new file.
 
-10. TIPS
+10. CALC.COM - calculator
+-------------------------
+Type a sum, press Return for the answer.
++ - * / ^ and ( ). ANS = last answer,
+PI, SQR LN LOG EXP ABS. Example:
+  2+3*4   sqr(16)+pi   ans/7
+Empty line or Q quits.
+
+11. TIPS
 -------
 Boot with BASIC off: hold OPTION.
 No file name given: tools show a prompt.
