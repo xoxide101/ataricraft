@@ -140,16 +140,46 @@
     render();
     if (W.lnLoad) makeNames(r, true);
   }
-  async function openFile(i, file, handle) {
+  // A disk with no DOS directory (boot/protected/custom-loader/data disk): show what can be read from it instead of refusing.
+  async function rawInfo(file, bytes) {
+    let b = bytes, kind = 'raw', note = '';
+    try { const f = AC.DiskConv && AC.DiskConv.detect ? AC.DiskConv.detect(bytes, file.name) : null; if (f) kind = f; if (f && f !== 'atr' && f !== 'xfd') { b = AC.DiskConv.toAtr(bytes, file.name); note = ' (shown as converted ATR)'; } } catch (e) { note = ' (could not convert: ' + e.message + ')'; }
+    const atr = b[0] === 0x96 && b[1] === 0x02, off = atr ? 16 : 0, ss = atr ? b[4] | (b[5] << 8) : 128;
+    const secs = atr ? Math.ceil(Math.max(0, b.length - 16 + (ss === 256 ? 384 : 0)) / ss) : Math.ceil(b.length / 128);
+    const hx = (v, n) => v.toString(16).toUpperCase().padStart(n, '0');
+    const s1 = b.subarray(off, off + 6), boots = s1.length === 6 && s1[1] > 0;
+    const cls = secs === 720 && ss === 128 ? 'single density (90K)' : secs === 1040 && ss === 128 ? 'enhanced density (130K)' : secs === 720 && ss === 256 ? 'double density (180K)' : secs + ' sectors of ' + ss + ' bytes';
+    const strs = [], seen = new Set();
+    let run = '';
+    for (let k = off; k < Math.min(b.length, off + 128 * 600); k++) {
+      const c = b[k];
+      if (c >= 32 && c < 127) run += String.fromCharCode(c);
+      else { if (run.trim().length >= 6 && /[A-Za-z]{4}/.test(run) && !seen.has(run.trim()) && strs.length < 14) { seen.add(run.trim()); strs.push(run.trim().slice(0, 60)); } run = ''; }
+    }
+    const sg = String.fromCharCode(...b.subarray(off + 360 * 128, off + 360 * 128 + 11));
+    const ps = /^PRINT SHOP/.test(sg) ? '<div style="margin-top:6px"><b>Print Shop graphics/data disk.</b> The icons are stored by sector like a database, not as DOS files, so this is information only.</div>' : '';
+    const html = `<div><b>${esc(file.name)}</b>${esc(note)}</div>${ps}
+      <div class="dim" style="margin-top:6px">No DOS 2 / MyDOS / SpartaDOS directory was found, so there are no files to list. This is normal for boot, copy-protected or custom-loader disks (many games and programs such as Print Shop).</div>
+      <table style="margin-top:8px"><tr><td class="dim">Container</td><td>${esc(kind.toUpperCase())}</td></tr>
+      <tr><td class="dim">Layout</td><td>${esc(cls)} · ${kb(bytes.length)} file</td></tr>
+      <tr><td class="dim">Boots</td><td>${boots ? `yes: sector 1 loads ${s1[1]} sector(s) at $${hx(s1[2] | (s1[3] << 8), 4)}, init $${hx(s1[4] | (s1[5] << 8), 4)}` : 'no boot sectors'}</td></tr></table>
+      ${strs.length ? '<div class="dim" style="margin-top:8px">Readable text on the disk</div><pre style="margin:2px 0;max-height:150px;overflow:auto;white-space:pre-wrap">' + strs.map(esc).join('\n') + '</pre>' : ''}
+      <div class="dim" style="margin-top:8px">Nothing is changed. You can look at it in the sector editor, or put it in an emulator drive to boot it.</div>`;
+    const v = await dlg('Disk information', html, [{ label: 'Close', value: null }, { label: 'Sector viewer…', value: 'ed' }, { label: 'Put in emulator drive', value: 'drive', pri: true }]);
+    if (v === 'drive' && host().insert) { let n = 1; while (n < 8 && host().disk(n)) n++; return host().insert(file, n); }
+    if (v === 'ed' && !W.ed) {
+      AC.WDisk.open({
+        parent: W.el, title: file.name, bytes: b, entries: [], kind: 'raw',
+        onReady: (a) => { W.ed = a; W.dlgKey = () => a.focus(); }, onClose: () => { W.ed = null; W.dlgKey = null; W.el.focus(); },
+        onSave: async (out) => { host().save(file.name.replace(/\.[^.]*$/, '') + '-edited.atr', out); },
+      });
+    }
+  }  async function openFile(i, file, handle) {
     if (window.AC && AC.Archives && AC.Archives.looksLikeArchive(file.name)) return openArchive(i, file, handle);
     const bytes = AC.Progress ? await AC.Progress.read(file, 'Loading ' + file.name) : new Uint8Array(await file.arrayBuffer());
     const m = C.mount(bytes, file.name);
     if (!m) {
-      if (/\.(atx|atr|xfd|pro|dcm)$/i.test(file.name) && host().insert) {
-        let n = 1; while (n < 8 && host().disk(n)) n++;
-        log(`${file.name}: no file system to browse (copy-protected or a boot disk), so it goes into emulator drive D${n} instead`);
-        return host().insert(file, n);
-      }
+      if (/\.(atx|atr|xfd|pro|dcm|dsk|img)$/i.test(file.name)) return rawInfo(file, bytes);
       log(`${file.name}: no DOS 2.x / MyDOS / SpartaDOS-family file system found`); return;
     }
     const key = 'F' + (++W.seq);
