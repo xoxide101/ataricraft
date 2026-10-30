@@ -22,9 +22,9 @@
     return { vol, bytes, name: from ? (name || '').replace(/\.[^.]*$/, '') + '.atr' : name || '', kind: vol.kind, dirty: false, from };
   }
 
-  const canDirs = (m) => m.kind === 'sdfs' || m.kind === 'mydos';
+  const canDirs = (m) => m.kind === 'sdfs' || m.kind === 'mydos' || m.kind === 'folder';
   const dataPerSector = (m) => (m.kind === 'sdfs' ? m.vol.sectorSize : m.vol.sectorSize - 3);
-  const dirLimit = (m) => (m.kind === 'sdfs' ? 1400 : 64);
+  const dirLimit = (m) => (m.kind === 'folder' ? 100000 : m.kind === 'sdfs' ? 1400 : 64);
 
   // Sectors a file of `size` bytes occupies on this volume (data + map sectors).
   function sectorsFor(m, size) {
@@ -57,13 +57,13 @@
       longnames: { label: 'Long names (LONGNAME.TXT)', ok: !ro, why: roWhy },
       tree: { label: 'Folder tree', ok: canDirs(m), why: 'no folders on this disk' },
     };
-    c.limit = { label: `Directory limit ${dirLimit(m)} entries`, ok: true };
+    c.limit = { label: m.kind === 'folder' ? 'No directory limit' : `Directory limit ${dirLimit(m)} entries`, ok: true };
     return c;
   }
 
   function info(m) {
     const u = usage(m);
-    return { kind: m.kind, label: m.vol.label || '', sectorSize: m.vol.sectorSize, sectors: m.vol.sectors, density: m.vol.sectorSize === 128 ? (m.vol.sectors > 720 ? 'enhanced' : 'single') : (m.vol.sectorSize === 256 ? 'double' : 'quad'), writable: !m.vol.readOnly, folders: canDirs(m), usage: u };
+    return { kind: m.kind, label: m.vol.label || '', sectorSize: m.vol.sectorSize, sectors: m.vol.sectors, density: m.kind === 'folder' ? 'PC folder' : m.vol.sectorSize === 128 ? (m.vol.sectors > 720 ? 'enhanced' : 'single') : (m.vol.sectorSize === 256 ? 'double' : 'quad'), writable: !m.vol.readOnly, folders: canDirs(m), usage: u };
   }
 
   // ---------- long-name sidecar ----------
@@ -81,19 +81,38 @@
   function formatLongNames(map) {
     const lines = [];
     for (const e of [...map.values()].sort((a, b) => (a.short < b.short ? -1 : 1))) lines.push(`${e.short.padEnd(12)}|${e.long}|${e.added || ''}|${e.size || 0}|${e.source || ''}`);
-    const s = lines.join('\x9b') + (lines.length ? '\x9b' : '');
-    const out = new Uint8Array(s.length);
-    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 255;
+    // UTF-8 per line so any Windows name survives; the line ends stay the Atari EOL byte 0x9B (ASCII-only names are unchanged).
+    const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null, parts = [];
+    let n = 0;
+    for (const l of lines) {
+      let b;
+      if (enc) b = enc.encode(l); else { b = new Uint8Array(l.length); for (let i = 0; i < l.length; i++) b[i] = l.charCodeAt(i) & 255; }
+      parts.push(b); n += b.length + 1;
+    }
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const b of parts) { out.set(b, o); o += b.length; out[o++] = 0x9b; }
     return out;
+  }
+  // Sidecar bytes -> text (lines joined by \n). UTF-8 when valid, else Latin-1 (older sidecars).
+  function sidecarText(b) {
+    const lines = [];
+    let s = 0;
+    const flush = (e) => {
+      const seg = b.subarray(s, e);
+      let t;
+      try { t = new TextDecoder('utf-8', { fatal: true }).decode(seg); } catch (x) { t = ''; for (let i = 0; i < seg.length; i++) t += String.fromCharCode(seg[i]); }
+      lines.push(t);
+    };
+    for (let i = 0; i < b.length; i++) if (b[i] === 0x9b || b[i] === 10 || b[i] === 13) { if (i > s) flush(i); s = i + 1; }
+    if (s < b.length) flush(b.length);
+    return lines.join('\n');
   }
   function readSidecar(m, dir) {
     const e = findEntry(m, joinP(dir, SIDECAR));
     if (!e) return new Map();
     try {
-      const b = m.vol.read(e);
-      let s = '';
-      for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
-      return parseLongNames(s);
+      return parseLongNames(sidecarText(m.vol.read(e)));
     } catch (x) { return new Map(); }
   }
   function writeSidecar(m, dir, map) {
@@ -582,7 +601,7 @@
 
   function readFile(m, path) { const e = findEntry(m, path); return e ? m.vol.read(e) : null; }
 
-  const api = { SIDECAR, readFile, SPECS, customSpec, specBytes, planSet, planSingle, buildSet, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, readSidecar, canDirs, caps, refresh: touch };
+  const api = { SIDECAR, readFile, SPECS, customSpec, specBytes, planSet, planSingle, buildSet, mount, info, usage, entries, listDir, props, plan, execute, executeAsync, removeEmptyDirs, dirsUnder, rename, remove, mkdir, setLabel, addHostFile, syncLongNames, validName, shortName, sectorsFor, parseLongNames, formatLongNames, sidecarText, readSidecar, canDirs, caps, refresh: touch };
   if (typeof AC !== 'undefined') AC.AfmCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

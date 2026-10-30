@@ -151,6 +151,28 @@
     render();
     if (W.lnLoad) makeNames(nr, true);
   }
+  async function openFolder(i, handle) {
+    const pg = AC.Progress ? AC.Progress.begin('Reading folder ' + handle.name + '…', 0) : null;
+    let vol;
+    try { vol = await AC.FolderFs.load(handle, (s) => { if (pg) pg.text(`Reading ${s.files} files · ${kb(s.bytes)}`); }); }
+    catch (e) { log('folder ' + handle.name + ': ' + e.message); return; }
+    finally { if (pg) pg.end(); }
+    const m = { vol, bytes: null, name: handle.name, kind: 'folder', dirty: false, from: null };
+    const key = 'F' + (++W.seq), nr = { key, kind: 'folder', name: handle.name, m, handle, unsaved: false };
+    W.mounts.set(key, nr);
+    Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
+    if (vol.skipped.length) log(`${handle.name}: ${vol.skipped.length} file(s) could not be read and are left alone (${vol.skipped[0]})`);
+    if (W.lnLoad && vol.primeNames()) { C.refresh(m); await commit(nr); }
+    render();
+  }
+  async function pickFolder(i) {
+    if (!window.showDirectoryPicker) return log('Folder drives need a Chromium browser (Chrome or Edge) with the File System Access API.');
+    try { openFolder(i, await showDirectoryPicker({ id: 'ataricraft-wafm-folder', mode: 'readwrite' })); } catch (e) { if (e.name !== 'AbortError') log('folder: ' + e.message); }
+  }
+  // Re-read a folder drive from the PC (picks up changes made outside WebAFM).
+  async function reloadFolder(r) {
+    try { r.m = { vol: await AC.FolderFs.load(r.handle), bytes: null, name: r.name, kind: 'folder', dirty: false, from: null }; r.unsaved = false; } catch (e) { log('reload ' + r.name + ': ' + e.message); }
+  }
   async function pickFile(i) {
     try {
       if (window.showOpenFilePicker) {
@@ -184,6 +206,10 @@
   // ---------- persistence and undo ----------
   async function commit(r) {
     if (r.kind === 'drive') { host().commit(r.n, r.m.bytes); return; }
+    if (r.kind === 'folder') {
+      try { await r.m.vol.flush(); r.unsaved = false; } catch (e) { r.unsaved = true; log('could not write folder ' + r.name + ': ' + e.message); }
+      return;
+    }
     r.unsaved = true;
     if (r.handle) await saveFile(r, true);
   }
@@ -199,7 +225,9 @@
   }
   function snapshot(label, recs) {
     const seen = new Set(), snaps = [];
-    for (const r of recs) if (r && !seen.has(r.key)) { seen.add(r.key); snaps.push({ key: r.key, bytes: r.m.bytes.slice() }); }
+    for (const r of recs) if (r && r.m.bytes && !seen.has(r.key)) { seen.add(r.key); snaps.push({ key: r.key, bytes: r.m.bytes.slice() }); }
+    if (recs.some((r) => r && r.kind === 'folder')) W.undo.length = 0; // PC folders are written straight away and cannot be undone
+    if (!snaps.length) return;
     W.undo.push({ label, snaps }); if (W.undo.length > 6) W.undo.shift();
   }
   async function undo() {
@@ -215,7 +243,14 @@
   async function afterWrite(recs) { const seen = new Set(); for (const r of recs) if (r && !seen.has(r.key)) { seen.add(r.key); if (W.lnSave) fillNames(r, true); C.refresh(r.m); await commit(r); } }
 
   // Fill LONGNAME.TXT from the scan title database (host.titleFor); returns a one-line summary or '' when nothing changed.
-  function fillNames(r, quiet) {
+  function fillNames(r, quiet, force) {
+    if (r.kind === 'folder') {
+      const n = r.m.vol.primeNames(!!force);
+      if (n) C.refresh(r.m);
+      const s = n ? `${r.name}: LONGNAME.TXT updated in ${n} folder(s)` : '';
+      if (s && !quiet) log(s);
+      return { res: { written: n }, s };
+    }
     const res = C.syncLongNames(r.m, { lookup: (n) => (host().titleFor ? host().titleFor(n) : '') });
     const bits = [res.added && res.added + ' added', res.upgraded && res.upgraded + ' titled', res.pruned && res.pruned + ' removed'].filter(Boolean);
     const s = bits.length ? `${r.name}: LONGNAME.TXT ${bits.join(', ')}` : '';
@@ -225,7 +260,7 @@
   }
   async function makeNames(r, auto) {
     if (!r) return;
-    const { res, s } = fillNames(r, true);
+    const { res, s } = fillNames(r, true, !auto);
     if (!res.written) { if (!auto) log(res.skipped ? `${r.name}: LONGNAME.TXT not updated — ${res.skipped}` : `${r.name}: LONGNAME.TXT already lists every file`); return; }
     C.refresh(r.m); await commit(r); log(s); render();
   }
@@ -284,7 +319,7 @@
     d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); updateTb(); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
-      if (v === 'pc') pickFile(i); else if (v === 'lib') importLib(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
+      if (v === 'pc') pickFile(i); else if (v === 'folder') pickFolder(i); else if (v === 'lib') importLib(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
     };
     d.querySelector('.up').onclick = () => { p.dir = parentOf(p.dir); p.sel = new Set(); render(); };
     d.querySelector('.tg').onclick = () => { p.tree = !p.tree; render(); };
@@ -347,7 +382,8 @@
     sel.innerHTML = '<option value="">— choose a disk —</option>';
     for (let n = 1; n <= 8; n++) { const dk = host().disk(n); if (dk) sel.insertAdjacentHTML('beforeend', `<option value="D${n}">D${n}: ${esc(dk.name)}</option>`); }
     for (const [k, x] of W.mounts) if (x.kind === 'file') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
-    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option><option value="lib">Scanned media library…</option>');
+    for (const [k, x] of W.mounts) if (x.kind === 'folder') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC folder: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
+    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option><option value="folder">PC folder as a drive…</option><option value="lib">Scanned media library…</option>');
     sel.value = p.src || '';
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
     { const tg = d.querySelector('.tg'), cp = r ? C.caps(r.m).tree : { ok: false, why: 'pick a disk first' }; tg.disabled = !cp.ok; tg.title = cp.ok ? '' : 'not available: ' + cp.why; }
@@ -358,7 +394,7 @@
     if (!r) { info.textContent = 'Pick a mounted drive (D1–D8) or a disk image on the PC. You can also drop a disk image or files here.'; crumb.textContent = ''; bar.style.visibility = 'hidden'; l.textContent = ''; return; }
     bar.style.visibility = '';
     const inf = C.info(r.m), u = inf.usage;
-    info.innerHTML = `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
+    info.innerHTML = r.kind === 'folder' ? `${esc(r.name)} · PC folder${inf.writable ? '' : ' · <b class="bad">read-only</b>'} · long names kept on the PC, 8.3 names shown beside them<br>${C.entries(r.m).filter((e) => !e.dir).length} files · ${kb(C.entries(r.m).reduce((a, e) => a + e.size, 0))}${r.unsaved ? ' · <span class="warn">changes not written yet</span>' : ''}` : `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
     bar.firstChild.style.width = u.pct + '%';
     const cc = C.caps(r.m), chips = ['write', 'folders', 'rename', 'del', 'import', 'edit', 'label', 'longnames'].map((k) => `<span class="cap ${cc[k].ok ? 'yes' : 'no'}" title="${esc(cc[k].ok ? 'available' : 'not available: ' + cc[k].why)}">${cc[k].ok ? '✔' : '✖'} ${esc(cc[k].label)}</span>`).join('');
     info.innerHTML += `<div class="caps">${chips}</div>`;
@@ -417,7 +453,7 @@
   function act(a) {
     const A = W.panes[W.active];
     ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, cart: doCart, mkzip: doMkZip,
-      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: () => { refreshDrives(); render(); }, close }[a] || (() => {}))();
+      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: async () => { for (const r of new Set(W.panes.map(rec))) if (r && r.kind === 'folder') await reloadFolder(r); refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => 1 - W.active;
 
@@ -441,8 +477,8 @@
       for (const w of P.warnings) warns.push(w);
       const free = P.free, need = P.sectors;
       sum.innerHTML = `<div><b>${move ? 'Move' : 'Copy'}</b> ${nf} file${nf === 1 ? '' : 's'}${nd ? ' and ' + nd + ' folder' + (nd === 1 ? '' : 's') : ''} from <b>${esc(sr.name)}</b> to <b>${esc(dr.name)}</b>${toDir ? ' / ' + esc(toDir) : ''}</div>
-        <div style="margin:8px 0">Needs <b>${need}</b> sectors (${kb(need * (dr.m.vol.sectorSize - (dr.m.kind === 'sdfs' ? 0 : 3)))}); <b>${free}</b> free of ${dr.m.vol.sectors} on the target (${dr.m.vol.sectorSize}-byte sectors).
-        ${P.ok ? `<span class="ok">Fits — ${free - need} sectors will remain free.</span>` : ''}</div>
+        <div style="margin:8px 0">${dr.m.kind === 'folder' ? `Writes <b>${nf}</b> file(s), about <b>${kb(P.files.reduce((a, f) => a + (f.size || 0), 0))}</b>, into the PC folder. Long names are kept as the real Windows names.` : `Needs <b>${need}</b> sectors (${kb(need * (dr.m.vol.sectorSize - (dr.m.kind === 'sdfs' ? 0 : 3)))}); <b>${free}</b> free of ${dr.m.vol.sectors} on the target (${dr.m.vol.sectorSize}-byte sectors).`}
+        ${P.ok && dr.m.kind !== 'folder' ? `<span class="ok">Fits — ${free - need} sectors will remain free.</span>` : ''}</div>
         ${P.errors.map((x) => '<div class="bad">✖ ' + esc(x) + '</div>').join('')}${warns.map((x) => '<div class="warn">⚠ ' + esc(x) + '</div>').join('')}
         ${P.conflicts.length ? `<div style="margin-top:8px">If a name already exists: <select class="cf"><option value="error">stop</option><option value="overwrite">overwrite</option><option value="skip">skip it</option><option value="rename">keep both (new name)</option></select></div>` : ''}`;
       const cf = sum.querySelector('.cf'); if (cf) { cf.value = opts.conflict || 'error'; cf.onchange = () => { opts.conflict = cf.value === 'error' ? undefined : cf.value; W.conflict = cf.value; paint(); }; }
@@ -787,6 +823,7 @@
 
   function diskEdit() {
     const r = rec(W.panes[W.active]); if (!r) return log('pick a disk first');
+    if (!r.m.bytes) return log('the raw sector editor works on disk images, not PC folders');
     if (W.ed) return;
     const ents = r.m.kind === 'dos2' || r.m.kind === 'mydos' ? C.entries(r.m).filter((e) => !e.dir && e.raw).map((e) => ({ path: e.path, start: e.raw.start })) : [];
     AC.WDisk.open({
@@ -928,5 +965,5 @@
     if (!e.ctrlKey && !e.metaKey) e.stopPropagation();
   }, true);
 
-  AC.WebAfm = { open, close, openDrive: (pane, n) => open({ pane, drive: n }), openFile: (pane, file) => { open(); return openFile(pane, file); }, _state: W, _core: C };
+  AC.WebAfm = { open, close, openDrive: (pane, n) => open({ pane, drive: n }), openFile: (pane, file) => { open(); return openFile(pane, file); }, openFolder: (pane, handle) => { open(); return openFolder(pane, handle); }, _state: W, _core: C };
 })();

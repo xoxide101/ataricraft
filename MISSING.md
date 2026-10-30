@@ -25,6 +25,7 @@ Research verdicts come from web research and were not tested in this project.
 | Item | Status |
 |---|---|
 | 80COL.COM (software 80-column E: handler with /ON /OFF) | built: 80x24 in ANTIC mode F, 4x8 cells, 12K at top of RAM. ON/OFF + DOS menu + DIR tested Atari800; ON + DIR on Altirra (NTSC colour fringes). BASIC, RESET, cold start untested |
+| WebAFM "PC folder as a drive" | built: pick a Windows folder in either pane; real long names kept, 8.3 short name shown, LONGNAME.TXT mirrors them (CRLF on the PC, UTF-8). Copy/move/rename/mkdir/delete to and from disks or other folders write straight to the folder. Tested on a browser-private folder (OPFS), not yet on a real Windows folder. No undo, no sector editor; whole folder is read into memory (1.5 GB cap); Chromium only; edits made outside WebAFM need Refresh |
 | nano-style full-screen editor | built: NANO.COM, tested Atari800 only |
 | calculator | built: CALC.COM (infix, FP ROM, ~9 digits), tested Atari800 + Altirra |
 | 5200 controller analog stick / keypad mapping | PART (keypad only) |
