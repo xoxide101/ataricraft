@@ -351,8 +351,8 @@
   // Identify by content (names lie): returns 'atr' | 'dcm' | 'pro' | 'xfd' | null.
   function detect(b, name) {
     if (isAtr(b)) return 'atr';
-    const ext = ((name || '').match(/\.([a-z0-9]+)$/i) || [])[1];
-    const e = ext ? ext.toLowerCase() : '';
+    if (b.length >= 4 && b[0] === 0x41 && b[1] === 0x54 && b[2] === 0x38 && b[3] === 0x58) return 'atx';
+    const ext = ((name || '').match(/\.([a-z0-9]+)$/i) || [])[1], e = ext ? ext.toLowerCase() : '';
     if ((b[0] === 0xf9 || b[0] === 0xfa) && (b[1] & 0x1f) === 1 && e !== 'car' && e !== 'rom') return 'dcm';
     if (b.length >= 16 && b[2] === 0x50 && b.length === 16 + ((b[0] << 8) | b[1]) * 140 && e !== 'xex') return 'pro';
     if (e === 'xfd' || (b.length % 128 === 0 && (b.length === 92160 || b.length === 133120 || b.length === 183936 || b.length === 184320))) return 'xfd';
@@ -365,6 +365,7 @@
       case 'dcm': return dcmToAtr(b);
       case 'pro': return proToAtr(b);
       case 'xfd': return xfdToAtr(b);
+      case 'atx': return atxToAtr(b);
       default: return b;
     }
   }

@@ -16,7 +16,7 @@
   // DCM/PRO images are converted to ATR on open; saving writes an ATR (m.from remembers the original container).
   function mount(bytes, name) {
     let from = null;
-    if (Conv) { const f = Conv.detect(bytes, name); if (f === 'dcm' || f === 'pro') { try { bytes = Conv.toAtr(bytes, name); from = f; } catch (e) { return null; } } }
+    if (Conv) { const f = Conv.detect(bytes, name); if (f === 'dcm' || f === 'pro' || f === 'atx') { try { bytes = Conv.toAtr(bytes, name); from = f; } catch (e) { return null; } } }
     const vol = DosFs.open(bytes);
     if (!vol) return null;
     return { vol, bytes, name: from ? (name || '').replace(/\.[^.]*$/, '') + '.atr' : name || '', kind: vol.kind, dirty: false, from };
