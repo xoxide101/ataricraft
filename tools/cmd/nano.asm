@@ -192,13 +192,12 @@ dk3     lda ktl,x
         jmp (T0)
 
 ktab    .byte 28,16,29,14,25,22
-        .byte 30,2,31,6,1,5,4,254,126,155,127,11,21,23,15,24,7,3
+        .byte 30,2,31,6,1,5,4,254,126,155,127,11,21,23,15,24,7,3,18,20,12
 NK      = *-ktab
 ktl     .byte <kup,<kup,<kdn,<kdn,<kpu,<kpd
-        .byte <klf,<klf,<krt,<krt,<khome,<kend,<kdel,<kdel,<kbs,<knl,<ktb,<kcut,<kpaste,<ksrch,<kwrite,<kexit,<khelp,<kpos
+        .byte <klf,<klf,<krt,<krt,<khome,<kend,<kdel,<kdel,<kbs,<knl,<ktb,<kcut,<kpaste,<ksrch,<kwrite,        <kexit,<khelp,<kpos,<kread,<kgoto,<krepl
 kth     .byte >kup,>kup,>kdn,>kdn,>kpu,>kpd
-        .byte >klf,>klf,>krt,>krt,>khome,>kend,>kdel,>kdel,>kbs,>knl,>ktb,>kcut,>kpaste,>ksrch,>kwrite,>kexit,>khelp,>kpos
-
+        .byte >klf,>klf,>krt,>krt,>khome,>kend,>kdel,>kdel,>kbs,>knl,>ktb,>kcut,>kpaste,>ksrch,>kwrite,        >kexit,>khelp,>kpos,>kread,>kgoto,>krepl
 ; ---- key handlers ----
 kup     jsr cup
         jmp loop
@@ -442,7 +441,11 @@ kp2     jsr setp
         jmp loop
 
 ; ^W search (case blind, wraps around, same text is offered again)
-ksrch   lda #<inb
+ksx     jmp loop
+ksrch   lda #0
+        sta rmode
+        sta rall
+ks0     lda #<inb
         sta fb
         lda #>inb
         sta fb+1
@@ -456,11 +459,26 @@ ksrch   lda #<inb
         php
         jsr clr21
         plp
-        bcc ks9
+        bcc ksx
         lda inb
         cmp #EOL
-        beq ks9
-        lda cur
+        beq ksx
+        lda rmode
+        beq ks0a
+        lda #<rb
+        sta fb
+        lda #>rb
+        sta fb+1
+        lda #<lbr
+        sta pl
+        lda #>lbr
+        sta pl+1
+        jsr prompt
+        php
+        jsr clr21
+        plp
+        bcc ksx
+ks0a    lda cur
         sta p
         lda cur+1
         sta p+1
@@ -476,10 +494,13 @@ ks2     lda p
         lda p+1
         sbc len+1
         bcc ks3
-        lda #0
+        lda rmode
+        beq ks2w
+        jmp rend
+ks2w    lda #0
         sta p
         sta p+1
-ks3     lda p
+ks3      lda p
         sta q
         lda p+1
         clc
@@ -511,11 +532,296 @@ ks6     dec cnt
         .byte 'Not found',0
         jsr msg1
 ks9     jmp loop
-kfound  lda p
+kfound  stx slen
+        lda p
         sta cur
         lda p+1
         sta cur+1
+        lda rmode
+        beq kfx
+        jmp krep
+kfx     jmp loop
+
+; ^L replace: search text, replacement, then Y / N / A for each match (no wrap)
+krepl   lda #1
+        sta rmode
+        lda #EOL
+        sta rb
+        lda #0
+        sta rall
+        jmp ks0
+
+krep    jsr fixtop
+        jsr draw
+        lda rall
+        bne krdo
+        jsr msg0
+        jsr pstr
+        .byte 'Replace? Y/N/A, ESC stops',0
+        jsr msg1
+        jsr getk
+        jsr fold
+        cmp #'Y'
+        beq krdo
+        cmp #'A'
+        bne kr1
+        sta rall
+        jmp krdo
+kr1     cmp #'N'
+        beq krskip
+        jsr clr21
         jmp loop
+krdo    lda slen
+        sta cnt
+        lda #0
+        sta cnt+1
+        jsr delgap
+        ldx #0
+krl     stx rx
+        lda rb,x
+        cmp #EOL
+        beq krd2
+        jsr inschr
+        ldx rx
+        inx
+        bne krl
+krd2    lda #1
+        sta mod
+        lda cur
+        sta p
+        lda cur+1
+        sta p+1
+        lda len
+        sta cnt
+        lda len+1
+        sta cnt+1
+        jmp ks2
+krskip  lda len
+        sta cnt
+        lda len+1
+        sta cnt+1
+        jmp ks1
+rend    jsr clr21
+        jsr msg0
+        jsr pstr
+        .byte 'No more matches',0
+        jsr msg1
+        jmp loop
+
+; ^T go to line number
+kgx     jmp loop
+kgoto   lda #EOL
+        sta gb
+        lda #<gb
+        sta fb
+        lda #>gb
+        sta fb+1
+        lda #<lbg
+        sta pl
+        lda #>lbg
+        sta pl+1
+        lda #5
+        sta fmax
+        jsr prompt
+        php
+        jsr clr21
+        plp
+        bcc kgx
+        lda #0
+        sta t
+        sta t+1
+        sta dst
+        sta dst+1
+        tax
+kg1     lda gb,x
+        cmp #EOL
+        beq kg4
+        sec
+        sbc #'0'
+        cmp #10
+        bcs kgx
+        sta tmp
+        lda t
+        asl
+        sta src
+        lda t+1
+        rol
+        sta src+1
+        lda src
+        asl
+        sta q
+        lda src+1
+        rol
+        sta q+1
+        asl q
+        rol q+1
+        clc
+        lda q
+        adc src
+        sta t
+        lda q+1
+        adc src+1
+        sta t+1
+        clc
+        lda t
+        adc tmp
+        sta t
+        bcc kg2
+        inc t+1
+kg2     inx
+        bne kg1
+kg4     lda t+1
+        bne kg5
+        lda t
+        cmp #2
+        bcc kg8
+kg5     lda dst
+        cmp len
+        lda dst+1
+        sbc len+1
+        bcs kg8
+        lda dst
+        sta q
+        lda dst+1
+        clc
+        adc #>BUF
+        sta q+1
+        ldy #0
+        lda (q),y
+        inc dst
+        bne kg6
+        inc dst+1
+kg6     cmp #EOL
+        bne kg4
+        lda t
+        bne kg7
+        dec t+1
+kg7     dec t
+        jmp kg4
+kg8     lda dst
+        cmp len
+        lda dst+1
+        sbc len+1
+        bcc kg3
+        lda len
+        sec
+        sbc #1
+        sta dst
+        lda len+1
+        sbc #0
+        sta dst+1
+kg3     lda dst
+        sta cur
+        lda dst+1
+        sta cur+1
+kg9     jmp loop
+
+; ^R insert a file (up to 2K, uses the cut buffer)
+kread   lda #EOL
+        sta pb
+        lda #<pb
+        sta fb
+        lda #>pb
+        sta fb+1
+        lda #<lbr2
+        sta pl
+        lda #>lbr2
+        sta pl+1
+        lda #28
+        sta fmax
+        jsr prompt
+        php
+        jsr clr21
+        plp
+        bcc kra9
+        lda pb
+        cmp #EOL
+        beq kra9
+        ldx #0
+kra1    lda fn,x
+        sta fn2,x
+        lda pb,x
+        sta fn,x
+        inx
+        cpx #60
+        bcc kra1
+        jsr fixname
+        jsr rdclip
+        php
+        ldx #0
+kra2    lda fn2,x
+        sta fn,x
+        inx
+        cpx #60
+        bcc kra2
+        plp
+        bcs kra8
+        lda cl
+        ora cl+1
+        beq kra7
+        jmp kp1
+kra7    jsr msg0
+        jsr pstr
+        .byte 'File is empty',0
+        jsr msg1
+kra9    jmp loop
+kra8    jsr msg0
+        jsr pstr
+        .byte 'Cannot read that file',0
+        jsr msg1
+        jmp loop
+
+rdclip  ldx #$10
+        lda #3
+        sta ICCOM,x
+        lda #<fn
+        sta ICBAL,x
+        lda #>fn
+        sta ICBAH,x
+        lda #4
+        sta ICAX1,x
+        lda #0
+        sta ICAX2,x
+        sta ICBLL,x
+        sta ICBLH,x
+        sta cl
+        sta cl+1
+        jsr CIOV
+        bpl rdc1
+        sec
+        rts
+rdc1    ldx #$10
+        lda #7
+        sta ICCOM,x
+        lda #<CLIP
+        sta ICBAL,x
+        lda #>CLIP
+        sta ICBAH,x
+        lda #<CLIPMAX
+        sta ICBLL,x
+        lda #>CLIPMAX
+        sta ICBLH,x
+        jsr CIOV
+        sty erc
+        ldx #$10
+        lda ICBLL,x
+        sta cl
+        lda ICBLH,x
+        sta cl+1
+        lda #12
+        sta ICCOM,x
+        jsr CIOV
+        lda erc
+        bpl rdc2
+        cmp #136
+        beq rdc2
+        lda #0
+        sta cl
+        sta cl+1
+        sec
+        rts
+rdc2    clc
+        rts
 
 kwrite  jsr wrfile
         jmp loop
@@ -641,6 +947,15 @@ kh1     lda #0
         jsr hnl
         jsr pstr
         .byte '^C  Show line and column',0
+        jsr hnl
+        jsr pstr
+        .byte '^R  Insert a file (up to 2K)',0
+        jsr hnl
+        jsr pstr
+        .byte '^T  Go to line number',0
+        jsr hnl
+        jsr pstr
+        .byte '^L  Replace, then Y/N/A each match',0
         jsr hnl
         jsr pstr
         .byte '^A  Start of line   ^E  End of line',0
@@ -1765,6 +2080,16 @@ HAND    = $0480
 kspec   .byte 'K:',EOL
 lbs     .byte 'Search: ',EOL
 lbw     .byte 'Write to: ',EOL
+lbr     .byte 'Replace with: ',EOL
+lbr2    .byte 'Insert file: ',EOL
+lbg     .byte 'Line number: ',EOL
+rmode   .byte 0
+rall    .byte 0
+slen    .byte 0
+rx      .byte 0
+gb      .ds 8
+rb      .ds 32
+fn2     .ds 64
 inb     .ds 32
 pb      .ds 64
 fn      .ds 64
