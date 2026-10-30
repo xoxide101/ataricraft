@@ -43,7 +43,7 @@
   // What can be done with this disk, and why not when it can't (drives the dimmed buttons).
   function caps(m) {
     const ro = !!m.vol.readOnly, why = {};
-    const roWhy = `read-only here (${m.kind.toUpperCase()}, ${m.vol.sectorSize}-byte sectors${m.vol.sectors > 720 && m.vol.sectorSize === 128 ? ', enhanced density' : ''})`;
+    const roWhy = m.vol.archive ? 'an archive is opened read-only; copy its files out to a disk or folder' : `read-only here (${m.kind.toUpperCase()}, ${m.vol.sectorSize}-byte sectors${m.vol.sectors > 720 && m.vol.sectorSize === 128 ? ', enhanced density' : ''})`;
     const c = {
       read: { label: 'Read / view / save to PC', ok: true },
       write: { label: 'Write files', ok: !ro, why: roWhy },

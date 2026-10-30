@@ -141,6 +141,7 @@
     if (W.lnLoad) makeNames(r, true);
   }
   async function openFile(i, file, handle) {
+    if (window.AC && AC.Archives && AC.Archives.looksLikeArchive(file.name)) return openArchive(i, file, handle);
     const bytes = AC.Progress ? await AC.Progress.read(file, 'Loading ' + file.name) : new Uint8Array(await file.arrayBuffer());
     const m = C.mount(bytes, file.name);
     if (!m) {
@@ -158,6 +159,36 @@
     Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
     render();
     if (W.lnLoad) makeNames(nr, true);
+  }
+  // An archive (ZIP, ARC, LZH, 7z, RAR...) opened as a read-only drive: files and folders are browsable and can be copied out.
+  // It is loaded through FolderFs from a small in-memory directory tree, so long names get 8.3 short names + LONGNAME.TXT like a PC folder.
+  async function openArchive(i, file, handle) {
+    const pg = AC.Progress ? AC.Progress.begin('Opening ' + file.name + '…', 0) : null;
+    let vol, fmt;
+    try {
+      const ar = await AC.Archives.list(file); fmt = ar.format.name;
+      const root = { kind: 'directory', name: '', kids: new Map(), entries: async function* () { yield* this.kids; } };
+      let done = 0;
+      for (const e of ar.entries) {
+        const parts = String(e.name).split('/').filter(Boolean), leaf = parts.pop(); if (!leaf) continue;
+        let data;
+        try { data = await AC.Archives.extract(file, e, ar.format); } catch (err) { log(file.name + ': ' + e.name + ': ' + err.message); continue; }
+        let dir = root;
+        for (const part of parts) { let k = dir.kids.get(part); if (!k) { k = { kind: 'directory', name: part, kids: new Map(), entries: root.entries }; dir.kids.set(part, k); } dir = k; }
+        const fh = { kind: 'file', name: leaf, getFile: async () => ({ size: data.length, lastModified: e.modified ? +new Date(e.modified) : file.lastModified || Date.now(), arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.length) }) };
+        dir.kids.set(leaf, fh);
+        if (pg) pg.text('Reading ' + (++done) + ' of ' + ar.entries.length + ' files');
+      }
+      vol = await AC.FolderFs.load(root);
+      vol.readOnly = true; vol.archive = true;
+      vol.primeNames(true);
+    } catch (e) { log(file.name + ': ' + e.message); return; } finally { if (pg) pg.end(); }
+    const m = { vol, bytes: null, name: file.name, kind: 'folder', dirty: false, from: null };
+    C.refresh(m);
+    const key = 'F' + (++W.seq), nr = { key, kind: 'archive', name: file.name, fmt, m, handle: null, unsaved: false };
+    W.mounts.set(key, nr); histAdd('file', file.name, handle, new Uint8Array(await file.arrayBuffer()));
+    Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
+    render();
   }
   // ---------- history of PC images and folders ----------
   const idb = () => new Promise((ok, no) => { const q = indexedDB.open('ac-wafm', 1); q.onupgradeneeded = () => q.result.createObjectStore('hist', { keyPath: 'id' }); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
@@ -190,7 +221,7 @@
   // Unmount a disk image or folder from a pane. Mounted emulator drives (D1-D8) stay in the emulator; only the pane lets go.
   async function eject(i) {
     const r = rec(W.panes[i]); if (!r) return;
-    if (r.kind !== 'drive' && r.unsaved) {
+    if (r.kind !== 'drive' && r.kind !== 'archive' && r.unsaved) {
       const go = await dlg('Eject ' + r.name, `<div>${esc(r.name)} has changes that are not saved${r.kind === 'file' ? ' (use Save as… first)' : ''}. Eject anyway?</div>`, [{ label: 'Cancel', value: false }, { label: 'Eject', value: true, pri: true }]);
       if (!go) return;
     }
@@ -438,9 +469,9 @@
     sel.innerHTML = '<option value="">— choose a disk —</option>';
     for (let n = 1; n <= 8; n++) { const dk = host().disk(n); if (dk) sel.insertAdjacentHTML('beforeend', `<option value="D${n}">D${n}: ${esc(dk.name)}</option>`); }
     for (const [k, x] of W.mounts) if (x.kind === 'file') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
-    for (const [k, x] of W.mounts) if (x.kind === 'folder') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC folder: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
-    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option><option value="folder">PC folder as a drive…</option><option value="lib">Scanned media library…</option>');
-    { const live = new Set([...W.mounts.values()].map((x) => x.kind + ':' + x.name)), hh = (W.hist || []).filter((h) => !live.has(h.kind + ':' + h.name));
+    for (const [k, x] of W.mounts) if (x.kind === 'folder' || x.kind === 'archive') sel.insertAdjacentHTML('beforeend', `<option value="${k}">${x.kind === 'archive' ? 'Archive' : 'PC folder'}: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
+    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image or archive…</option><option value="folder">PC folder as a drive…</option><option value="lib">Scanned media library…</option>');
+    { const live = new Set([...W.mounts.values()].map((x) => (x.kind === 'archive' ? 'file' : x.kind) + ':' + x.name)), hh = (W.hist || []).filter((h) => !live.has(h.kind + ':' + h.name));
       if (hh.length) sel.insertAdjacentHTML('beforeend', '<optgroup label="History (last used)">' + hh.map((h) => `<option value="H:${h.id}">${h.kind === 'folder' ? '📁' : '💾'} ${esc(h.name)} · ${esc(new Date(h.t).toLocaleDateString())}</option>`).join('') + '<option value="hclear">Clear history</option></optgroup>'); }
     sel.value = p.src || '';
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
@@ -453,7 +484,7 @@
     if (!r) { info.textContent = 'Pick a mounted drive (D1–D8) or a disk image on the PC. You can also drop a disk image or files here.'; crumb.textContent = ''; bar.style.visibility = 'hidden'; l.textContent = ''; return; }
     bar.style.visibility = '';
     const inf = C.info(r.m), u = inf.usage;
-    info.innerHTML = r.kind === 'folder' ? `${esc(r.name)} · PC folder${inf.writable ? '' : ' · <b class="bad">read-only</b>'} · long names kept on the PC, 8.3 names shown beside them<br>${C.entries(r.m).filter((e) => !e.dir).length} files · ${kb(C.entries(r.m).reduce((a, e) => a + e.size, 0))}${r.unsaved ? ' · <span class="warn">changes not written yet</span>' : ''}` : `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
+    info.innerHTML = r.kind === 'folder' || r.kind === 'archive' ? `${esc(r.name)} · ${r.kind === 'archive' ? 'archive (' + esc(r.fmt) + ', read-only: copy files out)' : 'PC folder'}${inf.writable ? '' : ' · <b class="bad">read-only</b>'} · long names kept on the PC, 8.3 names shown beside them<br>${C.entries(r.m).filter((e) => !e.dir).length} files · ${kb(C.entries(r.m).reduce((a, e) => a + e.size, 0))}${r.unsaved ? ' · <span class="warn">changes not written yet</span>' : ''}` : `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
     bar.firstChild.style.width = u.pct + '%';
     const cc = C.caps(r.m), chips = ['write', 'folders', 'rename', 'del', 'import', 'edit', 'label', 'longnames'].map((k) => `<span class="cap ${cc[k].ok ? 'yes' : 'no'}" title="${esc(cc[k].ok ? 'available' : 'not available: ' + cc[k].why)}">${cc[k].ok ? '✔' : '✖'} ${esc(cc[k].label)}</span>`).join('');
     info.innerHTML += `<div class="caps">${chips}</div>`;
