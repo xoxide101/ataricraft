@@ -145,7 +145,7 @@
     const m = C.mount(bytes, file.name);
     if (!m) { log(`${file.name}: no DOS 2.x / MyDOS / SpartaDOS-family file system found`); return; }
     const key = 'F' + (++W.seq);
-    const nr = { key, kind: 'file', name: file.name, m, handle: handle || null, unsaved: false };
+    const nr = { key, kind: 'file', name: file.name, m, handle: m.from ? null : handle || null, unsaved: false };
     W.mounts.set(key, nr);
     Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
     render();
@@ -176,7 +176,7 @@
   async function pickFile(i) {
     try {
       if (window.showOpenFilePicker) {
-        const [h] = await showOpenFilePicker({ id: 'ataricraft-wafm', multiple: false, types: [{ description: 'Atari disk images', accept: { 'application/octet-stream': ['.atr', '.xfd', '.dsk', '.img'] } }] });
+        const [h] = await showOpenFilePicker({ id: 'ataricraft-wafm', multiple: false, types: [{ description: 'Atari disk images', accept: { 'application/octet-stream': ['.atr', '.atx', '.xfd', '.dcm', '.pro', '.dsk', '.img'] } }] });
         return openFile(i, await h.getFile(), h);
       }
     } catch (e) { if (e.name === 'AbortError') return; }
