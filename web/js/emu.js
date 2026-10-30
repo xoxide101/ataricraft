@@ -20,7 +20,11 @@ window.AC = window.AC || {};
     '65xe': { label: 'Atari 65XE', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: XL_RAM },
     '130xe': { label: 'Atari 130XE', romFlag: '-xlxe_rom', osKind: 'xl', def: '128', ram: XL_RAM },
     '1200xl': { label: 'Atari 1200XL', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-1200'] }] },
-  };
+    '400': { label: 'Atari 400', romFlag: '-osb_rom', osKind: '800', def: '16', ram: [{ v: '16', label: '16 KB', args: ['-atari', '-ram', '16'] }, { v: '48', label: '48 KB', args: ['-atari'] }] },
+    '1400xl': { label: 'Atari 1400XL', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-xl'] }] },
+    '1440xkd': { label: 'Atari 1440XKD', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-xl'] }] },
+    '1450xld': { label: 'Atari 1450XLD', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-xl'] }] },
+    '5200': { label: 'Atari 5200', romFlag: '-5200_rom', osKind: '5200', def: '16', ram: [{ v: '16', label: '16 KB', args: ['-5200'] }] },  };
 
   class Emu {
     constructor(m, opt) {
@@ -40,7 +44,7 @@ window.AC = window.AC || {};
       const model = MODELS[opt.model];
       m.FS.writeFile('/os.rom', opt.os);
       const ram = model.ram.find((r) => r.v === opt.ram) || model.ram.find((r) => r.v === model.def);
-      const args = ['atari800', opt.tv === 'pal' ? '-pal' : '-ntsc', ...ram.args, model.romFlag, '/os.rom', '-H1', '/host',       '-hreadwrite', '-mouse', 'touch', '-directmouse'];
+      const args = ['atari800', opt.tv === 'pal' ? '-pal' : '-ntsc', ...ram.args, (opt.osA && model.osKind === '800' ? '-osa_rom' : model.romFlag), '/os.rom', '-H1', '/host',       '-hreadwrite', '-mouse', 'touch', '-directmouse'];
       m.FS.mkdir('/host');
       for (const [n, b] of Object.entries(opt.host || {})) m.FS.writeFile('/host/' + n, b);
       if (opt.basic) {

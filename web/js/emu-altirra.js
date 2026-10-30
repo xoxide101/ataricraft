@@ -4,8 +4,8 @@ window.AC = window.AC || {};
 (function () {
   const Emu = AC.Emu;
   const W = AC.SCREEN.w, H = AC.SCREEN.h;
-  const RAM = { '48': '48K', '52': '52K', '64': '64K', '128': '128K', '320r': '320K', '320c': '320K_Compy', '576': '576K', '1088': '1088K' };
-  const SYSTEM = { '800': '800', '800xl': '800xl', '65xe': '800xl', '130xe': '130xe', '1200xl': '1200xl' };
+  const RAM = { '16': '16K', '48': '48K', '52': '52K', '64': '64K', '128': '128K', '320r': '320K', '320c': '320K_Compy', '576': '576K', '1088': '1088K' };
+  const SYSTEM = { '800': '800', '800xl': '800xl', '65xe': '800xl', '130xe': '130xe', '1200xl': '1200xl', '400': '800', '1400xl': '800xl', '1440xkd': '800xl', '1450xld': '800xl', '5200': '5200' };
   // Atari scan codes for ctrl+letter (keychar 1..26).
   const LETTER = [0x3f, 0x15, 0x12, 0x3a, 0x2a, 0x38, 0x3d, 0x39, 0x0d, 0x01, 0x05, 0x00, 0x25, 0x23, 0x08, 0x0a, 0x2f, 0x28, 0x3e, 0x2d, 0x0b, 0x10, 0x2e, 0x16, 0x2b, 0x17];
   const SPECIAL_CHAR = { 10: 0x0c, 8: 0x34, 9: 0x2c, 27: 0x1c };
@@ -72,7 +72,8 @@ window.AC = window.AC || {};
       o('basic', opt.basicOn ? 'enabled' : 'disabled');
       // The OS and BASIC picked in the ROM selectors are what boots, same as the Atari800 core.
       const fwFile = (kind, bytes) => { const p = '/system/' + kind + '.rom'; m.FS.writeFile(p, bytes); a.fwCustom(kind, p); };
-      if (opt.os) fwFile(opt.model === '800' ? 'os800' : 'osxl', opt.os);
+      if (opt.model === '5200') o('os_firmware', 'internal');
+      else if (opt.os) fwFile(opt.model === '800' || opt.model === '400' ? 'os800' : 'osxl', opt.os);
       else o('os_firmware', 'internal');
       if (opt.basic) fwFile('basic', opt.basic);
       else o('basic_firmware', 'internal');
