@@ -3556,7 +3556,8 @@
         return;
       }
       const opts = [...$('ctype').options];
-      const guess = opts.find((o) => /^Standard/i.test(o.textContent)) || opts.find((o) => !/5200/.test(o.textContent)) || opts[0];
+      const is5200 = AC.MODELS[$('model').value].osKind === '5200';
+      const guess = (is5200 && (opts.find((o) => /two chip.*5200/i.test(o.textContent)) || opts.find((o) => /5200/.test(o.textContent)))) || opts.find((o) => /^Standard/i.test(o.textContent)) || opts.find((o) => !/5200/.test(o.textContent)) || opts[0];
       if (guess) {
         $('ctype').value = guess.value;
         S.pendingCart = slot;
@@ -3565,7 +3566,7 @@
         S.pendingCart = slot;
         log(`${r.kb} KB cart loaded as "${guess.textContent}". If it shows diagnostics, pick another type and press OK`);
       }
-    } else if (slot === 2) S.emu.coldStart();
+    } else if (slot === 2 || AC.MODELS[$('model').value].osKind === '5200') S.emu.coldStart();
   }
   // Cartridges are only changed with the power off: warn, then switch the computer off.
   // ---- File-menu equivalents: boot image, state save/load, detach/rotate disks, save cartridge, full screen ----
@@ -3764,7 +3765,7 @@
   window.AC_setKbMode(['keys', 'arrows', 'pad', 'joy', 'paddle', 'drive'].includes(localStorage.getItem('ac.kbmode')) ? localStorage.getItem('ac.kbmode') : 'keys');
   $('kblayout').onchange = (e) => AC.keyboard.build($('kbd'), handle, e.target.value);
   $('romfiles').onchange = (e) => addRoms(e.target.files);
-  $('model').onchange = () => { fillRomSelects(); syncBasicUi(); const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
+  $('model').onchange = () => { fillRomSelects(); syncBasicUi(); if ($('model').value === '5200' && $('core').value === 'altirra') { $('core').value = 'atari800'; log('5200 carts only run on the Atari800 core so far; switched core'); } const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
   function saveRomSel() {
     const kind = osKindOf($('model').value);
     const s = JSON.parse(localStorage.getItem('ac.romsel') || '{}');
