@@ -143,13 +143,61 @@
   async function openFile(i, file, handle) {
     const bytes = AC.Progress ? await AC.Progress.read(file, 'Loading ' + file.name) : new Uint8Array(await file.arrayBuffer());
     const m = C.mount(bytes, file.name);
-    if (!m) { log(`${file.name}: no DOS 2.x / MyDOS / SpartaDOS-family file system found`); return; }
+    if (!m) {
+      if (/\.(atx|atr|xfd|pro|dcm)$/i.test(file.name) && host().insert) {
+        let n = 1; while (n < 8 && host().disk(n)) n++;
+        log(`${file.name}: no file system to browse (copy-protected or a boot disk), so it goes into emulator drive D${n} instead`);
+        return host().insert(file, n);
+      }
+      log(`${file.name}: no DOS 2.x / MyDOS / SpartaDOS-family file system found`); return;
+    }
     const key = 'F' + (++W.seq);
     const nr = { key, kind: 'file', name: file.name, m, handle: m.from ? null : handle || null, unsaved: false };
+    histAdd('file', file.name, nr.handle, bytes);
     W.mounts.set(key, nr);
     Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
     render();
     if (W.lnLoad) makeNames(nr, true);
+  }
+  // ---------- history of PC images and folders ----------
+  const idb = () => new Promise((ok, no) => { const q = indexedDB.open('ac-wafm', 1); q.onupgradeneeded = () => q.result.createObjectStore('hist', { keyPath: 'id' }); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); });
+  const idbDo = async (mode, fn) => { const db = await idb(); return new Promise((ok, no) => { const t = db.transaction('hist', mode), s = t.objectStore('hist'), r = fn(s); t.oncomplete = () => { db.close(); ok(r && r.result); }; t.onerror = () => { db.close(); no(t.error); }; }); };
+  async function histLoad() {
+    try { W.hist = ((await idbDo('readonly', (s) => s.getAll())) || []).sort((a, b) => b.t - a.t); } catch (e) { W.hist = W.hist || []; }
+    if (W.el) render();
+  }
+  async function histAdd(kind, name, handle, bytes) {
+    const rec0 = { id: kind + ':' + name, kind, name, t: Date.now(), handle: handle || null, bytes: !handle && bytes && bytes.length <= 8 << 20 ? bytes : null };
+    try {
+      await idbDo('readwrite', (s) => s.put(rec0));
+      const all = ((await idbDo('readonly', (s) => s.getAll())) || []).sort((a, b) => b.t - a.t);
+      if (all.length > 25) await idbDo('readwrite', (s) => { for (const h of all.slice(25)) s.delete(h.id); });
+    } catch (e) { /* history is a convenience; storage may be blocked */ }
+    await histLoad();
+  }
+  async function histClear() { try { await idbDo('readwrite', (s) => s.clear()); } catch (e) { /* ignore */ } W.hist = []; render(); }
+  async function histOpen(i, id) {
+    const h = (W.hist || []).find((x) => x.id === id); if (!h) return;
+    try {
+      if (h.handle) {
+        if (h.handle.requestPermission && (await h.handle.requestPermission({ mode: 'readwrite' })) !== 'granted') return log('permission denied for ' + h.name);
+        return h.kind === 'folder' ? await openFolder(i, h.handle) : await openFile(i, await h.handle.getFile(), h.handle);
+      }
+      if (h.bytes) return await openFile(i, new File([h.bytes], h.name));
+      log(h.name + ': the browser kept no link to this file; drop it in again.');
+    } catch (e) { log(h.name + ': ' + e.message + ' (moved or deleted? drop it in again)'); }
+  }
+  // Unmount a disk image or folder from a pane. Mounted emulator drives (D1-D8) stay in the emulator; only the pane lets go.
+  async function eject(i) {
+    const r = rec(W.panes[i]); if (!r) return;
+    if (r.kind !== 'drive' && r.unsaved) {
+      const go = await dlg('Eject ' + r.name, `<div>${esc(r.name)} has changes that are not saved${r.kind === 'file' ? ' (use Save as… first)' : ''}. Eject anyway?</div>`, [{ label: 'Cancel', value: false }, { label: 'Eject', value: true, pri: true }]);
+      if (!go) return;
+    }
+    const free = r.kind !== 'drive' && ![...W.panes].some((p, k) => k !== i && p.src === r.key);
+    Object.assign(W.panes[i], { src: null, dir: '', sel: new Set(), cur: '', filter: '' });
+    if (free) { W.mounts.delete(r.key); W.undo = W.undo.filter((u) => !u.snaps.some((s) => s.key === r.key)); }
+    render();
   }
   async function openFolder(i, handle) {
     const pg = AC.Progress ? AC.Progress.begin('Reading folder ' + handle.name + '…', 0) : null;
@@ -159,7 +207,7 @@
     finally { if (pg) pg.end(); }
     const m = { vol, bytes: null, name: handle.name, kind: 'folder', dirty: false, from: null };
     const key = 'F' + (++W.seq), nr = { key, kind: 'folder', name: handle.name, m, handle, unsaved: false };
-    W.mounts.set(key, nr);
+    W.mounts.set(key, nr); histAdd('folder', handle.name, handle);
     Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
     if (vol.skipped.length) log(`${handle.name}: ${vol.skipped.length} file(s) could not be read and are left alone (${vol.skipped[0]})`);
     if (W.lnLoad && vol.primeNames()) { C.refresh(m); await commit(nr); }
@@ -185,7 +233,7 @@
     inp.click();
   }
   function open(a) {
-    build();
+    build(); if (!W.hist) histLoad();
     W.el.style.display = 'flex';
     refreshDrives();
     if (a && a.drive) setDrive(a.pane || 0, a.drive);
@@ -305,7 +353,7 @@
     const pn = el.querySelector('.wpanes');
     W.panes.forEach((p, i) => {
       const d = document.createElement('div'); d.className = 'wp'; d.dataset.i = i;
-      d.innerHTML = `<div class="wph"><select class="src"></select><button class="up" title="Up one folder (Backspace)">⬆</button><button class="tg" title="Switch between folder view and full tree">Tree</button><button class="sv" title="Write the disk image to the PC">Save as…</button><input class="flt" placeholder="find in disk…" style="flex:1;min-width:80px"></div>
+      d.innerHTML = `<div class="wph"><select class="src"></select><button class="up" title="Up one folder (Backspace)">⬆</button><button class="tg" title="Switch between folder view and full tree">Tree</button><button class="sv" title="Write the disk image to the PC">Save as…</button><button class="ej" title="Eject: unmount this disk or folder from the pane">Eject</button><input class="flt" placeholder="find in disk…" style="flex:1;min-width:80px"></div>
         <div class="wcrumb"></div><div class="winfo"></div><div class="bar"><i class="u"></i><i class="pd"></i></div><div class="wl"></div>`;
       pn.append(d); wirePane(d, i);
     });
@@ -319,11 +367,12 @@
     d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); updateTb(); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
-      if (v === 'pc') pickFile(i); else if (v === 'folder') pickFolder(i); else if (v === 'lib') importLib(i); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
+      if (v === 'pc') pickFile(i); else if (v === 'folder') pickFolder(i); else if (v === 'lib') importLib(i); else if (v === 'hclear') histClear(); else if (v.startsWith('H:')) histOpen(i, v.slice(2)); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
     };
     d.querySelector('.up').onclick = () => { p.dir = parentOf(p.dir); p.sel = new Set(); render(); };
     d.querySelector('.tg').onclick = () => { p.tree = !p.tree; render(); };
     d.querySelector('.sv').onclick = () => { const r = rec(p); if (r) host().save(r.name, r.m.bytes), (r.unsaved = false), render(); };
+    d.querySelector('.ej').onclick = () => eject(i);
     d.querySelector('.flt').oninput = (e) => { p.filter = e.target.value; render(); };
     const l = d.querySelector('.wl');
     l.onclick = (e) => rowClick(i, e);
@@ -391,11 +440,14 @@
     for (const [k, x] of W.mounts) if (x.kind === 'file') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
     for (const [k, x] of W.mounts) if (x.kind === 'folder') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC folder: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
     sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image…</option><option value="folder">PC folder as a drive…</option><option value="lib">Scanned media library…</option>');
+    { const live = new Set([...W.mounts.values()].map((x) => x.kind + ':' + x.name)), hh = (W.hist || []).filter((h) => !live.has(h.kind + ':' + h.name));
+      if (hh.length) sel.insertAdjacentHTML('beforeend', '<optgroup label="History (last used)">' + hh.map((h) => `<option value="H:${h.id}">${h.kind === 'folder' ? '📁' : '💾'} ${esc(h.name)} · ${esc(new Date(h.t).toLocaleDateString())}</option>`).join('') + '<option value="hclear">Clear history</option></optgroup>'); }
     sel.value = p.src || '';
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
     { const tg = d.querySelector('.tg'), cp = r ? C.caps(r.m).tree : { ok: false, why: 'pick a disk first' }; tg.disabled = !cp.ok; tg.title = cp.ok ? '' : 'not available: ' + cp.why; }
     d.querySelector('.sv').style.display = r && r.kind === 'file' ? '' : 'none';
     d.querySelector('.sv').textContent = r && r.unsaved ? 'Save as… ●' : 'Save as…';
+    d.querySelector('.ej').style.display = r ? '' : 'none';
     const fl = d.querySelector('.flt'); if (fl.value !== p.filter) fl.value = p.filter;
     const info = d.querySelector('.winfo'), bar = d.querySelector('.bar'), crumb = d.querySelector('.wcrumb'), l = d.querySelector('.wl');
     if (!r) { info.textContent = 'Pick a mounted drive (D1–D8) or a disk image on the PC. You can also drop a disk image or files here.'; crumb.textContent = ''; bar.style.visibility = 'hidden'; l.textContent = ''; return; }

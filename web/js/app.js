@@ -3356,6 +3356,7 @@
     commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes); S.disks[n] = { name: d.name, bytes }; S.dirty[n] = true; },
     renameDisk: (n, name) => { const d = S.disks[n]; if (!d) return; d.name = name; S.dirty[n] = true; const el = $('d' + n); if (el) el.textContent = name; },
     running: () => !!(S.emu && !S.off),
+    insert: (file, n) => loadAny(file, n, 'disk'),
     titleFor: (name) => titleFor(name),
     library: () => MED.files.map((f) => ({ name: f.name, kind: f.kind, title: f.title || '' })),
     libraryFile: async (name) => {
@@ -4046,7 +4047,7 @@
     if (roms.length) { await addRoms(roms); log(`${roms.length} ROM${roms.length > 1 ? 's' : ''} added to the library (Auto-pick or the lists choose which to use)`); }
     if (rest.length) await loadMedia(rest, 1);
   }
-  document.body.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; dropHint.style.display = 'none'; dropAll(e.dataTransfer.files); });
+  document.body.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; dropHint.style.display = 'none'; if (e.target.closest && e.target.closest('#wafm')) return; dropAll(e.dataTransfer.files); });
   requestAnimationFrame(loop);
 
   // ---- clipboard ----
