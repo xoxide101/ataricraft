@@ -302,6 +302,18 @@
     } catch (e) { log('could not write ' + r.name + ' in place (' + e.message + '); use Save as…'); }
     if (!r.handle) { host().save(r.name, r.m.bytes); r.unsaved = false; log('downloaded ' + r.name); }
   }
+  async function saveAs(r) {
+    const name = /\.(atr|atx|xfd|dcm|pro|dsk|img)$/i.test(r.name) ? r.name : r.name + '.atr';
+    try {
+      if (window.showSaveFilePicker) {
+        const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Atari disk image', accept: { 'application/octet-stream': ['.atr', '.xfd', '.dsk', '.img'] } }] });
+        const w = await h.createWritable(); await w.write(r.m.bytes); await w.close();
+        if (r.kind === 'file') { r.handle = h; r.name = h.name; }
+        r.unsaved = false; log('saved ' + h.name); render(); return;
+      }
+    } catch (e) { if (e.name === 'AbortError') return; log('Save as failed (' + e.message + '); downloading instead'); }
+    host().save(name, r.m.bytes); r.unsaved = false; render();
+  }
   function snapshot(label, recs) {
     const seen = new Set(), snaps = [];
     for (const r of recs) if (r && r.m.bytes && !seen.has(r.key)) { seen.add(r.key); snaps.push({ key: r.key, bytes: r.m.bytes.slice() }); }
@@ -402,7 +414,7 @@
     };
     d.querySelector('.up').onclick = () => { p.dir = parentOf(p.dir); p.sel = new Set(); render(); };
     d.querySelector('.tg').onclick = () => { p.tree = !p.tree; render(); };
-    d.querySelector('.sv').onclick = () => { const r = rec(p); if (r) host().save(r.name, r.m.bytes), (r.unsaved = false), render(); };
+    d.querySelector('.sv').onclick = () => { const r = rec(p); if (r) saveAs(r); };
     d.querySelector('.ej').onclick = () => eject(i);
     d.querySelector('.flt').oninput = (e) => { p.filter = e.target.value; render(); };
     const l = d.querySelector('.wl');
@@ -476,7 +488,7 @@
     sel.value = p.src || '';
     d.querySelector('.tg').textContent = p.tree ? 'Folders' : 'Tree';
     { const tg = d.querySelector('.tg'), cp = r ? C.caps(r.m).tree : { ok: false, why: 'pick a disk first' }; tg.disabled = !cp.ok; tg.title = cp.ok ? '' : 'not available: ' + cp.why; }
-    d.querySelector('.sv').style.display = r && r.kind === 'file' ? '' : 'none';
+    d.querySelector('.sv').style.display = r && (r.kind === 'file' || r.kind === 'drive') ? '' : 'none';
     d.querySelector('.sv').textContent = r && r.unsaved ? 'Save as… ●' : 'Save as…';
     d.querySelector('.ej').style.display = r ? '' : 'none';
     const fl = d.querySelector('.flt'); if (fl.value !== p.filter) fl.value = p.filter;
@@ -484,7 +496,7 @@
     if (!r) { info.textContent = 'Pick a mounted drive (D1–D8) or a disk image on the PC. You can also drop a disk image or files here.'; crumb.textContent = ''; bar.style.visibility = 'hidden'; l.textContent = ''; return; }
     bar.style.visibility = '';
     const inf = C.info(r.m), u = inf.usage;
-    info.innerHTML = r.kind === 'folder' || r.kind === 'archive' ? `${esc(r.name)} · ${r.kind === 'archive' ? 'archive (' + esc(r.fmt) + ', read-only: copy files out)' : 'PC folder'}${inf.writable ? '' : ' · <b class="bad">read-only</b>'} · long names kept on the PC, 8.3 names shown beside them<br>${C.entries(r.m).filter((e) => !e.dir).length} files · ${kb(C.entries(r.m).reduce((a, e) => a + e.size, 0))}${r.unsaved ? ' · <span class="warn">changes not written yet</span>' : ''}` : `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
+    info.innerHTML = r.kind === 'folder' || r.kind === 'archive' ? `${esc(r.name)} · ${r.kind === 'archive' ? 'archive (' + esc(r.fmt) + ', read-only: copy files out)' : 'PC folder'}${inf.writable ? '' : ' · <b class="bad">read-only</b>'} · ${r.kind === 'archive' ? 'long names shown with 8.3 names beside them' : 'long names kept on the PC, 8.3 names shown beside them'}<br>${C.entries(r.m).filter((e) => !e.dir).length} files · ${kb(C.entries(r.m).reduce((a, e) => a + e.size, 0))}${r.unsaved ? ' · <span class="warn">changes not written yet</span>' : ''}` : `${esc(r.kind === 'drive' ? 'D' + r.n + ': ' : '')}${esc(r.name)} · ${inf.kind.toUpperCase()}${inf.label ? ' “' + esc(inf.label) + '”' : ''} · ${inf.sectors}×${inf.sectorSize} B ${inf.density}${inf.writable ? '' : ' · <b class="bad">read-only</b>'}${inf.folders ? '' : ' · no folders'}<br>${u.free} sectors free (${kb(u.bytesFree)}) of ${u.total}${r.kind === 'drive' && host().running() ? ' · <span class="warn">in the running computer</span>' : ''}`;
     bar.firstChild.style.width = u.pct + '%';
     const cc = C.caps(r.m), chips = ['write', 'folders', 'rename', 'del', 'import', 'edit', 'label', 'longnames'].map((k) => `<span class="cap ${cc[k].ok ? 'yes' : 'no'}" title="${esc(cc[k].ok ? 'available' : 'not available: ' + cc[k].why)}">${cc[k].ok ? '✔' : '✖'} ${esc(cc[k].label)}</span>`).join('');
     info.innerHTML += `<div class="caps">${chips}</div>`;
