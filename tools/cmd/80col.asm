@@ -95,7 +95,7 @@ ia1     lda HATABS,x
 ia_no   sec
         rts
 ia2     lda HATABS+2,x
-        cmp #$80
+        cmp #$70
         bcc ia_no
         cmp #$D0
         bcs ia_no
@@ -158,7 +158,21 @@ on1a    cmp #$A0
         lda #>blob7e
         sta beh
         jmp on2
-on1b    lda #<m_mem
+on1b    cmp #$80
+        bne on1c
+        ldx #<blob5
+        ldy #>blob5
+        lda #<blob5e
+        sta bel
+        lda #>blob5e
+        sta beh
+        jmp on2
+on1c    cmp #$80
+        bcs on1d
+        lda #<m_16
+        ldy #>m_16
+        jmp prx
+on1d    lda #<m_mem
         ldy #>m_mem
         jmp prx
 on2     stx sp
@@ -440,10 +454,13 @@ m_on    dta c'80 COLUMN SCREEN ON',EOL
 m_off   dta c'80 COLUMN SCREEN OFF',EOL
 m_already dta c'80 COLUMNS ALREADY ON',EOL
 m_not   dta c'80 COLUMNS NOT ON',EOL
-m_mem   dta c'NEEDS RAMTOP $A0 OR $C0 (48K)',EOL
+m_mem   dta c'UNSUPPORTED RAMTOP (32K OR MORE)',EOL
+m_16    dta c'REQUIRES 32K OR MORE',EOL
 
 blob9   ins 'bin\r9000.bin'
 blob9e
 blob7   ins 'bin\r7000.bin'
 blob7e
+blob5   ins 'bin\r5000.bin'
+blob5e
         run start
