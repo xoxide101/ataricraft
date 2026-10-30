@@ -336,7 +336,14 @@
       e.preventDefault(); l.querySelectorAll('.dropt').forEach((x) => x.classList.remove('dropt'));
       const tr = e.target.closest('tr.r'), toDir = tr && tr.dataset.dir === '1' ? tr.dataset.p : p.dir;
       if (W.drag) { const dg = W.drag; W.drag = null; if (dg.from !== i || toDir !== p.dir) xfer(e.shiftKey || e.ctrlKey ? true : false, dg.from, dg.items, i, toDir); return; }
-      const files = [...e.dataTransfer.files]; if (!files.length) return;
+      const its = [...e.dataTransfer.items || []].filter((x) => x.kind === 'file' && x.getAsFileSystemHandle);
+      const hs = its.map((x) => x.getAsFileSystemHandle().catch(() => null)); // must start inside the event
+      const files = [...e.dataTransfer.files];
+      if (hs.length) {
+        const dir = (await Promise.all(hs)).find((h) => h && h.kind === 'directory');
+        if (dir) { try { if (dir.requestPermission && (await dir.requestPermission({ mode: 'readwrite' })) !== 'granted') return log('folder: permission denied'); } catch (_) {} return openFolder(i, dir); }
+      }
+      if (!files.length) return;
       if (!rec(p)) return openFile(i, files[0]);
       addFiles(i, files, toDir);
     });
