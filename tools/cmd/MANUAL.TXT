@@ -213,7 +213,18 @@ PI, SQR LN LOG EXP ABS. Example:
   2+3*4   sqr(16)+pi   ans/7
 Empty line or Q quits.
 
-11. TIPS
+11. 80COL.COM - 80 column screen
+--------------------------------
+80COL /ON    80 x 24 text for DOS and BASIC
+80COL /OFF   back to 40 columns
+Or run it and type ON or OFF.
+Uses the top 12K of RAM (RAMTOP is lowered),
+so tools that use all memory may clash.
+A cold start turns it off. BASIC GRAPHICS
+modes other than 0 show the normal screen.
+Colour fringes are normal on NTSC.
+
+12. TIPS
 -------
 Boot with BASIC off: hold OPTION.
 No file name given: tools show a prompt.

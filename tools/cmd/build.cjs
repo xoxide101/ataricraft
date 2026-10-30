@@ -16,3 +16,7 @@ run('arj.asm', '-o:bin\\arj.com');
 run('view.asm', '-o:bin\\view.com');
 run('nano.asm', '-o:bin\\nano.com');
 run('calc.asm', '-o:bin\\calc.com');
+require('./mkfont80.cjs');
+run('res80.asm', '-d:BASE=$9000', '-o:bin\\r9000.bin');
+run('res80.asm', '-d:BASE=$7000', '-o:bin\\r7000.bin');
+run('80col.asm', '-o:bin\\80col.com');
