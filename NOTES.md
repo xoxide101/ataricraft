@@ -126,3 +126,7 @@ WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack
 ## Extra machine models
 - Models 400, 1400XL, 1440XKD, 1450XLD and 5200 added. The XL-family OSes run as plain XL hardware (no voice, modem or built-in drive). The 400/800 OS-A ROM passes -osa_rom. On Altirra the 5200 uses the internal firmware. A 5200 without a cart gives a black or garbage screen. 1400XL ROM (00c82145) is not confirmed on the Atari800 core (garbled). 5200 keypad, carts and controllers are not done.
 
+
+## 5200
+- Keypad layout (Keys: 5200 keypad) sends the 5200 key codes (start 0x39, pause 0x31, reset 0x29, 0-9 * #). 5200 carts are typed by size (16K defaults to two-chip). 5200 carts run on the Atari800 core only: Altirra maps the cart but shows black. Raw 5200 dumps get a CAR header on Altirra (not enough on its own).
+

@@ -299,6 +299,13 @@ window.AC = window.AC || {};
 
     insertCart(slot, name, bytes) {
       const path = this.path('cart', slot, name);
+      // Raw 5200 dumps have no header, so wrap them in a CAR header (type ids match the Atari800 list) for Altirra to identify them.
+      const car5200 = { 4096: 20, 8192: 19, 16384: 6, 32768: 4 }[bytes.length];
+      if (this.opt.model === '5200' && car5200 && String.fromCharCode(...bytes.subarray(0, 4)) !== 'CART') {
+        let sum = 0; for (const x of bytes) sum += x;
+        const w = new Uint8Array(16 + bytes.length), dv = new DataView(w.buffer);
+        w.set([67, 65, 82, 84]); dv.setUint32(4, car5200); dv.setUint32(8, sum >>> 0); w.set(bytes, 16); bytes = w;
+      }
       this.m.FS.writeFile(path, bytes);
       this.cartPaths = this.cartPaths || {};
       this.cartPaths[slot] = path;

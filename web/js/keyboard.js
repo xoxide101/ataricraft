@@ -78,6 +78,10 @@ window.AC = window.AC || {};
     const m = [{ special: 2 }, { option: 1 }, { select: 1 }, { start: 1 }][i];
     return txt('f' + (i + 1), 'F' + (i + 1), 1, () => m || {});
   })];
+  // 5200 controller keypad: the 5200 key codes differ from the computer's.
+  const KP = (l, c) => txt('k' + l, l, 1, () => ({ keycode: c }));
+  const ROWS5200 = [[KP('1', 0x3f), KP('2', 0x3d), KP('3', 0x3b)], [KP('4', 0x37), KP('5', 0x35), KP('6', 0x33)], [KP('7', 0x2f), KP('8', 0x2d), KP('9', 0x2b)], [KP('*', 0x27), KP('0', 0x25), KP('#', 0x23)]];
+  const SIDE5200 = [txt('start', 'Start', 1, () => ({ keycode: 0x39 })), txt('pause', 'Pause', 1, () => ({ keycode: 0x31 })), txt('reset', 'Reset', 1, () => ({ keycode: 0x29 }))].map((k) => Object.assign([k], { side: true }));
   const INV_TEXT = 'Atari';
 
   let charset = null;
@@ -188,7 +192,8 @@ window.AC = window.AC || {};
       side.className = 'kside';
       el.append(main, side);
       const is1200 = this.layout === '1200xl';
-      [...(is1200 ? FKEYS() : []), ...ROWS, ...SIDE(is1200)].forEach((row) => {
+      const is5200 = this.layout === '5200';
+      (is5200 ? [...ROWS5200, ...SIDE5200] : [...(is1200 ? FKEYS() : []), ...ROWS, ...SIDE(is1200)]).forEach((row) => {
         row.forEach((k) => { if (k.id === 'inv') k.text = INV_TEXT; });
         const r = document.createElement('div');
         r.className = 'krow';
