@@ -19,4 +19,5 @@ run('calc.asm', '-o:bin\\calc.com');
 require('./mkfont80.cjs');
 run('res80.asm', '-d:BASE=$9000', '-o:bin\\r9000.bin');
 run('res80.asm', '-d:BASE=$7000', '-o:bin\\r7000.bin');
+run('res80.asm', '-d:BASE=$5000', '-o:bin\\r5000.bin');
 run('80col.asm', '-o:bin\\80col.com');
