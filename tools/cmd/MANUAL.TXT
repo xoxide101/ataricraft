@@ -192,7 +192,17 @@ Plain DOS 2.x has no TYPE. Use:
    then INPUT #1,A$ and PRINT A$.
 SpartaDOS / BW-DOS have TYPE built in.
 
-9. TIPS
+9. NANO.COM  - text editor
+--------------------------
+  NANO FILE.TXT   (no name: new buffer)
+Ctrl+arrows move. ^O write, ^X exit,
+^W search, ^K cut line, ^U paste,
+^A/^E line start/end, ^V/^Y page,
+^D delete, BackSpace, Tab, ^G help.
+Text area about 23K. A missing file
+is opened as a new file.
+
+10. TIPS
 -------
 Boot with BASIC off: hold OPTION.
 No file name given: tools show a prompt.
