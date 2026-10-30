@@ -24,11 +24,9 @@ Research verdicts come from web research and were not tested in this project.
 ## Software tools
 | Item | Status |
 |---|---|
-| 80COL.COM (software 80-column E: handler with /ON /OFF) | NO. Feasible, about 8-10 KB RAM. |
+| 80COL.COM (software 80-column E: handler with /ON /OFF) | built: 80x24 in ANTIC mode F, 4x8 cells, 12K at top of RAM. ON/OFF + DOS menu + DIR tested Atari800; ON + DIR on Altirra (NTSC colour fringes). BASIC, RESET, cold start untested |
 | nano-style full-screen editor | built: NANO.COM, tested Atari800 only |
 | calculator | built: CALC.COM (infix, FP ROM, ~9 digits), tested Atari800 + Altirra |
-| 80col.com /on /off | not started |
-| Calculator | NO |
 | 5200 controller analog stick / keypad mapping | PART (keypad only) |
 
 ## Multicartridges (research verdicts)
