@@ -1,4 +1,4 @@
-// Builds the AtariCraft Tools disk: a plain Atari DOS 2.5 enhanced-density (130K) data disk.
+// Builds the AtariCraft Tools disk: a MyDOS 360K (1440 x 256 B) data disk.
 // It carries no DOS, so it is not tied to any one OS: boot any DOS, then mount it as D2:.
 // Usage: node tools/make-tools-disk.cjs   (run tools/cmd/build.cjs and tools/tests/build.cjs first)
 const fs = require('fs'), path = require('path');
@@ -15,14 +15,16 @@ const progs = [
   ['VIEW.COM', 'tools/cmd/bin/view.com'], ['NANO.COM', 'tools/cmd/bin/nano.com'], ['CALC.COM', 'tools/cmd/bin/calc.com'], ['80COL.COM', 'tools/cmd/bin/80col.com'],
   ...['arc', 'zip', 'lzh', 'alf', 'zoo', 'arj', 'dcm', 'disc'].map((n) => [n.toUpperCase() + '.COM', 'tools/cmd/bin/' + n + '.com']),
   ...['KEYTEST', 'SNDTEST', 'GFXTEST', 'MEMTEST', 'CPUTEST', 'MIDIPLAY', 'MP3PLAY'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
-  ['TEST.PMD', 'tools/tests/TEST.PMD'],
+  ['TEST.PMD', 'tools/tests/TEST.PMD'], ['DEMO.PMD', 'tools/tests/DEMO.PMD'], ['DEMO.MID', 'tools/tests/DEMO.MID'],
+  ['MP3DEMO.SMP', 'tools/tests/audio/MP3DEMO.SMP'], ['DUAL.SMP', 'tools/tests/audio/DUAL.SMP'],
+  ['MONO.WAV', 'tools/tests/audio/MONO.WAV'], ['STEREO.WAV', 'tools/tests/audio/STEREO.WAV'],
 ];
 
 const readme = `ATARICRAFT TOOLS DISK
-Atari DOS 2.5 format, 130K enhanced density.
-Has no DOS on it. Boot any DOS, then use this
-as D2:. DOS 2.5, MyDOS, SpartaDOS, BW-DOS and
-DOS XL all read it. Plain DOS 2.0 (90K) cannot.
+MyDOS format, 360K (1440 x 256 byte sectors).
+Has no DOS on it. Boot a DOS that reads 256-byte
+sectors, then use this as D2: (MyDOS, SpartaDOS,
+BW-DOS). DOS 2.0/2.5 cannot read it.
 
 Start with TOOLS.TXT (VIEW TOOLS.TXT).
 Run a tool: DOS menu option L, then the name.
@@ -67,17 +69,19 @@ SNDTEST  POKEY audio: 4 voices, noise, sweeps,
 GFXTEST  every graphics mode, I = scroll
 MEMTEST  extended RAM, B = burn-in loop
 CPUTEST  6502 and 65C816 instruction check
-MIDIPLAY play a .PMD song: L left, R right,
-  B both, SPACE play. Try TEST.PMD.
-MP3PLAY  play a .SMP sample, same keys. Make
-  files on a PC with audioconv.cjs.
+MIDIPLAY play a .MID or .PMD song: L left, R right,
+  B both, SPACE play. Try DEMO.MID.
+MP3PLAY  play a .SMP sample or 8-bit .WAV, same
+  keys. Try MP3DEMO.SMP, DUAL.SMP (dual POKEY),
+  MONO.WAV, STEREO.WAV. Make files on a PC
+  with audioconv.cjs.
 
 Not on this disk: games, BASIC programs, word
 processor, spreadsheet, RAM disk.
 `;
 
 const manual = fs.readFileSync(path.join(root, 'tools/cmd/MANUAL.TXT'), 'latin1');
-const bl = AC.DosFs.createDos2({ sectors: 1040 });
+const bl = AC.DosFs.createMyDos({ sectors: 1440, sectorSize: 256 });
 const m = C.mount(bl, 'tools.atr');
 m.vol.writeFile('README.TXT', atascii(readme), true);
 m.vol.writeFile('TOOLS.TXT', atascii(tools), true);
@@ -87,7 +91,7 @@ C.refresh(m);
 
 const outDir = path.join(root, 'web/library/craftapps/Tools');
 fs.mkdirSync(outDir, { recursive: true });
-const out = path.join(outDir, 'AtariCraft Tools 130K.atr');
+const out = path.join(outDir, 'AtariCraft Tools 360K.atr');
 fs.writeFileSync(out, Buffer.from(m.bytes));
 const m2 = C.mount(new Uint8Array(fs.readFileSync(out)), 'x');
 const names = C.entries(m2).map((e) => e.name);
