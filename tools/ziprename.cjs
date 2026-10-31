@@ -1,5 +1,6 @@
 // Rebuild short-named ROM zips (MAME style) with long DAT (TOSEC) names. Never touches the source folder.
-//   node tools/ziprename.cjs <zip folder> --dat <dat folder|file> --out <new folder> [--match "Atari 2600"]
+//   node tools/ziprename.cjs <zip folder> --dat <dat folder|file> --out <new folder> [--match "Atari 2600"] [--nointro "Atari - 2600.dat"] [--mame softlist.xml]
+// Names are tried in order: TOSEC (MD5 of the contents), then a clrmamepro CRC DAT, then the MAME software list (zip short name).
 // Each zip is matched by the MD5 of the files inside. A matched zip is rewritten as "<DAT name>.zip"
 // with its matched files renamed to the DAT names. Unmatched zips are listed and left out.
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
@@ -46,22 +47,34 @@ function writeZip(ents) {
   return Buffer.concat([...parts, cdb, end]);
 }
 
+const unesc2 = unesc, mameDesc = new Map(), niCrc = new Map();
+if (opt('--nointro')) for (const m of fs.readFileSync(opt('--nointro'), 'utf8').matchAll(/comment "([^"]*)"[\s\S]*?rom \( crc ([0-9A-F]+) \)/g)) niCrc.set(m[2].toLowerCase(), m[1]);
+if (opt('--mame')) for (const m of fs.readFileSync(opt('--mame'), 'utf8').matchAll(/<software name="([^"]+)"[^>]*>[\s\S]*?<description>([^<]*)/g)) mameDesc.set(m[1], unesc2(m[2]));
+
 fs.mkdirSync(out, { recursive: true });
-const used = new Set(), done = [], none = [], partial = [];
+const used = new Set(), done = [], none = [], partial = [], by = { TOSEC: 0, 'No-Intro': 0, MAME: 0 };
 for (const f of fs.readdirSync(root).filter((x) => /\.zip$/i.test(x)).sort()) {
   let ents; try { ents = readZip(fs.readFileSync(path.join(root, f))); } catch (e) { none.push(f + ' (unreadable)'); continue; }
   const hits = ents.map((e) => byMd5.get(crypto.createHash('md5').update(e.data).digest('hex')) || null);
   const first = hits.find(Boolean);
-  if (!first) { none.push(f); continue; }
-  if (hits.some((h) => !h)) partial.push(f);
-  let target = safe(first.replace(/\.[^.]+$/, '')) + '.zip', k = 2;
-  while (used.has(target.toLowerCase())) target = safe(first.replace(/\.[^.]+$/, '')) + ` [${k++}].zip`;
-  used.add(target.toLowerCase());
-  const renamed = ents.map((e, i) => ({ name: hits[i] ? safe(hits[i]) : path.basename(e.name), data: e.data }));
+  let base, source, renamed;
+  if (first) {
+    source = 'TOSEC'; base = first.replace(/\.[^.]+$/, '');
+    if (hits.some((h) => !h)) partial.push(f);
+    renamed = ents.map((e, i) => ({ name: hits[i] ? safe(hits[i]) : path.basename(e.name), data: e.data }));
+  } else {
+    const ni = ents.map((e) => niCrc.get(zlib.crc32(e.data).toString(16).padStart(8, '0'))).find(Boolean);
+    base = ni || mameDesc.get(f.replace(/\.zip$/i, '')); source = ni ? 'No-Intro' : 'MAME';
+    if (!base) { none.push(f); continue; }
+    renamed = ents.map((e) => ({ name: ents.length === 1 ? safe(base) + (path.extname(e.name) || '.bin') : path.basename(e.name), data: e.data }));
+  }
+  let target = safe(base) + '.zip', k = 2;
+  while (used.has(target.toLowerCase())) target = safe(base) + ` [${k++}].zip`;
+  used.add(target.toLowerCase()); by[source]++;
   fs.writeFileSync(path.join(out, target), writeZip(renamed));
-  done.push(`${f}  ->  ${target}`);
+  done.push(`${f}  ->  ${target}   [${source}]`);
 }
 fs.writeFileSync(path.join(out, '_renamed.txt'), done.join('\n') + '\n\nNOT MATCHED:\n' + none.join('\n') + '\n');
 if (args.includes('--list')) done.forEach((d) => console.log(d));
-console.log(`\n${done.length} rebuilt into ${out}; ${none.length} not found in the DATs (left out); ${partial.length} had some files not in the DATs (kept under their own names).`);
+console.log(`${done.length} rebuilt into ${out} (TOSEC ${by.TOSEC}, No-Intro ${by['No-Intro']}, MAME ${by.MAME}); ${none.length} unidentified; ${partial.length} TOSEC zips had extra files not in the DATs (kept under their own names).`);
 console.log(`Full old -> new list and unmatched names: ${path.join(out, '_renamed.txt')} (or add --list to print).`);
