@@ -254,6 +254,7 @@
   <label class="tgl" title="XEP80 80-column interface on joystick port 1. Applies on Boot (load an XEP80 handler such as XEP80.SYS)."><input id="xep80" type="checkbox"><b>80</b></label>
   <label class="tgl" title="Fast disk access (SIO patch). Disks load almost instantly. Turn OFF for copy-protected disks or programs with their own serial code. Applies immediately (reboots)."><input id="fastsio" type="checkbox" checked><b class="emo">⚡</b></label>
   <button id="boot" class="tgl" title="Power on / Boot"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 2v10"/><path d="M6.3 5.8a9 9 0 1 0 11.4 0"/></svg></button>
+  <button id="coldbolt" class="tgl" title="Cold start (power-cycle the running computer)"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M14 2 6 13h5l-1.2 4.2L14.6 8.5z" transform="translate(1.5 -1)"/><path d="M13.2 14.5 10 22l9-11h-4.6z" transform="translate(-1.5 0)"/></svg></button>
   <button id="mapbtn" class="tgl" title="Keyboard mapping…"><svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="1" width="20" height="14" rx="2.5"/><path d="M4.5 5h1.5M8.5 5h1.5M12 5h1.5M15.5 5h2M4.5 8.5h2M8.5 8.5h1.5M12 8.5h1.5M15.5 8.5h2M6 12h10" stroke-linecap="round"/></svg></button>
   <button id="sndbtn" class="tgl" title="Sound on/off">🔊</button><button id="fnbtn" class="tgl" title="Virtual FujiNet (SIO device $70) on/off">FN</button><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" style="width:70px" title="Volume">
   <div id="infobar"><span id="status" class="dim">choose ROMs, then Boot</span>
@@ -475,7 +476,7 @@
 <script src="js/fujinet.js"></script>
 <script src="js/rawdisk.js"></script>
 <script src="js/drivesets.js?v=1"></script>
-<script src="js/app.js?v=20261030e"></script>
+<script src="js/app.js?v=20261030f"></script>
 <script>
 (function(){
   var root=document.documentElement;

@@ -3862,6 +3862,7 @@
   $('reset').onclick = () => S.emu && S.emu.warmStart();
   function coldOrExe() { if (S.lastExe) S.emu.bootFile(S.lastExe.name, S.lastExe.bytes); else S.emu.coldStart(); }
   $('cold').onclick = () => S.emu && coldOrExe();
+  $('coldbolt').onclick = () => S.emu && coldOrExe();
   $('pause').onclick = () => { S.running = !S.running; $('pause').textContent = S.running ? 'Pause' : 'Run'; };
   $('speed').oninput = (e) => { S.speed = Math.pow(2, +e.target.value); const s = S.speed.toFixed(S.speed < 1 ? 2 : 1); $('speedv').textContent = s + '×'; $('spd').textContent = s; };
 
