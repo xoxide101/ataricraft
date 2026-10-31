@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // libcheck: read-only audit of a folder of Atari disk images (ATR, XFD, ATX, DCM, PRO).
-//   node tools/libcheck.cjs <folder> [--csv out.csv] [--json out.json]
+//   node tools/libcheck.cjs <folder> [--dat <dat folder or file>] [--csv out.csv] [--json out.json]
 // Reports exact duplicates (same file), content duplicates (same sectors in a different container, e.g. ATX vs ATR or an
 // ATR with a different header), files whose extension lies about the container, ATR headers that disagree with the file
 // size, copy-protected ATX images, images that cannot be parsed, and a DOS 2 / MyDOS deleted-file and hidden-data summary.
@@ -22,10 +22,25 @@ const md5 = (b) => crypto.createHash('md5').update(b).digest('hex');
 const sha1 = (b) => crypto.createHash('sha1').update(b).digest('hex');
 const crc = (b) => (zlib.crc32 ? zlib.crc32(b) >>> 0 : 0).toString(16).padStart(8, '0');
 const rows = [];
+const datDir = opt('--dat');
+const byMd5 = new Map(), byCrc = new Map();
+let datCount = 0;
+if (datDir) {
+  const list = fs.statSync(datDir).isDirectory() ? fs.readdirSync(datDir).filter((f) => /\.dat$/i.test(f)).map((f) => path.join(datDir, f)) : [datDir];
+  for (const f of list) {
+    const label = path.basename(f).replace(/ \(TOSEC-v[^)]*\)\.dat$/i, '').replace(/\.dat$/i, '');
+    const x = fs.readFileSync(f, 'utf8'); datCount++;
+    for (const m of x.matchAll(/<rom name="([^"]*)" size="(\d+)"(?: crc="([0-9a-f]+)")?(?: md5="([0-9a-f]+)")?/gi)) {
+      const e = { name: m[1].replace(/&amp;/g, '&').replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>'), size: +m[2], dat: label };
+      if (m[4]) { if (!byMd5.has(m[4])) byMd5.set(m[4], e); } else if (m[3]) byCrc.set(m[3] + ':' + m[2], e);
+    }
+  }
+}
 for (const p of files) {
   const rel = path.relative(root, p).replace(/\\/g, '/');
   const b = new Uint8Array(fs.readFileSync(p));
   const r = { path: rel, bytes: b.length, crc32: crc(b), md5: md5(b), sha1: sha1(b), flags: [] };
+  if (datDir) { const hit = byMd5.get(r.md5) || byCrc.get(r.crc32 + ':' + b.length); if (hit) { r.datName = hit.name; r.dat = hit.dat; } }
   const ext = path.extname(p).slice(1).toLowerCase();
   let kind = null; try { kind = DC.detect(b, path.basename(p)); } catch (e) { /* unknown */ }
   r.container = kind || 'unknown';
@@ -66,6 +81,16 @@ P();
 P(`SAME SECTORS, DIFFERENT FILE: ${content.length} groups (e.g. ATX vs ATR, or different ATR headers)`);
 for (const g of content) g.forEach((r) => P(`  ${r.container} ${r.path}`));
 P();
+if (datDir) {
+  const hit = rows.filter((r) => r.datName), miss = rows.filter((r) => !r.datName);
+  const rename = hit.filter((r) => path.basename(r.path).toLowerCase() !== r.datName.toLowerCase());
+  P(`DAT MATCH (${datCount} DATs, ${byMd5.size} entries): ${hit.length} recognised, ${miss.length} not in the DATs`);
+  P(`  already correctly named: ${hit.length - rename.length}; known under a different name: ${rename.length}`);
+  P('RENAME SUGGESTIONS (not applied):');
+  rename.slice(0, 60).forEach((r) => P(`  ${path.basename(r.path)}  ->  ${r.datName}   [${r.dat}]`));
+  if (rename.length > 60) P(`  ... ${rename.length - 60} more (use --csv)`);
+  P();
+}
 const flagged = rows.filter((r) => r.flags.length);
 P(`FLAGS: ${flagged.length} images`);
 for (const r of flagged) r.flags.forEach((f) => P(`  ${r.path}: ${f}`));
@@ -78,7 +103,7 @@ console.log(out.join('\n'));
 
 const csvOut = opt('--csv'), jsonOut = opt('--json');
 if (csvOut) {
-  const cols = ['path', 'bytes', 'container', 'sectorSize', 'sectors', 'fs', 'files', 'crc32', 'md5', 'sha1', 'payloadMd5', 'deleted', 'recoverable', 'freeData', 'flags'];
+  const cols = ['path', 'bytes', 'container', 'sectorSize', 'sectors', 'fs', 'files', 'crc32', 'md5', 'sha1', 'payloadMd5', 'dat', 'datName', 'deleted', 'recoverable', 'freeData', 'flags'];
   const q = (v) => '"' + String(v === undefined ? '' : Array.isArray(v) ? v.join('; ') : v).replace(/"/g, '""') + '"';
   fs.writeFileSync(csvOut, [cols.join(','), ...rows.map((r) => cols.map((c) => q(r[c])).join(','))].join('\n'));
 }
