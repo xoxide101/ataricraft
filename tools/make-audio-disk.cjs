@@ -1,4 +1,4 @@
-// Builds the AtariCraft Audio disk: Atari DOS 2.5 enhanced density (130K) data disk with the audio tools and
+// Builds the AtariCraft Audio disk: MyDOS 180K (720 x 256 B) data disk with the audio tools and
 // original (public domain) test files. No DOS on it: boot any DOS, then mount it as D2:.
 // Usage: node tools/make-audio-disk.cjs   (run tools/tests/build.cjs first)
 const fs = require('fs'), path = require('path');
@@ -33,12 +33,16 @@ const files = [
   ['DEMO.MID', rd('tools/tests/DEMO.MID')],
   ['TEST.PMD', rd('tools/tests/TEST.PMD')],
   ['STEREO.SMP', stereoSample()],
+  ['MP3DEMO.SMP', rd('tools/tests/audio/MP3DEMO.SMP')],
+  ['DUAL.SMP', rd('tools/tests/audio/DUAL.SMP')],
+  ['MONO.WAV', rd('tools/tests/audio/MONO.WAV')],
+  ['STEREO.WAV', rd('tools/tests/audio/STEREO.WAV')],
 ];
 
 const readme = `ATARICRAFT AUDIO DISK
-Atari DOS 2.5 format, 130K enhanced density.
-Has no DOS on it. Boot any DOS, then use this
-as D2:. Run a tool: DOS menu L, then the name.
+MyDOS format, 180K (720 x 256 byte sectors).
+Has no DOS on it. Boot MyDOS (or SpartaDOS,
+BW-DOS), then use this as D2:. Run a tool: DOS menu L, then the name.
 
 MIDIPLAY.COM  play a .PMD song
 MP3PLAY.COM   play a .SMP sample, or an 8-bit
@@ -54,6 +58,12 @@ DEMO.MID    same tune as a MIDI file (MIDIPLAY reads .MID directly)
 TEST.PMD    short test tune
 STEREO.SMP  tone left, then right, then both
             (needs a second POKEY to separate)
+MP3DEMO.SMP 7.8 s mono sample (synth -> mp3 ->
+            audioconv)
+DUAL.SMP    3.9 s dual POKEY sample, melody left,
+            bass right
+MONO.WAV    8-bit mono WAV, MP3PLAY loads it as is
+STEREO.WAV  8-bit stereo WAV, melody L, bass R
 
 Make your own on a PC (ataricraft/tools):
  midiconv.cjs  song.mid -> .PMD
@@ -63,14 +73,14 @@ stereo. NTSC timing; PAL plays slow.
 Test files here are public domain.
 `;
 
-const m = C.mount(AC.DosFs.createDos2({ sectors: 1040 }), 'audio.atr');
+const m = C.mount(AC.DosFs.createMyDos({ sectors: 720, sectorSize: 256 }), 'audio.atr');
 m.vol.writeFile('README.TXT', atascii(readme), true);
 for (const [n, b] of files) m.vol.writeFile(n, b, true);
 C.refresh(m);
 
 const outDir = path.join(root, 'web/library/craftapps/Tools');
 fs.mkdirSync(outDir, { recursive: true });
-const out = path.join(outDir, 'AtariCraft Audio 130K.atr');
+const out = path.join(outDir, 'AtariCraft Audio 180K.atr');
 fs.writeFileSync(out, Buffer.from(m.bytes));
 const m2 = C.mount(new Uint8Array(fs.readFileSync(out)), 'x');
 const names = C.entries(m2).map((e) => e.name);

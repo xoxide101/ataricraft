@@ -2,7 +2,7 @@
 //   node tools/audioconv.cjs <in> [--out NAME.SMP] [--speed 2] [--secs N] [--start S] [--gain 1.0]
 // --speed = scanlines per sample: 1 = 15.7 kHz (about 3.9 s fits), 2 = 7.86 kHz (7.8 s, default), 3 = 5.24 kHz (11.7 s).
 // File layout: 'S','M','P',1, speed, pages, 0, 0, then packed nibbles (high nibble first), 256-byte pages.
-// The player holds the whole clip in RAM ($4000-$B7FF = 120 pages = 30720 bytes of packed samples).
+// The player holds the whole clip in RAM ($4000-$B7FF = 30720 bytes incl. 8-byte header, so 119 pages).
 const { spawnSync } = require('child_process');
 const fs = require('fs'), path = require('path');
 const args = process.argv.slice(2);
@@ -11,7 +11,7 @@ const input = args[0];
 if (!input || input.startsWith('--')) { console.log('usage: node tools/audioconv.cjs <in> [--out NAME.SMP] [--stereo] [--speed 1|2|3] [--secs N] [--start S] [--gain G]'); process.exit(1); }
 const speed = +opt('--speed', 2), gain = +opt('--gain', 1), ch = args.includes('--stereo') ? 2 : 1;
 if (![1, 2, 3].includes(speed)) { console.log('--speed must be 1, 2 or 3'); process.exit(1); }
-const rate = 15720 / speed, MAXPAGES = 120, maxSamples = MAXPAGES * 512 / ch;
+const rate = 15720 / speed, MAXPAGES = 119, maxSamples = MAXPAGES * 512 / ch;
 const secs = Math.min(+opt('--secs', maxSamples / rate), maxSamples / rate), start = +opt('--start', 0);
 const ff = spawnSync('ffmpeg', ['-v', 'error', '-ss', String(start), '-t', String(secs), '-i', input, '-ac', String(ch), '-ar', String(Math.round(rate)), '-af', 'highpass=f=40,loudnorm=I=-14:TP=-1:LRA=7', '-f', 'u8', '-'], { maxBuffer: 1 << 28 });
 if (ff.error || ff.status !== 0) { console.log('ffmpeg failed: ' + (ff.error ? ff.error.message : ff.stderr.toString())); process.exit(1); }
