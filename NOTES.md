@@ -123,6 +123,9 @@ WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack
 
 - **MANUAL.TXT** (	ools/cmd/MANUAL.TXT, 40-column, converted to ATASCII by out\t_addtests.cjs): syntax and keys for VIEW, CMD, the archive tools, DISC, AFM and the hardware tests. On every disk with room (not the 90K AFM D2 disk). Read it with VIEW MANUAL.TXT.
 
+## AtariCraft Tools disk (shareable)
+"web/library/craftapps/Tools/AtariCraft Tools 130K.atr" is tracked in git (our own tools only, no third-party DOS). It is a plain Atari DOS 2.5 enhanced-density data disk (1040 x 128 B, no DOS on it, so not tied to one OS): DOS 2.5, MyDOS, SpartaDOS, BW-DOS and DOS XL read it; DOS 2.0 90K cannot. Boot any DOS and use it as D2:. Holds README.TXT, TOOLS.TXT (what each file does), MANUAL.TXT, AFM, AFM80, CMD, VIEW, NANO, CALC, 80COL, the 8 archive tools and the 5 hardware tests (SNDTEST has the stereo ditty on key D). Rebuild with `node tools/make-tools-disk.cjs` after `node tools/cmd/build.cjs` and `node tools/tests/build.cjs`; the script checks every file reads back byte-identical.
+
 ## Extra machine models
 - Models 400, 1400XL, 1440XKD, 1450XLD and 5200 added. The XL-family OSes run as plain XL hardware (no voice, modem or built-in drive). The 400/800 OS-A ROM passes -osa_rom. On Altirra the 5200 uses the internal firmware. A 5200 without a cart gives a black or garbage screen. 1400XL ROM (00c82145) is not confirmed on the Atari800 core (garbled). 5200 keypad, carts and controllers are not done.
 

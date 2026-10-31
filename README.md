@@ -46,6 +46,7 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 
 ## Other features
 
+- **Tools disk**: `web/library/craftapps/Tools/AtariCraft Tools 130K.atr` is a no-DOS DOS 2.5 data disk with the file managers, shell, editor, calculator, archive tools and hardware tests (see TOOLS.TXT on it). Use it as D2: under any DOS that reads enhanced density.
 - **Big disks**: browse/extract DOS 2, MyDOS and SpartaDOS/BW-DOS images, create and write 16 MB SDFS disks, mount a host folder as a disk. See [docs/LARGE-DISKS.md](docs/LARGE-DISKS.md).
 
 - Messages pop up as a bubble over the screen; the last one stays on the second header line next to FPS.
