@@ -106,7 +106,7 @@ Three passes over a folder of MAME-style zips, all in `tools/`:
 
 - tools/tests/ (MADS; shared common.inc and cscreen.inc colour framework: per-row DLI colour bars, mode-7 block map, VBI-reset; `node tools/tests/build.cjs` -> tools/tests/bin/*.COM). All tests show colour PASS/FAIL rows and a RESULT bar.
   - CPUTEST: detects 6502/65C02/65C816, instruction self-checks, speed estimate (approx).
-  - SNDTEST: POKEY1 random check, stereo detection (second POKEY at $D210, probed both ways), guided listening test (G, then Y/N/S) for left/right/both/noise/sweep, free-play keys 0-9.
+  - SNDTEST: POKEY1 random check, stereo detection (second POKEY at $D210, probed both ways), guided listening test (G, then Y/N/S) for left/right/both/noise/sweep, free-play keys 0-9, D ditty, L / R static on one side, S digitised-style sample (4-bit, volume-only mode) left, right, then both. Sample data is `tools/tests/sample.bin` (made by `mksample.cjs`, synthetic). Not yet heard.
   - KEYTEST: visual keyboard, grey untested / yellow held / green tested; Start/Select/Option, Break, Shift, Ctrl; joystick and paddle readout; hold Start+Select+Option to exit. Emulators only report Shift together with another key.
   - GFXTEST: GR.0-15, GR.8 1-bit mono pattern, mixed ANTIC modes screen, and a diagonal fine-scroll page (HSCROL/VSCROL plus LMS coarse steps, double-buffered display lists; key I on the summary); Y/N/S per screen and a colour summary.
   - MEMTEST: RAM size and total, bank map, burn-in (B), aliasing check.

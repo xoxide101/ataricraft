@@ -62,12 +62,14 @@ ig1     stx t4
         bne ig1
         loc 0,14
         say s_menu
+        loc 0,16
+        say s_menu2
         loc 0,12
         say s_mhelp
         lda #0
         sta mode
 
-loop    lda #0
+loop     lda #0
         sta ATRACT
         jsr vsync
         lda CH
@@ -82,7 +84,7 @@ notesc  cmp #$3D
         bne notg
         jsr guided
         jmp loop
-notg    ldx #10
+notg    ldx #13
 fk      cmp keymap,x
         beq found
         dex
@@ -93,6 +95,13 @@ found   stx mode
         sta step
         jsr silence
         jsr shownow
+        lda mode
+        cmp #13
+        bne nokey
+        jsr smpseq
+        lda #0
+        sta mode
+        jsr silence
 nokey   jsr play
         jmp loop
 
@@ -267,8 +276,73 @@ play    lda mode
         lda jtab+1,x
         sta jv+1
         jmp (jv)
-jtab    .word m_off,m_left,m_right,m_both,m_alt,m_scale,m_chord,m_noise,m_low,m_sweep,m_ditty
+jtab    .word m_off,m_left,m_right,m_both,m_alt,m_scale,m_chord,m_noise,m_low,m_sweep,m_ditty,m_sl,m_sr,m_off
 m_off   rts
+
+; static (noise) on one side only
+m_sl    lda #40
+        sta AUDF1
+        lda #$88
+        sta AUDC1
+        rts
+m_sr    lda #40
+        sta R_AUDF1
+        lda #$88
+        sta R_AUDF1+1
+        rts
+
+; sample test: the same 4-bit sample through POKEY volume-only mode, left, right, then both (both only on a mono machine)
+smpseq  lda stereo
+        beq sq3
+        lda #1
+        jsr smpplay
+        jsr gap
+        lda #2
+        jsr smpplay
+        jsr gap
+sq3     lda #3
+        jsr smpplay
+        rts
+gap     ldx #20
+gp1     jsr vsync
+        dex
+        bne gp1
+        rts
+smpplay sta smpch
+        jsr silence
+        sei
+        lda #0
+        sta NMIEN
+        lda #<sample
+        sta $90
+        lda #>sample
+        sta $91
+        ldy #0
+        ldx #16
+sl1     lda ($90),y
+        ora #$10
+        sta t1
+        lda smpch
+        and #1
+        beq sl2
+        lda t1
+        sta AUDC1
+sl2     lda smpch
+        and #2
+        beq sl3
+        lda t1
+        sta R_AUDF1+1
+sl3     sta WSYNC
+        sta WSYNC
+        iny
+        bne sl1
+        inc $91
+        dex
+        bne sl1
+        lda #$40
+        sta NMIEN
+        cli
+        jmp silence
 
 m_left  lda #71
         sta AUDF1
@@ -514,10 +588,14 @@ mode    .byte 0
 step    .byte 0
 jv      .word 0
 gmode   .byte 1,2,3,7,9
-keymap  .byte $32,$1F,$1E,$1A,$18,$1D,$1B,$33,$35,$30,$3A   ; keys 0-9 and D (OS key codes)
+smpch   .byte 0
+keymap  .byte $32,$1F,$1E,$1A,$18,$1D,$1B,$33,$35,$30,$3A,$00,$28,$3E   ; keys 0-9, D, L, R, S (OS key codes)
 scale   .byte 121,107,95,90,80,71,63,59
-ntab    .word n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10
-n0      .byte 'silence',0
+ntab    .word n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11,n12,n13
+n11     .byte 'static, LEFT only',0
+n12     .byte 'static, RIGHT only',0
+n13     .byte 'sample: left, right, both (4-bit, volume-only)',0
+n0       .byte 'silence',0
 n1      .byte 'LEFT tone (POKEY 1)',0
 n2      .byte 'RIGHT tone (POKEY 2)',0
 n3      .byte 'both channels',0
@@ -546,6 +624,8 @@ s_ask   .byte 'Did you hear it?  Y yes  N no  S skip',0
 s_play  .byte 'Playing: ',0
 s_mhelp .byte 'G guided  0-9 free play  D ditty  ESC exit',0
 s_menu  .byte '0 off 1 L 2 R 3 both 4 alt 5 scale 6 chord D ditty',0
+s_menu2 .byte 'L static left  R static right  S sample',0
+sample  ins 'sample.bin'
 s_ok    .byte 'RESULT: PASS - all heard steps OK',0
 s_bad   .byte 'RESULT: FAIL - a step was not heard',0
         run start
