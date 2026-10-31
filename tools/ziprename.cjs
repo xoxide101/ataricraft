@@ -61,6 +61,7 @@ for (const f of fs.readdirSync(root).filter((x) => /\.zip$/i.test(x)).sort()) {
   fs.writeFileSync(path.join(out, target), writeZip(renamed));
   done.push(`${f}  ->  ${target}`);
 }
-done.forEach((d) => console.log(d));
+fs.writeFileSync(path.join(out, '_renamed.txt'), done.join('\n') + '\n\nNOT MATCHED:\n' + none.join('\n') + '\n');
+if (args.includes('--list')) done.forEach((d) => console.log(d));
 console.log(`\n${done.length} rebuilt into ${out}; ${none.length} not found in the DATs (left out); ${partial.length} had some files not in the DATs (kept under their own names).`);
-if (none.length) console.log('not matched (first 40): ' + none.slice(0, 40).join(', '));
+console.log(`Full old -> new list and unmatched names: ${path.join(out, '_renamed.txt')} (or add --list to print).`);

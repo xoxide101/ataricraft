@@ -41,9 +41,11 @@ for (const p of files) {
   if (claimed.has(key) || (fs.existsSync(target) && target.toLowerCase() !== p.toLowerCase())) { skipped.push({ from: p, to: target }); continue; }
   claimed.add(key); plan.push({ from: p, to: target });
 }
-for (const m of plan) console.log(`${path.basename(m.from)}  ->  ${path.basename(m.to)}`);
-for (const s of skipped) console.log(`SKIP (target exists or duplicate): ${path.basename(s.from)} -> ${path.basename(s.to)}`);
-console.log(`\n${plan.length} to rename, ${skipped.length} skipped.`);
+if (args.includes('--list')) {
+  for (const m of plan) console.log(`${path.basename(m.from)}  ->  ${path.basename(m.to)}`);
+  for (const s of skipped) console.log(`SKIP (target exists or duplicate): ${path.basename(s.from)} -> ${path.basename(s.to)}`);
+}
+console.log(`${plan.length} to rename, ${skipped.length} skipped. (add --list to see each name)`);
 if (!args.includes('--apply')) { console.log('Preview only. Add --apply to rename.'); process.exit(0); }
 const logFile = opt('--log') || `rename-log-${Date.now()}.json`;
 fs.writeFileSync(logFile, JSON.stringify({ moves: plan }, null, 1));
