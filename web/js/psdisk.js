@@ -88,7 +88,23 @@
 
   // Font (FO.*): per-character height table, then lo/hi byte tables of glyph pointers (relative to the load address).
   // Glyph k is character 32+k, stored as rows of ceil(width/8) bytes.
+  function fontGlyphsF(d, addr) {
+    const N = 59; if (d.length < 4 * N) return null;
+    const out = []; let ok = 0, tot = 0;
+    for (let k = 0; k < N; k++) {
+      const w = d[k], h = d[N + k], p = (d[2 * N + k] | (d[3 * N + k] << 8)) - addr;
+      if (!w || !h || w > 64 || h > 64) { out.push({ ch: String.fromCharCode(32 + k), w: 8, h: 1, px: new Uint8Array(8) }); continue; }
+      const bpr = Math.ceil(w / 8); tot++;
+      if (p < 4 * N || p + bpr * h > d.length) { out.push({ ch: String.fromCharCode(32 + k), w: bpr * 8, h, px: new Uint8Array(bpr * 8 * h) }); continue; }
+      ok++;
+      const px = new Uint8Array(bpr * 8 * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < bpr * 8; x++) px[y * bpr * 8 + x] = (d[p + y * bpr + (x >> 3)] >> (7 - (x & 7))) & 1;
+      out.push({ ch: String.fromCharCode(32 + k), w: bpr * 8, h, px, pw: w });
+    }
+    return tot >= 40 && ok >= tot * 0.9 ? out : null;
+  }
   function fontGlyphs(d, addr) {
+    const f = fontGlyphsF(d, addr); if (f) return f;
     let best = null;
     for (let S = 0x40; S < 0xa0; S++) for (let N = 55; N <= 70; N++) {
       const H = S + N; if (H + N > d.length) continue;
@@ -170,5 +186,5 @@
     g.putImageData(img, 0, 0); return c;
   }
 
-  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, fontGlyphs, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
+  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, fontGlyphs, fontGlyphsF, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
 });
