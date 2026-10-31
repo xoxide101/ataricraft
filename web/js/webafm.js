@@ -222,7 +222,30 @@
     const v = await p;
     if (v === 'drive' && host().insert) { let n = 1; while (n < 8 && host().disk(n)) n++; return host().insert(file, n); }
   }  // A disk with no DOS directory (boot/protected/custom-loader/data disk): show what can be read from it instead of refusing.
-  async function rawInfo(file, bytes) {
+  // Heuristic search of a raw disk for Atari binary-load (XEX) programs: FF FF header followed by well-formed segments.
+  async function carveXex(file, d) {
+    const found = [];
+    for (let j = 0; j + 6 < d.length;) {
+      if (d[j] !== 0xff || d[j + 1] !== 0xff) { j++; continue; }
+      let p = j, segs = 0;
+      for (;;) {
+        if (p + 4 > d.length) break;
+        if (d[p] === 0xff && d[p + 1] === 0xff) p += 2;
+        if (p + 4 > d.length) break;
+        const s = d[p] | (d[p + 1] << 8), e = d[p + 2] | (d[p + 3] << 8), n = e - s + 1;
+        if (e < s || p + 4 + n > d.length) break;
+        p += 4 + n; segs++;
+      }
+      if (segs && p - j >= 64) { found.push({ at: j, len: p - j, segs }); j = p; } else j += 2;
+    }
+    const hx = (v) => v.toString(16).toUpperCase().padStart(6, '0');
+    const w = document.createElement('div');
+    w.innerHTML = found.length
+      ? `<div><b>${esc(file.name)}</b>: ${found.length} possible program(s)</div><div class="dim" style="margin:4px 0">Found by pattern, so some may be false hits. Offsets are bytes from the start of sector 1.</div><pre style="max-height:40vh">${found.map((f) => `$${hx(f.at)}  ${f.len} bytes, ${f.segs} segment(s)`).join('\n')}</pre>`
+      : `<div><b>${esc(file.name)}</b>: no binary-load programs found.</div>`;
+    const v = await dlg('Find executables', w, found.length ? [{ label: 'Close', value: null }, { label: 'Save as ZIP', value: 'zip', pri: true }] : [{ label: 'Close', value: null, pri: true }]);
+    if (v === 'zip') host().save(file.name.replace(/\.[^.]*$/, '') + '-xex.zip', host().zip(found.map((f) => ({ name: 'CARVED_' + hx(f.at) + '.XEX', data: d.slice(f.at, f.at + f.len) }))), 'application/zip');
+  }  async function rawInfo(file, bytes) {
     let b = bytes, kind = 'raw', note = '';
     try { const f = AC.DiskConv && AC.DiskConv.detect ? AC.DiskConv.detect(bytes, file.name) : null; if (f) kind = f; if (f && f !== 'atr' && f !== 'xfd') { b = AC.DiskConv.toAtr(bytes, file.name); note = ' (shown as converted ATR)'; } } catch (e) { note = ' (could not convert: ' + e.message + ')'; }
     if (window.AC && AC.PrintShop && AC.PrintShop.parse(b)) return psViewer(file, b);
@@ -247,7 +270,8 @@
       <tr><td class="dim">Boots</td><td>${boots ? `yes: sector 1 loads ${s1[1]} sector(s) at $${hx(s1[2] | (s1[3] << 8), 4)}, init $${hx(s1[4] | (s1[5] << 8), 4)}` : 'no boot sectors'}</td></tr></table>
       ${strs.length ? '<div class="dim" style="margin-top:8px">Readable text on the disk</div><pre style="margin:2px 0;max-height:150px;overflow:auto;white-space:pre-wrap">' + strs.map(esc).join('\n') + '</pre>' : ''}
       <div class="dim" style="margin-top:8px">Nothing is changed. You can look at it in the sector editor, or put it in an emulator drive to boot it.</div>`;
-    const v = await dlg('Disk information', html, [{ label: 'Close', value: null }, { label: 'Sector viewer…', value: 'ed' }, { label: 'Put in emulator drive', value: 'drive', pri: true }]);
+    const v = await dlg('Disk information', html, [{ label: 'Close', value: null }, { label: 'Sector viewer…', value: 'ed' }, { label: 'Find executables…', value: 'xex' }, { label: 'Put in emulator drive', value: 'drive', pri: true }]);
+    if (v === 'xex') return carveXex(file, b.subarray(off));
     if (v === 'drive' && host().insert) { let n = 1; while (n < 8 && host().disk(n)) n++; return host().insert(file, n); }
     if (v === 'ed' && !W.ed) {
       AC.WDisk.open({
