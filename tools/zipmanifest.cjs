@@ -38,7 +38,7 @@ for (const f of fs.readdirSync(root).filter((x) => /\.zip$/i.test(x)).sort()) {
     const crc = zlib.crc32(e.data).toString(16).padStart(8, '0'), md5 = crypto.createHash('md5').update(e.data).digest('hex');
     const mm = mameByCrc.get(crc) || [];
     const own = mm.find((x) => x.set === short || x.parent === short) || mm[0];
-    rows.push({ zip: f, file: e.name, size: e.data.length, crc32: crc, sha1: crypto.createHash('sha1').update(e.data).digest('hex'), md5,
+    rows.push({ zip: f, file: e.name, size: e.data.length, hdr: e.data.length > 128 && e.data.toString('latin1', 1, 10) === 'ATARI7800', crc32: crc, sha1: crypto.createHash('sha1').update(e.data).digest('hex'), md5,
       mameSet: own ? own.set : '', mameParent: own ? own.parent : '', mameDesc: own ? own.desc : '', tosec: tosec.get(md5) || '', nointro: nointro.get(crc) || '',
       mameOwn: own ? (own.set === short || own.parent === short || short === own.set) : false, mameAll: mm.map((x) => (x.parent || x.set) + '|' + x.set + '|' + x.desc).join(';;') });
   }
