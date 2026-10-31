@@ -2777,12 +2777,15 @@
   }
   const tapeItems = () => [
     { label: 'Load from file explorer…', run: () => $('tape').click() },
+    { label: 'Load file…', run: () => loadFileAny() },
     { label: 'Eject', run: () => $('te').click() },
     { label: 'Boot tape (Start held)', run: () => $('tboot').click() },
     { label: 'Rewind', run: () => $('trew').click() },
     { label: 'Save tape image', run: () => saveTape() },
     { label: 'Save tape image and eject', run: () => { saveTape(); $('te').click(); } },
   ];
+  function loadFileAny() { const i = document.createElement('input'); i.type = 'file'; i.onchange = () => i.files[0] && loadAny(i.files[0], false, null); i.click(); }
+  const addDiskFiles = (n) => { $('fsdrv').value = String(n); $('fspath').value = ''; $('fsadd').click(); };
   const saveTape = () => { const t = S.tape; if (!t || !t.bytes) return log('Tape: nothing loaded'); saveBlob(t.name, [t.bytes]); log(`Tape: saved ${t.name} (${t.bytes.length} bytes) to your Downloads`); };
   {
     const d = document.createElement('div');
@@ -3036,7 +3039,8 @@
   function diskActs(n) {
     const have = S.disks[n];
     return [
-      { label: 'Load...', run: () => $('f' + n).click() },
+      { label: 'Load disk...', run: () => $('f' + n).click() },
+      have && { label: 'Add file...', run: () => addDiskFiles(n) },
       have && { label: 'Eject', run: () => $('de' + n).click() },
       have && { label: 'Save image...', run: () => viaVal('savedrv', n, () => $('savedisk').click()) },
       have && { label: 'Save + Eject', run: () => { viaVal('savedrv', n, () => $('savedisk').click()); $('de' + n).click(); } },
@@ -3495,7 +3499,7 @@
     a.download = blankName(); a.click();
   };
   // ---- browse / extract / add files on a mounted disk ----
-  const fsBytes = (n) => { if (!S.emu) return null; const b = S.emu.readDisk(n); return b || (S.disks[n] && S.disks[n].bytes) || null; };
+  const fsBytes = (n) => { const b = S.emu && S.emu.readDisk(n); return b || (S.disks[n] && S.disks[n].bytes) || null; };
   const saveBlob = (name, parts, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(parts, { type: type || 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
   const crcNum = (b) => parseInt(crc32(b), 16);
   AC.WebAfmHost = {
@@ -3608,7 +3612,7 @@
     finally { prog.end(); }
     if (added.length) {
       const name = (S.disks[o.n] && S.disks[o.n].name) || `d${o.n}.atr`;
-      S.emu.mountDisk(o.n, name, o.bytes); S.disks[o.n] = { name, bytes: o.bytes }; S.dirty[o.n] = true;
+      if (S.emu) S.emu.mountDisk(o.n, name, o.bytes); S.disks[o.n] = { name, bytes: o.bytes }; S.dirty[o.n] = true;
       log(`D${o.n}: added ${added.length} file(s) (${added.join(', ')}), verified by reading back. Press Reset so the DOS rereads the disk.`);
     }
     fsShow();
