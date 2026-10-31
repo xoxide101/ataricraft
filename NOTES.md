@@ -90,6 +90,10 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 
 - Protected ATX: kept as ATX (ATR cannot hold timing/duplicate sectors); Convert file refuses them and says to load the .atx directly. atxInfo() flags duplicates, bad statuses and weak-bit chunks: 298 of 450 ATX in the library are protected. A.E. (8 duplicate sectors) boots natively as ATX in the browser. Not done: ATX writing, ATX -> PRO with status flags.
 
+## Library check
+
+- `node tools/libcheck.cjs <folder> [--csv out.csv] [--json out.json]`: read-only audit of ATR/XFD/ATX/DCM/PRO images. Lists exact duplicates (with a suggested keeper), same-sector duplicates across containers, wrong extensions, ATR headers that disagree with the file size, copy-protected ATX, and DOS 2/MyDOS deleted-file and free-space data (uses web/js diskconv, dosfs and diskaudit). It never renames or deletes; a DAT-driven renamer is not written yet.
+
 ## Hardware test programs
 
 - tools/tests/ (MADS; shared common.inc and cscreen.inc colour framework: per-row DLI colour bars, mode-7 block map, VBI-reset; `node tools/tests/build.cjs` -> tools/tests/bin/*.COM). All tests show colour PASS/FAIL rows and a RESULT bar.
