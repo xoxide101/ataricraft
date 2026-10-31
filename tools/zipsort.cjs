@@ -27,35 +27,55 @@ function readZip(buf) {
   return ents;
 }
 
-const plan = [], placed = new Map(); let dupes = 0;
+function writeZip(name, data) {
+  const nm = Buffer.from(name, 'utf8'), c = zlib.deflateRawSync(data), crc = zlib.crc32(data);
+  const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6); lh.writeUInt16LE(8, 8);
+  lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(c.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nm.length, 26);
+  const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8); ch.writeUInt16LE(8, 10);
+  ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(c.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nm.length, 28);
+  const off = 30 + nm.length + c.length, end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(46 + nm.length, 12); end.writeUInt32LE(off, 16);
+  return Buffer.concat([lh, nm, c, ch, nm, end]);
+}
+
+const plan = [], placed = new Map(); let dupes = 0, copies = 0;
 const byZip = new Map(); rows.forEach((r) => (byZip.get(r.zip) || byZip.set(r.zip, []).get(r.zip)).push(r));
 for (const [zip, rs] of byZip) {
   for (const r of rs) {
-    const parentSet = r.mameParent || r.mameSet || zip.replace(/\.zip$/i, '');
-    const top = safe(desc.get(parentSet) || r.mameDesc || parentSet);
     const ext = path.extname(r.file) || '.bin';
-    const name = safe(r.tosec || ((r.nointro || r.mameDesc || path.basename(r.file, ext)) + ext));
-    const dir = path.join(out, 'rom', system, medium, top);
-    let target = path.join(dir, name), k = 2;
-    for (;;) {
-      const prev = placed.get(target.toLowerCase());
-      if (!prev) break;
-      if (prev === r.sha1) { target = null; dupes++; break; }
-      const b = path.extname(name); target = path.join(dir, name.slice(0, name.length - b.length) + ` [${k++}]` + b);
+    const memberships = new Map();
+    for (const a of (r.mameAll || '').split(';;').filter(Boolean)) { const [par, set, d] = a.split('|'); if (!memberships.has(par)) memberships.set(par, d || desc.get(set)); }
+    const own = r.mameParent || r.mameSet || zip.replace(/\.zip$/i, '');
+    if (!memberships.size) memberships.set(own, r.mameDesc);
+    if (!memberships.has(own)) memberships.set(own, r.mameDesc);
+    let first = true;
+    for (const [parentSet, setDesc] of memberships) {
+      const top = safe(desc.get(parentSet) || setDesc || parentSet);
+      const base = r.tosec ? r.tosec.replace(/\.[^.]+$/, '') : (r.nointro || setDesc || path.basename(r.file, ext));
+      const name = safe(base + (r.tosec ? path.extname(r.tosec) : ext));
+      const dir = path.join(out, 'rom', system, medium, top);
+      let stem = safe(base), target = path.join(dir, stem + '.zip'), k = 2;
+      for (;;) {
+        const prev = placed.get(target.toLowerCase());
+        if (!prev) break;
+        if (prev === r.sha1) { target = null; dupes++; break; }
+        target = path.join(dir, `${stem} [${k++}].zip`);
+      }
+      if (!target) continue;
+      placed.set(target.toLowerCase(), r.sha1);
+      if (!first) copies++; first = false;
+      plan.push({ zip, file: r.file, target, inner: name, top, source: r.tosec ? 'TOSEC' : r.nointro ? 'No-Intro' : 'MAME' });
     }
-    if (!target) continue;
-    placed.set(target.toLowerCase(), r.sha1);
-    plan.push({ zip, file: r.file, target, top, source: r.tosec ? 'TOSEC' : r.nointro ? 'No-Intro' : 'MAME' });
   }
 }
-const folders = new Set(plan.map((p) => p.top)), single = new Set(); const cnt = {}; plan.forEach((p) => (cnt[p.top] = (cnt[p.top] || 0) + 1));
+const folders = new Set(plan.map((p) => p.top)); const cnt = {}; plan.forEach((p) => (cnt[p.top] = (cnt[p.top] || 0) + 1));
 const multiFolders = Object.values(cnt).filter((n) => n > 1).length;
 if (!args.includes('--dry')) {
-  for (const [zip, rs] of byZip) {
+  for (const [zip] of byZip) {
     const ents = readZip(fs.readFileSync(path.join(root, zip)));
-    for (const p of plan.filter((q) => q.zip === zip)) { fs.mkdirSync(path.dirname(p.target), { recursive: true }); fs.writeFileSync(p.target, ents.get(p.file)); }
+    for (const p of plan.filter((q) => q.zip === zip)) { fs.mkdirSync(path.dirname(p.target), { recursive: true }); fs.writeFileSync(p.target, writeZip(p.inner, ents.get(p.file))); }
   }
   fs.writeFileSync(path.join(out, 'rom', system, medium, '_sort-map.txt'), plan.map((p) => `${p.zip}!${p.file}  ->  ${path.relative(path.join(out, 'rom', system, medium), p.target)}   [${p.source}]`).join('\n'));
 }
-console.log(`${args.includes('--dry') ? 'DRY RUN: ' : ''}${plan.length} files into ${folders.size} top-name folders (${multiFolders} folders hold more than one rom, ${folders.size - multiFolders} hold a single rom); ${dupes} identical duplicates skipped.`);
+console.log(`${args.includes('--dry') ? 'DRY RUN: ' : ''}${plan.length} individual zips into ${folders.size} top-name folders (${multiFolders} hold more than one rom); ${copies} are extra copies of a rom listed under more than one top name; ${dupes} identical duplicates skipped.`);
 console.log(`names from: TOSEC ${plan.filter((p) => p.source === 'TOSEC').length}, No-Intro ${plan.filter((p) => p.source === 'No-Intro').length}, MAME ${plan.filter((p) => p.source === 'MAME').length}`);
