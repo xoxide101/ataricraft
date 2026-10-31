@@ -183,7 +183,7 @@
         const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:8px;align-items:center;margin:2px 0';
         const nm = Object.assign(document.createElement('span'), { textContent: `${e.name} · ${describe(e)}${e.short ? ' · incomplete' : ''}` }); nm.style.flex = '1';
         r.append(nm);
-        if (e.kind === 'border') { const bp = P.borderPixels(e.data), c = P.canvasOf(bp.px, bp.w, bp.h, 2); c.style.cssText = 'background:#fff;height:48px;width:auto;image-rendering:pixelated'; r.append(c); }
+        if (e.kind === 'border') { const bp = P.borderPixels(e.data), c = P.canvasOf(bp.px, bp.w, bp.h, 2); c.style.cssText = 'background:#fff;height:48px;width:auto;image-rendering:pixelated'; r.append(c); const fp = P.borderFrame(e.data), fc = P.canvasOf(fp.px, fp.w, fp.h, 1); fc.title = 'Frame preview (guess)'; fc.style.cssText = 'background:#fff;height:72px;width:auto;image-rendering:pixelated;border:1px solid #888'; r.append(fc); }
         if (e.kind === 'font') {
           const gl = P.fontGlyphs(e.data, e.addr);
           if (gl && gl.length) {

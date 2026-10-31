@@ -60,6 +60,19 @@
     return { px, w: 8, h };
   }
 
+  // Frame preview: the strip down the left and right edges, turned 90 degrees along the top and bottom. A guess at how Print Shop lays a border out.
+  function borderFrame(d) {
+    const n = d.length, bp = borderPixels(d).px, px = new Uint8Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      let v = 0;
+      if (x < 8) v = bp[y * 8 + x];
+      else if (x >= n - 8) v = bp[y * 8 + (n - 1 - x)];
+      if (y < 8) v = bp[x * 8 + y];
+      else if (y >= n - 8) v = bp[x * 8 + (n - 1 - y)];
+      px[y * n + x] = v;
+    }
+    return { px, w: n, h: n };
+  }
   function canvasOf(px, w, h, scale) {
     const c = document.createElement('canvas'); c.width = w * scale; c.height = h * scale;
     const g = c.getContext('2d'), img = g.createImageData(c.width, c.height);
@@ -186,5 +199,5 @@
     g.putImageData(img, 0, 0); return c;
   }
 
-  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, fontGlyphs, fontGlyphsF, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
+  return { parse, read, gfxPixels, borderPixels, borderFrame, canvasOf, png, sheet, fontGlyphs, fontGlyphsF, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
 });
