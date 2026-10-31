@@ -77,5 +77,26 @@ if (!args.includes('--dry')) {
   }
   fs.writeFileSync(path.join(out, 'rom', system, medium, '_sort-map.txt'), plan.map((p) => `${p.zip}!${p.file}  ->  ${path.relative(path.join(out, 'rom', system, medium), p.target)}   [${p.source}]`).join('\n'));
 }
+if (args.includes('--sets')) {
+  const sets = new Map(); plan.forEach((p) => (sets.get(p.top) || sets.set(p.top, []).get(p.top)).push(p));
+  const sdir = path.join(out, 'sets', system, medium); fs.mkdirSync(sdir, { recursive: true });
+  const cache = new Map(); const lines = [];
+  for (const [top, ps] of sets) {
+    const parts = [], cd = []; let off = 0;
+    for (const p of ps) {
+      if (!cache.has(p.zip)) cache.clear(), cache.set(p.zip, readZip(fs.readFileSync(path.join(root, p.zip))));
+      const data = cache.get(p.zip).get(p.file), nm = Buffer.from(p.inner, 'utf8'), c = zlib.deflateRawSync(data), crc = zlib.crc32(data);
+      const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6); lh.writeUInt16LE(8, 8); lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(c.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nm.length, 26);
+      const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8); ch.writeUInt16LE(8, 10); ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(c.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nm.length, 28); ch.writeUInt32LE(off, 42);
+      parts.push(lh, nm, c); cd.push(ch, nm); off += 30 + nm.length + c.length;
+    }
+    const cdb = Buffer.concat(cd), end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(ps.length, 8); end.writeUInt16LE(ps.length, 10); end.writeUInt32LE(cdb.length, 12); end.writeUInt32LE(off, 16);
+    fs.writeFileSync(path.join(sdir, top + '.zip'), Buffer.concat([...parts, cdb, end]));
+    lines.push(`${ps.length > 1 ? 'SET       ' : 'INDIVIDUAL'}  ${ps.length}  ${top}`);
+  }
+  fs.writeFileSync(path.join(sdir, '_classification.txt'), lines.join('\n'));
+  console.log(`sets: ${sets.size} set zips written to ${sdir} (${lines.filter((l) => l.startsWith('SET')).length} multi-rom sets, ${lines.filter((l) => l.startsWith('INDIV')).length} individuals)`);
+}
 console.log(`${args.includes('--dry') ? 'DRY RUN: ' : ''}${plan.length} individual zips into ${folders.size} top-name folders (${multiFolders} hold more than one rom); ${copies} are extra copies of a rom listed under more than one top name; ${dupes} identical duplicates skipped.`);
 console.log(`names from: TOSEC ${plan.filter((p) => p.source === 'TOSEC').length}, No-Intro ${plan.filter((p) => p.source === 'No-Intro').length}, MAME ${plan.filter((p) => p.source === 'MAME').length}`);
