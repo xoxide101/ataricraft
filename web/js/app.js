@@ -194,6 +194,77 @@
   }
   function resetRomChoice() { localStorage.removeItem('ac.romsel'); S.basicTouched = false; $('osrom').innerHTML = ''; $('basicrom').innerHTML = ''; fillRomSelects(); }
 
+  // System check: every ROM slot, what was found, where it came from, its CRC and the identified version. Browsers only reveal the folder name that was picked, not the full disk path.
+  const SLOTS = [['os800', 'OS for Atari 400/800 (10 KB)', ''], ['osxl', 'OS for XL/XE (16 KB)', ''], ['os5200', '5200 BIOS (2 KB)', 'needed for 5200 cartridges'], ['basic', 'BASIC (8 KB)', '']];
+  const FOLDER_TREE = [
+    'ataricraft-data/              any name works: use Scan folder... on the top folder',
+    '  roms/',
+    '    os/       ATARIOSA.ROM  ATARIOSB.ROM  ATARIXL.ROM   (400/800 and XL/XE operating systems)',
+    '    basic/    ATARIBAS.ROM',
+    '    5200/     5200.rom',
+    '  disks/      .atr .xfd .dcm .atx   (drag onto a drive, or browse in WebAFM)',
+    '  carts/      .car .rom .bin',
+    '  tapes/      .cas .wav',
+    '  states/     saved machine states',
+  ];
+  function sysCheck() {
+    const slots = SLOTS.map(([k, title, note]) => {
+      const items = S.lib[k].map((e) => {
+        if (e.builtin) return { builtin: true, file: e.name, from: 'built-in (Altirra, open licence)', size: e.bytes.length, crc: crc32(e.bytes), id: 'Altirra replacement ROM' };
+        romLabel(e);
+        return { builtin: false, file: e.name.replace(/^.*[\\/]/, ''), from: romSource(e), size: e.bytes.length, crc: crc32(e.bytes), id: e.label || 'not in the ROM database' };
+      });
+      const orig = items.filter((i) => !i.builtin && i.id !== 'not in the ROM database').length;
+      const other = items.filter((i) => !i.builtin).length - orig;
+      const built = items.some((i) => i.builtin);
+      const status = orig ? 'ok' : other ? 'warn' : built ? 'builtin' : 'missing';
+      const text = { ok: 'Original ROM found', warn: 'Found, but not recognised', builtin: 'Only the built-in Altirra ROM', missing: 'Missing' + (note ? ' (' + note + ')' : '') }[status];
+      return { k, title, items, status, text };
+    });
+    const text = () => {
+      const L = ['Ataricraft system check ' + new Date().toISOString(), document.title + ' | ' + navigator.userAgent, ''];
+      for (const s of slots) {
+        L.push(`${s.title}: ${s.text}`);
+        for (const i of s.items) L.push(`   ${i.file}  [${i.from}]  ${i.size} bytes  CRC ${i.crc}  ${i.id}`);
+      }
+      L.push('', 'Suggested folder layout:', ...FOLDER_TREE);
+      return L.join('\n');
+    };
+    return { slots, text };
+  }
+  async function sysCheckDialog() {
+    const { slots, text } = sysCheck();
+    let dlg = $('syschk');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'syschk'; document.body.append(dlg); }
+    dlg.innerHTML = '';
+    dlg.style.cssText = 'background:#1b1e24;color:#e6e0d4;border:1px solid #4a5160;border-radius:10px;width:min(94vw,760px);max-height:86vh;overflow:auto';
+    const el = (tag, css, txt) => { const x = document.createElement(tag); if (css) x.style.cssText = css; if (txt !== undefined) x.textContent = txt; return x; };
+    dlg.append(el('h3', 'margin:0 0 8px', 'System check'));
+    const colour = { ok: '#6c6', warn: '#eb5', builtin: '#7ad', missing: '#e66' };
+    for (const s of slots) {
+      const head = el('div', 'margin:10px 0 2px;font-weight:600');
+      head.append(el('span', `color:${colour[s.status]}`, '● '), document.createTextNode(s.title + ' - ' + s.text));
+      dlg.append(head);
+      for (const i of s.items) dlg.append(el('div', 'font:12px ui-monospace,Consolas,monospace;margin-left:18px;white-space:pre-wrap;word-break:break-all', `${i.file}  ${i.size} B  CRC ${i.crc}\n   ${i.id}  (${i.from})`));
+    }
+    const dirs = [];
+    try { if (S.romDirs) for (const h of await S.romDirs()) dirs.push(h.name); } catch (e) { /* none */ }
+    dlg.append(el('div', 'margin:12px 0 2px;font-weight:600', 'Scanned folders'));
+    dlg.append(el('div', 'font-size:12px;margin-left:18px', (dirs.length ? dirs.join(', ') : 'none remembered yet') + (S.romDirs ? '' : ' (this browser cannot remember folders; use Files... or drop ROMs in)')));
+    dlg.append(el('div', 'font-size:11px;color:#9aa;margin:4px 0 0 18px', 'The browser shows only the folder name you picked, not the full path on disk.'));
+    dlg.append(el('div', 'margin:12px 0 2px;font-weight:600', 'Suggested folder layout'));
+    dlg.append(el('pre', 'font:12px ui-monospace,Consolas,monospace;margin:0 0 10px;white-space:pre', FOLDER_TREE.join('\n')));
+    const row = el('div', 'display:flex;gap:8px;flex-wrap:wrap');
+    const mk = (label, fn) => { const b = el('button', '', label); b.onclick = fn; row.append(b); return b; };
+    mk('Scan folder...', () => { dlg.close(); $('romfolder').click(); });
+    const cp = mk('Copy report', async () => { try { await navigator.clipboard.writeText(text()); cp.textContent = 'Copied'; } catch (e) { cp.textContent = 'Copy failed'; } });
+    mk('Close', () => dlg.close());
+    dlg.append(row);
+    dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+    dlg.showModal();
+  }
+  window.AC_sysCheck = sysCheck;
+
   function fillRomSelects() {
     ensureBuiltinRoms();
     fillRam();
@@ -3932,6 +4003,7 @@
   $('osrom').onchange = () => { updateCharset(); saveRomSel(); showRomInfo(); };
   $('rommode').onchange = () => { localStorage.setItem('ac.rommode', $('rommode').value); resetRomChoice(); };
   $('romauto').onclick = resetRomChoice;
+  $('syscheck').onclick = sysCheckDialog;
   $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); showRomInfo(); };
   $('romfolder').onchange = (e) => addRoms(e.target.files);
 
@@ -3967,6 +4039,7 @@
       if (old && !l.length) l.push(old);
       return l;
     };
+    S.romDirs = romDirs;
     $('romfolder').addEventListener('click', async (e) => {
       e.preventDefault();
       let h;
