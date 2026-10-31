@@ -38,6 +38,15 @@ function writeZip(name, data) {
   return Buffer.concat([lh, nm, c, ch, nm, end]);
 }
 
+// --headers <folder>: for headerless ROMs whose payload (bytes after a 128-byte A78 header) matches a file there, store that headered file as .a78.
+const hdrLib = new Map();
+if (opt('--headers')) for (const f of fs.readdirSync(opt('--headers'), { recursive: true })) {
+  const fp = path.join(opt('--headers'), f); if (!fs.statSync(fp).isFile()) continue;
+  const b = fs.readFileSync(fp);
+  if (b.length > 128 && b.toString('latin1', 1, 10) === 'ATARI7800') hdrLib.set(require('crypto').createHash('md5').update(b.subarray(128)).digest('hex'), b);
+}
+const upgrade = (r) => (!r.hdr && hdrLib.get(r.md5)) || null;
+
 const plan = [], placed = new Map(); let dupes = 0, copies = 0;
 const byZip = new Map(); rows.forEach((r) => (byZip.get(r.zip) || byZip.set(r.zip, []).get(r.zip)).push(r));
 for (const [zip, rs] of byZip) {
@@ -52,7 +61,8 @@ for (const [zip, rs] of byZip) {
     for (const [parentSet, setDesc] of memberships) {
       const top = safe(desc.get(parentSet) || setDesc || parentSet);
       const base = r.tosec ? r.tosec.replace(/\.[^.]+$/, '') : (r.nointro || setDesc || path.basename(r.file, ext));
-      const name = safe(base + (r.tosec ? (/\.a78$/i.test(r.tosec) && !r.hdr ? '.bin' : path.extname(r.tosec)) : ext));
+      const up = upgrade(r);
+      const name = safe(base + (up ? '.a78' : r.tosec ? (/\.a78$/i.test(r.tosec) && !r.hdr ? '.bin' : path.extname(r.tosec)) : ext));
       const dir = path.join(out, 'rom', system, medium, top);
       let stem = safe(base), target = path.join(dir, stem + '.zip'), k = 2;
       for (;;) {
@@ -64,7 +74,7 @@ for (const [zip, rs] of byZip) {
       if (!target) continue;
       placed.set(target.toLowerCase(), r.sha1);
       if (!first) copies++; first = false;
-      plan.push({ zip, file: r.file, target, inner: name, top, source: r.tosec ? 'TOSEC' : r.nointro ? 'No-Intro' : 'MAME' });
+      plan.push({ zip, file: r.file, target, inner: name, top, up, source: r.tosec ? 'TOSEC' : r.nointro ? 'No-Intro' : 'MAME' });
     }
   }
 }
@@ -73,7 +83,7 @@ const multiFolders = Object.values(cnt).filter((n) => n > 1).length;
 if (!args.includes('--dry')) {
   for (const [zip] of byZip) {
     const ents = readZip(fs.readFileSync(path.join(root, zip)));
-    for (const p of plan.filter((q) => q.zip === zip)) { fs.mkdirSync(path.dirname(p.target), { recursive: true }); fs.writeFileSync(p.target, writeZip(p.inner, ents.get(p.file))); }
+    for (const p of plan.filter((q) => q.zip === zip)) { fs.mkdirSync(path.dirname(p.target), { recursive: true }); fs.writeFileSync(p.target, writeZip(p.inner, p.up || ents.get(p.file))); }
   }
   fs.writeFileSync(path.join(out, 'rom', system, medium, '_sort-map.txt'), plan.map((p) => `${p.zip}!${p.file}  ->  ${path.relative(path.join(out, 'rom', system, medium), p.target)}   [${p.source}]`).join('\n'));
 }
@@ -85,7 +95,7 @@ if (args.includes('--sets')) {
     const parts = [], cd = []; let off = 0;
     for (const p of ps) {
       if (!cache.has(p.zip)) cache.clear(), cache.set(p.zip, readZip(fs.readFileSync(path.join(root, p.zip))));
-      const data = cache.get(p.zip).get(p.file), nm = Buffer.from(p.inner, 'utf8'), c = zlib.deflateRawSync(data), crc = zlib.crc32(data);
+      const data = p.up || cache.get(p.zip).get(p.file), nm = Buffer.from(p.inner, 'utf8'), c = zlib.deflateRawSync(data), crc = zlib.crc32(data);
       const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6); lh.writeUInt16LE(8, 8); lh.writeUInt32LE(crc, 14); lh.writeUInt32LE(c.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nm.length, 26);
       const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8); ch.writeUInt16LE(8, 10); ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(c.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nm.length, 28); ch.writeUInt32LE(off, 42);
       parts.push(lh, nm, c); cd.push(ch, nm); off += 30 + nm.length + c.length;
