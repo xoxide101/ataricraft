@@ -22,3 +22,7 @@ web/js/diskdb.js
 # archive: blank disks are tracked; DOS boot disks (third-party) stay local
 !archive/blank/*.atr
 !roms/altirra/*.rom
+
+# the shareable AtariCraft Tools disk (our own tools only)
+!web/library/craftapps/Tools/
+!web/library/craftapps/Tools/*.atr
