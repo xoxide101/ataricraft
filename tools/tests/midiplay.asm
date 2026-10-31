@@ -1,6 +1,6 @@
 ; MIDIPLAY.COM - plays a POKEY music file (.PMD, made from a .mid by tools/midiconv.cjs): 4 pure-tone voices
 ; (more than 4 notes at once are stolen), noise for drums. Output goes to the left POKEY, the right POKEY or both.
-; The Atari does not read .mid itself. Timing is by frame (60 Hz NTSC; a PAL machine plays it a little slow).
+; It also reads a standard .mid (format 0/1) directly. Timing is by frame (60 Hz NTSC; a PAL machine plays it a little slow).
         org $2000
         jmp start
         icl 'common.inc'
@@ -8,9 +8,12 @@
 
 ; music file layout: 'PMD',1, then 3-byte records: frames to wait, register 0-7 (AUDF1,AUDC1,AUDF2,...), value.
 ; Register $FE = nothing (long waits), $FF = end of song.
-prepfile rts
+        icl 'midread.inc'
 
-doplay  jsr silence
+doplay  lda ismid
+        beq pmdplay
+        jmp mplay
+pmdplay jsr silence
         lda #<(BUF+4)
         sta pp
         lda #>(BUF+4)

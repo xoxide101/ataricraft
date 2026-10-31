@@ -30,6 +30,7 @@ const files = [
   ['MP3PLAY.COM', rd('tools/tests/bin/MP3PLAY.COM')],
   ['SNDTEST.COM', rd('tools/tests/bin/SNDTEST.COM')],
   ['DEMO.PMD', rd('tools/tests/DEMO.PMD')],
+  ['DEMO.MID', rd('tools/tests/DEMO.MID')],
   ['TEST.PMD', rd('tools/tests/TEST.PMD')],
   ['STEREO.SMP', stereoSample()],
 ];
@@ -49,6 +50,7 @@ then L left, R right, B both, SPACE play, any
 key stops, N new file, ESC exit.
 
 DEMO.PMD    original 16 second tune
+DEMO.MID    same tune as a MIDI file (MIDIPLAY reads .MID directly)
 TEST.PMD    short test tune
 STEREO.SMP  tone left, then right, then both
             (needs a second POKEY to separate)
