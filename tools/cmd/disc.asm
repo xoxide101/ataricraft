@@ -3,9 +3,38 @@
 ; Sectors come straight from SIO (device $39/$3A, $52 read, $48 high sector word, $53 status; see web/js/rawdisk.js).
 ; At the DISC> prompt:  D [D9:][path] list | T [D9:]path show | X [D9:]path [dest] copy to a DOS file | I [D9:] info
 ; Paths use / > or \ between names. A blank line exits.
+;
+; Notes (appears to match the code below):
+;  - UDF (fst=3) is also supported, in addition to the ISO 9660 / FAT mentioned above. Q quits too; L = D.
+;  - Everything is read-only: only SIO commands $52 (read), $48 (set high sector word) and $53 (status) are used.
+;  - The prompt loop saves the stack pointer in psp; 'abort' restores it, so any error deep inside a call chain
+;    just prints a message and returns to the DISC> prompt.
+;
+; Structure:
+;   start/prompt   command loop: parse command letter (mode 0=D/L, 1=T, 2=X, 3=I), path, optional destination
+;   getpath/cpt    copy command tokens into PATHB / DEST (D9:/D10: prefix selects unitn)
+;   sioset/rdsec   SIO setup and a cached sector read: lba (32 bit) -> SBUF, FBUF or UBUF (see bsel)
+;   mount          status ($53) -> sector size decides the file system: 2048 = UDF then ISO 9660, 512 = FAT
+;   FAT            gfb/fatnext read the FAT (12/16/32 bit entries) through the FBUF sector cache
+;   streams        sopen sets up a byte stream for an extent or cluster chain, snext delivers the next sector
+;                  in SBUF (sn = number of valid bytes); sm = 0 contiguous, 1 FAT chain, 2 UDF extents,
+;                  3 UDF embedded data
+;   directories    dopen/dnext iterate entries -> NAMEB (NUL ended 8.3 / ISO / UDF name), e_dir, e_start, e_size
+;   walk           resolve PATHB component by component starting at setroot
+;   commands       doinfo, dolist, dotype, doext
+;
+; Memory map (all above the program, which starts at CODE):
+;   $6400 SBUF  data sector (2048)     $6C00 FBUF  FAT sector (512)      $6E00 PATHB   $6E40 DEST
+;   $6E90 LABEL volume label           $6F00 VARS  byte variables, then 32 bit values at R = VARS+$40
+;   $7800 UBUF  UDF file entry sector  $8000 ADBUF UDF allocation descriptors   $8100 FIDB  $8140 FNB
+;   $8240 CMPN  upper cased path component being matched
+; 32 bit values are little endian 4 byte fields handled by the MOV4/ADD4/SUB4/... macros defined below.
+; Key variables: lba = sector to read, sbtag/fbtag/utag = sector currently cached in SBUF/FBUF/UBUF (valid when
+; sbv/fbv/ubv = 1), base = partition start (FAT) or UDF partition start, fatlba/rootlba/datalba = FAT geometry,
+; e_start/e_size/e_dir = current directory entry, s_* = stream state, fst = file system type, kind = FAT bits.
         icl 'lib\sys.asm'
 
-SBUF    = $6400         ; data sector (up to 2048 bytes)
+SBUF     = $6400         ; data sector (up to 2048 bytes)
 FBUF    = $6C00         ; FAT sector (512 bytes)
 PATHB   = $6E00         ; 64  path being resolved
 DEST    = $6E40         ; 64  extract destination
@@ -225,10 +254,16 @@ utag    = R+108
         bne :3
         .endm
 
+; 4 byte (32 bit) helper macros above: d/s/a/b are the first argument = destination/first operand, second = source.
+; They expand inline, clobber A (and carry) only, and operate on little endian 4 byte fields.
+
         org CODE
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- main command loop ----
+; Default drive is D9:. 'prompt' records the stack pointer in psp so 'abort' can unwind any nested call.
+; Command letters: D/L -> mode 0, T -> 1, X -> 2, I -> 3 (mode is the X register value built by the INX chain).
 start:  lda #9
         sta unitn
         jsr putsi
@@ -269,6 +304,8 @@ prompt: tsx
         jsr putsi
         .byte 'USE D, T, X OR I',EOL,0
         jmp prompt
+; PATHB and DEST start out empty (EOL only); the optional 1st argument is the path, for X the 2nd is the destination.
+; After mounting and walking the path the command dispatches to dolist / dotype / doext (info needs no walk).
 pm:     stx mode
         lda #EOL
         sta PATHB
@@ -303,10 +340,12 @@ pm_f:   lda mode
         jeq dotype
         jmp doext
 
+; leave to DOS (closes the IOCB $30 used by X, in case it is still open)
 bye:    ldx #$30
         jsr fclose
         jmp (DOSVEC)
 
+; error exit: close the extract file, restore the stack saved at the prompt and go back to DISC>
 abort:  ldx #$30
         jsr fclose
         ldx psp
@@ -314,6 +353,8 @@ abort:  ldx #$30
         jmp prompt
 
 ; TOK -> PATHB; a D9: / D10: prefix selects the drive
+; The prefix test is done character by character: X = number of prefix characters to skip (3 for D9:, 4 for D10:).
+; Out: PATHB = rest of the token, EOL ended; unitn updated when a prefix was given.
 getpath:
         ldx #0
         lda TOK
@@ -352,7 +393,7 @@ gp_d:   lda #EOL
         sta PATHB,y
         rts
 
-; copy TOK (upper cased) to (T1)+Y and end it with EOL
+; copy TOK (upper cased) to (T1)+Y and end it with EOL; Y = start index, X walks TOK
 cpt:    ldx #0
 cp1:    lda TOK,x
         beq cp2
@@ -366,7 +407,9 @@ cp2:    lda #EOL
         rts
 
 ; ---- SIO ----
-; A = command, X = DSTATS
+; Fill the SIO device control block: A = command, X = DSTATS ($40 = data goes to the computer, 0 = no data).
+; DDEVIC is always $31 (disk bus id) and DUNIT = unitn (9 or 10); the caller sets the buffer, length and AUX bytes.
+; Timeout 15 (about 16 s).
 sioset: sta DCOMND
         stx DSTATS
         lda #$31
@@ -377,7 +420,11 @@ sioset: sta DCOMND
         sta DTIMLO
         rts
 
-; read sector lba into SBUF (A = 0) or FBUF (A = 1)
+; read sector lba into SBUF (A = 0), FBUF (A = 1) or UBUF (any other A, used for UDF file entries)
+; Each buffer remembers which sector it holds (sbtag/fbtag/utag + valid flag sbv/fbv/ubv); a request for the cached
+; sector returns at once. Out: carry clear. Any SIO error prints DISK READ ERROR and jumps to abort.
+; Sectors above 65535 first send command $48 with the high word in AUX1/AUX2, then the normal $52 read follows with
+; the low word. Transfer length: SBUF = sector size (ssl/ssh), FBUF = 512, UBUF = 2048.
 rdsec:  sta bsel
         bne rs_n0
         lda sbv
@@ -481,6 +528,10 @@ rs_e:   lda #0
         jmp abort
 
 ; ---- mount: find out what is in the drive ----
+; Out: carry clear and fst = 1 (ISO 9660), 2 (FAT) or 3 (UDF) on success; carry set after printing a message.
+; Uses the SIO status command $53: 8 bytes in stb -- appears to be total sectors (4 bytes -> secs), sector size
+; (stb+4/5 -> ssl/ssh) and flags (bit 0 of stb+6 = image present). A 2048 byte sector size means optical (UDF, else
+; ISO 9660); 512 means FAT. Anything else is reported as an unknown file system.
 mount:  lda #0
         sta fst
         sta sbv
@@ -523,12 +574,18 @@ mt_nd:  jsr putsi
         sec
         rts
 
+; 2048 byte sectors: try UDF first, fall back to ISO 9660 when mt_udf says no
 mt_ui:  jsr mt_udf
         jcs mt_iso
         clc
         rts
 
 ; UDF (2048 byte sectors, one plain partition, short / long / embedded descriptors). Carry set when the drive is not UDF.
+; Appears to follow the standard layout: the anchor volume descriptor pointer at sector 256 (tag id 2) gives the main
+; volume descriptor sequence (location at +20, length at +16..19, capped at 16 sectors). Walking it: tag 5 =
+; partition descriptor (start sector at +188 -> base), tag 6 = logical volume descriptor (file set location at +252
+; -> rootlba, volume label from +84), tag 8 = terminator. Both 5 and 6 must be seen (bits of ugot). Then the file set
+; descriptor (tag 256) at base+rootlba is read; its root directory ICB (+404) replaces rootlba.
 mt_udf: lda secs+2
         ora secs+3
         bne mu_ok
@@ -540,6 +597,8 @@ mt_udf: lda secs+2
         lda secs
         cmp #5
         jcc mu_no
+; (the checks above require at least $0105 sectors, so that sector 256 exists)
+; Read the anchor at sector 256 ($0100): lba+1 = 1.
 mu_ok:  CLR4 lba
         lda #1
         sta lba+1
@@ -550,13 +609,13 @@ mu_ok:  CLR4 lba
         jne mu_no
         lda SBUF+1
         jne mu_no
-        MOV4 lba,SBUF+20
+        MOV4 lba,SBUF+20        ; main VDS location
         lda SBUF+17
         lsr
         lsr
         lsr
         clc
-        adc #1
+        adc #1                  ; (length >> 11) + 1 sectors, at most 16
         cmp #17
         bcc mu_c
         lda #16
@@ -639,6 +698,8 @@ mu_no:  lda #0
         sec
         rts
 
+; ISO 9660: primary volume descriptor at sector 16 (type 1, "CD001"); root directory record at +156 gives the
+; extent (+158) and size (+166); the volume label is the 32 bytes at +40.
 mt_iso: CLR4 lba
         lda #16
         sta lba
@@ -672,7 +733,7 @@ mt_ir:  lda SBUF+158,x
         rts
 cdid:   .byte 'CD001'
 
-; copy Y bytes at (T0) to LABEL, NUL ended, trailing spaces removed
+; copy Y bytes at (T0) to LABEL, NUL ended, trailing spaces removed (and NUL padding)
 getlab: sty tl
         ldy #0
 gl_c:   lda (T0),y
@@ -694,6 +755,8 @@ gl_t:   dey
 gl_d:   rts
 
 ; carry clear when SBUF holds a FAT boot sector (512 byte sectors)
+; Checks: $55AA signature, jump opcode $EB/$E9, bytes per sector = 512, sectors per cluster a power of two,
+; and 1 or 2 FATs.
 bpbok:  lda SBUF+510
         cmp #$55
         bne bb_n
@@ -726,6 +789,8 @@ bb_j:   lda SBUF+11
 bb_n:   sec
         rts
 
+; FAT: sector 0 is tried as a boot sector (superfloppy); otherwise the four MBR partition entries (16 bytes each at
+; +446) are scanned for a FAT type (ptypes) and that partition's first sector (entry +8) becomes base.
 mt_fat: CLR4 lba
         CLR4 base
         lda #0
@@ -782,6 +847,12 @@ mt_pn:  inc ctr
         jmp mt_unk
 ptypes: .byte 1,4,6,$0B,$0C,$0E
 
+; Parse the BIOS parameter block in SBUF: sectors/cluster (spc, spcsh = log2), reserved sectors (rsv), FAT count,
+; root entries (ent), total sectors (16 bit at +19 else 32 bit at +32), sectors per FAT (+22 else +36, FAT32),
+; root cluster (+44, FAT32). Then lay out: fatlba = base+rsv, rootlba = fatlba + nfat*spf, datalba = rootlba +
+; rootsecs ((ent*32+511)/512 -- computed as (ent+15)>>4). The FAT type is chosen by the cluster count (dv) as the
+; Microsoft spec says: < 4085 FAT12, < 65525 FAT16, else FAT32. eoc = first end-of-chain value for that type.
+; A volume label of "NO " (as in "NO NAME") is cleared.
 mt_f2:  lda SBUF+13
         sta spc
         ldx #0
@@ -951,7 +1022,8 @@ k4085:  .dword 4085
 k65525: .dword 65525
 
 ; ---- FAT ----
-; byte of the FAT at byte offset fo
+; byte of the FAT at byte offset fo (32 bit): reads FAT sector fo>>9 into FBUF (cached) and returns that byte in A.
+; Clobbers lba, T0, Y. The 32 bit shift right by 9 is done as a one place shift of the upper 3 bytes.
 gfb:    lda #0
         sta lba+3
         lda fo+3
@@ -977,7 +1049,9 @@ gfb:    lda #0
         lda (T0),y
         rts
 
-; s_cl = the FAT entry of s_cl
+; s_cl = the FAT entry of s_cl (next cluster of the chain; compare with eoc to detect the end)
+; FAT12: entry at byte offset n + n/2, two bytes; odd clusters use the top 12 bits (>>4), even the low 12 bits.
+; FAT16: offset n*2. FAT32: offset n*4, only the low 28 bits are used.
 fatnext:
         lda kind
         cmp #12
@@ -1050,6 +1124,10 @@ fx_l:   stx ctr
         rts
 
 ; ---- streams: sopen sets one up from e_start / e_size / e_dir, snext puts the next sector in SBUF (sn = valid bytes) ----
+; sopen: ISO 9660 -> contiguous (sm=0) from sector e_start, s_cnt = sectors = (size+2047)>>11, size-limited.
+;        FAT directory -> a cluster chain from e_start (sm=1); the FAT12/16 root (e_start=0) is a contiguous run
+;        of rootsecs sectors at rootlba (sm=0), FAT32 root starts at rootclus. FAT file -> chain, size-limited.
+;        UDF -> so_udf. s_lim=1 means the stream stops after s_rem bytes (files); directories run to the end.
 sopen:  lda fst
         cmp #3
         jeq so_udf
@@ -1110,6 +1188,9 @@ so_ch:  lda #1
         sta s_si
         rts
 
+; Out: carry clear = SBUF holds the next sector, sn = number of valid bytes in it (last sector of a size-limited
+; stream is trimmed to s_rem); carry set = end of stream. In chain mode the sector is
+; datalba + (cluster-2)*spc + s_si, and fatnext is called after the last sector of each cluster.
 snext:  lda s_lim
         beq sn_a
         ZER4 s_rem
@@ -1220,6 +1301,7 @@ sn_end: sec
 
 ; ---- UDF ----
 ; (T1) = destination (NUL ended, at most 40 characters); FNB = dstring (compression id 8 or 16 first), tl = its length
+; Id 8 = one byte per character, id 16 = UCS-2 (high byte must be 0 else '?'); control characters become '?'.
 ustr:   ldy #0
         lda tl
         beq us_z
@@ -1260,6 +1342,9 @@ us_z:   lda #0
         rts
 
 ; the file entry at partition block e_start -> UBUF; e_size, eoff, elen and aic set
+; Accepts tag 261 (file entry, X=0) or 266 (extended file entry, X=40 = extra header bytes). Information length
+; (+56) -> e_size; L_EA (+168+X) + 176 + X -> eoff = offset of the allocation descriptors; L_AD (+172+X) -> elen;
+; aic = ICB flags (+34) & 7 = allocation type (0 short, 1 long, 3 embedded). Bad entry -> message and abort.
 readfe: MOV4 lba,e_start
         ADD4 lba,base
         lda #2
@@ -1307,6 +1392,8 @@ rf_bad: jsr putsi
         .byte EOL,'BAD UDF FILE ENTRY',EOL,0
         jmp abort
 
+; UDF stream setup: sm = 2 (extent list copied to ADBUF, ads = 8 for short_ad / 16 for long_ad, adl = bytes capped
+; to 255 and rounded down to whole descriptors) or sm = 3 (embedded data, aic 3, or unknown types treated as such).
 so_udf: jsr readfe
         MOV4 s_rem,e_size
         lda #1
@@ -1365,6 +1452,8 @@ su_d:   lda #2
         rts
 
 ; next sector of a UDF stream (s_lim is always set)
+; Walks the descriptors in ADBUF: each has a 4 byte length (top 2 bits = extent type; type 3 = continuation, which
+; ends the stream here) followed by the block number, which gets base added. s_cnt = sectors left in the extent.
 sn_udf: lda sm
         cmp #3
         jeq sn_emb
@@ -1467,7 +1556,8 @@ se_d:   lda #0
         sta sbv
         jmp sn_z
 
-; read one byte of the open directory stream; carry set at the end
+; read one byte of the open directory stream into A; carry set at the end. dpos = read position inside SBUF,
+; sn = valid bytes; refills with snext when the sector is used up. Clobbers T0, Y.
 gb:     lda dpos+1
         cmp sn+1
         bcc gb_h
@@ -1499,6 +1589,10 @@ gb_e:   sec
         rts
 
 ; next file identifier descriptor -> NAMEB, e_dir, e_start (file entry block), e_size
+; Reads byte by byte with gb (FIDs may straddle sectors): 38 byte header into FIDB (tag 257 check, characteristics
+; +18, L_FI +19, ICB block +24, L_IU +36), skips the implementation use bytes, reads the name into FNB, then pads
+; to a 4 byte boundary. Deleted/parent entries (characteristics $0C) and empty names are skipped. For plain files
+; the file entry is read to get the size (readfe).
 dn_udf: lda #0
         sta kl
 du_h:   jsr gb
@@ -1595,6 +1689,7 @@ du_r:   clc
         rts
 
 ; ---- directories ----
+; open the directory described by e_start / e_size / e_dir for dnext
 dopen:  jsr sopen
         lda #0
         sta dend
@@ -1605,6 +1700,9 @@ dopen:  jsr sopen
         rts
 
 ; next entry -> NAMEB, e_dir, e_start, e_size; carry set at the end
+; FAT: 32 byte entries at dpos; first byte 0 = end, $E5 = deleted, '.' = dot entries, attribute $0F (long name)
+; and volume label bit ($08) are skipped. The 8.3 name is rebuilt as NAME.EXT; attribute bit 4 = directory;
+; cluster = +26 (low) and +20 (high, FAT32 only); size = +28.
 dnext:  lda dend
         jne dn_end
         lda fst
@@ -1724,6 +1822,9 @@ dn_end: lda #1
         sec
         rts
 
+; ISO 9660 directory record at (T0): length byte 0 = padding to the next sector (skip), +2 extent, +10 size,
+; +25 flags (bit 1 = directory), +32 name length, +33 name. Records named $00 / $01 (. and ..) are skipped;
+; the ";version" suffix is cut off, a trailing '.' dropped, and names are capped at 14 characters.
 dn_iso: ldy #0
         lda (T0),y
         bne dn_ir
@@ -1795,6 +1896,7 @@ dn_iz2: lda (T0),y
         clc
         rts
 
+; entry for the root directory -> e_dir / e_start / e_size (FAT root is cluster 0 here; see sopen)
 setroot:
         lda #1
         sta e_dir
@@ -1813,7 +1915,7 @@ sr_f:   CLR4 e_start
         CLR4 e_size
         rts
 
-; Z set when A is / > or \
+; Z set when A is / > or \ (path separators; $5C = backslash)
 issep:  cmp #'/'
         beq is_y
         cmp #'>'
@@ -1822,6 +1924,9 @@ issep:  cmp #'/'
 is_y:   rts
 
 ; PATHB -> e_dir / e_start / e_size / NAMEB; carry set when not found
+; Starts at the root and, for each component (upper cased into CMPN, max 40 chars), opens the current directory and
+; compares against NAMEB of every entry. A path that ends after a separator or is empty resolves to the directory.
+; pi = parse position in PATHB.
 walk:   jsr setroot
         lda #0
         sta pi
@@ -1871,6 +1976,7 @@ wk_ok:  clc
         rts
 
 ; ---- commands ----
+; I: print "Dn: FS [bits] LABEL" and the sector count / size. The 32 bit count goes through dec32 + putdig.
 doinfo: jsr putsi
         .byte 'D',0
         lda unitn
@@ -1923,6 +2029,7 @@ di_n:   jsr putnl
         .byte ' BYTES',EOL,0
         jmp prompt
 
+; D / L: list a directory (one line per entry, then the entry count in nfl/nfh) or a single file.
 dolist: lda e_dir
         bne dl_d
         jsr listline
@@ -1947,6 +2054,7 @@ dl_e:   lda nfl
         .byte ' ENTRIES',EOL,0
         jmp prompt
 
+; print NAMEB padded with spaces to 13 columns (at least one space), then <DIR> or the size in bytes
 listline:
         ldy #0
 ll_n:   lda NAMEB,y
@@ -1975,6 +2083,7 @@ ll_f:   MOV4 dv,e_size
         jmp putnl
 
 ; ---- T: show a text file ----
+; Streams the file sector by sector and feeds each byte (T0 = pointer into SBUF, tch:tcl = bytes left) to tyout.
 dotype: lda e_dir
         jne notfile
         lda #0
@@ -2007,6 +2116,8 @@ ty_c:   dec tcl
 ty_d:   jsr putnl
         jmp prompt
 
+; print one byte of text: LF = newline (pauses with a MORE prompt every 20 lines; ESC aborts), CR ignored, TAB = space,
+; other control or non-ASCII bytes show as '.'
 tyout:  cmp #$0A
         beq ty_nl
         cmp #$0D
@@ -2045,6 +2156,9 @@ notfile:
         jmp prompt
 
 ; ---- X: copy a file out to a DOS file ----
+; Builds the output file spec in FSPEC2 from DEST: empty -> D1:<name>; ending in : > or \ -> DEST + source name;
+; otherwise DEST is used as is. Opens it for write (mode 8) on IOCB $30, then writes every sector with bputp
+; (V_BPL/V_BPH = buffer, V_BLL/V_BLH = length).
 doext:  lda e_dir
         bne notfile
         ldy #0
@@ -2111,6 +2225,7 @@ dx_c:   ldx #$30
         jmp prompt
 
 ; dv (32 bit) -> 8 digits in dig, leading zeros turned into spaces
+; Repeated subtraction of the powers of ten in table pw (4 bytes each, index Y*4); dv is destroyed.
 dec32:  ldy #0
 d3_p:   sty kl
         lda #0
@@ -2158,6 +2273,7 @@ d3_z:   lda dig,y
         iny
         bne d3_z
 d3_r:   rts
+; print the 8 characters in dig
 putdig: ldy #0
 pg_l:   lda dig,y
         jsr putc
@@ -2165,6 +2281,7 @@ pg_l:   lda dig,y
         cpy #8
         bcc pg_l
         rts
+; powers of ten, 10^7 down to 10^0, as 32 bit little endian
 pw:     .dword 10000000
         .dword 1000000
         .dword 100000

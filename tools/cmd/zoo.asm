@@ -4,6 +4,25 @@
 ; Reads the archive front to back and follows the directory chain; an archive whose chain runs backwards cannot be read.
 ; LZW: a 13 bit table; very long strings are limited by a 1K stack, and the ring is not used. Larger problems: use the host side (AFM/WebATM, web/js/archives.js -> 7-Zip).
 ; At the ZOO> prompt: L ZOOFILE | X ZOOFILE [DEST] [MEMBER] | T ZOOFILE [MEMBER]   (blank line = exit)
+;
+; ZOO format: main header (32 bytes): +0 20 byte text, +20 tag $FDC4A7DC (stored as DC A7 C4 FD), +24 offset of
+; the first directory entry. Each directory entry is 51 bytes: +0 tag, +4 type, +5 packing method (0/1/2),
+; +6 offset of the next entry (0 = last), +10 offset of this entry's data, +14 DOS date, +16 DOS time,
+; +18 CRC-16 of the original data, +20 original size, +24 packed size, +30 deleted flag (non-zero = skip),
+; +38 short name (13 bytes, NUL ended). Entries are chained; data lives at its own offset.
+; Method 1 = LZW (codes LSB first, 9..13 bits, 256 = clear, 257 = end); method 2 = LZH, which appears to be
+; the same LZ77 + canonical Huffman scheme as -lh5-: blocks of (16 bit symbol count, literal/length table,
+; distance table), literals 0..255, lengths = symbol - 253 (3..), distance copied from the 8K ring.
+; CRC-16 is the reflected poly $A001 variant (table CRL/CRH), checked after every member.
+;
+; Structure: prompt -> members (follows the entry chain with seekto, forward only) -> domember ->
+; procdata (stored / lzw / lzmain) -> outb (CRC, ring, OUTBUF, file on IOCB 3). Input comes from the archive
+; on IOCB 2 via INBUF; getbyte keeps pos0-3 (file position) so seekto can skip ahead; getdb limits to the
+; member's packed size (s0-s3). Errors jump to abort which restores the stack (psp).
+; Memory map: STK $5C00 (LZW stack) / PGM $5B00 (LZW page map) / CRC tables $6400 / INBUF $6600 / OUTBUF $6700 /
+; HDR $6800 / VARS $6900 / DEST $69C0 / MEMB $6A00 / Huffman tables TC0-2, SYML/SYMH $6B00-$70FF /
+; LENS $7100 / ring $8000-$9FFF. Zero page: wp ring write ptr, sp ring read ptr, pcl/pch/psl/psh current
+; table pointers, lp lengths pointer, kp LZW stack ptr, pp LZW page pointer.
         icl 'lib\sys.asm'
 
 STK     = $5C00         ; LZW string stack (1K), built backwards while a code is unwound
@@ -153,6 +172,8 @@ pp      = $8C           ; page pointer into the LZW arrays, its low byte stays 0
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- entry: build CRC table, banner, then the ZOO> loop (mode 0 list, 1 extract, 2 test) ----
+; pos0-3 (archive position) is reset for every archive; DEST/MEMB as in the other archive tools.
 start:  jsr crctab
         jsr putsi
         .byte 'ZOO 0.1  ZOO LISTER/EXTRACTOR',EOL
@@ -274,7 +295,7 @@ bye:    ldx #$20
         jsr fclose
         jmp (DOSVEC)
 
-; stop everything that is open and go back to the prompt
+; stop everything that is open and go back to the prompt (stack restored from psp)
 abort:  ldx #$30
         jsr fclose
         ldx #$20
@@ -313,6 +334,7 @@ cp2:    lda #EOL
         rts
 
 ; ---- CRC-16 table (poly $A001, reflected) ----
+; 256 entries in CRL (low) / CRH (high): per index, 8 shift-right steps with xor $A001 on carry.
 crctab: ldx #0
 ct_l:   stx tl
         lda #0
@@ -337,7 +359,7 @@ ct_n:   dey
         bne ct_l
         rts
 
-; A = byte -> running CRC-16
+; A = byte -> running CRC-16 (c0/c1): crc = (crc >> 8) ^ table[(crc ^ byte) & $FF]. Clobbers A,X.
 crcb:   eor c0
         tax
         lda c1
@@ -348,6 +370,7 @@ crcb:   eor c0
         rts
 
 ; ---- input ----
+; refill INBUF with up to 255 bytes (ilen = count, C=1 at EOF)
 fill:   lda #<INBUF
         sta V_BPL
         lda #>INBUF
@@ -369,7 +392,7 @@ fill:   lda #<INBUF
 fl_e:   sec
         rts
 
-; next archive byte in A, carry set at the end of the file
+; next archive byte in A, carry set at the end of the file (also advances the 32 bit position pos0-3)
 getbyte:
         ldx ipos
         cpx ilen
@@ -414,7 +437,7 @@ gdb_a:  dec s0
 gdb_z:  lda #0
         rts
 
-; one bit, most significant first
+; one bit, most significant first (used by the Huffman decoder); bb = byte, bn = bits left. Bit in A.
 getbit: lda bn
         bne gt_g
         jsr getdb
@@ -427,7 +450,7 @@ gt_g:   dec bn
         rol
         rts
 
-; one bit, least significant first, returned in the carry
+; one bit, least significant first, returned in the carry (used by the LZW code reader)
 getbitl:
         lda bn
         bne gl_g
@@ -476,7 +499,8 @@ sk_a:   dec s0
         jmp skip32
 sk_d:   rts
 
-; read forward up to the position in tg0..tg3
+; read forward up to the position in tg0..tg3 (the archive is never rewound: a target already
+; passed gives ferr_seek). Computes tg - pos into s0-s3 and skips that many bytes.
 seekto: sec
         lda tg0
         sbc pos0
@@ -501,6 +525,8 @@ remz:   lda rm0
         rts
 
 ; ---- output: A = byte into the ring, the CRC and (when writing) the file ----
+; The ring ($8000-$9FFF) holds the last 8K of output for LZH matches; wp wraps $A000 -> $8000. rng <> 0
+; (LZW) disables ring writes. rm0-rm3 counts the output bytes still wanted. Clobbers A,X,Y.
 outb:   sta ob
         jsr crcb
         lda rng
@@ -554,7 +580,7 @@ wr_e:   jsr putsi
         .byte EOL,'WRITE ERROR',EOL,0
         jmp abort
 
-; fill the ring with spaces
+; fill the ring with spaces (initial window of the LZH coder)
 fillring:
         lda #0
         sta q
@@ -581,7 +607,9 @@ cl_l:   sta LENS,x
         rts
 
 ; ---- canonical Huffman tables (as in lzh.asm, code lengths up to 16) ----
-; X = table number -> pcl/pch/psl/psh
+; Per table: TCn = count of codes per length 1..16 (low bytes, high bytes 32 bytes further), symbols
+; sorted by (length, symbol value) in SYMLn/SYMHn.
+; X = table number -> pcl/pch/psl/psh (pointers to counts low/high and symbols low/high)
 settab: lda tcl,x
         sta pcl
         clc
@@ -607,6 +635,9 @@ thl:    .byte <SYMH0,<SYMZ,<SYMZ
 thh:    .byte >SYMH0,>SYMZ,>SYMZ
 
 ; build table X from nl/nh lengths at lp
+; Pass 1 (p1) counts how many symbols have each length; OFFL/OFFH then become the running start index
+; of each length (prefix sums, ofl loop); pass 2 (p2) stores each symbol (index il/ih) at the next free
+; slot for its length, giving symbols ordered by length then value. Length 0 = unused symbol.
 build:  jsr settab
         ldy #16
         lda #0
@@ -716,6 +747,10 @@ p2k:    dec kl
 p2d:    rts
 
 ; X = table -> symbol in vl/vh (bits are read most significant first)
+; Canonical decode: code accumulates bit by bit in cd; fl = first code of the current length, il = index of
+; the first symbol of that length, k = count at that length. If cd - fl < k the symbol is
+; sym[il + cd - fl]; otherwise il += k, fl = (fl + k) << 1, cd <<= 1 and the next length is tried.
+; More than 16 bits gives bad data.
 decode: jsr settab
         lda #0
         sta cdl
@@ -813,6 +848,9 @@ ds_d:   jmp decode
 
 ; ---- LZH block tables ----
 ; read a table: pn symbols, pb bits for the length count, ps = position after which 2 bits of zero run follow (255 = none)
+; Format: count k (pb bits); if k = 0 one constant symbol follows (pb bits) and no bits are used when decoding
+; (cfl/cvl/cvh). Otherwise k code lengths, each 3 bits (value 7 extended by unary 1 bits up to 16);
+; after index ps a 2 bit count of extra zero lengths is skipped. The lengths then go through build.
 rdpt:   jsr clrl
         ldx pb
         jsr getbits
@@ -876,6 +914,10 @@ rp_b:   lda #<LENS
         jmp build
 
 ; start of a block: size, literal/length table (table 0, coded with table 2), distance table (table 1)
+; Block size = 16 bits (symbols in the block). Table 2 (19 symbols, 5 bit count, zero-run skip after
+; index 3) is the code-length code. Table 0 has 9 bit count ck of lengths, each decoded via table 2:
+; symbol 0 = one zero length, 1 = 3+4 bits zero lengths, 2 = 20+9 bits zero lengths, >= 3 = length sym-2.
+; Then table 1: pnp distance symbols (14 for LZH here), 4 bit count.
 newblk: ldx #16
         jsr getbits
         lda vl
@@ -995,6 +1037,7 @@ nb_p:   lda pnp
         jmp rdpt
 
 ; ---- shared LZ loop ----
+; getsym: next literal/length symbol into vl/vh, starting a new block when the symbol count runs out.
 getsym: lda blkl
         ora blkh
         bne gs_a
@@ -1006,6 +1049,8 @@ gs_b:   dec blkl
         ldx #0
         jmp dsym
 
+; getdist: distance symbol s (0..13) -> dl/dh. s < 2 is the distance itself; else the distance is
+; (1 << (s-1)) OR the next s-1 raw bits.
 getdist:
         ldx #1
         jsr dsym
@@ -1039,6 +1084,8 @@ gt_l:   asl mlk
 gt_r:   rts
 
 ; decode until the output size is reached (blkl/blkh = 0, ring and tables prepared)
+; Symbol < 256 = literal. Else match length = sym - 253 (3 min), distance from getdist; the read pointer sp =
+; wp - dist - 1 wrapped into $8000-$9FFF, then bytes are copied one at a time (through outb, so overlap works).
 lzmain: jsr remz
         beq lz_d
         jsr getsym
@@ -1096,7 +1143,11 @@ lz_3:   dec lenl
 lz_d:   rts
 
 ; ---- LZW (method 1) ----
+; Codes: lwd bits (9..13), LSB first. 256 = clear table (lzclr), 257 = end. Table entries (code-256) live in
+; three arrays (suffix, prefix low, prefix high) scattered over free pages via the page map PGM (see lzinit);
+; once the table holds LZWN*256 entries no more are added. Strings are unwound onto the STK stack and popped.
 ; code of lwd bits, least significant bit first -> vl/vh
+; (bits are shifted in from the top, then the 16-lwd unused low bits are shifted out)
 getcode:
         lda #0
         sta vl
@@ -1118,6 +1169,7 @@ gc_s:   lsr vh
         bne gc_s
         rts
 
+; reset the LZW state: width 9, width limit lmx = 512, next free code 258, no previous code
 lzclr:  lda #9
         sta lwd
         lda #0
@@ -1131,6 +1183,7 @@ lzclr:  lda #9
         sta lfr1
         rts
 
+; push A on the LZW string stack; too long a string gives ferr_stk
 push:   ldy #0
         sta (kp),y
         inc kp
@@ -1141,6 +1194,8 @@ pu_k:   lda kp+1
         jcs ferr_stk
         rts
 
+; build the page map PGM: 3*LZWN physical pages, from $4D00 up to $5AFF, then jumping over the
+; code/stack region ($5B00-$6AFF) to $6B00 and upward (the Huffman table area, unused by LZW)
 lzinit: lda #PGLO
         sta tl
         lda #0
@@ -1159,6 +1214,10 @@ li_n:   inx
         bne li_l
         rts
 
+; LZW decoder. Per code: first code after a clear is a literal. Otherwise if code < next free it is in the
+; table; code == next free is the KwKwK case (push last first char, then expand previous code); larger = bad.
+; Expansion follows prefix links (lw_w) pushing suffixes, the final literal is lnc (first char); the stack
+; is popped to outb; then entry (prev code, lnc) is added; width grows when next free reaches lmx (max 13).
 lzw:    jsr lzinit
         jsr lzclr
 lw_l:   jsr remz
@@ -1296,6 +1355,8 @@ lw_f:   lda lfr0
         jmp lw_l
 
 ; run the member's data through the decoder; carry set when the method is not supported
+; Seeks to the data offset (HDR+10), loads s0-s3 = packed size (HDR+24), rm0-rm3 = original size (HDR+20),
+; resets CRC/bit state/ring pointer, then dispatches on the method byte HDR+5: 0 copy, 1 lzw, 2 LZH.
 procdata:
         lda #0
         sta c0
@@ -1369,6 +1430,9 @@ rm_b:   jsr putsi
         jmp abort
 ztag:   .byte $DC,$A7,$C4,$FD
 
+; Directory walk: seek to each entry (nx0-3), read its 51 bytes, check the tag, take the next-entry offset
+; (HDR+6), stop when it is 0 (after processing). Entries with the deleted flag (HDR+30) are skipped; the
+; 8.3 name is derived from NAMEF (conv83/uniq) and the entry is processed by domember.
 members:
         jsr rdmain
 mem:    ldx #3
@@ -1420,6 +1484,8 @@ mm_e:   stx nf
 mem_d:  rts
 
 ; NAMEF (nf chars) -> 8.3 name in NAMEB; NAMEB[0]=0 for a folder entry
+; Scans for the last path separator ('/', '\' or $FF -> st = start of the file name) and the last '.'
+; (ld = position after it); copies up to 8 name chars + '.' + up to 3 extension chars through fixc.
 conv83: ldy #0
         sty st
         sty ld
@@ -1532,6 +1598,8 @@ mq_y:   clc
         rts
 
 ; list, extract or test the entry in HDR
+; Same flow as alf/arc: skip or list unselected entries; extract creates DEST+name (IOCB 3); procdata decodes;
+; then the CRC (c0/c1) is compared with HDR+18/19 -> OK / CRC ERROR; unknown method -> UNSUPPORTED METHOD.
 domember:
         lda #0
         sta want
@@ -1638,6 +1706,8 @@ pn1:    lda NAMEB,y
 pn2:    rts
 
 ; ---- listing ----
+; mname prints the 3 letter method name (STO, LZW, LZH, ??? for others) from mtab.
+; listline: name, original size, packed size, method, date as MM-DD (month/day from HDR+14/15).
 mname:  lda HDR+5
         cmp #3
         bcc mn_k

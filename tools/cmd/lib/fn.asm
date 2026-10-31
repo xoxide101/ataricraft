@@ -1,5 +1,7 @@
 ; fn.asm - FujiNet hooks. SIO device $70 for the adapter, N: for network files (use COPY N:HTTP://... name).
 ; Plug-ins reach this through the API table (fnsio): fill DCOMND, DSTATS, DBUF*, DBYT*, DAUX* then call it.
+; fnsio: SIO device $70 (FujiNet), unit 1, timeout 15 (DTIMLO, about 1 s units of 64 ticks), returns Y = SIO status.
+; Included by CMD.COM after lib\io.asm; clobbers A.
 fnsio:  lda #$70
         sta DDEVIC
         lda #1
@@ -9,7 +11,7 @@ fnsio:  lda #$70
         jsr SIOV
         rts
 
-; carry clear when an N: handler is installed
+; carry clear when an N: handler is installed (scans HATABS, 3-byte entries: name, handler address)
 hasnet: ldx #0
 hn_l:   lda HATABS,x
         beq hn_no
@@ -24,6 +26,8 @@ hn_no:  sec
 hn_y:   clc
         rts
 
+; FN command: ask the adapter for its adapter-config block ($E8 = get adapter config, 140 bytes
+; into IOBUF; DSTATS $40 = data from device to computer) and print version, SSID and IP.
 cmd_fn: lda #$E8
         sta DCOMND
         lda #$40

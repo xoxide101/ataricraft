@@ -1,4 +1,6 @@
 ; circ.inc - half widths (pixels) of a round circle, radius 90 lines, 160x192 mode (1 pixel = 1.6 lines)
+; Pure data (.byte table, indexed by line offset from the centre); included by cmds\test.asm
+; (COLOR test pattern, geometry grid and circle).
         .byte 56,56,56,56,56,56,56,56,56,56,56,56,56,56,56,55
         .byte 55,55,55,55,55,55,55,54,54,54,54,54,53,53,53,53
         .byte 53,52,52,52,52,51,51,51,50,50,50,49,49,49,48,48

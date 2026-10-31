@@ -8,6 +8,17 @@
 ; Density: 0 = 720 x 128, 1 = 720 x 256, 2 = 1040 x 128. The output is a normal ATR (sectors 1-3 always 128 bytes).
 ; Multi-part archives must be joined in order first (COPY /A or the host side). Sectors that DCM never mentions are zero.
 ; At the DCM> prompt: X file.DCM [dest.ATR]   (blank line = exit). Without a destination the extension becomes .ATR.
+;
+; Structure: prompt -> convert (writes the 16 byte ATR header, then one "pass" per DCM part, then zero
+; fills any sectors never mentioned) -> pass (decodes groups) -> h41/h42/h43/h44 coding handlers ->
+; emitb/emitz (write the sector in DBUF / a zero sector to the output). The DCM file is read on IOCB 2
+; through INBUF; the ATR is written on IOCB 3 through OUTBUF. Errors jump to abort (stack restored from psp).
+; Sector 1.. in DBUF is kept between groups because each sector is coded as a change from the previous one
+; (a $46 group just re-emits DBUF). A group names its sector number; sectors skipped over are emitted as zeros.
+; Memory map: INBUF $5000, OUTBUF $5100, DBUF $5200 (current sector), VARS $5300, DEST $5340.
+; Key variables: ssz sector size flag, tsl/tsh total sectors, secl/sech sectors written, pf flags of the
+; current part, fl0 flags of the first part, st coding byte of the current group, cil/cih and cjl/cjh
+; buffer indexes used by the handlers, AH = ATR header ($96 $02, size in paragraphs, sector size).
         icl 'lib\sys.asm'
 
 INBUF   = $5000
@@ -47,6 +58,7 @@ AH      = VARS+32       ; ATR header (16 bytes)
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- entry: banner, then the DCM> loop; opens the DCM on IOCB 2 and the ATR (DEST) on IOCB 3 ----
 start:  jsr putsi
         .byte 'DCM 0.1  DISKCOMM TO ATR',EOL
         .byte 'X FILE.DCM [DEST.ATR]',EOL
@@ -126,6 +138,7 @@ bye:    ldx #$20
         jsr fclose
         jmp (DOSVEC)
 
+; close both channels, restore the stack saved at the prompt (psp) and go back to the prompt
 abort:  ldx #$30
         jsr fclose
         ldx #$20
@@ -242,6 +255,8 @@ dv_w:   lda atrx,x
 atrx:   .byte '.ATR',EOL
 
 ; ---- input ----
+; fill: read up to 255 bytes of the DCM file into INBUF (C=1 at EOF); getbyte: next byte in A, C=1 at EOF;
+; getbyt: same but EOF is an error (ferr_eof).
 fill:   lda #<INBUF
         sta V_BPL
         lda #>INBUF
@@ -325,6 +340,7 @@ sl_s:   lda #128
 sl_l:   lda #0
         rts
 
+; emit the sector in DBUF (ssz-dependent length, via seclen) and count it
 emitb:  jsr seclen
         sta ec
         lda #0
@@ -338,6 +354,7 @@ eb_l:   ldx ei
         bne eb_l
         jmp eb_n
 
+; emit a sector of zeros and count it (eb_n is shared with emitb: secl/sech++)
 emitz:  jsr seclen
         sta ec
         lda #0
@@ -413,6 +430,11 @@ rf_l:   jmp rdfill
 rf_d:   rts
 
 ; ---- the converter ----
+; Reads the first header ($F9/$FA, flags; pass number must be 1), sets sector size / total from the
+; density (dsz/dtl/dth: 720x128, 720x256, 1040x128; density 3 is rejected), writes the ATR header
+; (bytes: $96 $02 = magic, paragraph count lo/hi, sector size lo/hi), then loops over passes. At the
+; end of a part, if flag bit 7 is clear another header must follow (its density bits must match the first);
+; when the last part is done, remaining sectors up to the total are written as zeros.
 convert:
         lda #0
         sta opos
@@ -509,10 +531,15 @@ cv_d:   rts
 dsz:    .byte 0,1,0
 dtl:    .byte <720,<720,<1040
 dth:    .byte >720,>720,>1040
-dpl:    .byte $80,$E8,$80       ; ATR size in paragraphs: 720*8, 720*16-24, 1040*8
+dpl:    .byte $80,$E8,$80       ; ATR size in paragraphs: 720*8, 720*16-24, 1040*8 (sectors 1-3 are 128 bytes)
 dph:    .byte $16,$2C,$20
 
 ; one pass: groups of (sector number, coding byte [, more])
+; Each group: 16 bit sector number then the coding byte; $45 ends the pass. Sectors between the last one
+; written and the named one are emitted as zeros; a number lower than the next expected one is bad data.
+; Coding (low 7 bits): $41 h41, $42 h42, $43 h43, $44 h44, $46 unchanged, $47 whole sector copied.
+; When bit 7 is set the next coding byte for the following sector follows without a new number
+; (consecutive sectors); the loop at ps_e emits DBUF after every handler.
 pass:   jsr getbyt
         sta nol
         jsr getbyt
@@ -603,6 +630,8 @@ h42f:   sta DBUF,x
         rts
 
 ; $43: alternating raw runs and repeated-byte runs, each given by its end offset (0 = 256)
+; Loop: read end offset -> copy that many raw bytes (rdcopy); if the sector is not full, read the next end
+; offset and a fill byte and fill up to it (rdfill); repeat until the sector end is reached.
 h43:    lda #0
         sta cil
         sta cih

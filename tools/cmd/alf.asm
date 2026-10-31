@@ -2,6 +2,22 @@
 ; Members: 29 byte ARC-like header ($1A $0F, name[13], packed, date, time, 16 bit additive sum, size) + LZW data
 ; (9..12 bit codes, MSB first, 256 = reset, 257 = end, no early change). Mirrors web/js/alf.js (tested on every sample).
 ; At the ALF> prompt: L ALFFILE | X ALFFILE [DEST] [MEMBER] | T ALFFILE [MEMBER]   (blank line = exit)
+;
+; Member header (29 bytes, little endian): +0 $1A, +1 $0F, +2 name[13] (NUL ended, 8.3 style),
+;   +15 packed size (4), +19 DOS date (2), +21 time (2), +23 16 bit additive byte sum of the original (2),
+;   +25 original size (4). Packed data follows directly; the next header follows the data.
+;   A header not starting $1A $0F (or EOF) silently ends the archive.
+; Data: LZW, code width 9..12 bits growing as the next free code reaches 512/1024/2048 (no early change),
+;   codes are read MSB first, 256 = reset (width 9, table empties to 258 entries), 257 = end of data.
+;   Decoding also stops when the member's original size has been produced.
+; Structure: prompt loop -> members -> domember -> procdata/lzmain (getbits <- getbit <- getdb <- getbyt)
+;   -> outb (sum + OUTBUF + file on IOCB 3). The archive is read on IOCB 2 through INBUF.
+;   Errors in the stream jump to abort, which restores the stack (psp) and returns to the prompt.
+; Memory map ($6400-$B7FF): PFXL/PFXH/SUF tables 4096 entries each ($6400/$7400/$8400), STK $9400 string
+;   stack (4K), INBUF $A400, OUTBUF $A500, HDR $A600, VARS $A700, DEST $A7C0, MEMB $A800.
+; Zero page: stp $B0 string stack pointer, pp $B2 table page pointer (low byte always 0, indexed by Y),
+;   nxt/nxh $B4 next free code. Variables: s0-s3 packed bytes left, rm0-rm3 output bytes left,
+;   c0/c1 running sum, wd code width, pvl/pvh previous code, fb first byte of current string.
         icl 'lib\sys.asm'
 
 PFXL    = $6400         ; code -> prefix code, low bytes (4096)
@@ -63,6 +79,7 @@ pp      = $B2           ; page pointer into the tables, its low byte stays 0
 nxt     = $B4           ; next free code
 nxh     = nxt+1
 
+; 16 bit increment / decrement of a memory word
         .macro INC16 v
         inc :1
         bne *+4
@@ -80,6 +97,9 @@ nxh     = nxt+1
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- entry: banner, then the ALF> command loop ----
+; psp keeps the stack pointer so abort can unwind from deep inside the decoder. mode: 0 list, 1 extract,
+; 2 test. Archive name gets "D:" unless it has a device prefix; DEST = output prefix, MEMB = member filter.
 start:  lda #0
         sta pp
         jsr putsi
@@ -198,7 +218,7 @@ bye:    ldx #$20
         jsr fclose
         jmp (DOSVEC)
 
-; stop everything that is open and go back to the prompt
+; stop everything that is open and go back to the prompt (stack restored from psp)
 abort:  ldx #$30
         jsr fclose
         ldx #$20
@@ -229,6 +249,7 @@ cp2:    lda #EOL
         rts
 
 ; ---- input ----
+; refill INBUF with up to 255 bytes from the archive; ilen = count read, ipos = 0. C=1 at EOF.
 fill:   lda #<INBUF
         sta V_BPL
         lda #>INBUF
@@ -289,6 +310,7 @@ gdb_z:  lda #0
         rts
 
 ; one bit, most significant first
+; bb = current byte, bn = bits left; fetches a new byte with getdb when empty. Returns bit in A.
 getbit: lda bn
         bne gt_g
         jsr getdb
@@ -346,6 +368,8 @@ remz:   lda rm0
         rts
 
 ; ---- output: A = byte into the sum and (when writing) the file; bytes past the member's size are dropped ----
+; Sum is c0/c1 = 16 bit additive sum of all output bytes. rm0-rm3 counts down the bytes still wanted.
+; A full OUTBUF page (256 bytes) is flushed with wrout. Clobbers A,X.
 outb:   sta ob
         jsr remz
         beq ob_r
@@ -394,7 +418,10 @@ wr_e:   jsr putsi
         jmp abort
 
 ; ---- LZW ----
-; table entry nxt: prefix = pv, suffix = fb
+; Table: PFXL/PFXH hold a 12 bit prefix code per entry (high nibble in PFXH), SUF the last byte.
+; Entries 0-255 are the literal bytes (implicit), 256/257 control, first free entry is 258.
+; table entry nxt: prefix = pv, suffix = fb (ignored once the table holds 4096 entries)
+; Page trick: pp+1 is set to the table base page + code high byte, Y = code low byte.
 addent: lda nxh
         cmp #$10
         bcs ae_r
@@ -420,6 +447,7 @@ addent: lda nxh
 ae_r:   rts
 
 ; push the string of code cul/cuh (all but its first byte, last byte first); cul ends as the first byte
+; Follows prefix links until the code is < 256 (cuh = 0); each step pushes the suffix on the stack at stp.
 unwind: lda cuh
         beq uw_d
         clc
@@ -461,6 +489,11 @@ pa_g:   DEC16 stp
 pa_d:   rts
 
 ; decode until the output size is reached or the end code shows up
+; Per code: 256 resets, 257 ends. The first code after a reset is a literal (< 256). Otherwise a code
+; below nxt is expanded directly; code == nxt is the "KwKwK" case (kw=1): expand the previous code and
+; repeat its first byte. The first byte (fb) is output, then the rest popped; then addent adds
+; (previous code + fb). The new width follows from nxh: <2 -> 9, <4 -> 10, <8 -> 11, else 12 bits.
+; A code above nxt is bad data (ferr_data).
 lzmain: lda #9
         sta wd
         lda #<258
@@ -555,6 +588,7 @@ lm_p:   lda vl
 lm_d:   rts
 
 ; run the member's data through the decoder
+; Clears the sum and bit state, loads s0-s3 = packed size (HDR+15), rm0-rm3 = original size (HDR+25).
 procdata:
         lda #0
         sta c0
@@ -572,6 +606,7 @@ pd_a:   lda HDR+15,x
 
 ; ---- archive walk ----
 ; read the next header into HDR; carry set at the end of the entries (anything but $1A $0F ends it silently)
+; Reads 29 bytes into HDR and saves the stored sum (HDR+23/24) in hcrl/hcrh.
 rdlh:   jsr getbyte
         bcs rl_e
         sta HDR
@@ -599,6 +634,8 @@ rl_h:   sty tl
 rl_e:   sec
         rts
 
+; Archive loop: header -> 8.3 name (conv83) -> domember; s0-s3 = packed size. Members with an empty
+; name are skipped. Counts members in nfl/nfh.
 members:
 mem:    jsr rdlh
         bcs mem_d
@@ -620,6 +657,7 @@ mem_k:  jsr skip32
 mem_d:  rts
 
 ; NAMEF (up to 12 chars, NUL ended) -> NAMEB, upper case, odd characters turned into '_', no trailing '.'
+; (the '.' separator itself is kept; fixc handles the others)
 conv83: ldx #0
 cv_l:   cpx #12
         bcs cv_e
@@ -678,6 +716,9 @@ mq_y:   clc
         rts
 
 ; list, extract or test the member whose header is in HDR (s0..s3 = its packed size)
+; Unselected members are skipped (listed in mode 0). Selected ones: extract creates DEST+name on IOCB 3,
+; procdata decodes, remaining packed bytes are skipped, then the sum is compared with the header.
+; Prints OK or CHECKSUM ERROR.
 domember:
         lda #0
         sta want
@@ -778,6 +819,8 @@ pn1:    lda NAMEB,y
 pn2:    rts
 
 ; ---- listing ----
+; Name padded to 14, original size, packed size (7 digits each, see putdig), "ALF", then date as MM-DD
+; (month = bits 8-5 of the date word at HDR+19/20, day = bits 4-0; the year is not shown). Clobbers A,X,Y,tl,dv.
 listline:
         ldy #0
 ll_n:   lda NAMEB,y

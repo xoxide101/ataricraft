@@ -1,9 +1,32 @@
 ; arc.asm - ARC.COM, a stand-alone SEA ARC lister/extractor for any Atari DOS.
 ; Methods 1/2 stored, 3 packed, 4 squeezed, 8 crunched (dynamic LZW), CRC16 checked. Reference: web/js/arc.js
 ; At the ARC> prompt: L ARCFILE | X ARCFILE [DEST] [MEMBER] | T ARCFILE [MEMBER]   (blank line = exit)
+;
+; ARC file format (SEA ARC): a sequence of members, each = a header followed by the compressed data.
+;   +0  $1A marker              +1  method (0 = end of archive; 1 = old stored, 2 = stored, 3 = packed (RLE),
+;   +2  name, 13 bytes, 0-term       4 = squeezed (Huffman+RLE), 8 = crunched (dynamic LZW, 9..12 bits+RLE))
+;   +15 compressed size (4)     +19 DOS date (2)   +21 DOS time (2)   +23 CRC16 of the original data (2)
+;   +25 original size (4)       (method 1 headers are 4 bytes shorter: no original-size field, size = compressed)
+; Header is read as 2 bytes ($1A,method) then 27 more (21 for method 1).
+; The original data is always run through the RLE90 decoder (marker $90, $90 $00 = literal $90) for methods
+; 3, 4, 8 and CRC16 (poly $A001, table driven) is checked against the header.
+;
+; Structure: prompt loop (L/X/T) -> members loop -> listline / extract -> method decoders (getbyte/getbit
+; feed them from INBUF; all output goes through rle_in -> outb which counts bytes, updates the CRC and
+; buffers 256 bytes of OUTBUF for the output file on IOCB 3). The archive is on IOCB 2.
+; Uses lib\sys.asm (equates), lib\io.asm (console / IOCB helpers) and lib\hand.asm (line input).
+;
+; Memory map (all $6400-$BBFF, above CODE): TREE $6400 squeeze tree, TBL_L/H $6900/$6A00 CRC tables,
+; HDR $6B00 member header, VARS $6C00 variables, DEST $6CC0 / MEMB $6D00 args, INBUF $7000 (3.5K read
+; buffer), OUTBUF $7F00 (256), PREL/PREH/SUF $8000/$9000/$A000 LZW tables (4096 entries each),
+; STK $B000 string expansion stack. Zero page: SP $E0 stack ptr, CDL/CDH $E2 current LZW code,
+; OLDL/OLDH $E4 previous code, LSTL/LSTH $E6 last defined code, EL/EH $E8 code being expanded.
+; Key vars: r0-r3 compressed bytes left, orm0-2 output bytes left, crcl/crch running CRC, ipos/ilen
+; input buffer position/length, bbox/bsl bit buffer and bits left, csz LZW code size, maxh high byte of
+; the max table size.
         icl 'lib\sys.asm'
 
-PREL    = $8000         ; LZW prefix low bytes (4096)
+PREL     = $8000         ; LZW prefix low bytes (4096)
 PREH    = $9000         ; LZW prefix high bytes
 SUF     = $A000         ; LZW end characters
 STK     = $B000         ; string expansion stack
@@ -82,6 +105,10 @@ EH      = $E9
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- entry: build the CRC table, print the banner, then the ARC> command loop ----
+; Command line is tokenised with nexttok (TOK); mode: 0 = list, 1 = extract, 2 = test.
+; Archive name gets a "D:" prefix unless it already contains ':'. DEST (default "D:") is the target
+; prefix for extracted files, MEMB (default empty = all) the single member to select.
 start:  jsr crctab
         jsr putsi
         .byte 'ARC 0.1  SEA ARC LISTER/EXTRACTOR',EOL
@@ -167,7 +194,7 @@ pm_m:   jsr nexttok
         sta T1+1
         ldy #0
         jsr cpt
-pm_go:  lda #4
+pm_go:  lda #4                  ; open archive for input on IOCB 2 ($20)
         ldx #$20
         jsr fopen1
         bpl pm_ok
@@ -189,6 +216,7 @@ pm_ok:  lda #0
         .byte ' FILE(S)',EOL,0
         jmp prompt
 
+; close both channels and return to DOS
 bye:    ldx #$20
         jsr fclose
         ldx #$30
@@ -209,6 +237,9 @@ cp2:    lda #EOL
         rts
 
 ; ---- CRC16 table (poly $A001) ----
+; Builds the 256-entry reflected CRC-16 table (poly $A001 = $8005 reversed) in TBL_L/TBL_H:
+; for each byte value, 8 times shift right, xor with $A001 when a 1 falls out.
+; Clobbers A,X,Y,tl,th. Per byte: crc = (crc >> 8) ^ table[(crc ^ byte) & $FF] (see outb).
 crctab: ldx #0
 ct_l:   stx tl
         lda #0
@@ -235,6 +266,8 @@ ct_n:   dey
 
 ; ---- member loop ----
 ; read 2 bytes then the rest of the header; carry set at the end of the archive
+; Out: HDR filled, C=0; C=1 if short read, first byte is not $1A, or method byte is 0 (end marker).
+; The rest is 27 bytes, or 21 for method 1 (no original-size field).
 rdhdr:  lda #<HDR
         sta V_BPL
         lda #>HDR
@@ -265,6 +298,9 @@ rh_g:   lda #<(HDR+2)
 rh_e:   sec
         rts
 
+; Walk all members. For each: copy compressed size (HDR+15) to r0-r3 and original size (HDR+25) to dv
+; (method 1: original = compressed), upper-case the name (max 13 chars) into NAMEB, then list it or
+; (if it matches the filter) extract/test it; unselected data is skipped. Counts members in nfl/nfh.
 members:
 mem:    jsr rdhdr
         bcs mem_d
@@ -339,6 +375,9 @@ mq_y:   clc
         rts
 
 ; ---- listing ----
+; One line per member: name padded to 14, original size, compressed size (8 digits each), method name
+; (4 chars from mnam2), then date as YYYY-MM-DD. Date word at HDR+19: bits 15-9 year-1980, 8-5 month,
+; 4-0 day; $07BC = 1980. Clobbers A,X,Y,tl,N0,N1,dv.
 listline:
         ldy #0
 ll_n:   lda NAMEB,y
@@ -415,6 +454,7 @@ ll_m:   lda mnam2-4,x
 mnames: .byte 0,0,0,0,0,0,0,0,0
 mnam2:  .byte 'STORSTORPACKSQZDCRN5CRN6CRN7CRNCSQSH'
 
+; print A (0-99) as two decimal digits
 put2d:  ldx #0
 p2_l:   cmp #10
         bcc p2_d
@@ -430,6 +470,8 @@ p2_d:   pha
         jmp putc
 
 ; dv (32 bit) -> 8 digits in dig, leading zeros turned into spaces
+; Repeated subtraction of the powers of ten in pw (3-byte compare + dv+3 as final borrow test);
+; destroys dv. Y = digit index, cnth = digit count.
 dec32:  ldy #0
 d3_p:   sty cntl
         lda #0
@@ -513,6 +555,8 @@ rr_s:   sec
         rts
 
 ; refill INBUF from the member; carry set when the member is used up
+; Reads min(255, bytes left) into INBUF, sets ilen/ipos=0 and decrements the 32-bit count r0-r3.
+; A short read zeroes the remaining count and uses the actual length from ICBLL.
 fill:   lda r3
         ora r2
         ora r1
@@ -578,6 +622,7 @@ gb_ok:  ldx ipos
 gb_r:   rts
 
 ; next bit (LSB first) in A, carry set at the end
+; Bit reader: bbox holds the current byte, bsl the number of bits left in it.
 getbit: lda bsl
         bne gt_g
         jsr getbyte
@@ -593,6 +638,7 @@ gt_g:   dec bsl
 gt_r:   rts
 
 ; discard whatever is left of the member
+; Reads and throws away chunks of up to $0E00 bytes (fits INBUF) until r0-r3 is zero.
 skip:   lda r0
         ora r1
         ora r2
@@ -644,6 +690,8 @@ sk_d:   rts
 
 ; ---- output ----
 ; A = byte: caps at the stored size, updates the CRC, buffers for the file
+; Bytes beyond the original size (orm0-2 = bytes still wanted) are ignored. In extract mode the byte goes
+; to OUTBUF and a full 256-byte page is flushed with wrout. Clobbers A,X.
 outb:   sta ob
         lda orm0
         ora orm1
@@ -694,6 +742,8 @@ wr_e:   jsr putsi
         jmp bye
 
 ; run length expansion ($90 marker) in front of outb
+; In: A = decoded-stage byte. $90 starts a repeat; next byte n: 0 = literal $90, else the last byte is
+; repeated n-1 more times (it was already output once). State: rlerep (marker seen), rlelast, rcnt.
 rle_in: ldx rlerep
         bne ri_r
         cmp #$90
@@ -719,6 +769,10 @@ ri_l:   lda rlelast
 ri_d:   rts
 
 ; ---- extract / test one member ----
+; Prints "X name" / "T name", resets decoder state, (extract mode) builds DEST+name in FSPEC2 and
+; creates it on IOCB 3 ($30), runs the decoder for the method, flushes the file, skips any unread data,
+; then reports OK, CRC ERROR (compared with HDR+23/24), SHORT DATA or BAD DATA.
+; Methods 1/2 copy bytes, 3 = RLE only, 4 = unsqz, 8 = lzw; others are skipped as unsupported.
 extract:
         lda #'X'
         ldx mode
@@ -846,6 +900,11 @@ ex_bd:  jsr putsi
         rts
 
 ; ---- method 4: squeezed (Huffman) ----
+; Stream: 16-bit node count N (<= 257), then N pairs of 16-bit child words (4 bytes/node) stored at TREE,
+; then the data bits, LSB first. Child word: bit 15 set = leaf, value is ~symbol (so $FF00|~sym);
+; leaf $FEFF (symbol 256) = end of data. Decode: start at node 0, bit 0 -> left child, 1 -> right,
+; follow until a leaf; emit its symbol through rle_in and restart at node 0.
+; Sets derr on a bad node count. N = 0 means an empty file.
 unsqz:  jsr getbyte
         jcs sq_x
         sta ndl
@@ -943,6 +1002,9 @@ sq_bad: lda #1
 sq_x:   rts
 
 ; ---- method 8: dynamic LZW, nomarch style (the stream is grouped in 8 codes; 256 only drops the width) ----
+; Codes are packed LSB first, width csz grows 9..max bits (maxbits byte = first byte of stream, 12 ->
+; maxh = $10 i.e. 4096 entries). Code 256 = reset (table cleared, width back to 9). The table has
+; prefix (PREL/PREH) and suffix (SUF) arrays; strings are expanded backwards onto STK then popped.
 ; read a code of A bits into CDL/CDH. Carry set at the end of the data or on a code that is out of range.
 readcode:
         sta rcn
@@ -978,6 +1040,8 @@ rc_s:   lsr CDH
 rc_e:   sec
         rts
 
+; A = current width. Codes are written in groups of 8: after a width change or reset, skip codes
+; until ofs (code count mod 8) returns to 0, so the next code starts on the group boundary.
 resync: sta rsn
 rs_l:   lda ofs
         beq rs_d
@@ -1059,6 +1123,11 @@ em_bad: lda #1
         sta SP+1
         rts
 
+; LZW main loop. Per code: if it is already in the table (<= last) expand it, else (KwKwK case) expand
+; the previous code and append kk (its first char); then add table entry last+1 = (old code, kk).
+; When the table index reaches the end of the current width (cszt: low bytes 1,3,7,15 -> 512..4096
+; entries) the width is increased and the stream resynced. A full table stops adding entries.
+; maxbits byte must be 10..12 (A-8 in 2..4), otherwise bad data.
 lzw:    jsr getbyte
         jcs lz_x
         sec

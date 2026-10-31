@@ -1,10 +1,29 @@
 ; SNDTEST.COM - POKEY audio test, mono and stereo. Detects a second POKEY ($D210) and checks the first one's
 ; random generator automatically. G runs a guided listening test (left, right, both, noise, sweep) where you
 ; answer Y / N and get PASS or FAIL per step; keys 0-9 are free-play tones. ESC exits.
+;
+; KEYS (OS key codes as returned in CH): G ($3D) guided test, 0-9 tones, D ditty, L static left, R static
+;   right, S sample, ESC ($1C) exit. In the guided test: Y ($2B) heard, N ($23) not heard, S ($3E) skip,
+;   ESC aborts.
+; MODES (variable mode, index into jtab/ntab/keymap): 0 off, 1 left tone, 2 right tone, 3 both, 4 alternating,
+;   5 scale, 6 4-voice chord, 7 noise, 8 16-bit low tone, 9 sweep, 10 ditty, 11 static left, 12 static right,
+;   13 sample test. Each mode's routine (m_xxx) is called once per frame by play and just (re)writes POKEY.
+; GUIDED STEPS (rows 5..9 of the screen = steps 0..4): left, right, both, noise, sweep (gmode table).
+; SCREEN: coloured text rows from cscreen.inc (NA = 15 rows, no map, no rows below). Row 0 title, 2 POKEY 1
+;   check, 3 POKEY 2 detect, 5..9 guided steps with PASS/FAIL, 11 current mode, 12 help/question, 13 result,
+;   14 and 16 key menus.
+; MEMORY: code at $2000; cscreen.inc takes TXTBUF $3000, MAPBUF $3300, DLIST $3400, FONT $3800.
+;   sample.bin (4096 bytes) is included at the end of the program (16 pages of 4-bit volumes, one per byte).
+; ZERO PAGE: $80..$8B common.inc (sp, sa, si, v16, t1..t4); $90/$91 sample read pointer in smpplay;
+;   $B7..$B9 cscreen.inc (dlr, d1, d2). t1/t2/t3/t4 are scratch (see each routine).
+; POKEY: left = $D200.., right (second POKEY, stereo upgrade) = $D210..; right-side AUDC is written as
+;   R_AUDF1+1 etc. AUDC values: $A8 = pure tone volume 8, $88 = noise volume 8, $10|n = volume-only level n.
+; CONNECTIONS: uses common.inc (eput, locate/loc, puts/say, vsync, RANDOM, CH...) and cscreen.inc (gs_init,
+;   gs_off, bar, setres, clrrow, sbase); defines NA/NMAP/NB for cscreen.inc before including it.
         org $2000
-NA      = 15
-NMAP    = 0
-NB      = 0
+NA      = 15            ; text rows above the map (cscreen.inc)
+NMAP    = 0             ; no map rows
+NB      = 0             ; no rows below
 AUDF1   = $D200
 AUDC1   = $D201
 AUDCTL  = $D208
@@ -17,6 +36,8 @@ R_RANDOM= $D21A
         icl 'common.inc'
         icl 'cscreen.inc'
 
+; start - set up: detect stereo, check POKEY 1, take over the screen (gs_init), draw the static page, then
+; fall into the main loop. PASS/FAIL/n-a labels: setres A = 0 pass, 1 fail, 2 n/a; fails counts failures.
 start   lda #$7D
         jsr eput
         lda #1
@@ -69,18 +90,21 @@ ig1     stx t4
         lda #0
         sta mode
 
+; main loop: once per frame reset the attract timer, read a key (CH, $FF = none), then run the current mode.
+; G runs guided; a key found in keymap (index = mode) switches mode; S (mode 13) runs the sample test
+; once and returns to silence. ESC quits.
 loop     lda #0
-        sta ATRACT
+        sta ATRACT      ; keep the screen from going into attract mode
         jsr vsync
         lda CH
         cmp #$FF
         beq nokey
         ldx #$FF
         stx CH
-        cmp #$1C
+        cmp #$1C        ; ESC
         bne notesc
         jmp quit
-notesc  cmp #$3D
+notesc  cmp #$3D        ; G
         bne notg
         jsr guided
         jmp loop
@@ -106,6 +130,10 @@ nokey   jsr play
         jmp loop
 
 ; ---- guided listening test
+; guided: reset the step rows (5..9), then for gpos = 0..4 play gmode[gpos] and wait for Y / N / S / ESC.
+; Y = PASS (setres 0), N = FAIL (1, fails++), S = skipped (3). Step 1 (right tone) is marked n/a (2) on a mono
+; machine. Bars: scheme 3 (yellow) while a step is active. At the end row 13 shows PASS (scheme 2) if fails = 0,
+; else FAIL (scheme 4). ESC aborts. Uses t4 as a row counter; clobbers A,X,Y,mode,step.
 guided  lda #0
         sta fails
         sta gpos
@@ -137,11 +165,11 @@ gs1     lda gpos
         bne gs2
         lda stereo
         bne gs2
-        ldx #6
+        ldx #6          ; mono machine: the right-only step cannot be heard, mark n/a
         lda #2
         jsr setres
         jmp gnext
-gs2     lda gpos
+gs2     lda gpos        ; row = 5 + gpos
         clc
         adc #5
         tax
@@ -177,14 +205,14 @@ gwait   lda #0
         beq gwait
         ldx #$FF
         stx CH
-        cmp #$2B
+        cmp #$2B        ; Y
         beq gyes
-        cmp #$23
+        cmp #$23        ; N
         beq gno
-        cmp #$1C
+        cmp #$1C        ; ESC
         bne gw2
         jmp gabort
-gw2     cmp #$3E
+gw2     cmp #$3E        ; S = skip
         bne gwait
         lda gpos
         clc
@@ -244,7 +272,7 @@ gabort  lda #0
         say s_mhelp
         rts
 
-; X = step row (5..9): write its label
+; rowtxt: X = step row (5..9): write its label from gtab at column 0. Preserves X. Clobbers A,Y,sa.
 rowtxt  txa
         pha
         sec
@@ -267,7 +295,7 @@ rowtxt  txa
         tax
         rts
 
-; run the active mode once per frame
+; play: run the active mode's routine once per frame via jtab (indirect jump through jv; each m_xxx ends in rts).
 play    lda mode
         asl
         tax
@@ -279,7 +307,8 @@ play    lda mode
 jtab    .word m_off,m_left,m_right,m_both,m_alt,m_scale,m_chord,m_noise,m_low,m_sweep,m_ditty,m_sl,m_sr,m_off
 m_off   rts
 
-; static (noise) on one side only
+; static (noise) on one side only: AUDF 40, AUDC $88 = noise volume 8. m_sr writes the right POKEY
+; (R_AUDF1+1 is R_AUDC1).
 m_sl    lda #40
         sta AUDF1
         lda #$88
@@ -292,6 +321,7 @@ m_sr    lda #40
         rts
 
 ; sample test: the same 4-bit sample through POKEY volume-only mode, left, right, then both (both only on a mono machine)
+; smpseq: smpplay for left (1) and right (2) with a 20-frame gap when stereo, then both (3). Clobbers A,X,Y,t1.
 smpseq  lda stereo
         beq sq3
         lda #1
@@ -303,11 +333,14 @@ smpseq  lda stereo
 sq3     lda #3
         jsr smpplay
         rts
-gap     ldx #20
+gap     ldx #20         ; ~1/3 second of silence
 gp1     jsr vsync
         dex
         bne gp1
         rts
+; smpplay: A = side mask (bit 0 left, bit 1 right). Plays sample (16 pages, 4096 bytes, one 4-bit level per
+; byte; values must be 0..15) with interrupts off (NMIEN = 0): AUDC = $10 | level ($10 = volume-only),
+; held for two scanlines (2 x WSYNC, ~7.9 kHz). $90/$91 = read pointer. Ends with NMIEN = $40 and silence.
 smpplay sta smpch
         jsr silence
         sei
@@ -318,7 +351,7 @@ smpplay sta smpch
         lda #>sample
         sta $91
         ldy #0
-        ldx #16
+        ldx #16         ; pages
 sl1     lda ($90),y
         ora #$10
         sta t1
@@ -331,7 +364,7 @@ sl2     lda smpch
         and #2
         beq sl3
         lda t1
-        sta R_AUDF1+1
+        sta R_AUDF1+1   ; = R_AUDC1
 sl3     sta WSYNC
         sta WSYNC
         iny
@@ -339,11 +372,13 @@ sl3     sta WSYNC
         inc $91
         dex
         bne sl1
-        lda #$40
+        lda #$40        ; VBI back on
         sta NMIEN
         cli
         jmp silence
 
+; --- mode routines (called every frame by play; each just sets the POKEY registers)
+; m_left / m_right / m_both: pure tone AUDF 71, AUDC $A8 (pure tone, volume 8).
 m_left  lda #71
         sta AUDF1
         lda #$A8
@@ -356,7 +391,7 @@ m_right lda #71
         rts
 m_both  jsr m_left
         jmp m_right
-; swap the tone between left and right about every half second
+; swap the tone between left and right about every half second (RTCLOK+2 bit 5 = every 32 frames)
 m_alt   lda RTCLOK+2
         and #$20
         beq alt_l
@@ -366,7 +401,7 @@ m_alt   lda RTCLOK+2
 alt_l   lda #0
         sta R_AUDF1+1
         jmp m_left
-; walk a C major scale on the left (and the right) every 32 frames
+; walk a C major scale on the left (and the right) every 32 frames; step (0..7) indexes scale (AUDF values)
 m_scale lda step
         cmp #8
         bcc ms1
@@ -386,6 +421,7 @@ ms2     lda step
         sta AUDC1
         sta R_AUDF1+1
         rts
+; m_chord: all four POKEY 1 channels (AUDF1/3/5/7 = AUDF1+0/2/4/6) as a chord, pure tone volume 4 ($A4)
 m_chord lda #121
         sta AUDF1
         lda #95
@@ -400,6 +436,7 @@ m_chord lda #121
         sta AUDC1+4
         sta AUDC1+6
         rts
+; m_noise: noise ($88) on both sides, AUDF 40
 m_noise lda #40
         sta AUDF1
         sta R_AUDF1
@@ -407,7 +444,8 @@ m_noise lda #40
         sta AUDC1
         sta R_AUDF1+1
         rts
-; 16-bit mode: channels 1+2 joined for a very low tone
+; 16-bit mode: channels 1+2 joined for a very low tone (AUDCTL $50 = bit 6 channel 1 at 1.79 MHz + bit 4 join
+; 1+2; the 16-bit period is AUDF2:AUDF1 = $1000 and the sound comes from channel 2's AUDC)
 m_low   lda #$50
         sta AUDCTL
         lda #$00
@@ -417,7 +455,7 @@ m_low   lda #$50
         lda #$A8
         sta AUDC1+2
         rts
-; slow frequency sweep on both channels
+; slow frequency sweep on both channels (AUDF = 2 * frame counter: one full sweep every 128 frames)
 m_sweep lda RTCLOK+2
         asl
         sta AUDF1
@@ -428,6 +466,9 @@ m_sweep lda RTCLOK+2
         rts
 
 ; stereo ditty, 4 phases of 256 frames: both / left alone (melody an octave down) / right alone / both
+; phase = RTCLOK+1 & 3 (t1). Melody note = mel[RTCLOK+2 / 8 & 31] (t2, 8 frames per note, 0 = rest); bass note
+; = bass[RTCLOK+2 / 16 & 15]. Left: phase 2 silent, phase 1 melody an octave down (AUDF*2+1), else bass.
+; Right: phase 1 silent, else melody. AUDF 0 is a rest: its AUDC is set to 0, else $A8. Clobbers A,X,t1,t2.
 m_ditty lda RTCLOK+1
         and #3
         sta t1
@@ -475,6 +516,8 @@ dt3     sta R_AUDF1
 dt2     sta R_AUDF1+1
         rts
 
+; silence: AUDCTL = 0 and all AUDF/AUDC (4 channels) of both POKEYs = 0, SKCTL = 3 (leave init mode, key scan on;
+; R_SKCTL only if stereo). Clobbers A,X.
 silence ldx #7
         lda #0
         sta AUDCTL
@@ -489,7 +532,8 @@ si1     sta AUDF1,x
         sta R_SKCTL
 si2     rts
 
-; POKEY 1 check: its random generator must be changing
+; POKEY 1 check: its random generator must be changing. Out: p1ok = 1 if RANDOM differs from its first
+; sample within 256 tries (~30 loops apart), else 0. Clobbers A,X,Y,t1.
 p1check lda #0
         sta p1ok
         ldx #0
@@ -508,7 +552,10 @@ pkok    lda #1
         sta p1ok
         rts
 
-; stereo present when POKEY #2 runs its own random generator while #1 is held in init mode
+; detect: stereo present when POKEY #2 runs its own random generator while #1 is held in init mode (SKCTL
+; bits 0-1 = 0 stops RANDOM). Probe 1: #1 in init, #2 running; probe 2: the other way round. On a mono
+; machine $D21x mirrors $D20x so both counters move together. Stereo if exactly one side stayed constant.
+; Out: stereo = 0/1; SKCTL and R_SKCTL left at 3. Clobbers A,X,t1..t4.
 detect  lda #0
         sta stereo
         lda #0
@@ -532,7 +579,9 @@ dend    lda #3
         sta R_SKCTL
         rts
 
-; A = SKCTL for POKEY 1, X = SKCTL for POKEY 2; counts random changes in t3 (P1) and t4 (P2)
+; A = SKCTL for POKEY 1, X = SKCTL for POKEY 2; counts random changes in t3 (P1) and t4 (P2): after a settling
+; delay, RANDOM / R_RANDOM are sampled 8 times (~20 loops apart) against a first reading (t1/t2). Interrupts off.
+; Clobbers A,X,Y,t1..t4.
 dprobe  sei
         sta SKCTL
         stx R_SKCTL
@@ -563,6 +612,7 @@ dl5     inx
         bne dl2
         cli
         rts
+; shownow: write "Playing: <name of mode>" on row 11. Clobbers A,X,Y.
 shownow ldx #11
         jsr clrrow
         loc 0,11
@@ -574,24 +624,26 @@ shownow ldx #11
         ldy ntab+1,x
         jmp puts
 
+; quit: silence, give the OS screen back (gs_off clears it), show the cursor again, return to DOS.
 quit    jsr silence
         jsr gs_off
         lda #0
         sta CRSINH
         rts
 
-stereo  .byte 0
-p1ok    .byte 0
-fails   .byte 0
-gpos    .byte 0
-mode    .byte 0
-step    .byte 0
-jv      .word 0
-gmode   .byte 1,2,3,7,9
+; ---- data
+stereo  .byte 0         ; 1 = second POKEY found
+p1ok    .byte 0         ; 1 = POKEY 1 random generator running
+fails   .byte 0         ; guided steps answered N
+gpos    .byte 0         ; guided step 0..4
+mode    .byte 0         ; current mode 0..13
+step    .byte 0         ; scale step
+jv      .word 0         ; indirect jump vector used by play
+gmode   .byte 1,2,3,7,9 ; mode used by each guided step
 smpch   .byte 0
 keymap  .byte $32,$1F,$1E,$1A,$18,$1D,$1B,$33,$35,$30,$3A,$00,$28,$3E   ; keys 0-9, D, L, R, S (OS key codes)
-scale   .byte 121,107,95,90,80,71,63,59
-ntab    .word n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11,n12,n13
+scale   .byte 121,107,95,90,80,71,63,59   ; AUDF for a C major scale
+ntab    .word n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11,n12,n13   ; mode names
 n11     .byte 'static, LEFT only',0
 n12     .byte 'static, RIGHT only',0
 n13     .byte 'sample: left, right, both (4-bit, volume-only)',0
@@ -606,8 +658,8 @@ n7      .byte 'noise, both',0
 n8      .byte '16-bit low tone (POKEY 1)',0
 n9      .byte 'sweep, both',0
 n10     .byte 'ditty: low bass LEFT, high melody RIGHT',0
-bass    .byte 243,162,144,162,181,144,181,216,243,162,144,162,181,216,243,243
-mel     .byte 60,47,39,47,60,47,39,0,53,39,35,39,53,39,35,0
+bass    .byte 243,162,144,162,181,144,181,216,243,162,144,162,181,216,243,243   ; ditty bass AUDF, 16 notes
+mel     .byte 60,47,39,47,60,47,39,0,53,39,35,39,53,39,35,0   ; ditty melody AUDF, 32 notes (0 = rest)
         .byte 60,47,39,29,23,29,39,47,35,39,35,29,39,47,60,0
 gtab    .word g1,g2,g3,g4,g5
 g1      .byte 'STEP 1  LEFT tone (or mono tone)',0
@@ -625,7 +677,7 @@ s_play  .byte 'Playing: ',0
 s_mhelp .byte 'G guided  0-9 free play  D ditty  ESC exit',0
 s_menu  .byte '0 off 1 L 2 R 3 both 4 alt 5 scale 6 chord D ditty',0
 s_menu2 .byte 'L static left  R static right  S sample',0
-sample  ins 'sample.bin'
+sample  ins 'sample.bin'        ; 4096 bytes of 4-bit levels (0..15), played by smpplay
 s_ok    .byte 'RESULT: PASS - all heard steps OK',0
 s_bad   .byte 'RESULT: FAIL - a step was not heard',0
         run start

@@ -1,5 +1,11 @@
 ; misc.asm - memory, environment and system commands.
+;
+; Part of CMD.COM (included from cmd.asm); same convention as file.asm: entered with ARG at the
+; arguments, returns carry clear = OK / carry set + V_ERR. Scratch: N0-N5, T0/T1, V_A0-V_A2.
+; Environment block ENVB holds SET variables as "NAME=VALUE",EOL records ended by a 0 byte;
+; PATHV and PROMPTV hold the PATH and PROMPT text (EOL, 0 terminated).
 
+; CLS: $7D is the ATASCII clear-screen code
 cmd_cls:
         lda #$7D
         jsr putc
@@ -14,6 +20,8 @@ cmd_pause:
         clc
         rts
 
+; MEM: free bytes under DOS = RAMTOP*256 - MEMLO (16-bit subtract: low byte 0 - MEMLO,
+; high byte RAMTOP - MEMLO+1); RAMTOP is in pages, so RAMTOP/4 gives K of RAM.
 cmd_mem:
         sec
         lda #0
@@ -37,6 +45,7 @@ cmd_mem:
         clc
         rts
 
+; PEEK addr: print the byte at addr (decimal or $hex) via (N0),y
 cmd_peek:
         jsr needtok
         jcs failr
@@ -53,6 +62,7 @@ mm_bad: lda #165
         sec
         rts
 
+; POKE addr value: store the low byte of value at addr (T1 = target pointer). mm_bad = V_ERR 165.
 cmd_poke:
         jsr needtok
         jcs failr
@@ -72,7 +82,8 @@ cmd_poke:
         clc
         rts
 
-; print 8 bytes at T0 labelled with V_A0
+; print 8 bytes at T0 labelled with the address in V_A0 (hex, then ASCII; codes outside 32..122
+; show as '.'), then advance both T0 and V_A0 by 8
 dumpline:
         ldx V_A0+1
         lda V_A0
@@ -113,6 +124,8 @@ dl_n:   clc
         inc V_A0+1
 dl_r:   rts
 
+; MDUMP addr [bytes]: dump memory, 8 bytes per line; the optional byte count is divided by 8
+; (3 x lsr/ror) to a line count in V_A1 (default 8 lines, minimum 1). Any key stops it.
 cmd_mdump:
         jsr needtok
         jcs failr
@@ -148,6 +161,8 @@ md_l:   jsr dumpline
 md_d:   clc
         rts
 
+; DUMP file: hex dump of a file in 256-byte blocks (bget into IOBUF); V_A0 = running file offset,
+; V_A1 = lines in this block, V_A2 = read status. After each block a key is awaited; ESC quits.
 cmd_dump:
         jsr needtok
         jcs failr
@@ -225,6 +240,8 @@ cr_d:   lda #EOL
         clc
         rts
 
+; SET [NAME=VALUE]: no argument lists ENVB; otherwise the rest of the line is appended after the
+; last record (the new text is not merged with an existing variable of the same name).
 cmd_set:
         jsr argend
         bne st_add
@@ -276,6 +293,8 @@ st_e:   lda T1
         ldx T1+1
         jmp cprest
 
+; PATH [dirs] / PROMPT [text]: show or store the rest of the line (cprest). PROMPT with no
+; argument resets to the default prompt (empty PROMPTV = show CWD).
 cmd_path:
         jsr argend
         bne pa_s
@@ -304,11 +323,14 @@ pr_s:   lda #<PROMPTV
         clc
         rts
 
+; COLD: clear COLDST (warm-start flag) and jump to the OS cold start entry $E477
 cmd_cold:
         lda #0
         sta COLDST
         jmp $E477
 
+; BASIC: clear BASICF, set PORTB bit 1 = 0 (enables the built-in BASIC ROM on XL/XE; AND #$FD
+; clears bit 1) and cold start so the OS boots into BASIC
 cmd_basic:
         lda #0
         sta BASICF
@@ -319,6 +341,7 @@ cmd_basic:
         sta COLDST
         jmp $E477
 
+; HELP [topic]: no argument walks cmdtab and lists the command names; with one, shows a topic text
 cmd_help:
         jsr nexttok
         beq hp_all
@@ -355,6 +378,8 @@ hp_d:   jsr putnl
         clc
         rts
 
+; topic lookup: the table 'topics' is a list of name,0,text,0 entries ended by a 0 name byte.
+; TOK is compared case-insensitively; a hit prints the text through putc.
 hp_topic:
         lda #<topics
         sta T0
@@ -446,6 +471,7 @@ cmd_stub:
         clc
         rts
 
+; EXIT / QUIT: set V_QUIT so the main loop returns to DOS (in a batch file it also ends the script)
 cmd_exit:
         lda #1
         sta V_QUIT
@@ -460,6 +486,7 @@ cmd_ver:
         clc
         rts
 
+; ECHO text: print the rest of the line (ARG) as typed
 cmd_echo:
         jsr argend
         beq ce_d
@@ -470,6 +497,9 @@ ce_d:   jsr putnl
         clc
         rts
 
+; DIR [pattern]: default *.*; lists records from the directory reader (IOCB 3). lncwd preloads
+; LONGNAME.TXT so lnshow can print the long name next to each short one. Free sectors from the
+; directory footer are printed at the end. keyhit is polled each line (value unused).
 cmd_dir:
         jsr nexttok
         bne cd_a
@@ -518,6 +548,8 @@ cd_fail:
         rts
 
 ; ---- DATE and TIME: kept in memory for this session (the 8-bit has no clock) ----
+; V_A0 = offset into the buffer: 0 = DATEB, $10 = TIMEB (16 bytes each). No argument shows the
+; value, an argument stores up to 15 characters as typed (no validation).
 cmd_date:
         ldx #0
         beq dtm_go

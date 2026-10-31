@@ -1,6 +1,8 @@
 ; sys.asm - equates shared by CMD.COM and every stand-alone tool.
-CIOV    = $E456
-SIOV    = $E459
+; Pure definitions, no code. Sections: OS vectors/IOCB/DCB/zero-page names, scratch zero page,
+; the program memory map and the DB-relative data block layout.
+CIOV    = $E456         ; CIO entry
+SIOV    = $E459         ; SIO entry
 ICHID   = $0340
 ICCOM   = $0342
 ICSTA   = $0343
@@ -22,23 +24,25 @@ DBYTHI  = $0309
 DAUX1   = $030A
 DAUX2   = $030B
 HATABS  = $031A
-RTCLOK  = $12
-DOSVEC  = $0A
-RUNAD   = $02E0
-INITAD  = $02E2
-MEMLO   = $02E7
-RAMTOP  = $6A
-ATRACT  = $4D
-CH      = $02FC
-PORTB   = $D301
-COLDST  = $0244
-BASICF  = $03F8
-CRSINH  = $02F0
+; ---- OS RAM / hardware names ----
+RTCLOK  = $12           ; 3-byte frame clock, $12-$14
+DOSVEC  = $0A           ; DOS run vector (jump here to return to DOS)
+RUNAD   = $02E0         ; run address of a loaded binary
+INITAD  = $02E2         ; init address of a binary load segment
+MEMLO   = $02E7         ; lowest free RAM
+RAMTOP  = $6A           ; top of RAM, in pages
+ATRACT  = $4D           ; attract-mode counter (write 0 to keep colours alive)
+CH      = $02FC         ; last key code, $FF = none
+PORTB   = $D301         ; PIA port B: bit 0 = OS ROM, upper bits = XL/XE banking
+COLDST  = $0244         ; non-zero forces a cold start on reset
+BASICF  = $03F8         ; non-zero when BASIC is disabled
+CRSINH  = $02F0         ; cursor inhibit flag
 
-EOL     = $9B
-API_VER = 1
+EOL     = $9B           ; ATASCII end of line
+API_VER = 1             ; version byte of the plug-in API table in cmd.asm
 
-; zero page (free when no BASIC floating point is in use)
+; zero page (free when no BASIC floating point is in use): ARG = command line cursor,
+; T0/T1 = pointer scratch, N0-N5 = number/loop scratch. Routines clobber these freely.
 ARG     = $D4
 T0      = $D6
 T1      = $D8
@@ -49,7 +53,9 @@ N3      = $DD
 N4      = $DE
 N5      = $DF
 
-; memory map
+; memory map: CODE $3800 = program start; DB = data block (variables below);
+; IOBUF $7000-$7FFF = 4K general I/O buffer; LNMEM $8000 = LONGNAME.TXT cache (max $0FFF bytes);
+; PLUG $9000 = plug-in (.CMX) load area (max $0BFF bytes)
 CODE    = $3800
         .ifndef DB
 DB      = $6000         ; data block (CMD.COM moves it up because its code outgrew $6000)

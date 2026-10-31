@@ -4,6 +4,33 @@
 ; Keys:  Ctrl+arrows (or ^B ^F ^P ^N) move   ^A start of line   ^E end of line   ^V / ^Y page down / up
 ;        ^D or Ctrl+Delete delete character   BACKSPACE delete left   ^K cut line   ^U paste
 ;        ^W search   ^O write file   ^X exit   ^C show position   ^G help
+;        ^R insert a file   ^T go to line number   ^L search and replace   TAB inserts two spaces
+;
+; Overview (appears to match the code below):
+;  - The whole text is one flat byte array at BUF ($6000..), len bytes long (offset 0..len-1). Lines are ended
+;    by EOL ($9B), and the last byte of the text is always an EOL ("final EOL"), so an empty buffer is len = 1.
+;    There is no gap buffer: inschr/insgap and delgap move the tail of the text with copydn / copyup.
+;    cur = cursor offset into the buffer, top = offset of the first line shown on screen. Offsets are 16 bit
+;    and are turned into addresses by adding >BUF to the high byte.
+;  - Screen: GR.0 style 40x24 text. Nothing goes through CIO: draw/pch/rowclr store screen codes directly
+;    into screen memory (address from SAVMSC, 40 bytes per row). Row 0 = title bar (inverse), rows 1..TROWS
+;    (20) = text (rows longer than 40 characters are cut, not wrapped), row 21 = message / prompt line,
+;    rows 22..23 = key hints. The cursor is drawn by inverting the character under it (CRSINH hides the OS cursor).
+;  - Keys come from K: opened on IOCB 7 ($70); ktab (key codes) / ktl,kth (handler address low/high bytes)
+;    form a dispatch table, handlers end with 'jmp loop'. Printable keys 32..124 are inserted.
+;    The first 6 table entries (up, down, page keys) keep the wanted column (vfl) for vertical moves.
+;  - Files use IOCB 1 ($10): loadf (open read, one block read of up to MAXL bytes), savefile (open write, put block).
+;    A name without a device prefix gets 'D:' put in front by fixname.
+;  - Startup: a file name comes from the CMD hand-over block at HAND ($0480, first byte $A5, then the text),
+;    otherwise it is typed at the 'NANO FILE?' prompt. The HAND byte is cleared after use.
+;
+; Memory map: $5400-$5BFF CLIP (cut buffer, CLIPMAX = $0800 bytes), text buffer BUF = $6000, MAXL = $5BFF bytes
+;   maximum (so the text ends below $BC00). Zero page $80..$B1 holds the working variables below:
+;   cur/len/top (offsets), p/q/src/dst/sp (pointers), t/tp/cnt (16 bit temporaries), cl = bytes in the cut buffer,
+;   want = wanted column, mod = modified flag, inv = inverse video mask ORed into screen codes ($80 or 0),
+;   scol = print column, crow/ccol = screen position of the cursor, fb/pl/fmax/fl = prompt state
+;   (text pointer, label pointer, max length, current length), key/pk = last / previous key.
+;   Variable data (file name, input buffers) is at the end of the file.
         icl 'lib\sys.asm'
 
 BUF     = $6000
@@ -50,15 +77,19 @@ erc     = $AF
 pcnt    = $B0
 tflag   = $B1
 
+; ZP / equates: MAXL = largest text size (BUF+MAXL = $BBFF), TROWS = number of text rows on screen,
+; SHFLOK = OS shift/caps lock flag ($02BE), SAVMSC = screen memory pointer ($58)
         org CODE
 start   lda #1
-        sta CRSINH
+        sta CRSINH              ; hide the OS cursor, the editor draws its own
         lda SHFLOK
         sta oldshf
         lda #EOL
         sta fn
         sta inb
         sta pb
+; fn / inb / pb start out as empty (EOL only) strings. If the CMD hand-over block (HAND, $A5 signature) is present,
+; skip blanks and copy the first word of the text (max 58 characters) into fn.
         lda HAND
         cmp #$A5
         bne ask
@@ -85,6 +116,7 @@ h4      lda #EOL
         sta HAND
         jmp named
 
+; no hand-over: read the file name with CIO command 5 (get record) on IOCB 0 (screen editor)
 ask     jsr putsi
         .byte 'NANO FILE? ',0
         lda #<fn
@@ -100,6 +132,7 @@ ask     jsr putsi
         ldx #0
         jsr CIOV
 
+; reset editor state, then load the named file (or start with an empty buffer when no name was given)
 named   lda #0
         sta mod
         sta cur
@@ -121,6 +154,8 @@ named   lda #0
         jmp go
 nb      jsr newbuf
 
+; (re)open K: on IOCB 7 for keyboard reads: close (12), then open (3) with ICAX1 = 4 (read); clear the screen
+; (125); SHFLOK = 0 gives lower case typing. tflag from loadf: 1 = file truncated to fit, 2 = new file.
 go      ldx #$70
         lda #12
         sta ICCOM,x
@@ -158,6 +193,9 @@ go1     jsr msg0
         jsr msg1
 
 ; ---- main loop ----
+; Each pass: scroll to keep the cursor visible (fixtop), redraw (draw), wait for a key (getk), clear the message
+; row, then look the key up in ktab. Found: jump through ktl/kth (indirect jump via T0); not found: insert it
+; when it is a printable character (32..124). pk = key of the previous pass (^K uses it to chain cuts).
 loop    lda key
         sta pk
         jsr fixtop
@@ -191,6 +229,9 @@ dk3     lda ktl,x
         sta T0+1
         jmp (T0)
 
+; key dispatch table, in order: up(Ctrl+up, ^P), down(Ctrl+down, ^N), page up (^Y), page down (^V), left (Ctrl+left,
+; ^B), right (Ctrl+right, ^F), ^A, ^E, ^D, Ctrl+Delete ($FE), BACKSPACE ($7E), RETURN ($9B), TAB ($7F), ^K, ^U,
+; ^W, ^O, ^X, ^G, ^C, ^R, ^T, ^L. The three lists ktab / ktl / kth must stay in the same order.
 ktab    .byte 28,16,29,14,25,22
         .byte 30,2,31,6,1,5,4,254,126,155,127,11,21,23,15,24,7,3,18,20,12
 NK      = *-ktab
@@ -199,6 +240,7 @@ ktl     .byte <kup,<kup,<kdn,<kdn,<kpu,<kpd
 kth     .byte >kup,>kup,>kdn,>kdn,>kpu,>kpd
         .byte >klf,>klf,>krt,>krt,>khome,>kend,>kdel,>kdel,>kbs,>knl,>ktb,>kcut,>kpaste,>ksrch,>kwrite,        >kexit,>khelp,>kpos,>kread,>kgoto,>krepl
 ; ---- key handlers ----
+; Every handler ends with 'jmp loop'. Cursor moves use cup / cdn (see below); page keys move TROWS-1 lines.
 kup     jsr cup
         jmp loop
 kdn     jsr cdn
@@ -216,6 +258,7 @@ kpd1    jsr cdn
         bne kpd1
         jmp loop
 
+; left / right: move cur by one, never before 0 and never onto the final EOL (canfwd)
 klf     lda cur
         ora cur+1
         beq klx
@@ -233,6 +276,7 @@ krt     jsr canfwd
         sta cur+1
 krx     jmp loop
 
+; HOME / END: t = cur, then lstart / lend give the start of line / the EOL offset of the line
 khome   lda cur
         sta t
         lda cur+1
@@ -254,6 +298,7 @@ kend    lda cur
         sta cur+1
         jmp loop
 
+; ^D / Ctrl+Delete: delete the byte under the cursor (not the final EOL); BACKSPACE: step left, delete that byte
 kdel    jsr canfwd
         bcs kdx
         lda #1
@@ -281,6 +326,7 @@ kb1     dec cur
         sta mod
 kbx     jmp loop
 
+; RETURN inserts an EOL; TAB inserts two spaces
 knl     lda #EOL
         jsr inschr
         jmp loop
@@ -291,6 +337,9 @@ ktb     lda #' '
         jmp loop
 
 ; ^K cut the current line into the clipboard (repeat to add more lines)
+; dst = line start, t = its EOL, cnt = line length, tp = length including the EOL (bytes copied to CLIP).
+; Nothing is cut on the final empty line. If the previous key was not ^K (pk <> 11) the clipboard (cl = size) is
+; emptied first. Fails with 'Cut buffer full' when CLIPMAX would be exceeded.
 kcut    lda cur
         sta t
         lda cur+1
@@ -399,7 +448,7 @@ kc3     lda cnt
         sta mod
 kc4     jmp loop
 
-; ^U paste
+; ^U paste: insert the cut buffer (cl bytes) at the cursor via insgap + copyup, cursor ends after the text
 kpaste  lda cl
         ora cl+1
         bne kp1
@@ -441,6 +490,9 @@ kp2     jsr setp
         jmp loop
 
 ; ^W search (case blind, wraps around, same text is offered again)
+; The prompt keeps the old text in inb. p = candidate offset (starts after the cursor), cnt = positions left to try
+; (len, so the whole buffer is covered once, wrapping at len). Compare is done through 'fold' (upper case).
+; kfound leaves slen = length of the match and cur at its start. rmode/rall are shared with replace (^L).
 ksx     jmp loop
 ksrch   lda #0
         sta rmode
@@ -543,6 +595,8 @@ kfound  stx slen
 kfx     jmp loop
 
 ; ^L replace: search text, replacement, then Y / N / A for each match (no wrap)
+; Reuses the search code with rmode = 1: kfound jumps to krep; rb = replacement text; rall = replace all (A).
+; krdo deletes slen bytes and inserts rb, then the search resumes right after the cursor.
 krepl   lda #1
         sta rmode
         lda #EOL
@@ -609,6 +663,8 @@ rend    jsr clr21
         jmp loop
 
 ; ^T go to line number
+; The digits are converted to t (t = t*8 + t*2 + digit, using src = t*2 and q = t*8). Then dst scans the
+; text counting EOLs until t-1 lines have been skipped. A number past the end puts the cursor on the last line.
 kgx     jmp loop
 kgoto   lda #EOL
         sta gb
@@ -717,6 +773,8 @@ kg3     lda dst
 kg9     jmp loop
 
 ; ^R insert a file (up to 2K, uses the cut buffer)
+; The file is read into CLIP by rdclip (the name is swapped into fn temporarily, then restored from fn2),
+; then pasted with the normal paste code (kp1).
 kread   lda #EOL
         sta pb
         lda #<pb
@@ -771,6 +829,8 @@ kra8    jsr msg0
         jsr msg1
         jmp loop
 
+; read file fn into CLIP: IOCB 1, CIO open (3, ICAX1 = 4 read), get block (7) of up to CLIPMAX bytes; cl = bytes
+; read (ICBLL/H after the call). Error 136 (EOF) is fine. Out: carry set = could not open or other error.
 rdclip  ldx #$10
         lda #3
         sta ICCOM,x
@@ -823,9 +883,11 @@ rdc1    ldx #$10
 rdc2    clc
         rts
 
+; ^O write file
 kwrite  jsr wrfile
         jmp loop
 
+; ^X exit: when modified ask 'Save changes?' (Y writes then exits unless the write failed, N discards, other key cancels)
 kexit   lda mod
         beq quit
         jsr msg0
@@ -845,6 +907,7 @@ kx9     jmp loop
 quit    jmp bye
 
 ; ^C show line and column
+; Line = (EOLs before cur)+1 (tp); total lines = EOLs in the whole text (dst); column = cur - line start + 1 (src).
 kpos    lda cur
         sta t
         lda cur+1
@@ -907,6 +970,8 @@ kpz     jsr msg0
         jmp loop
 
 ; ^G help screen
+; Clears rows 1..23, prints a header in inverse video, then each help line with hnl (next row, column 1);
+; any key returns. hr = current help row.
 khelp   lda #1
         sta hr
 kh1     lda #0
@@ -987,6 +1052,7 @@ kh1     lda #0
         jsr getk
         jmp loop
 
+; next help row: hr++, clear it, scol = 1
 hnl     inc hr
         lda #0
         sta inv
@@ -997,6 +1063,7 @@ hnl     inc hr
         rts
 
 ; ---- editing primitives ----
+; Conventions: t, tp, cnt, src, dst, p, q are scratch (clobbered freely by these routines).
 ; carry clear when the cursor is not on the final EOL; t = cur+1
 canfwd  lda cur
         clc
@@ -1011,6 +1078,7 @@ canfwd  lda cur
         sbc len+1
         rts
 
+; p = address of the cursor in the buffer (BUF + cur)
 setp    lda cur
         sta p
         lda cur+1
@@ -1019,7 +1087,7 @@ setp    lda cur
         sta p+1
         rts
 
-; insert one character from A at the cursor
+; insert one character from A at the cursor (cursor moves after it, mod set; 'Buffer full' message if no room)
 inschr  sta tmp
         lda #1
         sta cnt
@@ -1044,6 +1112,8 @@ ic2     lda #1
         rts
 
 ; open a gap of cnt bytes at the cursor (carry set = no room)
+; The text after cur is moved up by cnt with copydn (backwards, since the areas overlap) and len grows by cnt;
+; the gap contents are left undefined for the caller to fill. The new length must stay <= MAXL.
 insgap  clc
         lda len
         adc cnt
@@ -1090,7 +1160,7 @@ insgap  clc
 ig9     sec
         rts
 
-; delete cnt bytes at the cursor
+; delete cnt bytes at the cursor: the text after them (len-cur-cnt bytes) is moved down with copyup, len -= cnt
 delgap  clc
         lda cur
         adc cnt
@@ -1126,6 +1196,7 @@ delgap  clc
         rts
 
 ; copy t bytes from q up to p, lowest address first (p below q, or no overlap)
+; Whole pages first (Y = 0..255, t+1 times), then the remaining t low bytes. Clobbers q, p, t, A, Y.
 copyup  lda t+1
         beq cu2
 cu1     ldy #0
@@ -1148,6 +1219,7 @@ cu3     lda (q),y
 cu4     rts
 
 ; copy t bytes backwards, q and p point just past the end of source and destination
+; First the partial page (t low byte) is copied downwards, then t+1 full pages of 256 bytes, high pages first.
 copydn  lda t
         beq cd2
         sec
@@ -1182,7 +1254,7 @@ cd4     lda (q),y
         bne cd3
 cd5     rts
 
-; t = offset of the start of the line holding offset t
+; t = offset of the start of the line holding offset t (walks back to just after the previous EOL, or to BUF)
 lstart  lda t
         sta q
         lda t+1
@@ -1236,7 +1308,7 @@ le9     lda q
         sta t+1
         rts
 
-; cnt = number of EOLs before offset t
+; cnt = number of EOLs before offset t (t is counted down to 0 and destroyed)
 cnteol  lda #0
         sta cnt
         sta cnt+1
@@ -1264,7 +1336,7 @@ ce4     dec t
         jmp ce1
 ce9     rts
 
-; remember the wanted column for up / down
+; remember the wanted column for up / down (only when the previous key was not a vertical move: vfl = 0)
 setwant lda vfl
         bne sw9
         lda cur
@@ -1309,6 +1381,8 @@ pc1     clc
         sta cur+1
         rts
 
+; cursor up: go to the EOL before the current line, find that line's start and place the cursor in the wanted
+; column; does nothing on the first line. cdn (below) does the mirror image using the next line's EOL.
 cup     jsr setwant
         lda cur
         sta t
@@ -1365,6 +1439,7 @@ cdn     jsr setwant
 cdn9    rts
 
 ; ---- view window ----
+; setfp: src = address of the end of the text (BUF + len); setcq: dst = address of the cursor (BUF + cur)
 setfp   lda len
         sta src
         lda len+1
@@ -1400,6 +1475,9 @@ vn2     cmp #EOL
 vn9     rts
 
 ; scroll top so the cursor is on screen
+; Cursor above top: top = start of the cursor's line, then walk screen rows (vnext) from there until the cursor
+; is passed, keeping the last row start. Cursor below: count rows from top to the cursor; if that is >= TROWS,
+; advance top by (rows - (TROWS-1)) screen rows so the cursor lands on the last row. Needs setfp/setcq first.
 fixtop  jsr setfp
         jsr setcq
         lda cur
@@ -1489,6 +1567,10 @@ ft7     dec cnt
 ft9     rts
 
 ; ---- screen ----
+; Redraws everything. Row rowc (1..TROWS): clear it, then copy characters from p (starting at top) converted by
+; 'conv' until EOL, 40 columns or the end of the text; when p reaches the cursor address (dst) its row/column are
+; saved in crow/ccol. Then the inverse title bar (row 0: name, 'Modified' at column 32) and the two hint rows.
+; Finally the cursor cell is inverted (EOR $80). ATRACT is zeroed to stop the attract-mode colour cycling.
 draw    lda #0
         sta ATRACT
         jsr setfp
@@ -1587,7 +1669,7 @@ dt3     lda #22
         sta (sp),y
 dtx     rts
 
-; A = row: sp = screen address of that row
+; A = row: sp = screen address of that row (SAVMSC + 40 * row)
 setrow  tax
         lda SAVMSC
         sta sp
@@ -1617,6 +1699,8 @@ rc1     sta (sp),y
         rts
 
 ; screen code for the ATASCII byte in A (result in A)
+; ATASCII $00-$1F -> screen code +$40, $20-$5F -> -$20, $60-$7F unchanged; bit 7 (inverse) is kept.
+; (the 'adc #64' at cv1 relies on carry being clear after the failed 'cmp #32')
 conv    sta cvt
         and #$7F
         cmp #32
@@ -1641,7 +1725,9 @@ pch     jsr conv
         inc scol
         rts
 
-; print the 0 terminated text that follows the jsr
+; print the 0 terminated text that follows the jsr (inline string): the return address on the stack points at
+; the last byte of the jsr, so it is popped into T0, walked and finally pushed back after the terminating 0.
+; The text goes to the screen row set by rowclr/setrow, at column scol, via pch.
 pstr    pla
         sta T0
         pla
@@ -1673,6 +1759,7 @@ pm1     ldy pi
 pm9     rts
 
 ; print t as a decimal number without leading zeros
+; Repeated subtraction of 10000,1000,100,10,1 (tables dl/dh); the last digit is always printed. t is destroyed.
 dnum    ldx #0
         lda #0
         sta cnt
@@ -1708,7 +1795,7 @@ dn5     inx
 dl      .byte <10000,<1000,<100,<10,<1
 dh      .byte >10000,>1000,>100,>10,>1
 
-; message line (row 21): "[ text ]"
+; message line (row 21): "[ text ]"; use msg0, then pstr/dnum to print the text, then msg1
 msg0    lda #0
         sta inv
         lda #21
@@ -1721,11 +1808,13 @@ msg1    lda #' '
         jsr pch
         lda #']'
         jmp pch
+; clear the message row
 clr21   lda #0
         sta inv
         lda #21
         jmp rowclr
 
+; upper case A (lower case letters only; AND $DF clears bit 5)
 fold    cmp #'a'
         bcc fo9
         cmp #'z'+1
@@ -1735,6 +1824,8 @@ fo9     rts
 
 ; line input on row 21: pl = label, fb = text (EOL terminated, edited in place), fmax = longest
 ; carry set = Enter, carry clear = ESC
+; carry set = Enter, carry clear = ESC (^C also cancels). Accepts printable keys 32..124 and BACKSPACE (126).
+; The current text is shown after the label with an inverse blank as cursor.
 prompt  ldy #0
 pr0     lda (fb),y
         cmp #EOL
@@ -1794,6 +1885,8 @@ prcan   clc
         rts
 
 ; ---- files ----
+; make fn a full file spec: when it has no ':' the shift loop moves the name up two bytes and puts 'D:' in
+; front (the string is stored EOL terminated; the name ends at the first blank or EOL)
 fixname ldx #0
 fx1     lda fn,x
         cmp #':'
@@ -1816,6 +1909,7 @@ fx3     lda fn-1,x
         sta fn+1
 fx9     rts
 
+; empty buffer: just the final EOL
 newbuf  lda #1
         sta len
         lda #0
@@ -1824,6 +1918,9 @@ newbuf  lda #1
         sta BUF
         rts
 
+; load fn into BUF through IOCB 1: open for read (ICAX1 = 4); error 170 (file not found) starts a new buffer with
+; tflag = 2, other errors go to 'fail'. One get-block (7) of up to MAXL bytes; error 136 (EOF) is the normal end,
+; a full buffer sets tflag = 1 ('File too long'). len = bytes read; ensures the text ends with an EOL.
 loadf   ldx #$10
         lda #3
         sta ICCOM,x
@@ -1902,6 +1999,7 @@ lf5     lda #EOL
 lf9     rts
 
 ; ^O: ask for the name and write the buffer. Carry clear = written.
+; The prompt starts with the current name (pb); a changed name becomes the new fn. Empty or ESC = 'Cancelled'.
 wrfile  ldx #0
 wf1     lda fn,x
         sta pb,x
@@ -1944,6 +2042,9 @@ wf8     jsr msg0
         sec
         rts
 
+; close IOCB 1, open fn for write (ICAX1 = 8), put block (11) of len bytes from BUF, close. erc keeps the error
+; code of the write so the close cannot hide it. Success clears mod and shows 'Wrote n bytes' (carry clear);
+; an error shows its code (carry set).
 savefile jsr fixname
         ldx #$10
         lda #12
@@ -2018,6 +2119,8 @@ sv2     jsr msg0
         rts
 
 ; ---- console / keyboard ----
+; putc: print A on the screen editor (IOCB 0) with CIO put-char (ICCOM 11, length 0). Used outside the editor
+; (prompt before start, error text on exit); the editor itself writes to screen memory.
 putc    ldx #0
         stx ICBLL
         stx ICBLH
@@ -2026,6 +2129,7 @@ putc    ldx #0
         ldx #0
         jmp CIOV
 
+; print the 0 terminated text that follows the jsr through putc (same inline-string trick as pstr)
 putsi   pla
         sta T0
         pla
@@ -2045,6 +2149,7 @@ pi3     lda T0+1
         pha
         rts
 
+; wait for a key from K: (IOCB 7, get-char). Out: A = ATASCII code (0 on CIO error). Resets ATRACT.
 getk    ldx #$70
         lda #7
         sta ICCOM,x
@@ -2058,8 +2163,10 @@ getk    ldx #$70
         lda #0
 gk1     rts
 
+; file could not be opened / read at startup: message, then fall into bye
 fail    jsr putsi
         .byte 'CAN',39,'T OPEN OR READ THE FILE',EOL,0
+; leave: close IOCB 7 and 1, restore SHFLOK and the cursor, clear the screen, return to DOS
 bye     ldx #$70
         lda #12
         sta ICCOM,x
@@ -2076,6 +2183,10 @@ bye     ldx #$70
         jsr putc
         jmp (DOSVEC)
 
+; ---- data ----
+; HAND = CMD hand-over block; kspec = device name for K:; lb* = prompt labels (EOL terminated); rmode / rall / slen
+; = replace mode, replace-all flag, match length; gb = line number input, rb = replacement text, fn2 = saved
+; file name for ^R, inb = search text, pb = ^O / ^R name input, fn = current file name.
 HAND    = $0480
 kspec   .byte 'K:',EOL
 lbs     .byte 'Search: ',EOL

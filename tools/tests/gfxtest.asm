@@ -1,6 +1,26 @@
 ; GFXTEST.COM - steps through the OS graphics modes 0-15 (split screen with a text window), then a GR.8 1-bit
 ; hi-res mono test pattern and a mixed-ANTIC-mode screen (text modes 2/4/5/6/7 and bitmap modes 8-F in one display
 ; list). After each screen answer Y = ok, N = bad, S = skip, ESC = finish. A colour summary with PASS / FAIL follows.
+;
+; TESTS (index `mode`, ntest = 19): 0-15 = OS graphics GR.0-GR.15 (opened through S: on IOCB 6, each filled
+;   with a stepping byte pattern); 16 = GR.8 mono bars (opened as GR.8); 17 = mixed ANTIC modes (custom
+;   display list `mixdl`); 18 = fine-scroll page (HSCROL/VSCROL, any key = answer). This is a visual test:
+;   the user judges the picture. Y (KBCODE $2B) = ok (0), N ($23) = bad (1), anything else (S) = skipped
+;   (3); ESC ($1C) stops. Result codes are kept in `res`. PASS = at least one test ok and none bad.
+;
+; SCREENS: the test screens use the OS display lists (S: OPEN) except modes 17/18, which write their own
+;   display list into SDLSTL/SDLSTH ($0230/$0231). The summary screen uses cscreen.inc (NA = 6 text rows,
+;   NMAP = 1 map row of 19 cells = the 19 tests, NB = 3 text rows) with a DLI per row for colours and a
+;   VBI hook that resets the DLI row counter. Map colours: green ok, red bad, grey skipped/untested.
+;
+; MEMORY: code/data from $2000, cscreen.inc buffers at $3000-$3800+. Test data: mixed screen bands at
+;   $4000-$5A00 (one 256-byte-aligned page per band; pages are chosen by the `band` macro), scroll display
+;   lists at $5C00 / $5D00, scroll status line at $5E00, scroll bitmap SCRBUF at $6000-$6FFF.
+; ZERO PAGE: $8C mode, $8D/$8E cnt (fill count), $8F pat, $90/$91 ptr, $92/$93 fnl/fnh (byte count for fb),
+;   $94 pv, $95 stp (pattern step), $96/$97 dp (display list pointer), plus common.inc/cscreen.inc.
+;
+; EXTENDING: increase ntest, give the new test a number, add a case in the dispatch at `next`, a label in
+;   ltab/lbl (and mmap/szlo/szhi if it is an OS mode) and a text slot in the summary map.
         org $2000
 NA      = 6
 NMAP    = 1
@@ -9,18 +29,19 @@ NB      = 3
         icl 'common.inc'
         icl 'cscreen.inc'
 
-IOCB6   = $60
-mode    = $8C
+IOCB6   = $60           ; IOCB 6 (offset $60) is used for the S: screen device
+mode    = $8C           ; current test number 0..ntest-1
 cnt     = $8D           ; 16-bit fill count
-pat     = $8F
+pat     = $8F           ; running fill pattern byte
 ptr     = $90
-fnl     = $92
+fnl     = $92           ; byte count for fb (lo/hi)
 fnh     = $93
-pv      = $94
-stp     = $95
-ntest   = 19
+pv      = $94           ; running pattern value in fb
+stp     = $95           ; pattern step in fb (0 = constant fill with 0)
+ntest   = 19            ; 16 OS modes + mono + mixed + scroll
 dp      = $96           ; display list pointer (fine-scroll page)
 
+; band count_lo,count_hi,page: fb-fill `count` bytes starting at page:$00 using the current stp.
         .macro band
         lda #:1
         sta fnl
@@ -30,6 +51,8 @@ dp      = $96           ; display list pointer (fine-scroll page)
         jsr fb
         .endm
 
+; start: mark every test "skipped" (res = 3), then loop over the tests: open the mode, draw it, wait for a
+; key and record the answer. ESC ends early; after the last test the summary is shown.
 start   ldx #ntest-1
         lda #3
 st0     sta res,x
@@ -40,13 +63,13 @@ st0     sta res,x
 next    jsr openmode
         lda mode
         cmp #16
-        bcc nfill
-        beq nhires
+        bcc nfill       ; 0-15: OS graphics modes
+        beq nhires      ; 16: GR.8 mono pattern
         cmp #18
-        beq nscrl
-        jsr mixed
+        beq nscrl       ; 18: scroll
+        jsr mixed       ; 17: mixed ANTIC modes
         jmp nask
-nscrl   jsr scroll
+nscrl   jsr scroll      ; scroll waits for the key itself and returns it in A
         jmp nk
 nhires  jsr hires
         jsr label
@@ -54,16 +77,16 @@ nhires  jsr hires
 nfill   jsr fill
         jsr label
 nask    jsr getkey
-nk      cmp #$1C
+nk      cmp #$1C        ; ESC
         beq done
-        ldx #3
-        cmp #$2B
+        ldx #3          ; default answer: skipped
+        cmp #$2B        ; Y key
         bne na1
-        ldx #0
+        ldx #0          ; ok
         jmp na2
-na1     cmp #$23
+na1     cmp #$23        ; N key
         bne na2
-        ldx #1
+        ldx #1          ; bad
 na2     txa
         ldx mode
         sta res,x
@@ -73,15 +96,18 @@ na2     txa
         bcc next
 done    lda #0
         sta mode
-        jsr openmode
+        jsr openmode    ; reopen GR.0 so the OS screen is sane before the summary
         jmp summary
 
+; openmode: close IOCB 6, then OPEN S: with graphics mode mmap[mode] (AUX2) and AUX1 = $1C (read/write
+; plus option bits; appears to include a text window for modes > 0). Hides the cursor and sets colours:
+; COLOR1 ($02C5) = $0F, COLOR2 ($02C6) = $94 (blue), COLOR4 border ($02C8) = $94. Clobbers A, X, Y.
 openmode ldx #IOCB6
-        lda #12
+        lda #12         ; CIO CLOSE
         sta ICCOM,x
         jsr CIOV
         ldx #IOCB6
-        lda #3
+        lda #3          ; CIO OPEN
         sta ICCOM,x
         lda #<scr
         sta ICBAL,x
@@ -99,13 +125,16 @@ openmode ldx #IOCB6
         lda #1
         sta CRSINH
         lda #$94
-        sta $02C6
+        sta $02C6       ; COLOR2
         lda #$0F
-        sta $02C5
+        sta $02C5       ; COLOR1
         lda #$94
-        sta $02C8
+        sta $02C8       ; COLOR4 (border)
         rts
 
+; fill: fill the whole screen RAM of OS mode `mode` with an incrementing byte pattern (pat = 0,1,2,...)
+; so every colour / luminance / character shows up. Count comes from szlo/szhi. In mode 0 the first 120
+; bytes (3 text rows) are skipped so the label printed by `label` stays readable. Clobbers A, Y, sp, cnt, pat.
 fill    ldx mode
         lda szlo,x
         sta cnt
@@ -148,8 +177,10 @@ f3      dec cnt
         bne f1
         rts
 
-; GR.8 1-bit hi-res: black and white only. 8 bands of 20 lines: 1-pixel columns (two phases), 2-pixel columns,
-; 4-pixel columns, 1-line stripes, checkerboard, half white / half black, a byte ramp.
+; hires: GR.8 1-bit hi-res: black and white only (COLOR2/COLOR4 = 0, COLOR1 = $0E). 8 bands of 20 lines:
+; 1-pixel columns (two phases), 2-pixel columns, 4-pixel columns, 1-line stripes, checkerboard, half white /
+; half black, a byte ramp. Pass/fail is judged by eye: edges must be sharp with no colour fringing.
+; Loop: bnd = band, lin = line in band, y = byte column; g8byte returns the byte. Clobbers A, X, Y, sp.
 hires   lda #0
         sta $02C6
         sta $02C8
@@ -187,6 +218,10 @@ g8n     inc lin
         bne g8b
         rts
 
+; g8byte: in = bnd (band), lin (line), Y (byte column 0..39); out = A, the pattern byte for that spot.
+; Bands 0-3: b8t = $AA / $55 (1-px columns, both phases), $CC (2-px), $F0 (4-px); band 4: $FF/$00 on
+; alternate lines; band 5: $AA/$55 on alternate lines (checkerboard); band 6: left half $FF, right half
+; $00; band 7: A = Y (a ramp of all bit patterns across the line).
 g8byte  lda bnd
         cmp #4
         bcc gb0
@@ -221,7 +256,8 @@ gb0     tax
         rts
 b8t     .byte $AA,$55,$CC,$F0
 
-; fill FNL/FNH bytes at page A with a stepping pattern (STP = 0 clears)
+; fb: fill FNL/FNH bytes starting at page A (address A*256) with a stepping pattern: byte n = n * STP
+; (mod 256); STP = 0 clears. Clobbers A, Y, ptr, pv, fnl, fnh.
 fb      sta ptr+1
         lda #0
         sta ptr
@@ -245,7 +281,12 @@ fb3     dec fnl
         bne fb1
         rts
 
-; one display list with ANTIC text modes 2, 6, 7, 4, 5 and bitmap modes 8, 9, A, B, C, D, E, F
+; mixed: one display list (mixdl) with ANTIC text modes 2, 6, 7, 4, 5 and bitmap modes 8, 9, A, B, C, D, E, F.
+; First fills each band's screen RAM (pages $40-$5A; text modes with stp = 0 or 7, i.e. a mix of
+; blank and stepped characters, bitmap modes with a stepping pattern) by the sizes the modes need
+; (e.g. mode F = 320 bytes = 64+256), writes captions into the three text pages, tints the 20-char
+; ANTIC 6/7 lines, then installs mixdl via SDLSTL ($0230/$0231) and sets five colours (COLOR0-4 =
+; $02C4-$02C8). Visual pass/fail: every band must look right. Clobbers A, X, Y, ptr, sp, pv, fnl/fnh.
 mixed   lda #0
         sta stp
         band 40,0,$40
@@ -304,7 +345,8 @@ mixed   lda #0
         sta $02C8
         rts
 
-; give the 20 characters at page A four colours (bits 6-7 select the colour register)
+; tint: give the 20 characters at page A four colours (bits 6-7 select the colour register, one
+; colour per 4 characters via ctab). Clobbers A, X, Y, ptr.
 tint    sta ptr+1
         lda #0
         sta ptr
@@ -322,8 +364,12 @@ ti1     tya
         rts
 ctab    .byte 0,$40,$80,$C0
 
+; mixdl: display list for `mixed`. $70 = 8 blank lines; $4x = LMS (mode x, address follows); plain
+; $0x bytes repeat the previous mode line. Modes are 2/6/7 (title text), 4, 5, 8, 9, A, B, C, D, E, F and a
+; final mode 2 line ($5A00, the prompt); $41 = jump back to the top and wait for VBI. Line counts per mode
+; make each band fill exactly the bytes written by `mixed` (e.g. mode C: 1 + 7 lines x 20 bytes).
 mixdl   .byte $70,$70,$70
-        .byte $42
+        .byte $42       ; ANTIC 2 text, LMS
         .word $4000
         .byte $46
         .word $4200
@@ -361,7 +407,9 @@ mixdl   .byte $70,$70,$70
         .byte $41
         .word mixdl
 
-; print the mode's description and the answer prompt through E:
+; label: print the mode's description (ltab) and the Y/N/S/ESC prompt through direct screen writes: in GR.0
+; at SAVMSC, in other modes into the text window whose address is TXTMSC ($0294/$0295). Clobbers A, X, Y,
+; sp, tw.
 label   ldx mode
         lda mode
         beq lb1
@@ -378,7 +426,7 @@ lb2     lda tw
         sta sp
         lda tw+1
         sta sp+1
-        lda ltab,x
+        lda ltab,x      ; low byte of the string; high bytes are 19 entries further on
         pha
         lda ltab+19,x
         tay
@@ -395,6 +443,10 @@ lb2     lda tw
         ldy #>s_ask
         jmp puts
 
+; summary: results screen (cscreen.inc). One map cell per test (colour from res via smst: green ok, red
+; bad, grey otherwise), its hex/letter id (lbl) printed above the cell, and counts of OK / BAD / SKIPPED.
+; RESULT: FAIL if any test is bad; PASS if none bad and at least one ok; "nothing was tested" otherwise.
+; Waits for a key, restores the OS screen. Clobbers everything.
 summary jsr gs_init
         ldx #0
         lda #1
@@ -474,6 +526,7 @@ sm_k    loc 0,8
         jsr gs_off
         rts
 
+; num: print A (0..255) in decimal followed by two spaces. Clobbers A, X, Y, v16, t1, t3.
 num     sta v16
         lda #0
         sta v16+1
@@ -485,9 +538,14 @@ num     sta v16
 
 ; fine-scroll page: 40-column ANTIC 2 window scrolled diagonally with HSCROL / VSCROL (fine) and LMS changes (coarse).
 ; Two display lists alternate so the hidden one is rebuilt while the other is shown. Any key ends it and is the answer.
+; scroll: build SCRBUF (32 rows x 128 bytes; chars = (column & 63) + (row & 15), & 63, with bit 7 set -> inverse
+; video on every 8th column / 8th row so scrolling is easy to see), two display lists and a status
+; line, then loops once per frame: upd points the visible list's 14 LMS addresses, the other list is
+; installed via SDLSTL ($0230/$0231), HSCROL ($D404) and VSCROL ($D405) get the fine offsets, and
+; xpos/ypos advance. Any key ends it and is returned in A (the user's answer). Clobbers everything.
 SCRBUF  = $6000         ; 32 rows x 128 bytes, pattern repeats every 64 columns and 16 rows
-HSCROL  = $D404
-VSCROL  = $D405
+HSCROL  = $D404         ; ANTIC fine horizontal scroll
+VSCROL  = $D405         ; ANTIC fine vertical scroll
 scroll  lda #0
         sta ptr
         sta sr
@@ -545,18 +603,18 @@ sc_n    inc sr
         sta CH
 sc_l    jsr upd
         lda dp+1
-        sta $0231
+        sta $0231       ; SDLSTH: show the list that upd just filled
         lda #0
-        sta $0230
+        sta $0230       ; SDLSTL
         sta ATRACT
         lda dp+1
-        eor #1
+        eor #1          ; flip between $5C and $5D: the other list is rebuilt next pass
         sta dp+1
         jsr vsync
         sec
         lda #0
         sbc xpos
-        and #3
+        and #3          ; HSCROL runs backwards as xpos grows, so the picture moves left
         sta HSCROL
         lda ypos
         and #7
@@ -580,6 +638,9 @@ sc_l    jsr upd
         pla
         rts
 
+; mkdl: build a scroll display list at page A: 3 x $70 blanks, 14 x $72 (mode 2 + LMS + HSCROL + VSCROL;
+; the LMS addresses are filled in by upd), a $42 status line at $5E00, and $41 JVB back to the list's own
+; address. Clobbers A, X, Y, dp+1.
 mkdl    sta dp+1
         ldy #2
         lda #$70
@@ -614,7 +675,8 @@ mk2     lda #$72
         sta (dp),y
         rts
 
-; point the 14 scroll lines at row (ypos/8)+i, column (xpos+3)/4
+; upd: point the 14 scroll lines at row (ypos/8)+i, column (xpos+3)/4. Address = $6000 + row*128 + col
+; (row/2 into the high byte, bit 0 of row as the $80 half-page offset). Clobbers A, X, Y, ay, scx, nl.
 upd     lda ypos
         lsr
         lsr
@@ -655,10 +717,12 @@ ay      .byte 0
 scx     .byte 0
 nl      .byte 0
 s_sc    .byte 'FINE SCROLL  Y=ok N=bad S=skip ESC=end',0
-scr     .byte 'S:',155
-mmap    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,8,0,0
+scr     .byte 'S:',155  ; device name for OPEN (155 = EOL)
+mmap    .byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,8,0,0      ; test number -> OS graphics mode
+; screen RAM bytes per OS mode 0-15 (what `fill` writes)
 szlo    .byte <960,<400,<200,<200,<400,<800,<1600,<3200,<6400,<6400,<6400,<6400,<800,<400,<3200,<6400
 szhi    .byte >960,>400,>200,>200,>400,>800,>1600,>3200,>6400,>6400,>6400,>6400,>800,>400,>3200,>6400
+; description string pointers: 19 low bytes, then 19 high bytes (tests 17/18 share the empty l17)
 ltab    .byte <l0,<l1,<l2,<l3,<l4,<l5,<l6,<l7,<l8,<l9,<l10,<l11,<l12,<l13,<l14,<l15,<l16,<l17,<l17
         .byte >l0,>l1,>l2,>l3,>l4,>l5,>l6,>l7,>l8,>l9,>l10,>l11,>l12,>l13,>l14,>l15,>l16,>l17,>l17
 l0      .byte 'GR.0  text 40x24, 2 colours (ANTIC 2)',0
@@ -694,9 +758,9 @@ s_pass  .byte 'RESULT: PASS - no bad modes',0
 s_fail  .byte 'RESULT: FAIL - see the red cells',0
 s_none  .byte 'RESULT: nothing was tested',0
 s_any   .byte 'Press any key to exit.',0
-lbl     .byte '0123456789ABCDEFGHI'
-smst    .byte 3,2,1,1
-res     .ds ntest
+lbl     .byte '0123456789ABCDEFGHI'     ; one id char per test, shown above its map cell
+smst    .byte 3,2,1,1   ; res code (0 ok, 1 bad, 2/3 skipped) -> mapset state (green, red, grey, grey)
+res     .ds ntest       ; per-test result codes
 c_ok    .byte 0
 c_bad   .byte 0
 c_sk    .byte 0

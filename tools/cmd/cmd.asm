@@ -1,10 +1,20 @@
 ; cmd.asm - CMD, a DOS-style command shell for Atari DOS 2.x, MyDOS, SpartaDOS and BW-DOS.
 ; Plug-ins (NAME.CMX, built with org PLUG) call the API table below; see README.md.
+;
+; Build: single source, everything is pulled in with icl at the end (cmds\*.asm, lib\*.asm).
+; Memory map: code at CODE ($3800) up to DB (data block, $6800 here; 'ert *>DB' guards overflow),
+;   IOBUF $7000-$7FFF, LONGNAME cache LNMEM $8000, plug-ins loaded at PLUG ($9000);
+;   page 6 ($0600) holds the binary loader, $0480 the command hand-off line (lib\hand.asm).
+; Command convention: a command is entered with ARG pointing at its arguments (read them with
+;   nexttok -> TOK) and returns carry clear = OK, carry set = error with the CIO code in V_ERR
+;   (dispatch then prints 'ERROR n'). Commands are looked up in cmdtab; unknown names go to runext.
 DB      = $6800
         icl 'lib\sys.asm'
         org CODE
         jmp start
         .byte API_VER
+; Plug-in API table: fixed-order jump table, the order is part of the ABI (plug-ins JSR to
+; api+3*n). Do not reorder. Argument conventions are those of the routines in lib\io.asm.
 api:    jmp putc
         jmp putnl
         jmp pstr
@@ -21,6 +31,8 @@ api:    jmp putc
         jmp getkey
         jmp fnsio
 
+; start-up: open K:, detect DOS, reset state, print banner, then run AUTOEXEC.BAT if present
+; (tryext appends .BAT to the spec built from TOK = 'AUTOEXEC'; N set = file not found).
 start:  jsr ioinit
         jsr dosdet
         jsr cwdinit
@@ -53,6 +65,7 @@ st_a:   lda s_auto,x
         jsr tryext
         bmi loop
         jsr run_bat
+; main loop: print the prompt (PROMPT text, or CWD with a trailing '>'), read a line, run it
 loop:   lda V_QUIT
         bne bye
         jsr putnl
@@ -76,12 +89,13 @@ lp_z:   dey
         beq lp_g
         lda #'>'
         jsr putc
-lp_g:   jsr getlinet
+lp_g:   jsr getlinet            ; line editor: OS editor or Tab-completing one (cmds\tab.asm)
         jsr runline
         jmp loop
-bye:    jmp (DOSVEC)
+bye:    jmp (DOSVEC)            ; EXIT: return to DOS
 s_auto: .byte 'AUTOEXEC',0
 
+; execute the line in LINE (also used by batch files): ARG = start of line, first token = command
 runline:
         lda #<LINE
         sta ARG
@@ -93,6 +107,7 @@ runline:
         jsr dispatch
 rl_r:   rts
 
+; upper-case TOK in place
 upcmd:  ldx #0
 uc_l:   lda TOK,x
         beq uc_d
@@ -102,6 +117,10 @@ uc_l:   lda TOK,x
         bne uc_l
 uc_d:   rts
 
+; command-table dispatch: T0 walks cmdtab, whose entries are NUL-terminated name + 2-byte handler
+; address; the table ends with a 0 name byte. A match copies the handler into jmpv and calls it
+; via dojmp (JMP (jmpv)) so the handler's RTS returns here. Carry set from the handler -> err.
+; No match -> runext (try as a program). Several names may share one handler (aliases).
 dispatch:
         lda #<cmdtab
         sta T0

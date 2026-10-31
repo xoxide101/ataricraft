@@ -1,5 +1,12 @@
 ; run.asm - running programs (.COM), plug-ins (.CMX) and scripts (.BAT).
+;
+; Part of CMD.COM (included from cmd.asm). Programs are run through the 256-byte loader
+; (loader.asm) which is copied to $0600 so it survives programs that overwrite CMD.
+; Interface with the loader: the file is open on IOCB 1 ($10), $0603 (lmode) = 0 run / 1 load only.
+; Hand-off line for tools: $0480 (flag) / $0481.. (text), see lib\hand.asm.
+; Return convention for commands: carry clear = OK, carry set = failure (V_ERR holds the code).
 
+; copy the loader image (embedded from bin\loader.bin) to $0600
 copyldr:
         ldx #0
 cl_l:   lda ldrimg,x
@@ -19,12 +26,13 @@ cmd_x:  jsr needtok
         bmi x_fail
         jsr copyldr
         lda #0
-        sta $0603
+        sta $0603               ; lmode = 0: run, never returns to CMD
         jmp $0600
 x_fail: sec
         rts
 
-; try to open FSPEC + suffix (A/X = suffix, EOL ended). Returns N set when it does not exist.
+; try to open FSPEC + suffix (A/X = suffix lo/hi, EOL ended). Returns N set when it does not exist.
+; V_A2 remembers the original spec length so unext can cut the suffix off again.
 tryext: sta T0
         stx T0+1
         ldy #0
@@ -49,7 +57,7 @@ te_c:   sty N3
         ldx #$10
         jsr fopen1
         rts
-unext:  ldy V_A2
+unext:  ldy V_A2                ; undo tryext: put the EOL back where the suffix began
         lda #EOL
         sta FSPEC,y
         rts
@@ -58,6 +66,10 @@ s_cmx:  .byte '.CMX',EOL
 s_com:  .byte '.COM',EOL
 s_bat:  .byte '.BAT',EOL
 
+; run the program named in TOK. With an extension (.BAT / .CMX / anything else = .COM) it is
+; opened directly; without one the suffixes .CMX, .COM, .BAT are tried in that order.
+; N4/N5 = the two characters after the dot (only the first letter, B, and the second, M, are tested).
+; Prints BAD COMMAND when nothing is found.
 runext: jsr mkspec
         ldx #0
 re_d:   lda TOK,x
@@ -102,7 +114,8 @@ re_bad: jsr putsi
         clc
         rts
 
-; pass the rest of the command line to the program (see lib\hand.asm)
+; pass the rest of the command line to the program (see lib\hand.asm). Copies up to ~100 bytes
+; of the remaining line to $0481 and sets the $A5 "line waiting" flag at $0480.
 sethand:
         lda #0
         sta $0480
@@ -122,6 +135,7 @@ sh_d:   lda #$A5
         sta $0480
 sh_r:   rts
 
+; .COM: run through the loader (mode 0); control does not come back to CMD
 run_com:
         jsr sethand
         jsr copyldr
@@ -129,6 +143,8 @@ run_com:
         sta $0603
         jmp $0600
 
+; .CMX plug-in: load only (mode 1), then call its RUNAD through dojmp (JMP (jmpv), defined in
+; cmd.asm) so the plug-in can return to CMD with RTS.
 run_cmx:
         jsr copyldr
         lda #1
@@ -146,7 +162,8 @@ run_cmx:
 rc_x:   clc
         rts
 
-; script: the file is open on IOCB 1, move it to IOCB 5 so commands can use the others
+; script: the file is open on IOCB 1; it is closed and reopened on IOCB 5 ($50) so commands can
+; use the other IOCBs. Each line is echoed and run via runline. Nesting is refused (V_BAT).
 run_bat:
         ldx #$10
         jsr fclose

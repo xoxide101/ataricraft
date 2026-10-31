@@ -2,23 +2,34 @@
 ; Type a sum and press Return:  2+3*4   (1+2)^3   SQR(16)   -2^2   ANS/7
 ; + - * / ^ and ( ) work, with the usual order.  ANS = last answer, PI, SQR LN LOG EXP ABS.
 ; Empty line or Q gives back the DOS.  Uses the OS floating point ROM (about 9 digits).
+;
+; Structure: main loop reads a line with CIO get-record into ibuf, then a recursive-descent
+;   parser (expr/term/pow/unary/prim) evaluates it directly with the OS floating point ROM.
+;   Each binary operator: left result is pushed on a software stack (stk, 6 bytes per FP
+;   number, max 15 deep), the right operand is parsed, swp restores left into FR0 and right
+;   into FR1, and the FP routine is called. FP routines return carry set on error.
+; FP numbers are 6-byte BCD floats. ROM entry points are listed below (FR0=$D4 and FR1=$E0
+;   are the OS floating point registers; INBUFF/CIX are the text input pointer/index for AFP).
+; Variables: ip = parse index into ibuf, sph = stack height in bytes, err = error code
+;   (1 FP error/overflow, 2 syntax/unknown name, 3 math domain, 4 trailing junk), idx/nn =
+;   temporaries. FP storage: ans (last answer), sa/sx (sqrt), pb/pe/rs (power), pic (PI), half.
         icl 'lib\sys.asm'
 
-AFP     = $D800
-FASC    = $D8E6
-IFP     = $D9AA
-FPI     = $D9D2
-FSUB    = $DA60
-FADD    = $DA66
-FMUL    = $DADB
-FDIV    = $DB28
-FLD0R   = $DD89
-FLD1R   = $DD98
-FST0R   = $DDA7
-FMOVE   = $DDB6
-EXPF    = $DDC0
-LOGF    = $DECD
-LOG10F  = $DED1
+AFP     = $D800         ; ASCII at (INBUFF)+CIX -> FR0
+FASC    = $D8E6         ; FR0 -> ASCII at (INBUFF), last char has bit 7 set
+IFP     = $D9AA         ; 16-bit integer in FR0/FR0+1 -> FP
+FPI     = $D9D2         ; FP in FR0 -> integer in FR0/FR0+1
+FSUB    = $DA60         ; FR0 = FR0 - FR1
+FADD    = $DA66         ; FR0 = FR0 + FR1
+FMUL    = $DADB         ; FR0 = FR0 * FR1
+FDIV    = $DB28         ; FR0 = FR0 / FR1
+FLD0R   = $DD89         ; load FR0 from address X(lo)/Y(hi)
+FLD1R   = $DD98         ; load FR1 from address X/Y
+FST0R   = $DDA7         ; store FR0 to address X/Y
+FMOVE   = $DDB6         ; FR1 = FR0
+EXPF    = $DDC0         ; FR0 = e^FR0
+LOGF    = $DECD         ; FR0 = ln(FR0)
+LOG10F  = $DED1         ; FR0 = log10(FR0)
 FR0     = $D4
 FR1     = $E0
 CIX     = $F2
@@ -31,6 +42,9 @@ idx     = $83
 nn      = $84
 sptr    = $86
 
+; Startup: print banner (inline string), clear ANS to 0. main: prompt, read a line (IOCB 0,
+;   command 5, max 62 chars), skip leading blanks and any '>' (allows pasting prompts),
+;   quit on EOL or Q, else parse; leftover text after the expression is error 4.
         org CODE
 start   jsr putsi
         .byte 'CALC  type a sum, Return = answer',EOL
@@ -90,6 +104,9 @@ bad     jsr putsi
 quit    jmp (DOSVEC)
 
 ; ---- parser: expr = term {+|- term}, term = pow {*|/ pow}, pow = unary [^ pow] ----
+; Each routine leaves its value in FR0 and sets err on failure. They use peek to look at
+;   the next non-blank character. '^' is right-associative; unary minus binds looser than
+;   '^' (so -2^2 = -4). Clobbers A,X,Y, FR0/FR1.
 expr    jsr term
 ex1     jsr peek
         cmp #'+'
@@ -155,11 +172,12 @@ unary   jsr peek
 un1     inc ip
         jsr pow
         lda FR0
-        beq un9
-        eor #$80
+        beq un9                 ; zero stays +0
+        eor #$80                ; flip FP sign bit
         sta FR0
 un9     rts
 
+; prim: '(' expr ')' | number (AFP parses at ibuf+CIX) | name (word). Errors -> err=2.
 prim    jsr peek
         cmp #'('
         bne pm1
@@ -198,6 +216,9 @@ num     lda #<ibuf
         rts
 
 ; name: ANS PI SQR LN LOG EXP ABS
+; word: collect up to 8 letters into wbuf (zero terminated), look it up in ftab (list of
+;   zero-terminated names, end marked by an extra 0); the match index idx selects the action:
+;   0 ANS, 1 PI (constants), 2 SQR, 3 LN, 4 LOG, 5 EXP, 6 ABS (functions need "(" expr ")").
 word    ldx #0
         ldy ip
 wd1     lda ibuf,y
@@ -268,7 +289,7 @@ m2      pha
         cmp #5
         beq fex
         lda FR0
-        and #$7F
+        and #$7F                ; ABS: clear the sign bit
         sta FR0
         rts
 arge    pla
@@ -282,7 +303,7 @@ flg     jsr LOG10F
 fex     jsr EXPF
         jmp chk
 
-; square root: LN guess, then three Newton steps
+; square root: LN guess, then three Newton steps  (x = EXP(LN(a)/2); x = (a/x + x)/2, x3)
 fsqr    lda FR0
         beq sq9
         bmi sqerr
@@ -325,6 +346,9 @@ sqerr   lda #3
         rts
 
 ; FR0 = base, FR1 = exponent.  Whole exponents up to 255 multiply out, others use EXP(y*LN x)
+;   (so a negative base with a non-whole exponent is error 3). A zero exponent gives 1, a
+;   zero base gives 0. Whole-number test: FPI then IFP round trip must equal |exponent|.
+;   A negative whole exponent is computed as 1/(base^|y|).
 dopow   ldx #<pb
         ldy #>pb
         jsr FST0R
@@ -412,11 +436,13 @@ one     lda #1
         jmp IFP
 
 ; ---- helpers ----
+; chk: after an FP call, carry set -> err=1 (overflow / domain).
 chk     bcc ck9
         lda #1
         sta err
 ck9     rts
 
+; peek: skip blanks at ip, return next char in A (not consumed). fold: upper-case A.
 peek    ldy ip
 pk1     lda ibuf,y
         cmp #' '
@@ -433,6 +459,7 @@ fold    cmp #'a'
         and #$DF
 fo9     rts
 
+; push: save FR0 (6 bytes) on the software stack stk; stack full (>=90 bytes) -> err=1.
 push    ldx sph
         cpx #90
         bcc ph1
@@ -467,7 +494,8 @@ sw1     lda stk,x
         bcc sw1
 sw9     rts
 
-; print FR0 and keep it as ANS
+; print FR0 and keep it as ANS. FASC leaves the text at (INBUFF) with bit 7 set on the last
+;   character; it is copied to obuf (bit stripped) and a trailing '.' (integer result) dropped.
 show    ldx #<ans
         ldy #>ans
         jsr FST0R
@@ -503,6 +531,7 @@ sh4     sty idx
 sh5     lda #EOL
         jmp putc
 
+; putc: print char A via CIO put-char (command 11, length 0) on IOCB 0.
 putc    ldx #0
         stx ICBLL
         stx ICBLH
@@ -511,6 +540,8 @@ putc    ldx #0
         ldx #0
         jmp CIOV
 
+; putsi: print the zero-terminated string stored right after the JSR, then resume after it
+;   (pops the return address, walks the string, pushes the address of its final 0).
 putsi   pla
         sta sptr
         pla
@@ -530,6 +561,8 @@ pi3     lda sptr+1
         pha
         rts
 
+; Data. pic = PI and half = 0.5 as 6-byte BCD floats (exponent byte $40 = 100^0, $3F = 100^-1;
+;   mantissa as BCD digit pairs: 03.14159265 and 50 x 100^-1).
 ftab    .byte 'ANS',0,'PI',0,'SQR',0,'LN',0,'LOG',0,'EXP',0,'ABS',0,0
 pic     .byte $40,$03,$14,$15,$92,$65
 half    .byte $3F,$50,0,0,0,0

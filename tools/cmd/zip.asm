@@ -4,6 +4,30 @@
 ; web/js/archives.js -> 7-Zip) for those. Reads the archive front to back (local headers), so it needs no seeking.
 ; Window: back references reach 14336 bytes ($8000-$B7FF ring); farther ones stop with "WINDOW TOO SMALL".
 ; At the ZIP> prompt: L ZIPFILE | X ZIPFILE [DEST] [MEMBER] | T ZIPFILE [MEMBER]   (blank line = exit)
+;
+; Usage notes
+;   L  list: one line per member (8.3 name, size, packed size, method, date).
+;   X  extract: DEST is a drive/folder prefix (default D:); MEMBER limits it to one 8.3 name.
+;   T  test: decode and check the CRC without writing any file.
+;   Q (or a blank line) leaves through DOSVEC. Archive names without ":" get "D:" prepended.
+;   Long and folder names in the archive are folded to upper case 8.3 (conv83, uniq); folder entries are skipped.
+;
+; ZIP layout handled (little endian), local file header, 30 bytes, kept in HDR:
+;   +0 'PK',3,4  +4 version  +6 flags (bit0 encrypted, bit3 sizes follow in a data descriptor)
+;   +8 method  +10 time  +12 date  +14 CRC32  +18 packed size  +22 unpacked size
+;   +26 name length  +28 extra field length, then the name, the extra field and the packed data.
+; The central directory is never read; the walk ends at the first record that is not 'PK',3,4.
+; With flag bit 3 the real CRC and sizes come from the descriptor after the data (optional 'PK',7,8 first).
+;
+; Structure: prompt/command parser -> members (walk) -> domember (decide) -> procdata (stored or inflate)
+;   -> outb (window + CRC32 + output buffer).  inflate = block loop (stored/fixed/dynamic), build (canonical
+;   Huffman tables), decode (bit-by-bit canonical decode) and codes (LZ77 literal/length+distance expansion).
+;
+; Memory map: code at CODE ($3800, lib\sys.asm) up to the tables; $6400-$67FF CRC32 tables (one page per byte);
+;   $6800-$6D7F Huffman counts/symbols; $6F00 code lengths; $7100 input buffer (255); $7200 output buffer (256);
+;   $7300 HDR; $7340 raw name; $7400 variables; $80-$B7 pages = 14336-byte sliding window (ring, wp/sp wrap).
+; Zero page: $B0 wp (window write), $B2 sp (match source), $B4-$BA table pointers, $BC ex (temp pointer),
+;   $C0 lp (code-length source), $C2 q, $C4 lq (LENS write), $C6 lend.  IOCB 2 ($20) = archive, IOCB 3 ($30) = output.
         icl 'lib\sys.asm'
 
 CRT0    = $6400         ; CRC32 tables, one page per byte of the 32-bit entry
@@ -110,11 +134,14 @@ q       = $C2
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- start: build the CRC tables, print the banner, fall into the command loop ----
 start:  jsr crctab
         jsr putsi
         .byte 'ZIP 0.1  PKZIP LISTER/EXTRACTOR',EOL
         .byte 'L ZIP | X ZIP [DEST] [MEMBER] | T ZIP',EOL
         .byte 'STORED+DEFLATE ONLY. Q QUITS',EOL,0
+; ---- command loop: read a line, pick the mode (L=0, X=1 extract, T=2 test) into 'mode', then
+; parse ARCHIVE [DEST] [MEMBER] into FSPEC / DEST / MEMB. 'psp' keeps the stack pointer so abort can unwind.
 prompt: tsx
         stx psp
         jsr putnl
@@ -153,6 +180,7 @@ ck_l:   lda TOK,x
         beq ck_ye
         inx
         bne ck_l
+; archive name has no ':' -> prefix "D:"; DEST defaults to "D:" and MEMB to empty (= all members)
 ck_no:  lda #<FSPEC
         sta T1
         lda #>FSPEC
@@ -197,7 +225,7 @@ pm_m:   jsr nexttok
         sta T1+1
         ldy #0
         jsr cpt
-pm_go:  lda #4
+pm_go:  lda #4          ; OPEN for input on IOCB 2
         ldx #$20
         jsr fopen1
         bpl pm_ok
@@ -221,13 +249,15 @@ pm_ok:  lda #0
         .byte ' FILE(S)',EOL,0
         jmp prompt
 
+; ---- bye: close both files and return to DOS ----
 bye:    ldx #$20
         jsr fclose
         ldx #$30
         jsr fclose
         jmp (DOSVEC)
 
-; stop everything that is open and go back to the prompt
+; ---- abort: close IOCB 2 (archive) and IOCB 3 (output), restore the stack saved at the prompt and re-prompt.
+; Used by every fatal error path; the error text has already been printed.
 abort:  ldx #$30
         jsr fclose
         ldx #$20
@@ -235,6 +265,7 @@ abort:  ldx #$30
         ldx psp
         txs
         jmp prompt
+; ---- fatal error messages: print text then abort ----
 ferr_eof:
         jsr putsi
         .byte EOL,'UNEXPECTED END OF ARCHIVE',EOL,0
@@ -261,7 +292,10 @@ cp2:    lda #EOL
         sta (T1),y
         rts
 
-; ---- CRC32 tables (poly $EDB88320) ----
+; ---- CRC32 tables (poly $EDB88320, reflected) ----
+; Builds the 256 entries one byte-column per page: CRT0 = bits 0-7 ... CRT3 = bits 24-31 of each entry.
+; For each X: shift the 32-bit value (lenh:lenl:th:tl) right 8 times, XORing the polynomial ($EDB88320)
+; whenever a 1 bit falls out. Clobbers A,X,Y,tl,th,lenl,lenh.
 crctab: ldx #0
 ct_l:   stx tl
         lda #0
@@ -301,6 +335,9 @@ ct_n:   dey
         rts
 
 ; A = byte -> running CRC32
+; Table-driven update: index = (crc xor byte) & $FF, new crc = (crc >> 8) xor table[index]. The right
+; shift by 8 is done by moving c1->c0, c2->c1, c3->c2. The CRC is kept un-inverted ($FFFFFFFF start);
+; the final value is complemented when compared. Clobbers A,X.
 crcb:   eor c0
         tax
         lda c1
@@ -317,6 +354,8 @@ crcb:   eor c0
         rts
 
 ; ---- input ----
+; fill: read up to 255 bytes of the archive into INBUF. Out: ilen = count read, ipos = 0,
+; carry set if nothing was read (EOF). Clobbers A,X.
 fill:   lda #<INBUF
         sta V_BPL
         lda #>INBUF
@@ -351,11 +390,13 @@ gb_ok:  lda INBUF,x
         clc
 gb_r:   rts
 
-; same, but the end of the file is an error
+; same, but the end of the file is an error (jumps to ferr_eof, which aborts). Clobbers A,X.
 getbyt: jsr getbyte
         jcs ferr_eof
         rts
 
+; Bit reader: deflate bits are taken LSB first from bb; bn = bits left in bb.
+; Out: A = next bit (0/1), Z flag set if 0. Clobbers A.
 getbit: lda bn
         bne gt_g
         jsr getbyt
@@ -369,6 +410,7 @@ gt_g:   dec bn
         rts
 
 ; X = number of bits (0-13) -> vl/vh, first bit is the least significant
+; Loops getbit, ORing each 1 bit into vl/vh at the mask ml/mh (1,2,4,...). Clobbers A,gcnt,ml,mh.
 getbits:
         stx gcnt
         lda #0
@@ -395,6 +437,8 @@ gb0:    asl ml
 gbd:    rts
 
 ; skip s0..s3 archive bytes
+; Reads and discards a 32-bit count (s3:s2:s1:s0, counted down to 0 with borrow). The file is read
+; sequentially, so skipping means reading. Clobbers A,X,s0-s3.
 skip32: lda s0
         ora s1
         ora s2
@@ -415,6 +459,8 @@ sk_a:   dec s0
 sk_d:   rts
 
 ; ---- output: A = byte into the window, the CRC and (when writing) the file ----
+; Stores the byte at wp (the window is a ring of pages WIN..WINEND-1, wp wraps back to WIN), updates the CRC,
+; and if wr<>0 appends it to OUTBUF, flushing 256 bytes to the file when opos wraps to 0. Clobbers A,X,Y,ob.
 outb:   sta ob
         jsr crcb
         ldy #0
@@ -457,7 +503,11 @@ wr_e:   jsr putsi
         jmp abort
 
 ; ---- Huffman tables ----
+; Three tables share the same layout: counts per code length (16 low bytes at TCn, 16 high bytes at TCn+16),
+; and symbols sorted by code (low byte / high byte arrays). 0 = literal/length, 1 = distance, 2 = code lengths.
+; Tables 1 and 2 have symbols < 256, so their high bytes go to the SYMZ scratch sink.
 ; X = table number -> pcl/pch/psl/psh
+; Out: pcl/pch = counts low/high, psl/psh = symbol low/high arrays. Clobbers A.
 settab: lda tcl,x
         sta pcl
         clc
@@ -483,6 +533,10 @@ thl:    .byte <SYMH0,<SYMZ,<SYMZ
 thh:    .byte >SYMH0,>SYMZ,>SYMZ
 
 ; build table X from nl/nh lengths at lp
+; Canonical Huffman construction (as in zlib's puff): pass 1 counts how many symbols have each length
+; (p1 loop); ofl turns the counts into the first slot of each length in the sorted symbol list; pass 2 (p2)
+; walks the lengths again and drops symbol number il/ih into the next free slot of its length
+; (length 0 = unused symbol). In: lp = lengths (one byte each), nl/nh = count. Clobbers A,X,Y,q,kl,kh,il,ih,tl,th,ex.
 build:  jsr settab
         ldy #15
         lda #0
@@ -592,6 +646,11 @@ p2k:    dec kl
 p2d:    rts
 
 ; X = table -> symbol in vl/vh
+; Canonical decode, one bit at a time (puff style). cdl/cdh = code so far, fl/fh = first code of the current
+; length, il/ih = index of the first symbol of that length, dlen = current length (1..15). For each length the
+; code is compared against first+count; if smaller the symbol is sym[index + (code - first)]. Else the
+; first code doubles, the code shifts left and the next bit is read. More than 15 bits -> BAD DATA.
+; Clobbers A,Y,tl,th,kl,kh,ex and the decode state above.
 decode: jsr settab
         lda #0
         sta cdl
@@ -678,6 +737,9 @@ dc_f:   sec
         rts
 
 ; ---- inflate ----
+; Decodes one deflate stream (RFC 1951) from the archive: a loop over blocks. Each block starts with a
+; final-block bit (fin) and a 2-bit type: 0 stored, 1 fixed Huffman, 2 dynamic Huffman, 3 = error.
+; Output goes through outb. Returns with carry clear after the final block. Clobbers everything.
 inflate:
         lda #0
         sta bn
@@ -692,6 +754,8 @@ blk:    jsr getbit
         cmp #2
         jeq dynamic
         jmp ferr_data
+; fixed Huffman block: literal/length lengths 0-143 = 8, 144-255 = 9 (done by the fx1 loop for the first 256),
+; 256-279 = 7, 280-287 = 8 (fx4 loop); distance table = 30 codes of 5 bits. Then decode with 'codes'.
 fixed:  ldx #0
         lda #<LENS
         sta lq
@@ -740,6 +804,11 @@ fx6:    sta LENS,y
         jsr build
         jmp codes
 
+; dynamic Huffman block: read HLIT, HDIST, HCLEN. hlitl = HLIT+1 (the literal/length count is 256+hlitl, so
+; nh=1 is used with it); hdist = HDIST+1; hclen = HCLEN+4.
+; Read HCLEN 3-bit code-length-code lengths in the permuted order clord into LENS[0..18]; build table 2 from them;
+; then decode hlitl+256+hdist code lengths with table 2 into LENS (16 = repeat previous 3-6x, 17 = zeros 3-10x,
+; 18 = zeros 11-138x); finally build table 0 (literal/length) and table 1 (distance) from LENS.
 dynamic:
         ldx #5
         jsr getbits
@@ -879,6 +948,7 @@ dy9:    lda #<LENS
         jmp codes
 
 ; A = length value -> next LENS slot (X is kept)
+; Also remembers it in prevv for code 16 (repeat previous length). Clobbers Y.
 putlen: sta prevv
         ldy #0
         sta (lq),y
@@ -887,6 +957,12 @@ putlen: sta prevv
         inc lq+1
 pl_r:   rts
 
+; ---- codes: the LZ77 symbol loop of a Huffman block ----
+; Decode a literal/length symbol (table 0): < 256 literal -> outb; 256 end of block; 257-285 length: base from
+; lbl/lbh plus 'lext' extra bits. Then a distance symbol (table 1): base from dbl/dbh plus 'dext' extra bits.
+; Distances above 14336 ($3800) cannot be served by the window -> WINDOW TOO SMALL. The match source sp = wp -
+; distance, wrapped by +$3800 (the window size) when it falls below page WIN; bytes are copied one at a time
+; through outb so overlapping matches (distance < length) work. Tables here are indexed by symbol-257 / symbol.
 codes:  ldx #0
         jsr decode
         lda vh
@@ -894,9 +970,9 @@ codes:  ldx #0
         lda vl
         jsr outb
         jmp codes
-cd_s:   lda vl
+cd_s:   lda vl          ; 256 = end of block
         jeq cd_end
-        cmp #30
+        cmp #30         ; symbol-256 = 1..29 are valid lengths (257-285); 286/287 are invalid
         jcs ferr_data
         sec
         sbc #1
@@ -931,7 +1007,7 @@ cd_s:   lda vl
         lda dbh,x
         adc vh
         sta dsh
-        lda dsh
+        lda dsh         ; distance must be <= $3800 (window size); $3800 itself is allowed
         cmp #$38
         bcc cd_ok
         bne cd_w
@@ -948,7 +1024,7 @@ cd_ok:  sec
         cmp #WIN
         bcs cd_c
         clc
-        adc #$38
+        adc #$38        ; wrap: add the window size ($38 pages)
         sta sp+1
 cd_c:   ldy #0
         lda (sp),y
@@ -973,6 +1049,8 @@ cd_end: lda fin
         jeq blk
         rts
 
+; stored block: discard the partial byte (bn=0), read LEN (lenl/lenh), skip NLEN (2 bytes, not verified),
+; then copy LEN bytes through outb.
 stored: lda #0
         sta bn
         jsr getbyt
@@ -995,6 +1073,9 @@ st_d:   lda fin
         jeq blk
         rts
 
+; Deflate tables. clord = order in which code-length code lengths are stored. lbl/lbh = base length for
+; symbols 257-285 (low/high; 258 = $102), lext = extra bits (0 for 285). dbl/dbh = base distance for codes
+; 0-29, dext = extra bits (0-13). Distance codes 30 and 31 are rejected in 'codes'.
 clord:  .byte 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15
 lbl:    .byte 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,2
 lbh:    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
@@ -1005,6 +1086,7 @@ dext:   .byte 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,1
 
 ; ---- archive walk ----
 ; read the next local header into HDR; carry set at the end of the entries
+; (EOF, short header or signature other than 'PK',3,4 -- e.g. the central directory). Clobbers A,Y,tl.
 rdlh:   ldy #0
 rl_l:   sty tl
         jsr getbyte
@@ -1031,6 +1113,9 @@ rl_l:   sty tl
 rl_e:   sec
         rts
 
+; members: per entry - read header, read the name (HDR+26 bytes, only the first 120 kept in NAMEF), skip the
+; extra field (HDR+28 bytes), make the 8.3 name, de-duplicate it (lib\uniq.asm) and hand the entry to domember.
+; Folder entries (empty NAMEB) are passed over without touching their data. nfl/nfh counts files processed.
 members:
 mem:    jsr rdlh
         jcs mem_d
@@ -1074,6 +1159,9 @@ rn_d:   lda HDR+28
 mem_d:  rts
 
 ; NAMEF (nf chars) -> 8.3 name in NAMEB; NAMEB[0]=0 for a folder entry
+; Pass 1 finds st = index after the last '/' or '\' and ld = index after the last '.' in that part (0 if none).
+; Then up to 8 name chars (stem = st..be) and up to 3 extension chars are copied through fixc. A name ending
+; in '/' leaves an empty stem, so NAMEB stays empty. Clobbers A,X,Y,st,ld,be,ec.
 conv83: ldy #0
         sty st
         sty ld
@@ -1184,6 +1272,11 @@ mq_y:   clc
         rts
 
 ; process or skip the member whose header is in HDR
+; want=1 only when mode is X/T, the name matches the filter and the encrypted flag (bit 0) is clear.
+; Unwanted entries are skipped by reading HDR+18 (packed size) bytes; if bit 3 is set the size is unknown, so a
+; deflate entry is decoded with wr=0 to find its end (other methods cannot be skipped -> abort).
+; Wanted entries: in X mode the output file DEST+NAMEB is opened on IOCB 3; then procdata, flush, CRC check
+; against HDR+14 (OK / CRC ERROR). An unsupported method is reported and its packed data skipped.
 domember:
         lda #0
         sta want
@@ -1245,7 +1338,7 @@ dm_f:   lda NAMEB,x
         bne dm_f
 dm_g:   lda #EOL
         sta FSPEC2,y
-        lda #8
+        lda #8          ; OPEN for output on IOCB 3 (creates/overwrites)
         ldx #$30
         jsr fopen2
         bpl dm_w
@@ -1292,7 +1385,7 @@ dm_chk: lda wr
         jsr wrout
 dm_fc:  ldx #$30
         jsr fclose
-dm_v:   lda c0
+dm_v:   lda c0          ; stored CRC is the complement of the running value
         eor #$FF
         cmp HDR+14
         bne dm_bad
@@ -1315,6 +1408,7 @@ dm_bad: jsr putsi
         .byte 'CRC ERROR',EOL,0
         rts
 
+; print 'X' (extracting) or 'T' (testing) before the name
 putc_mode:
         lda mode
         cmp #1
@@ -1333,7 +1427,11 @@ pn1:    lda NAMEB,y
         bne pn1
 pn2:    rts
 
-; run the member's data through the decoder; carry set when the method is not supported
+; ---- run the member's data through the decoder; carry set when the method is not supported ----
+; Method 0 (stored): copy the unpacked size (HDR+22) bytes through outb; refused with carry set when a data
+; descriptor is used (the size is unknown). Method 8: inflate, then if flag bit 3 is set read the data
+; descriptor ([ 'PK',7,8 ] CRC32, packed size, unpacked size) into HDR+14/18/22 so the CRC check and listing
+; see the real values. Initialises the CRC to $FFFFFFFF, the window pointer to WIN, bn and opos to 0.
 procdata:
         lda #$FF
         sta c0
@@ -1429,6 +1527,7 @@ pd8d:   clc
         rts
 
 ; ---- listing ----
+; A = ZIP method number -> 4-character name via mnum/mtxt (unknown methods print '????'). Clobbers A,X,Y.
 mname:  ldx #0
 mn_l:   cmp mnum,x
         beq mn_f
@@ -1450,6 +1549,9 @@ mn_p:   lda mtxt,x
 mnum:   .byte 0,1,2,6,8,9,12,14
 mtxt:   .byte 'STORSHRKREDUIMPLDEFLDF64BZ2 LZMA????'
 
+; one listing line: name padded to 12, unpacked size, packed size (8 digits each minus the first), method,
+; then the date. DOS date word at HDR+12: day = bits 0-4, month = bits 5-8 (the high bit comes from HDR+13 bit 0).
+; Year and time are not printed. Output is MM-DD.
 listline:
         ldy #0
 ll_n:   lda NAMEB,y
@@ -1505,6 +1607,7 @@ ll_c:   lda HDR+18,x
         jsr put2d
         jmp putnl
 
+; A (0-99) -> two decimal digits
 put2d:  ldx #0
 p2_l:   cmp #10
         bcc p2_d
@@ -1520,6 +1623,8 @@ p2_d:   pha
         jmp putc
 
 ; dv (32 bit) -> 8 digits in dig, leading zeros turned into spaces
+; Repeated subtraction of the powers of ten in table pw (10^7 .. 1); dv keeps the remainder (tv = scratch).
+; Clobbers A,X,Y,kl,kh,tv.
 dec32:  ldy #0
 d3_p:   sty kl
         lda #0
@@ -1567,6 +1672,7 @@ d3_z:   lda dig,y
         iny
         bne d3_z
 d3_r:   rts
+; print dig[1..7] (the top digit is dropped, so sizes above 9,999,999 would show truncated)
 putdig: ldy #1
 pg_l:   lda dig,y
         jsr putc

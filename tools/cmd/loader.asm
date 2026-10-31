@@ -1,6 +1,12 @@
 ; loader.asm - tiny binary loader copied to page 6 so it survives a program that overwrites CMD.
 ; $0603 = mode: 0 = run the program (then back to DOS), 1 = load only and return (plug-ins).
 ; The file is already open on IOCB 1 ($10).
+; Built to bin\loader.bin (exactly 256 bytes, padded) and embedded in CMD by cmds\run.asm
+; (copyldr copies it to $0600; entry = $0600 = jmp ldr).
+; Parses the standard Atari DOS binary load format: optional $FFFF header, then segments of
+; start word, end word, data. After each segment INITAD is called if the segment set it;
+; at the end RUNAD is jumped to (mode 0) or the loader RTSs (mode 1). If RUNAD is 0, DOSVEC is used.
+; Shared locations: lmode ($0603), lbuf = last 2-byte header word, lstart/llen = segment start/length.
         icl 'lib\sys.asm'
         org $0600
         jmp ldr
@@ -9,6 +15,7 @@ lbuf:   .word 0
 lstart: .word 0
 llen:   .word 0
 
+; read 2 bytes from IOCB 1 into lbuf; returns Y/N = CIO status (N set on EOF/error)
 rd2:    lda #<lbuf
         sta ICBAL+$10
         lda #>lbuf
@@ -24,16 +31,17 @@ rd2:    lda #<lbuf
         tya
         rts
 
+; main loop: clear RUNAD/INITAD, then loop over segments
 ldr:    lda #0
         sta RUNAD
         sta RUNAD+1
         sta INITAD
         sta INITAD+1
 lseg:   jsr rd2
-        bmi ldone
+        bmi ldone               ; EOF = no more segments
         lda lbuf
         and lbuf+1
-        cmp #$FF
+        cmp #$FF                ; $FFFF header word: skip and read the real start address
         beq lseg
         lda lbuf
         sta lstart
@@ -41,7 +49,7 @@ lseg:   jsr rd2
         sta lstart+1
         jsr rd2
         bmi ldone
-        sec
+        sec                     ; length = end - start + 1
         lda lbuf
         sbc lstart
         sta llen
@@ -71,8 +79,8 @@ lrd:    lda lstart
         sta INITAD
         sta INITAD+1
         beq lseg
-lcall:  jmp (INITAD)
-ldone:  lda #12
+lcall:  jmp (INITAD)            ; JSR here = indirect call of the segment's init routine
+ldone:  lda #12                 ; CIO close
         sta ICCOM+$10
         ldx #$10
         jsr CIOV

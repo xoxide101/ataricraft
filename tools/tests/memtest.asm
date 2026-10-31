@@ -2,6 +2,36 @@
 ; $4000-$7FFF window with four phases (address pattern, fixed 55/AA, random data, random read/write) plus a
 ; cross-bank check. Colour block map: grey idle, yellow testing, green good, red bad. B at the prompt = burn-in
 ; (repeat passes until a key is pressed). Program and screen buffers stay below $4000.
+;
+; USAGE: run it, read the memory summary, then press B for burn-in (loops until any key) or any other key
+;   for one pass. At the end any key exits. A key press during burn-in sets stopf and ends after the
+;   current cell. RESULT is PASS when the error count (errs) is 0, otherwise FAIL (red) with the first
+;   error shown (bank, address, PORTB value).
+;
+; HOW IT TESTS: each "cell" of the map is one RAM region seen through the window $4000-$7FFF: cell 0 = main
+;   RAM, cell n = extended bank n. For each cell the program selects the bank by writing PORTB ($D301),
+;   then runs 4 phases over pages pstart..pend: (1) address pattern: byte = offset xor page xor bank no.
+;   xor mask, written then verified, once with mask 0 and once with $FF; (2) fixed $55 then $AA, fill
+;   then verify; (3) pseudo-random fill and verify; (4) 8192 random-address write / readback /
+;   complement / readback. A 5th step (xbank) writes a signature into each bank and checks all
+;   signatures afterwards to catch aliased banks. Any mismatch calls `err`; the cell turns red.
+;   Pass/fail of a cell = no mismatch (bad = 0).
+;
+; DETECTION: detxl looks for ROM at $C000 (XL/XE) and romtest checks that RAM appears there with ROM
+;   paged out (PORTB bit 0 = 0). findbanks tries 64 PORTB bank combinations (mkpb) writing distinct
+;   values at $4000 and keeps one PORTB value per distinct bank in reps[] (nrep = count).
+;
+; SCREEN (cscreen.inc, NA = 7 text rows, NMAP = 4 map rows = up to 80 cells, NB = 6 text rows): DLI
+;   per row colours the bars, VBI hook resets the DLI row counter. Rows: 0 title, 1 machine type, 2 OS
+;   RAM, 3 extended banks, 4 CPU, 5 total, 6 legend; below the map 7 pass/phase, 8 current cell, 9 error
+;   count + elapsed time, 10 first error / passes done, 11 RUNNING / RESULT, 12 prompt.
+;
+; MEMORY: code and screen buffers stay below $4000 (the window under test). Zero page $90-$C3 holds the
+;   variables below ($90-$C3 is cleared at start); ptr ($90) low byte is always 0 so (ptr),y walks pages.
+;
+; EXTENDING: a new test phase is a routine that loops pstart..pend page by page, calls `tick` and
+;   `chkpg` per page, calls `err` on mismatch (Y = offset, ptr+1 = page), and is added to testcell
+;   with a phase string in pnl/pnh (and showphase's "/5" count).
         org $2000
         jmp start
         icl 'common.inc'
@@ -11,48 +41,52 @@ NB      = 6
         icl 'cscreen.inc'
 
 ptr     = $90           ; low byte kept at 0
-idx     = $92
-mask    = $93
-errs    = $94
-ff      = $96
-fpb     = $97
-fad     = $98
-pbsave  = $9A
-nrep    = $9B
-xl      = $9C
-curpb   = $9D
-bankno  = $9E
-selft   = $9F
-vf      = $A0
-romram  = $A1
-kb      = $A2
-fbk     = $A5
-rs      = $A6
-rs0     = $A7
-pstart  = $A8
-pend    = $A9
-burn    = $AA
-passn   = $AB
-stopf   = $AD
-cell    = $AE
-hz      = $AF
-tacc    = $B0
-lastt   = $B1
-ss      = $B2
+idx     = $92           ; bank number used in the address pattern
+mask    = $93           ; address pattern mask ($00 or $FF)
+errs    = $94           ; total error count (16-bit)
+ff      = $96           ; 1 once the first error has been recorded
+fpb     = $97           ; first error: PORTB value
+fad     = $98           ; first error: address (lo, hi)
+pbsave  = $9A           ; PORTB value at start (restored after every test); $FF on a 400/800
+nrep    = $9B           ; number of distinct extended banks
+xl      = $9C           ; 1 = XL/XE (ROM at $C000)
+curpb   = $9D           ; PORTB value for the cell being tested
+bankno  = $9E           ; cell/bank number (0 = main)
+selft   = $9F           ; nonzero if the self-test ROM window ($5000-$57FF) is mapped in the bank under test
+vf      = $A0           ; dopass: 0 = write, 1 = verify
+romram  = $A1           ; 1 = RAM under the OS ROM at $C000
+kb      = $A2           ; main RAM size in KB
+fbk     = $A5           ; first error: bank
+rs      = $A6           ; running random value
+rs0     = $A7           ; random seed for this cell
+pstart  = $A8           ; first page tested
+pend    = $A9           ; page after the last tested (exclusive)
+burn    = $AA           ; 1 = burn-in mode
+passn   = $AB           ; pass counter (16-bit)
+stopf   = $AD           ; set when a key stops burn-in
+cell    = $AE           ; current map cell
+hz      = $AF           ; frames per second (50 PAL, 60 NTSC)
+tacc    = $B0           ; frame accumulator for the clock
+lastt   = $B1           ; last RTCLOK+2 value seen
+ss      = $B2           ; elapsed seconds / minutes / hours
 mm      = $B3
 hh      = $B4
-bad     = $B5
-pv      = $B6
-cputype = $BA
-pv2     = $BB
-scnt    = $BC
-lastss  = $BE
+bad     = $B5           ; set when the current cell has had an error
+pv      = $B6           ; pattern byte being written / compared
+cputype = $BA           ; 0 = 6502, 1 = 65C02, 2 = 65C816
+pv2     = $BB           ; complement byte (stress test)
+scnt    = $BC           ; stress iteration counter (16-bit)
+lastss  = $BE           ; last seconds value drawn
 patx    = $BF
-phase   = $C0
-ncell   = $C1
+phase   = $C0           ; current phase 0-4
+ncell   = $C1           ; number of map cells = nrep + 1
 bx      = $C2
-aborted = $C3
+aborted = $C3           ; 1 if the run was stopped mid-pass (the partial pass is not counted)
 
+; start: clear zero page $90-$C3, detect the CPU, save PORTB, pick the frame rate from PALNTS (bits 1-3
+; zero = PAL = 50 Hz, otherwise 60 Hz), build the screen and print the machine summary (main RAM from
+; RAMTOP, XL/XE and ROM-RAM detection, extended banks, CPU, total). Then ask for burn-in and run the
+; passes: main RAM first (pages $40 up to RAMTOP-5 or $80), then each bank, then the cross-bank check.
 start   lda #1
         sta CRSINH
         ldx #$33
@@ -65,7 +99,7 @@ zl      sta $90,x
         lda PORTB
         sta pbsave
         lda PALNTS
-        and #$0E
+        and #$0E        ; GTIA PAL/NTSC bits; zero appears to mean PAL
         beq ispal
         lda #60
         bne sethz
@@ -80,7 +114,7 @@ sethz   sta hz
         loc 0,0
         say s_title
 
-        ; OS-visible RAM
+        ; OS-visible RAM (RAMTOP is in pages; /4 = KB)
         lda RAMTOP
         lsr
         lsr
@@ -91,7 +125,7 @@ sethz   sta hz
         bne isxl
         say s_800
         lda #$FF
-        sta pbsave
+        sta pbsave      ; no banking on a 400/800: use a neutral PORTB value
         jmp noxl
 isxl    say s_xl
         jsr romtest
@@ -114,11 +148,11 @@ noxl    loc 0,2
         lda RAMTOP
         cmp #$C0
         bcc nx1
-        lda #64
+        lda #64         ; RAMTOP at $C000 and RAM under the OS ROM: count it as a full 64K
         sta kb
         jmp nx1
 rom_no  say s_no
-nx1     lda RAMTOP
+nx1     lda RAMTOP      ; look for banks only on an XL/XE with at least 16K of main RAM
         cmp #$40
         bcc nobanks
         lda xl
@@ -177,7 +211,7 @@ mp1     lda #1
         loc 0,12
         say s_ask
         jsr getkey
-        cmp #$15
+        cmp #$15        ; KBCODE $15 = the B key
         bne single
         lda #1
         sta burn
@@ -197,6 +231,9 @@ nostop  loc 22,9
         lda RTCLOK+2
         sta lastt
 
+; passlp: one full pass. Reset non-red cells to grey, test main RAM (cell 0, pages $40..pend where pend =
+; RAMTOP-5 capped at $80; skipped if it would be <= $40), then every bank (cell n, PORTB = reps[n-1],
+; pend = $80), then xbank. Loops again if burn-in and not stopped.
 passlp  inc passn
         bne pn1
         inc passn+1
@@ -221,13 +258,13 @@ rc2     lda cst,x
         sta pstart
         lda RAMTOP
         sec
-        sbc #5
+        sbc #5          ; keep clear of the top pages (screen and OS use below RAMTOP)
         cmp #$80
         bcc m1
-        lda #$80
+        lda #$80        ; window ends at $7FFF
 m1      sta pend
         cmp #$41
-        bcc skipm
+        bcc skipm       ; nothing to test if RAM does not reach past $4000
         jsr testcell
 skipm   lda #$80
         sta pend
@@ -298,6 +335,7 @@ rd2     ldx #12
         sta CRSINH
         jmp gs_off
 
+; nrep16: v16 = nrep * 16 (KB of extended RAM). Clobbers A.
 nrep16  lda nrep
         sta v16
         lda #0
@@ -312,7 +350,8 @@ nrep16  lda nrep
         rol v16+1
         rts
 
-; XL/XE has ROM at $C000: a non-constant 16-byte window means ROM present
+; detxl: xl = 1 if the 16 bytes at $C000 are not all equal, i.e. OS ROM is present (XL/XE); a 400/800
+; has no ROM there (constant/floating). Clobbers A, X.
 detxl   lda #0
         sta xl
         ldx #15
@@ -326,7 +365,9 @@ dxyes   lda #1
         sta xl
         rts
 
-; with the OS ROM paged out, $C000 should hold writable RAM
+; romtest: sets romram = 1 if $C000 holds writable RAM with the OS ROM paged out (PORTB bit 0 = 0).
+; Interrupts/NMIs are off meanwhile (the OS would be unmapped). Writes $A5 and $5A and reads them back,
+; restores the original byte and PORTB, then re-enables NMIs ($C0). Clobbers A, t1, t2.
 romtest sei
         lda #0
         sta NMIEN
@@ -358,7 +399,9 @@ rt1     lda t2
         cli
         rts
 
-; PORTB value for combo A (CPU sees extended RAM because bit 4 stays 0)
+; mkpb: A = bank number 0..63 -> A = PORTB value for "combo A" (CPU sees extended RAM because bit 4 stays
+; 0, OS ROM on via bit 0). Bank number bits 0..5 appear to map to PORTB bits 1, 2, 3, 5, 6, 7 (bit 4 is
+; the CPU/ANTIC select), i.e. a wider scheme than the standard 130XE two-bit one. Clobbers t1, t2.
 mkpb    sta t1
         and #1
         asl
@@ -382,7 +425,11 @@ mkpb    sta t1
         ora #1
         rts
 
-; fills reps[] with one PORTB value per distinct 16K bank
+; findbanks: fills reps[] with one PORTB value per distinct 16K bank, nrep = count. Interrupts off.
+; Step 1: write $55 at $4000 in main RAM, $AA via bank combo 0; if main reads back $AA there is no
+; extended RAM (combo 0 aliases main). Step 2 (fb1): write $40+n at $4000 under each of the 64
+; combos. Step 3 (fb2): read them back; combos whose value survived are distinct banks (aliases
+; get overwritten by a later combo). $4000 and PORTB are restored. Clobbers A, X, Y, t1-t3.
 findbanks
         sei
         lda #0
@@ -445,7 +492,10 @@ fb_end  lda pbsave
         cli
         rts
 
-; test one cell (main RAM or a bank): cell, curpb, bankno, pstart, pend set by the caller
+; testcell: test one cell (main RAM or a bank): cell, curpb, bankno, pstart, pend set by the caller.
+; Marks the cell yellow, shows the label, seeds rs0 from RANDOM, selects the bank (PORTB = curpb), runs
+; the four phases, restores PORTB, then marks the cell red if any error occurred (bad), else green
+; (a cell already red stays red across passes). Falls through to showerr. Clobbers everything.
 testcell
         ldx cell
         lda #0
@@ -473,10 +523,10 @@ tc_go   lda #0
         sta bad
         lda curpb
         and #$80
-        eor #$80
+        eor #$80        ; selft = $80 if PORTB bit 7 = 0 (self-test ROM mapped at $5000-$57FF)
         sta selft
         lda RANDOM
-        ora #1
+        ora #1          ; nonzero seed for the random phase
         sta rs0
         lda curpb
         sta PORTB
@@ -510,6 +560,7 @@ tc_dr   lda cst,x
         jsr mapset
         jmp showerr
 
+; showphase: row 7 = "Pass n  Phase k/5 <name>" for the current `phase` (0-4). Clobbers A, X, Y, v16.
 showphase
         ldx #7
         jsr clrrow
@@ -536,6 +587,8 @@ showphase
         ldy pnh,x
         jmp puts
 
+; showerr: row 9 = error count; if an error has been recorded (ff) turn row 10 red and show the first
+; error: bank, address (fad) and PORTB value (fpb). Clobbers A, X, Y, v16.
 showerr loc 0,9
         say s_err
         lda errs
@@ -568,7 +621,10 @@ showerr loc 0,9
         jsr puthex
 se9     rts
 
-; seconds clock from RTCLOK, a key stops a burn-in, redraws the elapsed time when it changes
+; tick: called once per tested page. Seconds clock from RTCLOK (frame deltas accumulate in tacc and
+; roll over at hz = frames/second into ss/mm/hh), a key press (CH <> $FF) sets stopf during burn-in,
+; and the elapsed time is redrawn at row 9 col 31 when the seconds change. Also resets ATRACT.
+; Clobbers A, X, Y.
 tick    lda #0
         sta ATRACT
         lda burn
@@ -623,6 +679,7 @@ tk9     lda ss
         jsr put2
 tk10    rts
 
+; put2: print A (0..59) as two decimal digits. Clobbers A, X, Y.
 put2    ldx #'0'
 p2a     cmp #10
         bcc p2b
@@ -637,7 +694,8 @@ p2b     pha
         adc #'0'
         jmp putc
 
-; page is skipped (A=1) when it falls in the self-test ROM window
+; chkpg: A = 1 if page ptr+1 must be skipped, else 0. Skipped when the bank under test has the self-test
+; ROM mapped (selft) and the page is in $50-$57, which is where that ROM overlays RAM. Clobbers A.
 chkpg   lda selft
         beq cp_ok
         lda ptr+1
@@ -649,6 +707,9 @@ chkpg   lda selft
 cp_ok   lda #0
         rts
 
+; dopass4 (PHASE 1, address pattern): byte = offset xor page xor bank number xor mask. Runs dopass four
+; times: write+verify with mask 0, then write+verify with mask $FF (the inverse pattern), so each cell
+; is written with unique, address-dependent data that detects stuck bits and address-line aliasing.
 dopass4 lda bankno
         sta idx
         lda #0
@@ -665,6 +726,8 @@ dopass4 lda bankno
         inc vf
         jmp dopass
 
+; dopass: one sweep over pages pstart..pend-1. vf = 0 writes the pattern, vf = 1 compares and calls
+; `err` (Y = offset, ptr+1 = page) on a mismatch. Calls tick and chkpg per page. Clobbers A, X, Y.
 dopass  lda pstart
         sta ptr+1
 pgl     jsr tick
@@ -690,6 +753,9 @@ pgskip  inc ptr+1
         bne pgl
         rts
 
+; dopat (PHASE 2): fixed patterns. Fill the whole range with $55 (dofc), verify (dovc), then the same
+; with $AA: every bit is tested at both 0 and 1 (checkerboard-style, adjacent bits differ).
+; dofc fills pstart..pend-1 with pv; dovc verifies each byte equals pv, else `err`.
 dopat   lda #$55
         sta pv
         jsr dofc
@@ -733,7 +799,9 @@ dvc3    inc ptr+1
         bne dvc1
         rts
 
-; pseudo-random fill and verify (seed from POKEY RANDOM, x = 5x+$3D, mixed with the page number)
+; dorand (PHASE 3): pseudo-random fill and verify (seed from POKEY RANDOM, x = 5x+$3D, mixed with the page
+; number). The same sequence is regenerated from rs0 for the verify pass, so any changed byte is an
+; error. (asl asl = x4, plus x = 5x.) Clobbers A, Y, rs, ptr.
 dorand  lda rs0
         sta rs
         lda pstart
@@ -790,7 +858,9 @@ drv3    inc ptr+1
         bne drv1
         rts
 
-; random address, random value: write, read back, write the complement, read back
+; dostress (PHASE 4): random address, random value: write, read back, write the complement, read back.
+; 8192 operations ($20 x 256) per cell; address = random page in pstart..pend-1 and random offset (chkpg
+; pages skipped). A readback mismatch calls `err`. Exercises random access order / refresh behaviour.
 dostress
         lda #0
         sta scnt
@@ -830,7 +900,10 @@ st3     inc scnt
         bne st1
         rts
 
-; every bank gets a signature; then all signatures must still be intact (catches aliased banks)
+; xbank (PHASE 5, cross-bank): every bank gets a signature ($5A + bank index at $4010, $6123 and $7FF0);
+; then all signatures must still be intact (catches aliased banks, where writing one bank changes another).
+; A mismatch calls `err` for that bank (reported at page $40) and turns its cell red. Skipped when there
+; are no banks. PORTB is restored. Clobbers everything.
 xbank   lda nrep
         bne xb0
         rts
@@ -892,6 +965,8 @@ xbe     lda pbsave
         dex
         jmp xb3
 
+; err: record one error. Y = offset, ptr+1 = page. Increments errs (16-bit), sets bad, and for the very
+; first error saves the offset/page, PORTB value (curpb) and bank number for showerr. Preserves X, Y.
 err     inc errs
         bne e1
         inc errs+1
@@ -910,6 +985,8 @@ e1      lda #1
         sta fbk
 e2      rts
 
+; string pointer tables (low bytes, then high bytes), cst = per-cell state (0 yellow/1 grey/2 red/3 green,
+; as in mapset), reps = PORTB value for each extended bank
 cpnl    .byte <s_c0,<s_c1,<s_c2
 cpnh    .byte >s_c0,>s_c1,>s_c2
 pnl     .byte <s_p0,<s_p1,<s_p2,<s_p3,<s_p4
