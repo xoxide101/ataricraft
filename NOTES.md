@@ -93,8 +93,16 @@ One file, `web/library/dospack/ACDOS.PAK`, holds every DOS template (DOS 2.0S/2.
 ## Library check
 
 - `node tools/libcheck.cjs <folder> [--csv out.csv] [--json out.json]`: read-only audit of ATR/XFD/ATX/DCM/PRO images. Lists exact duplicates (with a suggested keeper), same-sector duplicates across containers, wrong extensions, ATR headers that disagree with the file size, copy-protected ATX, and DOS 2/MyDOS deleted-file and free-space data (uses web/js diskconv, dosfs and diskaudit). With `--dat <folder>` it also matches each image by MD5/CRC against Logiqx DATs and prints rename suggestions (not applied). `node tools/fetch-dats.cjs [Atari Commodore ...]` scrapes the newest public TOSEC DAT pack (hash catalogues only) into out/dats/tosec. It never renames or deletes; the renamer itself is not written yet.
+
+## ROM zip tooling (copies only; sources are never modified)
 
-## Hardware test programs
+Three passes over a folder of MAME-style zips, all in `tools/`:
+1. `zipmanifest.cjs <zips> --mame <softlist.xml> [--dat <dir> --match "Atari 7800"]`: read-only manifest (CSV/JSON) of hashes, MAME set/parent, TOSEC/No-Intro/library name per file.
+2. `zipsort.cjs <zips> --manifest m.json --mame x.xml --out <dir> --system "Atari 2600"`: builds `rom/<system>/<medium>/<top name>/<rom name>.zip`, one zip per ROM; a ROM listed under several parents is copied into each. `--sets` adds `sets/` (one zip per game) and `_classification.txt`. `--headers <folder>` swaps in real headered .a78 files for headerless ROMs whose payload hash matches.
+3. `ziprename.cjs`: rebuilds zips under long names (TOSEC, then No-Intro, then MAME title).
+
+`makedat.cjs <folder> --name N --out <dir> [--ext a78]` builds Logiqx DATs (whole-file and A78 payload) from your own files. Names from MAME titles are the weakest evidence; TOSEC/No-Intro/library names are matched by content hash. TOSEC 7800 hashes include the 128-byte A78 header, so headerless zips only match via a payload DAT.
+
 
 - tools/tests/ (MADS; shared common.inc and cscreen.inc colour framework: per-row DLI colour bars, mode-7 block map, VBI-reset; `node tools/tests/build.cjs` -> tools/tests/bin/*.COM). All tests show colour PASS/FAIL rows and a RESULT bar.
   - CPUTEST: detects 6502/65C02/65C816, instruction self-checks, speed estimate (approx).
