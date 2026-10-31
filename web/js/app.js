@@ -197,12 +197,12 @@
   // System check: every ROM slot, what was found, where it came from, its CRC and the identified version. Browsers only reveal the folder name that was picked, not the full disk path.
   const SLOTS = [['os800', 'OS for Atari 400/800 (10 KB)', ''], ['osxl', 'OS for XL/XE (16 KB)', ''], ['os5200', '5200 BIOS (2 KB)', 'needed for 5200 cartridges'], ['basic', 'BASIC (8 KB)', '']];
   const FOLDER_TREE = [
-    'ataricraft-data/              any name works: use Scan folder... on the top folder',
+    'ataricraft-data/             (any name; Scan folder... on this one)',
     '  roms/',
-    '    os/       ATARIOSA.ROM  ATARIOSB.ROM  ATARIXL.ROM   (400/800 and XL/XE operating systems)',
+    '    os/       ATARIOSA.ROM  ATARIOSB.ROM  ATARIXL.ROM',
     '    basic/    ATARIBAS.ROM',
     '    5200/     5200.rom',
-    '  disks/      .atr .xfd .dcm .atx   (drag onto a drive, or browse in WebAFM)',
+    '  disks/      .atr .xfd .dcm .atx   (drag onto a drive)',
     '  carts/      .car .rom .bin',
     '  tapes/      .cas .wav',
     '  states/     saved machine states',
@@ -264,6 +264,42 @@
     dlg.showModal();
   }
   window.AC_sysCheck = sysCheck;
+
+  // First-run guide: shown once when no original ROMs are found and no ROM folder has been chosen. Never in automated browsers, and ?nowiz skips it.
+  async function setupGuide(force) {
+    if (!force) {
+      if (localStorage.getItem('ac.wizdone') || navigator.webdriver || /[?&]nowiz\b/.test(location.search)) return;
+      if (['os800', 'osxl', 'basic'].some((k) => S.lib[k].some((e) => !e.builtin))) return;
+      try { if (S.romDirs && (await S.romDirs()).length) return; } catch (e) { /* none */ }
+    }
+    let dlg = $('wiz');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'wiz'; document.body.append(dlg); }
+    dlg.innerHTML = '';
+    dlg.style.cssText = 'background:#1b1e24;color:#e6e0d4;border:1px solid #4a5160;border-radius:10px;width:min(94vw,560px);max-height:86vh;overflow:auto';
+    const el = (tag, css, txt) => { const x = document.createElement(tag); if (css) x.style.cssText = css; if (txt !== undefined) x.textContent = txt; return x; };
+    dlg.append(el('h3', 'margin:0 0 8px', 'Welcome to Ataricraft'));
+    dlg.append(el('p', 'margin:0 0 8px', 'You can boot right now: the open-licence Altirra OS and BASIC are built in.'));
+    dlg.append(el('p', 'margin:0 0 8px', 'For the original Atari ROMs (OS A/B, XL/XE, BASIC, 5200 BIOS) point Ataricraft at the folder where you keep them. They are not included, so you supply your own dumps. Nothing is uploaded; files stay in your browser.'));
+    dlg.append(el('div', 'font-weight:600;margin:8px 0 2px', 'Suggested layout (any folder names work)'));
+    dlg.append(el('pre', 'font:12px ui-monospace,Consolas,monospace;margin:0 0 10px;white-space:pre;overflow-x:auto', FOLDER_TREE.join('\n')));
+    dlg.append(el('p', 'margin:0 0 10px;font-size:12px;color:#9aa', 'Disks, cartridges and tapes can simply be dropped onto the screen or onto WebAFM. Settings → ROMs → System check shows what was found and where.'));
+    const row = el('div', 'display:flex;gap:8px;flex-wrap:wrap');
+    const mk = (label, fn) => { const b = el('button', '', label); b.onclick = fn; row.append(b); };
+    mk('Choose ROM folder...', () => { dlg.close(); $('romfolder').click(); });
+    mk('Pick ROM files...', () => { dlg.close(); $('romfiles').click(); });
+    mk('System check', () => { dlg.close(); sysCheckDialog(); });
+    mk('Use built-in ROMs', () => { localStorage.setItem('ac.wizdone', '1'); dlg.close(); });
+    dlg.append(row);
+    const lbl = el('label', 'display:block;margin-top:10px;font-size:12px;color:#9aa');
+    const cb = el('input', 'display:inline'); cb.type = 'checkbox'; cb.checked = true;
+    cb.onchange = () => { if (cb.checked) localStorage.setItem('ac.wizdone', '1'); else localStorage.removeItem('ac.wizdone'); };
+    lbl.append(cb, document.createTextNode(' Do not show this again (reopen from Settings → ROMs → Setup guide)'));
+    dlg.append(lbl);
+    localStorage.setItem('ac.wizdone', '1');
+    dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+    dlg.showModal();
+  }
+  window.AC_setupGuide = () => setupGuide(true);
 
   function fillRomSelects() {
     ensureBuiltinRoms();
@@ -3981,7 +4017,7 @@
 
   $('rommode').value = localStorage.getItem('ac.rommode') || 'auto';
   fillRomSelects();
-  loadSavedRoms().then(autoLoadRoms).then(romUrlParams);
+  loadSavedRoms().then(autoLoadRoms).then(romUrlParams).then(() => setupGuide(false));
 
   // ---- UI wiring ----
   AC.keyboard.restoreCharset();
@@ -4004,6 +4040,7 @@
   $('rommode').onchange = () => { localStorage.setItem('ac.rommode', $('rommode').value); resetRomChoice(); };
   $('romauto').onclick = resetRomChoice;
   $('syscheck').onclick = sysCheckDialog;
+  $('setupguide').onclick = () => setupGuide(true);
   $('basicrom').onchange = () => { S.basicTouched = true; saveRomSel(); showRomInfo(); };
   $('romfolder').onchange = (e) => addRoms(e.target.files);
 
