@@ -52,7 +52,7 @@ for (const [zip, rs] of byZip) {
     for (const [parentSet, setDesc] of memberships) {
       const top = safe(desc.get(parentSet) || setDesc || parentSet);
       const base = r.tosec ? r.tosec.replace(/\.[^.]+$/, '') : (r.nointro || setDesc || path.basename(r.file, ext));
-      const name = safe(base + (r.tosec ? path.extname(r.tosec) : ext));
+      const name = safe(base + (r.tosec ? (/\.a78$/i.test(r.tosec) && !r.hdr ? '.bin' : path.extname(r.tosec)) : ext));
       const dir = path.join(out, 'rom', system, medium, top);
       let stem = safe(base), target = path.join(dir, stem + '.zip'), k = 2;
       for (;;) {
