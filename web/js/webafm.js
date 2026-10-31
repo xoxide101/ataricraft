@@ -391,15 +391,17 @@
     if (!r.handle) { host().save(r.name, r.m.bytes); r.unsaved = false; log('downloaded ' + r.name); }
   }
   async function saveAs(r) {
-    const name = /\.(atr|atx|xfd|dcm|pro|dsk|img)$/i.test(r.name) ? r.name : r.name + '.atr';
+    const name = /\.(atr|xfd|dsk|img)$/i.test(r.name) ? r.name : r.name.replace(/\.(atx|dcm|pro)$/i, '') + '.atr';
+    if (r.kind === 'drive') { const d = host().disk(r.n); if (d && d.bytes) r.m.bytes = d.bytes; }
+    const ext = (name.match(/\.[^.]+$/) || ['.atr'])[0].toLowerCase();
     try {
       if (window.showSaveFilePicker) {
-        const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Atari disk image', accept: { 'application/octet-stream': ['.atr', '.xfd', '.dsk', '.img'] } }] });
+        const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Atari disk image', accept: { 'application/octet-stream': [ext] } }] });
         const w = await h.createWritable(); await w.write(r.m.bytes); await w.close();
         if (r.kind === 'file') { r.handle = h; r.name = h.name; }
         r.unsaved = false; log('saved ' + h.name); render(); return;
       }
-    } catch (e) { if (e.name === 'AbortError') return; log('Save as failed (' + e.message + '); downloading instead'); }
+    } catch (e) { if (e.name === 'AbortError') return; log('Save disk failed (' + e.name + ': ' + e.message + '); downloading instead'); }
     host().save(name, r.m.bytes); r.unsaved = false; render();
   }
   function snapshot(label, recs) {
