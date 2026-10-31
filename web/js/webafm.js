@@ -1054,8 +1054,45 @@
     }
     const act = [{ label: 'OK', value: true, pri: true }];
     if (!items.length) act.unshift({ label: 'Rename disk…', value: 'rn' });
+    if (!items.length && r.m.bytes && window.AC && AC.DiskAudit && AC.DiskAudit.scan(r.m.bytes)) act.unshift({ label: 'Audit / recover…', value: 'audit' });
     const v = await dlg(items.length ? 'Properties' : 'Disk properties', h, act);
     if (v === 'rn') renameDisk(W.active);
+    if (v === 'audit') auditDisk(r);
+  }
+
+  const AUD_NOTE = { intact: 'recoverable', probable: 'probably recoverable', partial: 'partly recoverable', broken: 'partly recoverable', overwritten: 'overwritten' };
+  async function auditDisk(r) {
+    const a = AC.DiskAudit.scan(r.m.bytes);
+    const secBytes = (n) => r.m.bytes.subarray(16 + (n - 1) * 128, 16 + n * 128);
+    const got = a.deleted.filter((d) => d.bytes > 0);
+    const rows = a.deleted.map((d) => `<tr><td>${esc(d.name)}</td><td class="num">${d.bytes ? d.bytes.toLocaleString() + ' B' : '–'}</td><td class="num">${d.sectors.length}/${d.expected}</td><td class="${d.status === 'overwritten' ? 'bad' : d.status === 'intact' || d.status === 'probable' ? 'ok' : 'warn'}">${AUD_NOTE[d.status]}</td></tr>`).join('');
+    const html = `<div><b>${esc(r.name)}</b> <span class="dim">${a.fs === 'mydos' ? 'MyDOS' : 'DOS 2'}, ${a.sectors} sectors</span></div>
+      <div class="dim" style="margin:4px 0">Read-only. This looks at what the directory does not show.${a.limited ? ' Subfolders are not scanned, so unclaimed-sector counts are skipped.' : ''}</div>
+      ${a.deleted.length ? `<div style="margin-top:8px"><b>Deleted files (${a.deleted.length})</b></div><table style="max-height:28vh;overflow:auto;display:block"><tr class="dim"><td>Name</td><td>Size</td><td>Sectors</td><td>State</td></tr>${rows}</table>` : '<div class="dim" style="margin-top:8px">No deleted directory entries.</div>'}
+      <table style="margin-top:8px">
+      <tr><td class="dim">Data in sectors marked free</td><td class="num">${a.freeData.length} sectors</td></tr>
+      <tr><td class="dim">…not part of a deleted file</td><td class="num">${a.residue.length} sectors</td></tr>
+      ${a.limited ? '' : `<tr><td class="dim">Used but unclaimed by any file</td><td class="num">${a.orphans.length} sectors${a.orphans.length ? ' (' + a.orphans.slice(0, 8).join(', ') + (a.orphans.length > 8 ? '…' : '') + ')' : ''}</td></tr>`}
+      <tr><td class="dim">Extra ATR header bytes</td><td>${a.headerExtra ? '<code>' + a.headerExtra + '</code>' : 'none'}</td></tr></table>
+      ${a.residueText.length ? '<div class="dim" style="margin-top:8px">Readable text in leftover sectors</div><pre style="margin:2px 0;max-height:110px;overflow:auto;white-space:pre-wrap">' + a.residueText.map(esc).join('\n') + '</pre>' : ''}
+      <div class="dim" style="margin-top:8px">Recovered files are saved as copies. The disk is not changed. “Probably” means the sector count matches the directory but the chain keeps going, which happens when the sectors were written in one run.</div>`;
+    const act = [{ label: 'Close', value: null }];
+    if (a.residue.length) act.push({ label: 'Save leftover sectors', value: 'res' });
+    if (got.length) act.push({ label: 'Save recovered (ZIP)', value: 'zip', pri: true });
+    const v = await dlg('Audit / recover', html, act);
+    const base = r.name.replace(/\.[^.]*$/, '');
+    if (v === 'zip') {
+      const used = new Set();
+      host().save(base + '-recovered.zip', host().zip(got.map((d) => {
+        let n = d.status === 'intact' || d.status === 'probable' ? d.name : d.name + '.partial';
+        while (used.has(n)) n += '_';
+        used.add(n); return { name: n, data: d.data };
+      })), 'application/zip');
+    } else if (v === 'res') {
+      const out = new Uint8Array(a.residue.length * 128);
+      a.residue.forEach((n, i) => out.set(secBytes(n), i * 128));
+      host().save(base + '-leftover.bin', out);
+    }
   }
 
   // ---------- viewer / editor ----------
