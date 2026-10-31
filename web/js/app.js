@@ -2961,6 +2961,145 @@
     dlg.showModal();
   }
 
+  // ---- hover cards: details and quick actions for drives, cartridges and the tape ----
+  const HC = { el: null, t: null, id: null };
+  const fmtSize = (b) => (b >= 1048576 ? +(b / 1048576).toFixed(2) + ' MB' : +(b / 1024).toFixed(1) + ' KB');
+  const diskGeom = (b) => {
+    if (b[0] === 0x96 && b[1] === 0x02) { const ss = b[4] | (b[5] << 8), par = b[2] | (b[3] << 8) | (b[6] << 16); return { fmt: 'ATR', ss, ns: Math.round(par * 16 / ss) }; }
+    if (b[0] === 0x41 && b[1] === 0x54 && b[2] === 0x38 && b[3] === 0x58) return { fmt: 'ATX (copy-protected image)', ss: 0, ns: 0 };
+    return { fmt: 'raw sectors (XFD)', ss: 128, ns: Math.floor(b.length / 128) };
+  };
+  const densityName = (ss, ns) => (ss === 128 ? (ns <= 720 ? 'Single density (SD)' : ns <= 1040 ? 'Enhanced density (ED)' : 'Large, 128-byte sectors')
+    : ss === 256 ? (ns <= 720 ? 'Double density (DD)' : ns <= 1440 ? 'Double density, 2 sided' : 'Large, 256-byte sectors (hard disk)') : ss + '-byte sectors');
+  const diskCache = {};
+  function diskRows(n) {
+    const d = S.disks[n], out = [];
+    if (!d) {
+      out.push(['Disk', 'Empty - no disk inserted']);
+      if (n === 8 && ramOn()) out.push(['Mode', 'Marked as a RAM disk']);
+      return { rows: out, bar: null };
+    }
+    const b = (S.dirty[n] && S.emu && S.emu.readDisk(n)) || d.bytes;
+    const key = [d.name, b.length, d.rev || 0, S.dirty[n] ? 1 : 0].join('|');
+    let c = diskCache[n];
+    if (!c || c.key !== key) {
+      c = diskCache[n] = { key, rows: [], bar: null };
+      const g = diskGeom(b);
+      c.rows.push(['Disk', d.name], ['Image', g.fmt + ', ' + fmtSize(b.length)]);
+      if (g.ss) {
+        c.rows.push(['Density', densityName(g.ss, g.ns)], ['Sectors', g.ns + ' x ' + g.ss + ' bytes']);
+        const v = AC.DosFs && AC.DosFs.open(b);
+        if (v) {
+          const free = v.freeSectors(), used = Math.max(0, v.sectors - free), per = v.kind === 'sdfs' ? v.sectorSize : v.sectorSize - 3;
+          c.rows.push(['File system', v.kind.toUpperCase() + (v.label ? ' "' + v.label.trim() + '"' : '') + (v.readOnly ? ' (read-only here)' : '')],
+            ['Used', used + ' sectors, ' + fmtSize(used * per)], ['Free', free + ' sectors, ' + fmtSize(free * per)]);
+          c.bar = v.sectors ? used / v.sectors : null;
+          try { const l = v.list(), dirs = l.filter((e) => e.dir).length; c.rows.push(['Contents', (l.length - dirs) + ' files, ' + dirs + ' folders']); } catch (e) { /* directory unreadable */ }
+        } else c.rows.push(['File system', 'not recognised (boot disk or custom format)']);
+      }
+    }
+    out.push(...c.rows);
+    if (S.dirty[n]) out.push(['State', 'changed since loading']);
+    if (n === 8 && ramOn()) out.push(['Mode', 'D8: is marked as a RAM disk']);
+    if (S.folders && S.folders[n]) out.push(['Folder', 'mirrors host folder "' + S.folders[n].handle.name + '"']);
+    return { rows: out, bar: c.bar };
+  }
+  function cartRows(n) {
+    const c = S.carts[n], out = [];
+    if (!c) { out.unshift(['Cartridge', 'Empty - no cartridge inserted']); return out; }
+    out.unshift(['Cartridge', c.name]);
+    const p = AC.CartTool.parse(c.bytes), ty = p.type != null ? p.type : c.type, tn = (AC.CartTool.TYPES.find((t) => t[0] === ty) || [])[2];
+    out.push(['ROM size', fmtSize(p.size)], ['Type', tn ? tn + ' (type ' + ty + ')' : ty != null ? 'type ' + ty : 'not set (detected on boot)'],
+      ['Image', p.hasHeader ? 'CART header, checksum ' + (p.checksumOk ? 'OK' : 'BAD') : 'raw ROM, no header'], ['CRC32', p.crc]);
+    const nm = (AC.CART_NAMES || {})[p.crc];
+    if (nm) out.push(['Known as', nm[0] + ' - ' + nm[1] + ' ' + nm[2]]);
+    else if (p.known) out.push(['Known as', p.known.name]);
+    return out;
+  }
+  function tapeRows() {
+    const has = $('tn').textContent !== 'empty', out = [['Tape', has ? $('tn').textContent : 'Empty - no tape loaded']];
+    if (has) {
+      if (S.tape && S.tape.bytes) out.push(['Size', fmtSize(S.tape.bytes.length)]);
+      const ti = S.emu && S.emu.tapeInfo();
+      if (ti && ti.status && ti.size) out.push(['Position', 'block ' + ti.pos + ' of ' + ti.size]);
+      else if (!S.emu || !S.off) out.push(['State', 'read when you press Boot']);
+    }
+    return out;
+  }
+  function diskActs(n) {
+    const have = S.disks[n];
+    return [
+      { label: 'Load...', run: () => $('f' + n).click() },
+      have && { label: 'Eject', run: () => $('de' + n).click() },
+      have && { label: 'Save image...', run: () => viaVal('savedrv', n, () => $('savedisk').click()) },
+      { label: 'Blank...', run: (r) => blankMenu(n, r.left, r.bottom) },
+      have && { label: 'WebAFM', run: () => AC.WebAfm.openDrive(0, n) },
+      { label: 'More...', run: (r) => drvMenu(n, r.left, r.bottom) },
+    ].filter(Boolean);
+  }
+  const hcClose = () => { clearTimeout(HC.t); HC.t = null; if (HC.el) { HC.el.remove(); HC.el = null; } HC.id = null; };
+  const hcLater = () => { clearTimeout(HC.t); HC.t = setTimeout(hcClose, 280); };
+  function hcShow(id, anchor) {
+    const dl = document.getElementById('devdlg');
+    if (PM.el || (dl && dl.open)) return;
+    hcClose();
+    const num = /^D([1-8])$/.test(id) ? +id.slice(1) : 0;
+    let title = id, rows = [], bar = null, acts = [];
+    try {
+      if (num) { const r = diskRows(num); title = 'Drive D' + num + ':'; rows = r.rows; bar = r.bar; acts = diskActs(num); }
+      else if (id === 'K1' || id === 'K2') { const n = +id[1], i = devInfo(id); title = i.title; rows = cartRows(n); acts = i.acts; }
+      else if (id === 'C') { const i = devInfo(id); title = i.title; rows = tapeRows(); acts = i.acts; }
+      else { const i = devInfo(id); title = i.title; rows = i.body.filter(Boolean).map((l) => ['', l]); acts = i.acts; }
+    } catch (e) { rows = [['', 'details unavailable: ' + e.message]]; }
+    const el = document.createElement('div');
+    el.id = 'devcard';
+    el.style.cssText = 'position:fixed;z-index:9998;background:#1b1e24;color:#e6e0d4;border:1px solid #4a5160;border-radius:10px;box-shadow:0 6px 24px #000a;padding:10px 12px;min-width:240px;max-width:min(92vw,360px);font-size:12px;visibility:hidden';
+    const h = document.createElement('div'); h.textContent = title; h.style.cssText = 'font-weight:bold;font-size:13px;margin-bottom:6px';
+    el.append(h);
+    const g = document.createElement('div'); g.style.cssText = 'display:grid;grid-template-columns:auto 1fr;gap:2px 10px';
+    for (const [k, v] of rows) {
+      if (k) { const a = document.createElement('span'); a.textContent = k; a.style.opacity = '.6'; g.append(a); }
+      const b = document.createElement('span'); b.textContent = v; b.style.cssText = 'overflow-wrap:anywhere' + (k ? '' : ';grid-column:1/3'); g.append(b);
+    }
+    el.append(g);
+    if (bar != null) {
+      const t = document.createElement('div'); t.style.cssText = 'height:6px;margin-top:6px;background:#2c313b;border-radius:3px;overflow:hidden';
+      const f = document.createElement('div'); f.style.cssText = 'height:100%;width:' + Math.min(100, Math.round(bar * 100)) + '%;background:' + (bar > 0.9 ? '#d9362c' : '#3aa76d');
+      t.append(f); el.append(t);
+    }
+    const ev = devEl[id];
+    if (ev) { const st = ev.classList.contains('rd') ? 'reading' : ev.classList.contains('wr') ? 'writing' : ev.classList.contains('ot') ? 'busy' : 'idle'; const s = document.createElement('div'); s.textContent = 'Activity: ' + st; s.style.cssText = 'opacity:.6;margin-top:6px'; el.append(s); }
+    if (acts.length) {
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:8px';
+      for (const it of acts) {
+        const b = document.createElement('button'); b.textContent = it.label;
+        b.onclick = (e) => { e.stopPropagation(); const r = el.getBoundingClientRect(); hcClose(); it.run(r); };
+        row.append(b);
+      }
+      el.append(row);
+    }
+    el.addEventListener('mouseenter', () => clearTimeout(HC.t));
+    el.addEventListener('mouseleave', hcLater);
+    document.body.append(el);
+    const ar = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
+    el.style.left = Math.max(4, Math.min(ar.left, innerWidth - w - 4)) + 'px';
+    el.style.top = Math.max(4, ar.bottom + 6 + hh > innerHeight ? ar.top - hh - 6 : ar.bottom + 6) + 'px';
+    el.style.visibility = 'visible';
+    HC.el = el; HC.id = id;
+  }
+  function hcBind(el, id) {
+    el.addEventListener('mouseenter', () => { el.title = ''; clearTimeout(HC.t); HC.t = setTimeout(() => hcShow(id, el), HC.el ? 80 : 450); });
+    el.addEventListener('mouseleave', hcLater);
+    el.addEventListener('click', hcClose);
+    el.addEventListener('contextmenu', hcClose);
+  }
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hcClose(); }, true);
+  window.addEventListener('scroll', hcClose, true);
+  for (const id of Object.keys(devEl)) hcBind(devEl[id], id);
+  for (let n = 1; n <= 8; n++) hcBind(xfEl[n], 'D' + n);
+  hcBind(xfEl.C, 'C');
+  document.querySelectorAll('#drvviz .xf.cart').forEach((el, i) => hcBind(el, 'K' + (i + 1)));
+
   // ---- diagnostics log ----
   const diagText = () => {
     const st = S.emu ? JSON.stringify({ carts: Object.fromEntries(Object.entries(S.carts).map(([k, c]) => [k, { name: c.name, size: c.bytes.length, type: c.type }])), disks: Object.fromEntries(Object.entries(S.disks).map(([k, d]) => [k, d.name])), tape: $('tn').textContent, model: $('model').value, basic: $('basic').checked }) : 'not booted';

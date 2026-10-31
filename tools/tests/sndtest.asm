@@ -82,7 +82,7 @@ notesc  cmp #$3D
         bne notg
         jsr guided
         jmp loop
-notg    ldx #9
+notg    ldx #10
 fk      cmp keymap,x
         beq found
         dex
@@ -267,7 +267,7 @@ play    lda mode
         lda jtab+1,x
         sta jv+1
         jmp (jv)
-jtab    .word m_off,m_left,m_right,m_both,m_alt,m_scale,m_chord,m_noise,m_low,m_sweep
+jtab    .word m_off,m_left,m_right,m_both,m_alt,m_scale,m_chord,m_noise,m_low,m_sweep,m_ditty
 m_off   rts
 
 m_left  lda #71
@@ -351,6 +351,54 @@ m_sweep lda RTCLOK+2
         lda #$A8
         sta AUDC1
         sta R_AUDF1+1
+        rts
+
+; stereo ditty, 4 phases of 256 frames: both / left alone (melody an octave down) / right alone / both
+m_ditty lda RTCLOK+1
+        and #3
+        sta t1
+        lda RTCLOK+2
+        lsr
+        lsr
+        lsr
+        and #31
+        tax
+        lda mel,x
+        sta t2
+        lda t1
+        cmp #2
+        bne dl_a
+        lda #0
+        beq dl_s
+dl_a    cmp #1
+        bne dl_b
+        lda t2
+        beq dl_s
+        asl
+        adc #1
+        jmp dl_s
+dl_b    lda RTCLOK+2
+        lsr
+        lsr
+        lsr
+        lsr
+        and #15
+        tax
+        lda bass,x
+dl_s    sta AUDF1
+        beq dt1
+        lda #$A8
+dt1     sta AUDC1
+        lda t1
+        cmp #1
+        bne dr_a
+        lda #0
+        beq dt3
+dr_a    lda t2
+dt3     sta R_AUDF1
+        beq dt2
+        lda #$A8
+dt2     sta R_AUDF1+1
         rts
 
 silence ldx #7
@@ -466,9 +514,9 @@ mode    .byte 0
 step    .byte 0
 jv      .word 0
 gmode   .byte 1,2,3,7,9
-keymap  .byte $32,$1F,$1E,$1A,$18,$1D,$1B,$33,$35,$30   ; keys 0 1 2 3 4 5 6 7 8 9 (OS key codes)
+keymap  .byte $32,$1F,$1E,$1A,$18,$1D,$1B,$33,$35,$30,$3A   ; keys 0-9 and D (OS key codes)
 scale   .byte 121,107,95,90,80,71,63,59
-ntab    .word n0,n1,n2,n3,n4,n5,n6,n7,n8,n9
+ntab    .word n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10
 n0      .byte 'silence',0
 n1      .byte 'LEFT tone (POKEY 1)',0
 n2      .byte 'RIGHT tone (POKEY 2)',0
@@ -479,6 +527,10 @@ n6      .byte '4-voice chord (POKEY 1)',0
 n7      .byte 'noise, both',0
 n8      .byte '16-bit low tone (POKEY 1)',0
 n9      .byte 'sweep, both',0
+n10     .byte 'ditty: low bass LEFT, high melody RIGHT',0
+bass    .byte 243,162,144,162,181,144,181,216,243,162,144,162,181,216,243,243
+mel     .byte 60,47,39,47,60,47,39,0,53,39,35,39,53,39,35,0
+        .byte 60,47,39,29,23,29,39,47,35,39,35,29,39,47,60,0
 gtab    .word g1,g2,g3,g4,g5
 g1      .byte 'STEP 1  LEFT tone (or mono tone)',0
 g2      .byte 'STEP 2  RIGHT tone',0
@@ -492,8 +544,8 @@ s_p2s   .byte 'POKEY 2 ($D210) STEREO found',0
 s_p2m   .byte 'POKEY 2 ($D210) none (mono)',0
 s_ask   .byte 'Did you hear it?  Y yes  N no  S skip',0
 s_play  .byte 'Playing: ',0
-s_mhelp .byte 'G guided test   0-9 free play   ESC exit',0
-s_menu  .byte '0 off 1 L 2 R 3 both 4 alt 5 scale 6 chord',0
+s_mhelp .byte 'G guided  0-9 free play  D ditty  ESC exit',0
+s_menu  .byte '0 off 1 L 2 R 3 both 4 alt 5 scale 6 chord D ditty',0
 s_ok    .byte 'RESULT: PASS - all heard steps OK',0
 s_bad   .byte 'RESULT: FAIL - a step was not heard',0
         run start
