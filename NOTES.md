@@ -22,6 +22,8 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 - 1200XL F-key mapping, cart slot naming and `-1200` flag are guesses.
 - `web/js/cx2620.js` (2600 BASIC) written but not wired into the UI or tested.
 - Own Rust cycle-exact core, differential testing, enhanced hardware modules (U1MB, PokeyMAX, VBXE), NetSIO bridge, WebSerial: not started.
+- Audio: SAP/SAPX2/RMT player (needs a 6502 hook into the emulated POKEYs; SAP is player code plus data, not compressed audio), direct `.mid`/WAV reading on the Atari, long stereo clips via 130XE banked RAM, rebuild the tools disk with MIDIPLAY/MP3PLAY, test the `N2`-`N6` conversions. Stereo output not yet heard.
+- Idea (CraftGate, later; baseline Ataricraft first): a modern-side gateway that does the heavy work (search, TLS, mail, downloads, AI) as asynchronous jobs (SUBMIT, ACK, PROCESS, READY, FETCH, COMPLETE) buffered at gateway speed and delivered at the client's pace, so 6502 programs stay sequential and tiny. Pieces mentioned: KPage (simplified pages), output FORMAT (ATARI-BASIC, 6502-ASM, PLAIN-TEXT, KPAGE), small native front ends (NANO, MAIL, WEB, GET, SEND, CHAT, SEARCH, AI), client-scoped views over big archives, a Craft-aware DOS, same semantic objects for humans, programs and AI. The existing copy/paste bridge feeds results into NANO or BASIC. Order: baseline, machine/hardware model, minimal gateway, KPage and search/browser, files, mail/chat, DOS hooks, more machines. Needs a written spec first.
 - `web/ref/` (built WASM) is git-ignored; rebuild locally.
 
 ## Working notes
