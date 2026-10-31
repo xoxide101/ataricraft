@@ -197,7 +197,7 @@
       }
     };
     addRow('Borders (tiled strips, 8 pixels wide)', bor, (e) => `${e.len} bytes`);
-    addRow('Fonts (saved as raw data)', fon, (e) => `${e.len} bytes`);
+    addRow('Fonts (glyph sheet; PNG or raw data)', fon, (e) => `${e.len} bytes`);
     addRow('Other files (program code, menus, picture data: saved as raw data)', oth, (e) => `${e.len} bytes, load address $${e.addr.toString(16).toUpperCase().padStart(4, '0')}`);
     const scale = () => +q('.psz').value;
     const sel = () => (tag.size ? [...tag].map((i) => gfx[i]) : gfx);
@@ -233,7 +233,7 @@
         if (d[p] === 0xff && d[p + 1] === 0xff) p += 2;
         if (p + 4 > d.length) break;
         const s = d[p] | (d[p + 1] << 8), e = d[p + 2] | (d[p + 3] << 8), n = e - s + 1;
-        if (e < s || p + 4 + n > d.length) break;
+        if (s < 0x100 || e < s || p + 4 + n > d.length) break;
         p += 4 + n; segs++;
       }
       if (segs && p - j >= 64) { found.push({ at: j, len: p - j, segs }); j = p; } else j += 2;
