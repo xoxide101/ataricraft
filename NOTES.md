@@ -37,6 +37,12 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 - MAME titles: #medxml / auto-load a800*.xml from scanned folder; TITLES in localStorage ac.titles; scripts/titles-test.cjs.
 
 
+## v0.5.0 (2026-10-30)
+
+- Hover property cards for drives, cartridges and tape (Load, Add file, Save, Save + Eject); autosave folder, timed backups, unsaved-disk warning, multi-format Save disk; Print Shop viewer selected/all x separate/sheet saves.
+- Tools: NANO, CALC, 80COL, VIEW, SNDTEST stereo ditty. Shareable tools disk (see below). AFM/AFM80 rebuilt as V0.5 REV 14 (no code change from REV 13, version strings only).
+- Release v0.5.0 (pre-release) ships the emulator zip, the tools disk and AFM separately.
+
 ## v0.4.0 (2026-10-28)
 
 - AFM/AFM80 (REV 13) with full Properties screen (long name, added date, DOS date on SDX/BW-DOS); WebAFM two-pane disk explorer; DAT/CRC cart identification; FujiNet TNFS browse via relay.

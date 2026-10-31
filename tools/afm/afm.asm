@@ -1,5 +1,5 @@
 ; AFM - Ataricraft File Manager.  Two-pane file manager for Atari DOS 2 / MyDOS (uses CIO only).
-; Version/revision/date appear in the info and help screens: bump V0.4 REV n and BUILD date there on every release.
+; Version/revision/date appear in the info and help screens: bump V0.5 REV n and BUILD date there on every release.
 ; Build: mads afm.asm -o:afm.com
 
 CIOV    = $E456
@@ -2069,7 +2069,7 @@ doinfo:
         lda #125
         jsr putraw
         jsr putsi
-        .byte ' ATARICRAFT AFM V0.4 REV 13',$9B,' BUILD 2026-10-28',$9B,' SYSTEM INFO',$9B,$9B
+        .byte ' ATARICRAFT AFM V0.5 REV 14',$9B,' BUILD 2026-10-30',$9B,' SYSTEM INFO',$9B,$9B
         .byte 'COMPUTER: ',0
         lda $FCD8
         cmp #$4C
@@ -2234,7 +2234,7 @@ ph_d:   adc #'0'
 dohelp: lda #125
         jsr putraw
         jsr putsi
-        .byte ' ATARICRAFT AFM V0.4 REV 13 - KEYS',$9B,$9B
+        .byte ' ATARICRAFT AFM V0.5 REV 14 - KEYS',$9B,$9B
         .byte 'W/S OR -/=   MOVE CURSOR',$9B
         .byte ', . OR < >   PAGE UP / DOWN',$9B
         .byte 'TAB OR SPACE SWITCH PANE',$9B
