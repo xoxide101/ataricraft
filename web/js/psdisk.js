@@ -86,5 +86,43 @@
     return c;
   }
 
-  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, GW, GH };
+  // Font (FO.*): per-character height table, then lo/hi byte tables of glyph pointers (relative to the load address).
+  // Glyph k is character 32+k, stored as rows of ceil(width/8) bytes.
+  function fontGlyphs(d, addr) {
+    let best = null;
+    for (let S = 0x40; S < 0xa0; S++) for (let N = 55; N <= 70; N++) {
+      const H = S + N; if (H + N > d.length) continue;
+      let bad = 0, prev = -1, fit = 0;
+      for (let k = 1; k < N; k++) {
+        const p = d[S + k] | (d[H + k] << 8); if (!p) continue;
+        if (p < prev || p - prev > 200) bad++;
+        const h = d[S - N + k - 1], df = p - prev; if (prev > 0 && h && df > 0 && df % h === 0) fit++;
+        prev = p;
+      }
+      if (!best || bad < best.bad || (bad === best.bad && fit > best.fit)) best = { bad, fit, S, N, H };
+    }
+    if (!best || best.bad > 6) return null;
+    const ptr = [];
+    for (let k = 0; k < best.N; k++) ptr.push(((d[best.S + k] | (d[best.H + k] << 8)) - addr));
+    const out = [];
+    for (let k = 1; k < best.N; k++) {
+      const p = ptr[k], h = d[best.S - best.N + k];
+      if (!h || p <= 0 || p >= d.length) continue;
+      let nx = d.length; for (let j = k + 1; j < best.N; j++) if (ptr[j] > p && ptr[j] <= d.length) { nx = ptr[j]; break; }
+      const bpr = Math.max(1, Math.min(8, Math.round((nx - p) / h)));
+      const px = new Uint8Array(bpr * 8 * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < bpr * 8; x++) px[y * bpr * 8 + x] = ((d[p + y * bpr + (x >> 3)] || 0) >> (7 - (x & 7))) & 1;
+      out.push({ ch: String.fromCharCode(32 + k), w: bpr * 8, h, px });
+    }
+    return out;
+  }
+  function fontSheet(gl, scale) {
+    const cols = 12, cw = (Math.max(...gl.map((o) => o.w)) + 4) * scale, ch = (Math.max(...gl.map((o) => o.h)) + 4) * scale;
+    const c = document.createElement('canvas'); c.width = cols * cw; c.height = Math.ceil(gl.length / cols) * ch;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    gl.forEach((o, i) => g.drawImage(canvasOf(o.px, o.w, o.h, scale), (i % cols) * cw + 2, Math.floor(i / cols) * ch + 2));
+    return c;
+  }
+
+  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, fontGlyphs, fontSheet, GW, GH };
 });

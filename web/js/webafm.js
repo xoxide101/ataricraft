@@ -174,6 +174,14 @@
         const nm = Object.assign(document.createElement('span'), { textContent: `${e.name} · ${describe(e)}${e.short ? ' · incomplete' : ''}` }); nm.style.flex = '1';
         r.append(nm);
         if (e.kind === 'border') { const bp = P.borderPixels(e.data), c = P.canvasOf(bp.px, bp.w, bp.h, 2); c.style.cssText = 'background:#fff;height:48px;width:auto;image-rendering:pixelated'; r.append(c); }
+        if (e.kind === 'font') {
+          const gl = P.fontGlyphs(e.data, e.addr);
+          if (gl && gl.length) {
+            const c = P.fontSheet(gl, 1); c.style.cssText = 'background:#fff;max-width:420px;height:auto;image-rendering:pixelated';
+            const sp = document.createElement('button'); sp.textContent = 'Save PNG'; sp.onclick = async () => host().save(safe(e.name) + '.png', await P.png(P.fontSheet(gl, 2)), 'image/png');
+            r.append(c, sp);
+          }
+        }
         const sv = document.createElement('button'); sv.textContent = 'Save raw'; sv.onclick = () => host().save(safe(e.name) + '.bin', e.data); r.append(sv);
         oq.append(r); rows.push(r);
       }
