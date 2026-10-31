@@ -3094,8 +3094,10 @@
     el.addEventListener('mouseleave', hcLater);
     document.body.append(el);
     const ar = anchor.getBoundingClientRect(), w = el.offsetWidth, hh = el.offsetHeight;
-    el.style.left = Math.max(4, Math.min(ar.left, innerWidth - w - 4)) + 'px';
-    el.style.top = Math.max(4, ar.bottom + 6 + hh > innerHeight ? ar.top - hh - 6 : ar.bottom + 6) + 'px';
+    const mx = HC.mx == null ? ar.right : HC.mx, my = HC.my == null ? ar.top : HC.my;
+    let lx = mx + 25; if (lx + w > innerWidth - 4) lx = Math.max(4, mx - 25 - w);
+    el.style.left = lx + 'px';
+    el.style.top = Math.max(4, Math.min(my - 12, innerHeight - hh - 4)) + 'px';
     el.style.visibility = 'visible';
     HC.el = el; HC.id = id;
   }
@@ -3105,6 +3107,7 @@
     el.addEventListener('click', hcClose);
     el.addEventListener('contextmenu', hcClose);
   }
+  window.addEventListener('mousemove', (e) => { HC.mx = e.clientX; HC.my = e.clientY; }, true);
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hcClose(); }, true);
   window.addEventListener('scroll', hcClose, true);
   for (const id of Object.keys(devEl)) hcBind(devEl[id], id);
