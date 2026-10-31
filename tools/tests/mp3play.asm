@@ -6,7 +6,8 @@
         icl 'common.inc'
         icl 'player.inc'
 
-; sample file layout: 'SMP',1, speed (scanlines per sample, 1-3), pages (256 bytes of packed nibbles), 0, 0, data
+; sample file layout: 'SMP',1, speed (scanlines per sample, 1-3), pages (256 bytes), channels (0 or 1 = mono, 2 = stereo), 0, data
+; mono: packed nibbles, high nibble first. stereo: one frame per byte, left nibble high, right nibble low.
 doplay  jmp dp1
 pbad    rts
 dp1     lda BUF+4
@@ -44,6 +45,37 @@ pk0     lda SKSTAT
         sta NMIEN
         sta DMACTL
         ldy #0
+        lda BUF+6
+        cmp #2
+        bne pl1
+pl2     lda (pp),y
+        lsr
+        lsr
+        lsr
+        lsr
+        and mL
+        ora #$10
+        sta AUDC1
+        lda (pp),y
+        and mR
+        and #$0F
+        ora #$10
+        ldx stereo
+        beq pl3
+        sta R_AUDC1
+pl3     ldx spd
+pl4     sta WSYNC
+        dex
+        bne pl4
+        iny
+        bne pl2
+        inc pp+1
+        lda SKSTAT
+        and #4
+        beq plend
+        dec pgs
+        bne pl2
+        beq plend
 pl1     lda (pp),y
         lsr
         lsr
