@@ -31,7 +31,10 @@ cc_off: jsr putsi
         clc
         rts
 
-; read one line into LINE (called instead of getline by the main loop)
+; read one line into LINE (called instead of getline by the main loop). With TABF = 0 this is
+; just getline. Otherwise keys are read one at a time from K: (IOCB 7): EOL ends the line,
+; $7E (ATASCII delete-back) erases the last character and sends the same code to the screen,
+; Tab ($7F in ATASCII, also $09) calls tc_complete, other codes outside $20..$7A are ignored.
 getlinet:
         lda TABF
         bne gt_on
@@ -83,6 +86,8 @@ tc_put: ldx TC_N
 tc_pr:  rts
 
 ; compare the candidate at (T1) with the typed name part LINE[TC_PS..TC_N); on a match fold it into the common text
+; TC_CM = text all matches share so far (shortened at the first difference), TC_CNT = matches
+; (saturates at 255), TC_D1 = 1 when the first match is a folder, TC_PL = typed length of the name part.
 tc_try: lda TC_N
         sec
         sbc TC_PS
@@ -133,6 +138,8 @@ tt_t:   lda #0
         inc TC_CNT
         rts
 
+; Tab pressed: collect all candidates (command names for the first word, directory entries for
+; later words), then append the common text to the line; see tc_a / tc_spc at the end.
 tc_complete:
         lda #0
         sta TC_CNT

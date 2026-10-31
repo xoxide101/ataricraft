@@ -1,7 +1,10 @@
 ; res80.asm - the resident part of 80COL.COM: an 80 x 24 text screen driver for E:.
-; Assembled twice by build.cjs (BASE = $9000 for RAMTOP $C0, $7000 for RAMTOP $A0), so the same
-; 80COL.COM works with and without the BASIC cartridge.  The screen is ANTIC mode F (1 bit, 320 x 192),
-; each character is 4 x 8 pixels (3 x 5 glyph) packed two per byte.
+; Assembled three times (-d:BASE=$9000 for RAMTOP $C0, $7000 for RAMTOP $A0, $5000 for $80), so the
+; same 80COL.COM works with 48K, 40K (BASIC cartridge) and 32K.  The screen is ANTIC mode F
+; (1 bit, 320 x 192), each character is 4 x 8 pixels (3 x 5 glyph) packed two per byte.
+;
+; The output is an Atari binary (segments: font, variables, code) that 80col.asm embeds and
+; copies to BASE; it is position dependent, which is why one image is built per BASE.
 ;
 ; memory (offsets from BASE):
 ;   +$0000  screen rows 0-11 (320 bytes each, so none crosses a 4K boundary)
@@ -9,6 +12,23 @@
 ;   +$1000  screen rows 12-23
 ;   +$1F00  font     +$1FC0  variables
 ;   +$2000  tables, code, then the text shadow (24 x 80) and the line buffer
+;
+; Design notes:
+;  * Screen memory is organised as 24 "slots" of 320 bytes (8 scanlines x 40 bytes). The table
+;    ord[] maps logical row -> slot, and the display list's LMS address for each row is
+;    rewritten (mkdl) from ord[]. Scrolling and line insert/delete therefore only rotate ord[]
+;    and clear one slot instead of moving bitmap data. ANTIC's address counter cannot cross a
+;    4K boundary inside a mode line, hence the split with the display list in the middle.
+;  * A text "shadow" (SHAD, 24 x 80 character codes) mirrors the screen; it is used for
+;    insert/delete and for gathering the logical line under the cursor for input.
+;  * Glyphs are drawn by drawat from a 95-entry font of 16-bit words (see drawat).
+;  * wrapf[row] = 1 when that row continues on the next (line wrapped), as for the OS editor.
+;  * Control codes handled by putch: EOL, $1B ESC (next char is drawn literally), 28-31 cursor
+;    up/down/left/right, 125 clear, 126 backspace, 127 tab, 156/157 delete/insert line,
+;    254/255 delete/insert char; 253 (bell) and 128-159 otherwise are ignored.
+;  * Zero page: ptr,ptr2,ta,tb,tc ($CB-$D1) are scratch; the CIO entries save/restore them
+;    (saveall/leave) since the foreground program (e.g. BASIC) may use them.
+; Driver is entered through the handler table htab (signature '80C' just before it).
         icl 'lib\sys.asm'
         icl 'lib\r80.inc'
 
@@ -33,6 +53,12 @@ IOCB0PT = $0346
         org FONT
         icl 'lib\font80.inc'
 
+; Variables ($1FC0). First 9 bytes are the saved OS state used by /OFF and DOSINI:
+;   v_orge old E: handler table, v_ort old RAMTOP, v_odos old DOSINI, v_ovbi old VVBLKD,
+;   v_omt old MEMTOP. The rest: cursor (v_curx/v_cury), escf (ESC pending), chr (char in
+;   flight), savx/rety (X and Y status returned to CIO), lpos/llen (input line position /
+;   length), dch/dcol/drow (cell being drawn), gl/gh (glyph word), imask (inverse mask),
+;   kvec (K: get vector), savzp (saved zero page), gr (8 rows of the glyph being built).
         org VARS
 v_orge  dta a(0)
 v_ort   dta 0
@@ -63,10 +89,15 @@ gr      dta 0,0,0,0,0,0,0,0
         dta a(htab),a(rdosini),a(rvbi),a(rinit)
 
         org CODEB
-        dta c'80C'
+        dta c'80C'              ; signature checked by 80col.asm (isact) at table-3
+; CIO handler table: open, close, get, put, status, special (each address-1, as CIO uses RTS-style
+;   dispatch). Followed by a jmp used as the handler init entry.
 htab    dta a(h_ok-1),a(h_ok-1),a(h_get-1),a(h_put-1),a(h_ok-1),a(h_spec-1)
         jmp h_ok
 
+; Lookup tables (assembler-generated). ord = identity logical row -> slot map initially.
+;   slolo/slohi = screen address of each slot (slots 12-23 live in the second 4K block);
+;   shlo/shhi = shadow row addresses; cnt80l/h = bytes below row n (80*(23-n)) for scrolling.
 ord     :24 dta #
 wrapf   :24 dta 0
 slolo   :12 dta l(BASE+320*#)
@@ -78,12 +109,14 @@ shhi    :24 dta h(SHAD+80*#)
 cnt80l  :24 dta l(80*(23-#))
 cnt80h  :24 dta h(80*(23-#))
 
+; h_ok: open/close/status: return Y=1 (success). h_spec: special: Y=$92 (not implemented).
 h_ok    ldy #1
         rts
 h_spec  ldy #$92
         rts
 
 ; ---- CIO entry points -------------------------------------------------
+; h_put: CIO put-byte, A = character. Preserves X and the scratch zero page; returns Y=1.
 h_put   sta chr
         stx savx
         jsr saveall
@@ -93,6 +126,11 @@ h_put   sta chr
         jsr putch
         jmp leave
 
+; h_get: CIO get-byte. Returns the next character of the current input line. When the line
+;   buffer is empty: show the cursor, wait for keys (via the real K: handler, kget), echo
+;   them with putch, and on EOL gather the whole logical line from the screen (so lines can be
+;   edited with the cursor keys first). BREAK ($11 = 0) returns EOL with Y=$80 (break).
+;   Returns A = char, X restored, Y = status (rety).
 h_get   stx savx
         jsr saveall
         lda #1
@@ -103,7 +141,7 @@ h_get   stx savx
 hg_loop jsr curon
 hg_w    lda BRKKEY
         beq hg_brk
-        lda CH
+        lda CH                  ; $FF = no key pressed yet
         cmp #$FF
         beq hg_w
         jsr curoff
@@ -127,6 +165,7 @@ hg_brk  jsr curoff
         sta chr
         jmp leave
 
+; saveall/leave: save / restore zero page $CB-$D1 (7 bytes); leave also reloads X, Y, A for CIO.
 saveall ldx #6
 sv1     lda ptr,x
         sta savzp,x
@@ -144,7 +183,9 @@ lv1     lda savzp,x
         lda chr
         rts
 
-; A = next key from the real keyboard handler
+; kget: A = next key from the real keyboard handler. Finds 'K' in HATABS, takes its table's
+;   get-byte vector (+4/+5, stored as address-1), adds 1 and jumps to it through kvec; the
+;   handler's RTS returns straight to our caller. No K: entry -> EOL.
 kget    ldx #0
 kg1     lda HATABS,x
         beq kg_none
@@ -172,6 +213,9 @@ kg2     lda HATABS+1,x
         jmp (kvec)
 
 ; ---- put one character --------------------------------------------------
+; putch: A = ATASCII character; interprets control codes (see header) or draws it, wrapping
+;   at column 80 (sets wrapf) and scrolling at the bottom. "bne *+5" skips the next 3-byte
+;   jmp when the code does not match. Clobbers A,X,Y and scratch zero page.
 putch   sta chr
         lda escf
         beq pc_1
@@ -212,11 +256,11 @@ pc_2    cmp #125
         bne *+5
         jmp inschr
         cmp #253
-        beq pc_ret
+        beq pc_ret              ; bell: ignored
         cmp #128
         bcc pc_draw
         cmp #160
-        bcc pc_ret
+        bcc pc_ret              ; $80-$9F (other control graphics): ignored
 pc_draw lda v_curx
         sta dcol
         lda v_cury
@@ -239,6 +283,7 @@ setesc  lda #1
         sta escf
         rts
 
+; cursmv: codes 28-31 move the cursor up/down/left/right, wrapping around the screen edges.
 cursmv  cmp #30
         bcs cm_h
         cmp #29
@@ -270,6 +315,7 @@ cm_rt   inc v_curx
         sta v_curx
         rts
 
+; bksp: back up one column (not past column 0) and blank the cell.
 bksp    lda v_curx
         beq pc_ret
         dec v_curx
@@ -280,6 +326,7 @@ bksp    lda v_curx
         lda #$20
         jmp putcell
 
+; tabk: move to the next 8-column tab stop; past column 79 wraps to next line.
 tabk    lda v_curx
         and #$F8
         clc
@@ -292,6 +339,7 @@ tabk    lda v_curx
 tb1     sta v_curx
         rts
 
+; linefeed: cursor down; on the last row scroll up by deleting row 0 (dellines).
 linefeed lda v_cury
         cmp #23
         bcs lf_s
@@ -301,6 +349,8 @@ lf_s    lda #0
         jmp dellines
 
 ; ---- editing ----------------------------------------------------------
+; delchr / inschr: delete / insert a character at the cursor by shifting the rest of the
+;   row in the shadow, then redrawing from the cursor to the row end.
 delchr  lda v_cury
         jsr shrow
         ldy v_curx
@@ -347,13 +397,17 @@ rd1     ldy dcol
         bne rd1
         rts
 
+; dellin: delete the cursor's row, cursor to column 0.
 dellin  lda v_cury
         jsr dellines
         lda #0
         sta v_curx
         rts
 
-; delete row A, rows below move up, a blank row appears at the bottom
+; delete row A, rows below move up, a blank row appears at the bottom.
+;   Bitmap: no pixels move. The slot of the deleted row is cleared and moved to the end of
+;   ord[]/wrapf[] (rotation), then the shadow rows below are copied up (cnt80 bytes, split
+;   into whole pages dl3 + remainder dl5), and mkdl rebuilds the LMS addresses.
 dellines sta tb
         tax
         lda ord,x
@@ -418,6 +472,9 @@ br1     sta (ptr2),y
         bpl br1
         rts
 
+; inslin: insert a blank row at the cursor; rows below move down, the bottom row is lost.
+;   Same slot-rotation trick as dellines; the shadow is copied backwards (from the end) with
+;   a 16-bit count in gl/gh = 80*(23-row) so the overlapping move is safe.
 inslin  lda ord+23
         sta tc
         ldx #23
@@ -476,7 +533,7 @@ il5     lda v_cury
         jmp mkdl
 
 ; ---- screen / shadow bookkeeping --------------------------------------------
-; ptr = screen address of the slot of row A
+; rowptr: ptr = screen address of the slot of logical row A (via ord[]). Clobbers X.
 rowptr  tax
         lda ord,x
         tax
@@ -494,7 +551,7 @@ shrow   tax
         sta ptr2+1
         rts
 
-; zero slot A (320 bytes)
+; clrslot: zero slot A (320 bytes = one full page + 64 bytes). Note A is a slot number.
 clrslot tax
         lda slolo,x
         sta ptr
@@ -512,7 +569,8 @@ cs2     sta (ptr),y
         bne cs2
         rts
 
-; rewrite the LMS address of every row in the display list
+; rewrite the LMS address of every row in the display list. Each row is 10 bytes
+;   ($4F lo hi + 7 x $0F); the first LMS operand is at DLB+4, so tc steps 4,14,24,...
 mkdl    lda #0
         sta ta
         lda #4
@@ -535,6 +593,8 @@ mk1     ldx ta
         bne mk1
         rts
 
+; clrscr: clear all slots, fill the shadow with spaces ($20: 7 pages + 128 bytes = 1920),
+;   clear wrap flags, home the cursor and reset the input line state.
 clrscr  lda #0
         sta tmpv
 cl1     lda tmpv
@@ -572,7 +632,9 @@ cl5     sta wrapf,x
         sta llen
         rts
 
-; called once by the installer: build the display list and clear everything
+; called once by the installer: build the display list and clear everything.
+;   DL: 3 x $70 (24 blank lines), then 24 x { $4F+address (mode F with LMS), 7 x $0F },
+;   then $41 (JVB) back to the start. The LMS addresses are filled in by mkdl.
 rinit   lda #$70
         sta DLB
         sta DLB+1
@@ -603,7 +665,8 @@ ri2     sta DLB,y
         jmp clrscr
 
 ; ---- drawing -------------------------------------------------------------
-; ptr = screen byte of cell (dcol,drow), ta = 1 if the odd (right) nibble
+; cellptr: ptr = screen byte of cell (dcol,drow) = row slot + dcol/2; ta = 1 if the odd
+;   (right) nibble. Two 4-pixel cells share one byte: even column = high nibble.
 cellptr lda drow
         jsr rowptr
         lda dcol
@@ -618,6 +681,7 @@ cellptr lda drow
         inc ptr+1
 cp1     rts
 
+; add40: ptr += 40 (next scanline).
 add40   lda ptr
         clc
         adc #40
@@ -636,7 +700,14 @@ putcell sta dch
         sta (ptr2),y
         rts
 
-; draw dch at (dcol,drow); bit 7 = inverse
+; draw dch at (dcol,drow); bit 7 = inverse.
+;   Font: 95 words for chars 32-126 (index (c&$7F)-32, 2 bytes each). Bit 15 = descender flag
+;   (glyph rows go to scanlines 3-7 instead of 1-5); the remaining 15 bits are 5 rows x 3
+;   pixels, top row first. Each 3-bit row is shifted left once to leave a blank column on
+;   the right, giving a 4-pixel nibble in gr[0..7] (blank for unused scanlines). The nibble
+;   is then XORed with imask ($0F for inverse) and merged into the high or low nibble of
+;   the screen byte on each of the 8 scanlines, keeping the neighbouring cell intact.
+;   Characters outside 32-126 (after masking) draw as blank.
 drawat  lda #0
         bit dch
         bpl da_n
@@ -711,7 +782,7 @@ da_s    sta (ptr),y
         bne da_l
         rts
 
-; invert the cursor cell
+; xorcell: invert the 4 x 8 cursor cell (XOR, so calling it twice restores the screen).
 xorcell lda v_curx
         sta dcol
         lda v_cury
@@ -732,6 +803,7 @@ xc_l    ldy #0
         bne xc_l
         rts
 
+; curon/curoff: same routine (XOR toggle); skipped when the cursor is inhibited (CRSINH).
 curon   lda CRSINH
         bne co_r
         jmp xorcell
@@ -739,6 +811,9 @@ co_r    rts
 curoff  = curon
 
 ; ---- the logical line under the cursor goes to lbuf ----------------------------
+; gather: a logical line is the cursor's row plus rows joined by wrapf (at most 3 rows).
+;   Find the first row (tb) and last row (gr1), copy their shadow text to lbuf, trim trailing
+;   spaces, append EOL, set llen/lpos, move the cursor to the last row and linefeed.
 gather  ldx v_cury
 ga1     cpx #0
         beq ga2
@@ -810,7 +885,11 @@ ga10    lda #EOL
         jmp linefeed
 
 ; ---- hooks -----------------------------------------------------------------
-; deferred VBI: when the OS puts up its own GRAPHICS 0 list, swap ours back in
+; deferred VBI: when the OS puts up its own GRAPHICS 0 list, swap ours back in.
+;   If SDLSTL already equals DLB nothing to do. Otherwise the vbm/vbn operands are patched
+;   (self-modifying) with the current display list address and the list is recognised as
+;   the OS's by byte 3 = $42 (LMS mode 2) and byte 6 = $02; then SDLSTL is set to ours.
+;   Always chains to the previous VBI via v_ovbi.
 rvbi    lda SDLSTL+1
         cmp #>DLB
         bne vb1
@@ -837,7 +916,9 @@ vbn     lda $FFFF,y
         sta SDLSTL+1
 vb9     jmp (v_ovbi)
 
-; DOSINI: a warm start gives the memory back and resets the vectors, so take it again
+; DOSINI: a warm start gives the memory back and resets the vectors, so take it again.
+;   Chains to the old DOSINI first, then restores RAMTOP = BASE page, MEMTOP = BASE-1, the
+;   IOCB 0 put vector (htab+6, the put entry) and the deferred VBI.
 rdosini jsr rdo_old
         lda #>BASE
         sta RAMTOP
@@ -856,6 +937,7 @@ rdosini jsr rdo_old
         rts
 rdo_old jmp (v_odos)
 
+; The shadow text and line buffer follow the code; ert checks everything fits in RESZ bytes.
 SHAD    = *
 lbuf    = SHAD+1920
         ert lbuf+241>BASE+RESZ

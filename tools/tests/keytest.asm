@@ -1,6 +1,25 @@
 ; KEYTEST.COM - visual keyboard: every key is a block that is grey (untested), yellow (held down) or green
 ; (has been pressed). SHIFT, CTRL, START/SELECT/OPTION and BREAK are included. Joysticks and paddles are read
 ; out below. PASS when every key has been seen. Hold START+SELECT+OPTION together to exit.
+;
+; HOW IT WORKS: the main loop (once per frame) polls POKEY directly - KBCODE ($D209) with SKSTAT ($D20F)
+;   for the keyboard, CONSOL ($D01F) for START/SELECT/OPTION, IRQST ($D20E) bit 7 for BREAK - and paints
+;   a map cell for each key. The OS keyboard handler is not used. A cell goes yellow while its key is
+;   down and green once released ("settled"). PASS shows when `cnt` (distinct keys seen) >= `tot`.
+;
+; SCREEN (cscreen.inc, NA = 3 text rows, NMAP = 6 map rows of 20 cells, NB = 8 text rows):
+;   rows 0-2 title / KBCODE+SKSTAT / legend; map = the keyboard drawn as blocks;
+;   rows 3-10 below it: key count, JOY1-3 (U D L R FIRE), PADDLE 0-3, PADDLE 4-7, RESULT, exit hint.
+;   Map cell number = map row * 20 + column; cells are laid out roughly like the keyboard rows:
+;   0-14 digit row, 15-19 optional extra keys (not counted), 20-33 top letter row, 40 CTRL, 41-53 next row,
+;   60/72 SHIFT, 61-71 bottom row, 83-91 space bar (nine cells), 95-98 START/SELECT/OPTION/BREAK.
+;
+; MEMORY / VARIABLES: cnt = keys seen, tot = keys required (starts at 8 and grows per mapped key; see
+;   kt1), cur = key currently held ($FF none), shp/ctp = SHIFT / CTRL currently shown held, pv = previous
+;   console-key state, st = per-cell "seen" flags, ktab = KBCODE (low 6 bits) -> cell, $FF = unmapped.
+;
+; EXTENDING: add a `code,cell` pair to kdef (terminated by $FF) and, if the cell should be drawn at start
+;   and counted, nothing more is needed; cells 15-19 are deliberately not counted towards `tot`.
         org $2000
 NA      = 3
 NMAP    = 6
@@ -9,19 +28,20 @@ NB      = 8
         icl 'common.inc'
         icl 'cscreen.inc'
 
-cnt     .byte 0
-tot     .byte 0
-cur     .byte $FF
-shp     .byte 0
-ctp     .byte 0
-pst     .byte 0
-pv      .byte 0,0,0,0
-cbit    .byte 1,2,4,$80
-ccl     .byte 95,96,97,98
-st      .ds 100
-ktab    .ds 64
+cnt     .byte 0         ; number of distinct counted keys seen so far
+tot     .byte 0         ; number of keys that must be seen for PASS
+cur     .byte $FF       ; map cell of the main-block key currently held, $FF = none
+shp     .byte 0         ; 1 while SHIFT is shown held
+ctp     .byte 0         ; 1 while CTRL is shown held
+pst     .byte 0         ; state passed to paint
+pv      .byte 0,0,0,0   ; previous pressed state of START, SELECT, OPTION, BREAK
+cbit    .byte 1,2,4,$80 ; bit tested for each: CONSOL bits 0-2, IRQST bit 7 (0 = pressed)
+ccl     .byte 95,96,97,98       ; map cell of each of those four keys
+st      .ds 100         ; per-cell "has been seen" flag
+ktab    .ds 64          ; KBCODE & $3F -> map cell, $FF = not mapped
 
-; key code, cell
+; key table: pairs of (KBCODE low 6 bits, map cell), terminated by $FF.
+; Codes are POKEY keyboard scan codes (not ATASCII); bit 6/7 of KBCODE (shift/ctrl) are masked off.
 kdef    .byte $1C,0, $1F,1, $1E,2, $1A,3, $18,4, $1D,5, $1B,6, $33,7, $35,8, $30,9, $32,10, $36,11, $37,12, $34,13
         .byte $03,15, $04,16, $13,17, $14,18, $11,19
         .byte $2C,20, $2F,21, $2E,22, $2A,23, $28,24, $2D,25, $2B,26, $0B,27, $0D,28, $08,29, $0A,30, $0E,31, $0F,32, $0C,33
@@ -30,10 +50,13 @@ kdef    .byte $1C,0, $1F,1, $1E,2, $1A,3, $18,4, $1D,5, $1B,6, $33,7, $35,8, $30
         .byte $21,83
         .byte $FF
 
+; start: set up the screen, clear st, build ktab from kdef (counting each key except cells 15-19 into
+; tot, and drawing every mapped cell grey), draw the space bar, SHIFT, CTRL and console cells grey,
+; then fall into the main loop.
 start   lda #$7D
         jsr eput
         lda #1
-        sta CRSINH
+        sta CRSINH      ; hide the cursor
         jsr gs_init
         ldx #0
         lda #1
@@ -53,7 +76,7 @@ kt0     sta ktab,x
         dex
         bpl kt0
         lda #8
-        sta tot
+        sta tot         ; base 8 = space bar, 2 SHIFT cells, CTRL and the 4 console keys (not in kdef)
         ldx #0
 kt1     lda kdef,x
         cmp #$FF
@@ -76,7 +99,7 @@ kt3     pla
         inx
         inx
         jmp kt1
-kt9     ldx #83
+kt9     ldx #83         ; space bar: cells 83..91
 kt4     lda #1
         jsr mapset
         inx
@@ -84,16 +107,16 @@ kt4     lda #1
         bcc kt4
         lda #60
         sta t4
-        ldx #60
+        ldx #60         ; left / right SHIFT
         lda #1
         jsr mapset
         ldx #72
         lda #1
         jsr mapset
-        ldx #40
+        ldx #40         ; CTRL
         lda #1
         jsr mapset
-        ldx #95
+        ldx #95         ; START, SELECT, OPTION, BREAK
 kt5     lda #1
         jsr mapset
         inx
@@ -102,12 +125,14 @@ kt5     lda #1
         loc 0,10
         say s_hint
 
+; main loop, once per frame: keep attract mode off, wait for vblank, restart the pot scan (POTGO) so
+; POT0-7 stay current, and exit when START, SELECT and OPTION are all held (CONSOL low 3 bits = 0).
 loop    lda #0
         sta ATRACT
         jsr vsync
-        sta POTGO
+        sta POTGO       ; any write starts a new paddle (POT) scan
         lda CONSOL
-        and #7
+        and #7          ; 0 = START, SELECT and OPTION all pressed
         bne lp0
         jmp quit
 lp0     jsr keys
@@ -116,9 +141,11 @@ lp0     jsr keys
         jsr readout
         jmp loop
 
-; main key block: yellow while held, green after release
+; keys: main key block. Yellow while held, green after release. SKSTAT bit 2 = 0 means a key is down.
+; Uses KBCODE & $3F -> ktab; unmapped keys ($FF) are ignored. When a different key replaces the held
+; one, the previous cell is settled first (only one key is tracked at a time). Clobbers A, X, Y, pst.
 keys    lda SKSTAT
-        and #4
+        and #4          ; bit 2: 0 = a key is currently down
         bne kdn
         lda KBCODE
         and #$3F
@@ -148,14 +175,18 @@ kdn     lda cur
         jmp settle
 kret    rts
 
+; mods: SHIFT and CTRL cells. SHIFT is "down" if SKSTAT bit 3 = 0, or a key is down with KBCODE bit 6
+; (shift) set; both shift cells light together (the hardware cannot tell left from right). CTRL is
+; detected only while some key is down with KBCODE bit 7 set (CTRL alone generates no key code, so it
+; appears to be seen only in combination with another key). Clobbers A, X, Y.
 mods    lda SKSTAT
-        and #8
+        and #8          ; bit 3: 0 = SHIFT held
         beq sh1
         lda SKSTAT
         and #4
         bne sh0
         lda KBCODE
-        and #$40
+        and #$40        ; KBCODE bit 6 = shift
         beq sh0
 sh1     nop
         lda #1
@@ -179,7 +210,7 @@ ctl     lda SKSTAT
         and #4
         bne ct0
         lda KBCODE
-        bpl ct0
+        bpl ct0         ; KBCODE bit 7 = ctrl
         lda #1
         sta ctp
         ldx #40
@@ -193,13 +224,16 @@ ct0     lda ctp
         jmp settle
 ctr     rts
 
+; cons: START/SELECT/OPTION (CONSOL bits 0-2) and BREAK (IRQST bit 7); X = 0..3 indexes cbit/ccl/pv.
+; A pressed key reads as 0 in the hardware bit; the and/eor pair turns that into nonzero = pressed.
+; Pressed -> yellow; on release -> settle (green). Clobbers A, X, Y, t4.
 cons    ldx #3
 cn1     stx t4
         cpx #3
         beq cnb
         lda CONSOL
         jmp cnc
-cnb     lda IRQST
+cnb     lda IRQST       ; BREAK: IRQST bit 7 is 0 while the key is held
 cnc     and cbit,x
         eor cbit,x
         beq cnu
@@ -222,7 +256,8 @@ cnn     ldx t4
         bpl cn1
         rts
 
-; X = cell: mark tested, colour green
+; settle: X = cell: mark it tested (first time only: st flag, and cnt++ unless it is one of the
+; uncounted cells 15-19) and colour it green (state 3). Falls into paint. Clobbers A.
 settle  lda st,x
         bne se1
         lda #1
@@ -233,7 +268,7 @@ settle  lda st,x
         bcc se1
 se0     inc cnt
 se1     lda #3
-; X = cell, A = state; the space bar is nine cells wide
+; paint: X = cell, A = state (see mapset); the space bar (cell 83) is nine cells wide, 83..91.
 paint   sta pst
         cpx #83
         bne pa1
@@ -246,6 +281,10 @@ pa0     lda pst
 pa1     lda pst
         jmp mapset
 
+; readout: refresh the text rows: raw KBCODE/SKSTAT, keys tested count, joystick 1-3, paddles 0-7 and the
+; RESULT line (PASS when cnt >= tot). Hardware sources: PORTA low nibble = stick 1, high nibble =
+; stick 2; PORTB low nibble = stick 3 (400/800 only); TRIG0-2 = fire buttons; POT0-POT7 = paddles.
+; Clobbers A, X, Y, t1-t4, v16.
 readout loc 0,1
         say s_kb
         lda KBCODE
@@ -285,19 +324,19 @@ readout loc 0,1
         loc 0,5
         say s_j2
         lda PORTA
-        lsr
+        lsr             ; stick 2 is in the high nibble
         lsr
         lsr
         lsr
         sta t1
-        lda TRIG0+1
+        lda TRIG0+1     ; $D011 = TRIG1
         sta t2
         jsr joy
         loc 0,6
         say s_j3
         lda PORTB
         sta t1
-        lda TRIG0+2
+        lda TRIG0+2     ; $D012 = TRIG2
         sta t2
         jsr joy
         loc 0,7
@@ -337,12 +376,15 @@ rdone   say s_pass
         lda #2
         jmp bar
 
+; quit: restore the OS screen and cursor and return to DOS.
 quit    jsr gs_off
         lda #0
         sta CRSINH
         rts
 
-; t1 low nibble = U D L R (0 = pressed), t2 = trigger (0 = pressed)
+; joy: print "UDLR F" for one stick. t1 low nibble = U D L R (bit set = released, 0 = pressed),
+; t2 = trigger (0 = pressed). A pressed direction shows its letter, a released one '-'.
+; jb: A = letter, X = mask; prints the letter if (t1 & mask) = 0. Clobbers A, X, Y, t3.
 joy     lda #'U'
         ldx #1
         jsr jb

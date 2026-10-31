@@ -1,4 +1,5 @@
 ; hand.asm - command-line hand-off from CMD.COM to the standalone tools (ARC, ZIP, DCM).
+; Provides: getlineh (carry clear on return; line in LINE; clobbers A, Y).
 ;
 ; CMD.COM stores the text after the program name at HAND ($0480, unused page 4 RAM):
 ;   HAND   = $A5 when a line is waiting, $5A once the tool has taken it, 0 otherwise

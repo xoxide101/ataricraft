@@ -1,6 +1,30 @@
 ; Multi-program boot menu: 6 boot sectors at $0700, directory in sectors 7-13 (36 entries x 24 bytes), programs from sector 14.
 ; Entry: name[16] ASCII space padded, start sector (u16), length (u24). Keys 1-9,0 then A-Z pick an entry.
 ; Needs no DOS. buildMenuAtr() in diskconv.js patches the entry count at $0709.
+;
+; Disk layout (128-byte sectors): 1-6 this loader (768 bytes at $0700, 6-sector boot header),
+;   7-13 directory (7 sectors = 896 bytes, up to 36 entries of 24 bytes = 864 used),
+;   14.. the XEX programs, each starting at the sector given in its directory entry.
+;   Entry (24 bytes): +0..15 name (ASCII, space padded), +16/+17 start sector (lo/hi),
+;   +18..20 stream length in bytes (24-bit lo/mid/hi), +21..23 unused here.
+;
+; Boot header: flags 0, 6 sectors, load $0700, init $0706 = "jmp start". The byte after it
+;   ($0709, label count) is the number of directory entries, patched by diskconv.js.
+;
+; Flow: load the directory to table ($0B00); print title and one line per entry via CIO
+;   on E: (IOCB 0); open K: on IOCB 1 and wait for a key. Keys 1-9 select entries 0-8,
+;   0 selects entry 9, A-Z (lower case folded) select entries 10-35. Keys at or beyond
+;   'count' are ignored. The chosen program is then loaded exactly like xexboot.asm:
+;   segments start,end,data; $FFFF markers skipped; a segment at $02E2-$02E3 is an INIT
+;   vector called after loading; at end of stream RUNAD ($02E0) is jumped through, else
+;   DOSVEC ($000A). INIT/RUN vectors are zeroed first so a stale value is never used.
+;
+; Memory: $0700-$09FF loader, $0A00-$0A7F sector buffer (buf), $0A80.. state (V block),
+;   $0B00-$0E7F directory table. Zero page: ptr=$E0 (copy destination), tp=$E2 (entry ptr).
+; State (V block): cnt(3) bytes consumed, bpos index in buf (128=empty), secl/sech next
+;   sector, lo/hi/elo/ehi segment start/end, len(3) program length, dbl/dbh buffer address
+;   passed to rdsec, idx selected/current entry, ndir directory sector counter,
+;   line = text line being built for printing.
         opt h-
         org $0700
         .byte 0,6
@@ -28,12 +52,13 @@ table   = $0B00
 ptr     = $E0
 tp      = $E2
 
+; Phase 1: read the 7 directory sectors (7..13) into table, 128 bytes at a time.
 start   cld
         lda #7
         sta secl
         lda #0
         sta sech
-        sta $02e0
+        sta $02e0               ; clear RUNAD and INITAD so stale values are not used
         sta $02e1
         sta $02e2
         sta $02e3
@@ -53,8 +78,10 @@ ld1     jsr rdsec
 ld2     dec ndir
         bne ld1
 
+; Phase 2: print the title (22 bytes incl. two EOLs), then one 19-byte line per entry:
+;   key char, space, 16-char name, EOL. Key char: idx 0-8 -> '1'-'9', 9 -> '0', 10+ -> 'A'...
         lda #<title
-        sta $0344
+        sta $0344               ; CIO buffer address (IOCB 0)
         lda #>title
         sta $0345
         lda #22
@@ -87,7 +114,7 @@ cn      lda (tp),y
         sta line+2,y
         dey
         bpl cn
-        lda #$9b
+        lda #$9b                ; EOL
         sta line+18
         lda #<line
         sta $0344
@@ -104,6 +131,7 @@ cn      lda (tp),y
 nt      inc idx
         jmp ml
 
+; Phase 3: open K: on IOCB 1 (X=$10): command 3 (open), name kname, aux1=4 (read).
 mdone   lda #3
         sta $0352
         lda #<kname
@@ -116,6 +144,8 @@ mdone   lda #3
         sta $035b
         ldx #$10
         jsr $e456
+; Key loop: CIO command 7 (get chars) with length 0 returns one byte in A. Map the key to an
+;   entry index (see Phase 2); invalid or >= count retries.
 gk      lda #7
         sta $0352
         lda #0
@@ -125,7 +155,7 @@ gk      lda #7
         jsr $e456
         cmp #'a'
         bcc g1
-        sbc #$20
+        sbc #$20                ; fold lower case to upper (carry set by bcc not taken)
 g1      cmp #'0'
         bcc gk
         cmp #'9'+1
@@ -146,11 +176,13 @@ g2      cmp #'A'
 gok     cmp count
         bcs gk
         sta idx
-        lda #12
+        lda #12                 ; CIO close K:
         sta $0352
         ldx #$10
         jsr $e456
 
+; Locate directory entry idx (table + idx*24 by repeated addition) and copy its start
+;   sector and 24-bit length; reset the byte counter; point rdsec at buf.
         lda #<table
         sta tp
         lda #>table
@@ -191,6 +223,7 @@ gotp    ldy #16
         lda #>buf
         sta dbh
 
+; Phase 4: XEX segment loader; identical in logic to xexboot.asm (see its header).
 main    lda cnt
         cmp len
         lda cnt+1
@@ -238,7 +271,7 @@ segend  lda lo
         jsr doinit
         jmp main
 
-doinit  jmp ($02e2)
+doinit  jmp ($02e2)             ; reached by jsr, so INIT's RTS returns to segend
 
 done    lda $02e0
         ora $02e1
@@ -246,6 +279,7 @@ done    lda $02e0
         jmp ($02e0)
 nrun    jmp ($000a)
 
+; getb: next stream byte in A, refilling buf via rdsec when empty. Clobbers X.
 getb    ldx bpos
         cpx #128
         bcc gb1
@@ -261,6 +295,7 @@ gb1     lda buf,x
         inc cnt+2
 gb2     rts
 
+; put: CIO "put record" (command 9) on IOCB 0 (E:). In: buffer at $0344/5, A = length.
 put     sta $0348
         lda #0
         sta $0349
@@ -269,6 +304,9 @@ put     sta $0348
         ldx #0
         jmp $e456
 
+; rdsec: read sector secl/sech (128 bytes) to address dbl/dbh via SIOV ($E459), then advance
+;   to the next sector. DCB: D1: ($31), unit 1, read ($52), status $40, timeout 7.
+;   On error, bump COLBK ($D01A) and retry forever.
 rdsec   lda #$31
         sta $0300
         lda #1

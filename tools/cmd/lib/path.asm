@@ -1,5 +1,14 @@
 ; path.asm - current folder, file specs, LONGNAME.TXT and the directory reader.
+;
+; Included by CMD.COM and the stand-alone tools, after lib\io.asm and lib\dos.asm.
+; Conventions: TOK = user-typed name in; FSPEC / FSPEC2 = resulting CIO file spec (EOL terminated);
+; T1 = pointer to the spec being built; N5 = 1 when the spec is a raw device spec (N:), N0/N1 =
+; scratch lengths. CWD holds the current folder, e.g. D1:>GAMES> (see sys.asm for the layout).
+; LONGNAME.TXT (in the folder) maps long names to 8.3 names, one line per file, appears to be
+; "SHORT|long name" per line; it is cached at LNMEM with its length in V_LNL.
+; The directory reader uses IOCB 3 ($30) and the LONGNAME loader IOCB 4 ($40).
 
+; reset CWD to "D1:"
 cwdinit:
         ldx #0
 ci_l:   lda cwd0,x
@@ -25,9 +34,9 @@ mkspec2:
         sta T1+1
 mkspecp:
         lda #0
-        sta N5
+        sta N5                  ; N5 = 1 for an N: (network) device: name is copied untouched
         ldx #0
-ms_f:   lda TOK,x
+ms_f:   lda TOK,x               ; look for "dev:" within the first 5 characters
         beq ms_nd
         cmp #':'
         beq ms_dv
@@ -45,7 +54,7 @@ ms_cd:  lda TOK
         beq ms_rt
         cmp #'\'
         bne ms_nm
-ms_rt:  ldy #3
+ms_rt:  ldy #3                  ; absolute path: keep only the "D1:" part of CWD
         jmp ms_nm
 ms_dv:  lda TOK
         jsr toupper
@@ -64,7 +73,7 @@ ms_nl:  lda TOK,x
         beq ms_gt
         cmp #'/'
         bne ms_up
-ms_gt:  lda #'>'
+ms_gt:  lda #'>'                ; \ and / become the MyDOS folder separator
 ms_up:  jsr toupper
         jmp ms_st
 ms_raw: jsr ms_ld
@@ -79,12 +88,15 @@ ms_end: lda #EOL
         lda #0
         sta ms_x
         jmp lnresolve
-ms_ld:  ldx ms_x
+ms_ld:  ldx ms_x                ; fetch TOK[ms_x] (ms_x is a private source index, in the code)
         lda TOK,x
         rts
 ms_x:   .byte 0
 
-; second look at the last component of the spec at T1: if it is not 8.3, try LONGNAME.TXT
+; second look at the last component of the spec at T1: if it is not 8.3, try LONGNAME.TXT.
+; Skipped on SpartaDOS (V_DOS = 2, takes long names natively) and for N: specs. N0 = start of the
+; last component, N1 = end. The component is copied to LNB, checked by is83, and on a hit the
+; short name from NAMEB replaces it in the spec.
 lnresolve:
         lda V_DOS
         cmp #2
@@ -136,7 +148,8 @@ lr_wd:  lda #EOL
         sta (T1),y
 lr_x:   rts
 
-; carry set when the name in LNB is not a plain 8.3 name
+; carry set when the name in LNB is not a plain 8.3 name (more than one dot, a space, base over
+; 8 or extension over 3 characters). N2 = position of the last dot ($FF = none), N3 = dot count.
 is83:   lda #$FF
         sta N2
         lda #0
@@ -176,6 +189,8 @@ is_y:   sec
         rts
 
 ; load LONGNAME.TXT from the folder part of the spec at T1 (N0 = length of that part) into LNMEM
+; (up to $0FFF bytes) through IOCB 4. Carry clear when loaded; carry set (and V_LNL = 0) if the
+; file does not exist. SCR is used to build the path.
 lnload: ldy #0
 ll_c:   cpy N0
         beq ll_n
@@ -236,6 +251,8 @@ lc_l:   lda CWD,y
 lc_d:   sty N0
         jmp lnload
 
+; the lnbegin/lnend/lnnext trio walks the cached LONGNAME.TXT lines with T0 as the line pointer.
+; lnbegin: T0 = start, V_LE = end; carry set when the file is empty/absent.
 lnbegin:
         lda #<LNMEM
         sta T0
@@ -256,6 +273,7 @@ lnbegin:
 lb_ok:  clc
         rts
 
+; lnend: carry set when T0 has reached V_LE (no more lines)
 lnend:  lda T0+1
         cmp V_LE+1
         bcc le_ok
@@ -268,6 +286,7 @@ le_no:  sec
 le_ok:  clc
         rts
 
+; lnnext: advance T0 past the next EOL (start of the following line)
 lnnext: ldy #0
 ln_l:   lda (T0),y
         iny
@@ -392,7 +411,9 @@ ls_nx:  jsr lnnext
         jmp ls_line
 
 ; ---- directory reader (IOCB 3) ----
-; dopen: FSPEC holds the pattern. dnext: carry clear + record in DREC, carry set at the end (free sectors then in V_FREE).
+; dopen: FSPEC holds the pattern (open mode 6 = directory). dnext: carry clear + record in DREC,
+; carry set at the end (free sectors then in V_FREE, parsed from the footer line that starts
+; with digits). dclose closes the channel. DREC layout: 2 flag chars, 8+3 name, then sector count.
 dopen:  lda #6
         ldx #$30
         jmp fopen1
@@ -462,7 +483,7 @@ dn_z:   lda #0
         sta NAMEB,x
         rts
 
-; Z set when DREC is a folder
+; Z set when DREC is a folder (':' flag at DREC or DREC+1; appears to be the MyDOS/Sparta marker)
 isdirrec:
         lda DREC
         cmp #':'

@@ -1,25 +1,32 @@
 ; test.asm - hardware diagnostics: MEMTEST, KEYTEST, INPUT, COLOR, MONITOR.
+;
+; Part of CMD.COM (included from cmd.asm); commands return carry clear = OK like the others.
+; MEMTEST uses the RAM tester image (rt.asm -> bin\rt.bin, copied to $0500-$06FF by copyrt, which
+; overwrites the page 6 loader; entry points $0500 rt_det, $0503 rt_pg, $0506 rt_adr, $0509 pb).
+; Graphics tests open S: on IOCB 6 (see "open S:" below) and draw straight into screen memory.
+; Hardware registers used below:
+SKSTAT  = $D20F         ; POKEY serial/keyboard status
+KBCODE  = $D209         ; POKEY raw keyboard code
+CONSOL  = $D01F         ; GTIA console keys (bit 0 START, 1 SELECT, 2 OPTION; 0 = pressed)
+COLBK   = $D01A         ; GTIA background colour
+WSYNC   = $D40A         ; ANTIC: write to wait for horizontal sync
+NMIEN   = $D40E         ; ANTIC NMI enable
+TRIG2   = $D012         ; GTIA trigger 2 (joystick 3, 400/800 only)
+; OS shadow / zero page names
+ROWCRS  = $54           ; cursor row
+COLCRS  = $55           ; cursor column (low byte)
+SAVMSC  = $58           ; screen memory address
+BRKKEY  = $11           ; Break key flag
+VDSLST  = $0200         ; display list interrupt vector
+SDLSTL  = $0230         ; display list pointer (shadow)
+COLOR0  = $02C4         ; colour register 0 shadow (COLOR0..COLOR4 follow)
+STICK0  = $0278         ; joystick shadows (4 ports)
+STRIG0  = $0284         ; trigger shadows
+PADDL0  = $0270         ; paddle shadows
+PTRIG0  = $027C         ; paddle trigger shadows
+RTI_OP  = $40           ; 6502 RTI opcode (used as a do-nothing interrupt handler)
 
-SKSTAT  = $D20F
-KBCODE  = $D209
-CONSOL  = $D01F
-COLBK   = $D01A
-WSYNC   = $D40A
-NMIEN   = $D40E
-TRIG2   = $D012
-ROWCRS  = $54
-COLCRS  = $55
-SAVMSC  = $58
-BRKKEY  = $11
-VDSLST  = $0200
-SDLSTL  = $0230
-COLOR0  = $02C4
-STICK0  = $0278
-STRIG0  = $0284
-PADDL0  = $0270
-PTRIG0  = $027C
-RTI_OP  = $40
-
+; copy the 512-byte RAM tester image to $0500-$06FF (two 256-byte pages in one loop)
 copyrt:
         ldx #0
 crt1:   lda rtimg,x

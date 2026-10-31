@@ -4,6 +4,34 @@
 ; (AFM/WebATM, web/js/archives.js -> lzh.js / 7-Zip) for those. CRC-16 checked. Reads the archive front to back.
 ; Mirrors web/js/lzh.js (the reference decoder, tested on every sample).
 ; At the LZH> prompt: L LZHFILE | X LZHFILE [DEST] [MEMBER] | T LZHFILE [MEMBER]   (blank line = exit)
+;
+; Usage notes
+;   L  list: one line per member (8.3 name, original size, packed size, method letters, month-day).
+;   X  extract: DEST is a drive/folder prefix (default D:); MEMBER limits it to one 8.3 name.
+;   T  test: decode and compare the CRC-16 without writing a file.   Q or a blank line leaves via DOSVEC.
+;   An archive name without ":" gets "D:" in front. Names are folded to upper case 8.3 (conv83, uniq);
+;   the path part is dropped. Directory entries (-lhd-) and empty names are skipped.
+;
+; LHA header layout handled (little endian), level 0 and 1, kept in HDR (hs = HDR+0 = header size):
+;   +0 header size (not counting the first 2 bytes)  +1 checksum (not checked)  +2 '-'  +3..+5 'lh?'  +6 '-'
+;   +7 packed size  +11 original size  +15 time  +17 DOS date (day = bits 0-4, month = bits 5-8)  +19 attribute
+;   +20 header level  +21 name length  +22 name, then a 2-byte CRC-16 of the original data (level 0 ends here;
+;   level 1 adds OS id, and a 2-byte size of the first extended header at HDR[hs]). Level 1: the extended headers
+;   are read and skipped; their size is subtracted from the packed size (it counts them). A header size of 0
+;   or >= 250, or a missing '-' at +2/+6, ends the walk.
+; Methods: -lh0- stored; -lh1- adaptive Huffman (LZHUF style: 314 symbols, 4K ring, static 6-bit distance code);
+;   -lh4- (4K ring, 13 distance symbols) and -lh5- (8K ring, 14 distance symbols) static-block Huffman.
+;
+; Structure: prompt -> members (rdlh) -> domember -> procdata (sets up ring and tables per method) -> lzmain
+;   (shared literal/match loop) -> outb (ring + CRC-16 + output buffer). getsym/getdist pick the lh1 adaptive
+;   decoder (h1char/h1pos + update/reconst) or the lh4/lh5 block decoder (newblk/rdpt/build/decode).
+;
+; Memory map: code from CODE ($3800, lib\sys.asm); $6400/$6500 CRC-16 tables; $6600/$6700 lh1 distance code;
+;   $6800-$6E7F Huffman counts/symbols; $6F00 code lengths (512); $7100 input buffer; $7200 output buffer;
+;   $7300 HDR; $7500 variables; $8000.. ring (4K or 8K, page limit in wend, page mask in wmask);
+;   $A000-$B3FF lh1 tree arrays (freq, son, prnt as low/high byte arrays, see FRL..PRH).
+; Zero page: $B0 wp (ring write), $B2 sp (match source), $B4-$BA table pointers, $BC ex, $C0 lp, $C2 q;
+;   $80-$91 16-bit work values of the lh1 tree code. IOCB 2 ($20) = archive, IOCB 3 ($30) = output file.
         icl 'lib\sys.asm'
 
 CRL     = $6400         ; CRC-16 tables
@@ -151,6 +179,9 @@ pp      = $8C           ; page pointer into the tree arrays, its low byte stays 
 mm      = $8E
 m1      = $90
 
+; -lh1- tree helpers. The adaptive tree arrays are 16-bit values stored as separate low/high pages, so
+; element i of an array lives at lo_page+i.high_byte*256 + i.low_byte. pp (low byte always 0) is the page pointer.
+; GET16 lo,hi,idx,dst: dst(16 bit) = array[idx];  PUT16 lo,hi,idx,src: array[idx] = src.  Clobber A,Y,pp+1.
         .macro GET16 lo,hi,idx,dst
         lda :3+1
         clc
@@ -183,6 +214,8 @@ m1      = $90
         sta (pp),y
         .endm
 
+; INC16 v: 16-bit increment (the *+4 skips the INC of the high byte); DEC16 v: 16-bit decrement;
+; ADDI d,s,n: d = s + n (16 bit, constant n).
         .macro INC16 v
         inc :1
         bne *+4
@@ -210,12 +243,15 @@ m1      = $90
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- start: build the CRC-16 table and the lh1 distance code, print the banner, fall into the command loop ----
 start:  jsr crctab
         jsr gend
         jsr putsi
         .byte 'LZH 0.1  LHA/LZH LISTER/EXTRACTOR',EOL
         .byte 'L LZH | X LZH [DEST] [MEMBER] | T LZH',EOL
         .byte 'LH0 LH1 LH4 LH5 ONLY. Q QUITS',EOL,0
+; ---- command loop: read a line, mode (L=0, X=1 extract, T=2 test) -> 'mode', then parse
+; ARCHIVE [DEST] [MEMBER] into FSPEC / DEST / MEMB. 'psp' keeps the stack pointer so abort can unwind.
 prompt: tsx
         stx psp
         jsr putnl
@@ -254,6 +290,7 @@ ck_l:   lda TOK,x
         beq ck_ye
         inx
         bne ck_l
+; archive name has no ':' -> prefix "D:"; DEST defaults to "D:" and MEMB to empty (= all members)
 ck_no:  lda #<FSPEC
         sta T1
         lda #>FSPEC
@@ -298,7 +335,7 @@ pm_m:   jsr nexttok
         sta T1+1
         ldy #0
         jsr cpt
-pm_go:  lda #4
+pm_go:  lda #4          ; OPEN for input on IOCB 2
         ldx #$20
         jsr fopen1
         bpl pm_ok
@@ -322,13 +359,15 @@ pm_ok:  lda #0
         .byte ' FILE(S)',EOL,0
         jmp prompt
 
+; ---- bye: close both files and return to DOS ----
 bye:    ldx #$20
         jsr fclose
         ldx #$30
         jsr fclose
         jmp (DOSVEC)
 
-; stop everything that is open and go back to the prompt
+; ---- abort: close IOCB 2 (archive) and IOCB 3 (output), restore the stack saved at the prompt and re-prompt.
+; Used by every fatal error path; the error text has already been printed.
 abort:  ldx #$30
         jsr fclose
         ldx #$20
@@ -336,6 +375,7 @@ abort:  ldx #$30
         ldx psp
         txs
         jmp prompt
+; ---- fatal error messages: print text then abort ----
 ferr_eof:
         jsr putsi
         .byte EOL,'UNEXPECTED END OF ARCHIVE',EOL,0
@@ -359,6 +399,9 @@ cp2:    lda #EOL
         rts
 
 ; ---- CRC-16 table (poly $A001, reflected) ----
+; The CRC-16 used by LHA (polynomial $8005 reflected = $A001, initial value 0, no final xor). Entry X is X
+; shifted right 8 times (th:tl), XORing $A001 whenever a 1 bit falls out. CRL = low bytes, CRH = high bytes.
+; Clobbers A,X,Y,tl,th.
 crctab: ldx #0
 ct_l:   stx tl
         lda #0
@@ -384,6 +427,7 @@ ct_n:   dey
         rts
 
 ; A = byte -> running CRC-16
+; new crc = (crc >> 8) xor table[(crc xor byte) & $FF]; c0/c1 = low/high byte of the crc. Clobbers A,X.
 crcb:   eor c0
         tax
         lda c1
@@ -394,6 +438,9 @@ crcb:   eor c0
         rts
 
 ; -lh1- static distance code: 64 prefixes (3 bits x1, 4 x3, 5 x8, 6 x12, 7 x24, 8 x16) as 256 entry tables
+; Indexed by the next 8 input bits: DCODE = prefix value (0-63, the upper 6 bits of the distance),
+; DLEN = number of bits that prefix occupies. A prefix of length L fills 2^(8-L) consecutive entries.
+; Clobbers A,X,Y,gi,gp,gl,gc.
 gend:   lda #0
         sta gi
         sta gp
@@ -439,6 +486,8 @@ gd_f:   lda gi
         rts
 
 ; ---- input ----
+; fill: read up to 255 bytes of the archive into INBUF. Out: ilen = count read, ipos = 0,
+; carry set if nothing was read (EOF). Clobbers A,X.
 fill:   lda #<INBUF
         sta V_BPL
         lda #>INBUF
@@ -473,12 +522,14 @@ gb_ok:  lda INBUF,x
         clc
 gb_r:   rts
 
-; same, but the end of the file is an error
+; same, but the end of the file is an error (jumps to ferr_eof, which aborts). Clobbers A,X.
 getbyt: jsr getbyte
         jcs ferr_eof
         rts
 
 ; next byte of the member's packed data (s0..s3 counts what is left; zeros after the end, like the host decoder)
+; Decrements the 32-bit count s3:s2:s1:s0 (with borrow) before reading, so the packed size bounds the reads
+; and what the decoder did not consume can be skipped later by skip32. Clobbers A,X.
 getdb:  lda s0
         ora s1
         ora s2
@@ -498,7 +549,8 @@ gdb_a:  dec s0
 gdb_z:  lda #0
         rts
 
-; one bit, most significant first
+; one bit, most significant first (LHA bit order). bb = current byte, bn = bits left.
+; Out: A = bit, Z set if 0. Clobbers A.
 getbit: lda bn
         bne gt_g
         jsr getdb
@@ -512,6 +564,7 @@ gt_g:   dec bn
         rts
 
 ; X = number of bits (0-16) -> vl/vh, first bit read is the most significant
+; Shifts vl/vh left and ORs in each new bit. Clobbers A,gcnt.
 getbits:
         stx gcnt
         lda #0
@@ -529,6 +582,8 @@ gbl:    lda gcnt
 gbd:    rts
 
 ; skip s0..s3 archive bytes
+; Reads and discards a 32-bit count (s3:s2:s1:s0, counted down to 0 with borrow). The file is read
+; sequentially, so skipping means reading. Clobbers A,X,s0-s3.
 skip32: lda s0
         ora s1
         ora s2
@@ -556,6 +611,9 @@ remz:   lda rm0
         rts
 
 ; ---- output: A = byte into the ring, the CRC and (when writing) the file ----
+; Stores the byte at wp (ring from $8000, wp wraps at page wend), updates the CRC-16, counts down the remaining
+; output size rm0..rm3, and if wr<>0 appends it to OUTBUF, flushing 256 bytes when opos wraps to 0.
+; Clobbers A,X,Y,ob.
 outb:   sta ob
         jsr crcb
         ldy #0
@@ -608,6 +666,7 @@ wr_e:   jsr putsi
         jmp abort
 
 ; fill the ring with spaces
+; LHA starts every member with a dictionary of $20 bytes; covers pages $80 up to wend. Clobbers A,Y,q.
 fillring:
         lda #0
         sta q
@@ -634,7 +693,11 @@ cl_l:   sta LENS,x
         rts
 
 ; ---- canonical Huffman tables (as in zip.asm, code lengths up to 16) ----
+; Each table has counts per code length (17 low bytes at TCn, 17 high bytes at TCn+32) and the symbols sorted by
+; code (low/high byte arrays). 0 = literal/length (up to 510 symbols), 1 = distance, 2 = code-length codes.
+; Tables 1 and 2 have symbols < 256, so their high bytes go to the SYMZ scratch sink.
 ; X = table number -> pcl/pch/psl/psh
+; Out: pcl/pch = counts low/high, psl/psh = symbol low/high arrays. Clobbers A.
 settab: lda tcl,x
         sta pcl
         clc
@@ -660,6 +723,10 @@ thl:    .byte <SYMH0,<SYMZ,<SYMZ
 thh:    .byte >SYMH0,>SYMZ,>SYMZ
 
 ; build table X from nl/nh lengths at lp
+; Canonical Huffman construction: pass 1 (p1) counts how many symbols have each length; ofl turns the counts
+; into the first slot of each length in the sorted symbol list; pass 2 (p2) walks the lengths again and drops
+; symbol number il/ih into the next free slot of its length (length 0 = unused symbol).
+; In: lp = lengths (one byte each), nl/nh = count. Clobbers A,X,Y,q,kl,kh,il,ih,tl,th,ex.
 build:  jsr settab
         ldy #16
         lda #0
@@ -769,6 +836,11 @@ p2k:    dec kl
 p2d:    rts
 
 ; X = table -> symbol in vl/vh (bits are read most significant first)
+; Canonical decode, one bit at a time. cdl/cdh = code so far, fl/fh = first code of the current length,
+; il/ih = index of the first symbol of that length, dln = current length (1..16). For each length the code
+; is compared against first+count; if smaller the symbol is sym[index + (code - first)]. Otherwise the first
+; code doubles, the code shifts left and the next bit is read. More than 16 bits -> BAD DATA.
+; Clobbers A,Y,tl,th,kl,kh,ex and the decode state above.
 decode: jsr settab
         lda #0
         sta cdl
@@ -865,7 +937,11 @@ dsym:   lda cfl,x
 ds_d:   jmp decode
 
 ; ---- -lh4- / -lh5- block tables ----
+; Each block has its own tables: block header = 16-bit symbol count, the code-length table (table 2), the
+; literal/length table (table 0, 510 symbols, lengths run-length coded with table 2) and the distance table
+; (table 1, pnp symbols). A table whose length count is 0 is a single constant symbol (cfl/cvl/cvh), costing no bits.
 ; read a table: pn symbols, pb bits for the length count, ps = position after which 2 bits of zero run follow (255 = none)
+; Each length is 3 bits; 7 means 7 plus a unary extension (one extra 1-bit per step, up to 16).
 rdpt:   jsr clrl
         ldx pb
         jsr getbits
@@ -929,6 +1005,10 @@ rp_b:   lda #<LENS
         jmp build
 
 ; start of a block: size, literal/length table (table 0, coded with table 2), distance table (table 1)
+; The code-length table has 19 symbols (5-bit count) and a 2-bit zero run after the 3rd entry. Then a 9-bit
+; count of literal/length entries is read; each decoded table-2 symbol means: 0 = one zero length,
+; 1 = 3+4-bit zeros, 2 = 20+9-bit zeros, >=3 = a length of (symbol-2). The distance table follows (pnp
+; symbols, 4-bit count).
 newblk: ldx #16
         jsr getbits
         lda vl
@@ -1048,7 +1128,13 @@ nb_p:   lda pnp
         jmp rdpt
 
 ; ---- -lh1- (adaptive Huffman, "LZHUF") ----
+; Dynamic Huffman as in Okumura's LZHUF: NCHAR = 314 symbols (256 literals + 58 match lengths), TT = 627 nodes,
+; RR = 626 = root. freq[] ($A000), son[] ($A600) and prnt[] ($AC00) are 16-bit arrays (low/high pages). Leaves are
+; son values >= TT (symbol = son - TT). Decoding walks from the root following one bit per level; update() then
+; increments the leaf's frequency and swaps nodes up the tree to keep it sorted; when the root frequency reaches
+; $8000 reconst() halves all frequencies and rebuilds the tree.
 ; X = zero page address of a 16 bit value; carry clear when it is below TT
+; Out: carry set if value >= TT (a leaf), clear if an internal node.
 cmpT:   lda 1,x
         cmp #>TT
         bne cT_r
@@ -1056,6 +1142,9 @@ cmpT:   lda 1,x
         cmp #<TT
 cT_r:   rts
 
+; h1init: initial tree. Leaves 0..313 get freq 1, son = i+TT, and prnt[i+TT] = i; the internal nodes
+; 314..626 are then built pairwise (freq = sum of two children, son = left child, prnt of both = node), the
+; sentinel freq[TT] = $FFFF is set and prnt[RR] = 0.
 h1init: lda #0
         sta pp
         sta ii
@@ -1120,6 +1209,9 @@ h1_b:   GET16 FRL,FRH,ii,kk
         rts
 
 ; rebuild the tree with halved frequencies
+; Pass 1 (r1) collects the leaves into the low slots with freq = (freq+1)/2. Pass 2 (r2) recreates the internal
+; nodes by pairing neighbours and inserting each new sum at its sorted place (shifting entries up). Pass 3 (r3)
+; rewrites the parent links from the son array.
 reconst:
         lda #0
         sta ii
@@ -1224,6 +1316,9 @@ r3_n:   INC16 ii
         rts
 
 ; cc = symbol that was just coded: bump its frequency and keep the tree sorted
+; Reconstructs first if freq[root] = $8000. Then from the leaf up to the root: increment freq, and if the
+; next node has a smaller frequency, find the last node with freq <= the new value (u_f) and swap the two
+; subtrees (freq, son and the prnt links), continuing from the parent. cc/kk/ll/ii/jj/tq are the 16-bit work values.
 update: lda #<RR
         sta tq
         lda #>RR
@@ -1285,6 +1380,8 @@ u_nx:   GET16 PRL,PRH,cc,cc
         rts
 
 ; next literal/length symbol -> vl/vh
+; Starts at the root (son[RR]) and reads one bit per level: child = son[node] + bit, until a leaf (>= TT)
+; is reached; symbol = leaf - TT. Then update() adapts the tree. (A symbol >= 256 is a match: length = sym-253.)
 h1char: lda #<RR
         sta tq
         lda #>RR
@@ -1316,6 +1413,9 @@ h1_d:   sec
         jmp update
 
 ; match distance -> dl/dh: static code for the upper 6 bits, then 6 raw bits
+; Peek 8 bits (iv); DCODE/DLEN give the 6-bit prefix and its code length L. The prefix goes into bits 6-11
+; of dl/dh; L+6 bits are consumed in total (8 already read, so L-2 more are fetched into iv), and the low 6
+; bits of iv become bits 0-5. The result is distance minus 1 (lzmain adds the 1 back).
 h1pos:  ldx #8
         jsr getbits
         lda vl
@@ -1351,6 +1451,8 @@ h1_y:   lda iv
         rts
 
 ; ---- shared LZ loop ----
+; getsym: next literal/length symbol -> vl/vh. -lh1- uses the adaptive tree (h1char); -lh4-/-lh5- decode with
+; table 0, starting a new block (newblk) when the block's symbol count blkl/blkh has run out.
 getsym: lda meth
         cmp #1
         bne gs_5
@@ -1366,6 +1468,8 @@ gs_b:   dec blkl
         ldx #0
         jmp dsym
 
+; getdist: match distance -> dl/dh (distance minus 1). -lh1- uses h1pos. -lh4-/-lh5-: code from table 1; codes
+; 0 and 1 are the values themselves; code n >= 2 means n-1 extra bits: dl/dh = (1 << (n-1)) OR the extra bits.
 getdist:
         lda meth
         cmp #1
@@ -1403,6 +1507,9 @@ gt_l:   asl mlk
 gt_r:   rts
 
 ; decode until the output size is reached (blkl/blkh = 0, ring and tables prepared)
+; A symbol < 256 is a literal; otherwise a match with length = symbol - 253 (symbol 256 = length 3) and
+; source sp = wp - dist - 1, wrapped into the ring with wmask (ORed with $80 for the ring base page). Matches are
+; copied byte by byte through outb so overlapping copies work; stops when rm0..rm3 reaches 0.
 lzmain: jsr remz
         beq lz_d
         jsr getsym
@@ -1460,6 +1567,11 @@ lz_3:   dec lenl
 lz_d:   rts
 
 ; run the member's data through the decoder; carry set when the method is not supported
+; Clears the CRC-16, bn, opos and the block counter; loads s0..s3 from the packed size (HDR+7) and rm0..rm3 from the
+; original size (HDR+11). The method id is HDR+3..5 = 'l','h',digit. Per method:
+;   0: stored, ring = 4K ($8000-$8FFF) only for the window bookkeeping;
+;   1: meth=1, 4K ring ($0F mask) pre-filled with spaces, wp = $8FC4 (ring size - 60), h1init;
+;   4: meth=4, pnp=13, 4K ring;  5: meth=5, pnp=14, 8K ring ($1F mask, wend = $A0); wp = $8000 after a space fill.
 procdata:
         lda #0
         sta c0
@@ -1492,7 +1604,7 @@ pd_a:   lda HDR+7,x
         beq pd_5
 pd_u:   sec
         rts
-pd_0:   lda #$90
+pd_0:   lda #$90        ; method 0: ring limit page, wp = $8000
         sta wend
         lda #0
         sta wp
@@ -1545,6 +1657,10 @@ pd_k:   clc
 ; ---- archive walk ----
 ; read the next header into HDR (level 1: skip the extended headers and take them off the packed size);
 ; carry set at the end of the entries
+; Reads the size byte hs (0 or >= 250 = end), then hs+1 more bytes into HDR, checks the '-' marks around the
+; method id, rejects levels >= 2 (UNSUPPORTED HEADER LEVEL), extracts the name length (nf) and the CRC-16 stored
+; after the name (hcrl/hcrh). Level 1 loops over the extended headers: esl/esh = size of the next one (the last
+; 2 bytes of each header hold it), the packed size at HDR+7 is reduced by each one's size. Clobbers A,X,Y.
 rdlh:   jsr getbyte
         jcs rl_e
         sta hs
@@ -1635,6 +1751,9 @@ rl_ok:  clc
 rl_e:   sec
         rts
 
+; members: loop over headers; each gets its 8.3 name (conv83, uniq) and s0..s3 = packed size (HDR+7).
+; Entries with an empty name or method '-lhd-' (directory) are only skipped; others go to domember.
+; nfl/nfh counts files processed.
 members:
 mem:    jsr rdlh
         jcs mem_d
@@ -1660,6 +1779,9 @@ mem_k:  jsr skip32
 mem_d:  rts
 
 ; NAMEF (nf chars) -> 8.3 name in NAMEB; NAMEB[0]=0 for a folder entry
+; NAMEF is the name field inside HDR (HDR+22). Pass 1 finds st = index after the last '/' or '\' and ld = index
+; after the last '.' in that part (0 if none). Then up to 8 stem chars (st..be) and up to 3 extension chars
+; are copied through fixc. An empty stem leaves NAMEB empty. Clobbers A,X,Y,st,ld,be,ec.
 conv83: ldy #0
         sty st
         sty ld
@@ -1772,6 +1894,9 @@ mq_y:   clc
         rts
 
 ; list, extract or test the member whose header is in HDR (s0..s3 = its packed size)
+; want=1 when mode is X/T and the name matches the filter. Unwanted members are skipped (skip32) and, in L mode,
+; listed. X opens DEST+NAMEB on IOCB 3 and writes the output; X and T run procdata, skip whatever packed bytes
+; were not consumed, then compare the CRC-16 (c0/c1) with the stored one (hcrl/hcrh): OK / CRC ERROR.
 domember:
         lda #0
         sta want
@@ -1808,7 +1933,7 @@ dm_f:   lda NAMEB,x
         bne dm_f
 dm_g:   lda #EOL
         sta FSPEC2,y
-        lda #8
+        lda #8          ; OPEN for output on IOCB 3 (creates/overwrites)
         ldx #$30
         jsr fopen2
         bpl dm_w
@@ -1861,6 +1986,7 @@ dm_bad: jsr putsi
         .byte 'CRC ERROR',EOL,0
         rts
 
+; print 'X' (extracting) or 'T' (testing) before the name
 putc_mode:
         lda mode
         cmp #1
@@ -1880,6 +2006,7 @@ pn1:    lda NAMEB,y
 pn2:    rts
 
 ; ---- listing ----
+; print the three method letters (HDR+3..5, e.g. LH5) in upper case. Clobbers A,X.
 mname:  ldx #0
 mn_l:   lda HDR+3,x
         jsr toupper
@@ -1889,6 +2016,8 @@ mn_l:   lda HDR+3,x
         bcc mn_l
         rts
 
+; one listing line: name padded to 13, original size (HDR+11), packed size (HDR+7), method, then the date as
+; MM-DD. DOS date word at HDR+17: day = bits 0-4, month = bits 5-8 (the top month bit is HDR+18 bit 0).
 listline:
         ldy #0
 ll_n:   lda NAMEB,y
@@ -1943,6 +2072,7 @@ ll_c:   lda HDR+7,x
         jsr put2d
         jmp putnl
 
+; A (0-99) -> two decimal digits
 put2d:  ldx #0
 p2_l:   cmp #10
         bcc p2_d
@@ -1958,6 +2088,8 @@ p2_d:   pha
         jmp putc
 
 ; dv (32 bit) -> 8 digits in dig, leading zeros turned into spaces
+; Repeated subtraction of the powers of ten in table pw (10^7 .. 1); dv keeps the remainder (tv = scratch).
+; Clobbers A,X,Y,kl,kh,tv.
 dec32:  ldy #0
 d3_p:   sty kl
         lda #0
@@ -2005,6 +2137,7 @@ d3_z:   lda dig,y
         iny
         bne d3_z
 d3_r:   rts
+; print dig[1..7] (the top digit is dropped, so sizes above 9,999,999 would show truncated)
 putdig: ldy #1
 pg_l:   lda dig,y
         jsr putc

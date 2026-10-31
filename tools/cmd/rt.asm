@@ -1,6 +1,11 @@
 ; rt.asm - RAM tester image, copied to $0500 (2 pages) by MEMTEST.
 ; It runs below $4000 so the $4000-$7FFF bank window can be switched under it.
 ; Entry points: $0500 rt_det, $0503 rt_pg, $0506 rt_adr, $0509 pb.
+; Assembled to bin\rt.bin and embedded by cmds\test.asm (copyrt copies it to $0500).
+; Calling convention: arguments in zero page, not registers: T0 = PORTB value to test with,
+; T1 = PORTB saved by the routine, N0/N1 = address pointer, N2-N4 = patterns / error report.
+; Routines save/restore PORTB, disable IRQs (php/sei ... plp) and return carry set on error.
+; Memory map: B ($0400, cassette buffer) and SV ($0440) are scratch; code fills $0500-$06FF.
         icl 'lib\sys.asm'
         org $0500
 B       = $0400         ; 64 bytes (cassette buffer): detection results / address-test save area
@@ -23,6 +28,7 @@ pb2:    iny
         cpy #6
         bne pb1
         rts
+; PORTB bank bits (XL/XE extended RAM): the bank number bits 0..5 map to PORTB bits 2,3,6,5,7,1.
 bits:   .byte $04,$08,$40,$20,$80,$02
 
 ; skip the self-test ROM window ($5000-$57FF) when bit 7 of the bank value is 0
@@ -184,6 +190,11 @@ rt_adr: php
 ra_b:   sec
         rts
 
+; runp / runo run one of the op_* actions (action = low byte of its address in A) over the 64
+; pages ($40..$7F, Y = 0) or over 8 offsets inside page $40. Self-modifying: the low byte of the
+; operand of the JSR at lpj / lqj is overwritten, so the JSR calls op_s, op_w, op_v or op_r.
+; op_s saves a byte to B[x], op_w writes a signature (offset EOR page), op_v verifies it
+; (first mismatch is recorded: N2 expected, N3 read, T1+1 page, T0+1 offset), op_r restores.
 runp:   sta lpj+1
         lda #$40
         sta N1

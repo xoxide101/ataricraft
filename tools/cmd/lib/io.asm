@@ -1,6 +1,19 @@
 ; io.asm - console, CIO helpers, number printing and the argument tokenizer.
+;
+; Included by CMD.COM and every stand-alone tool (after lib\sys.asm, which defines the equates).
+; IOCB use: IOCB 0 ($00) = E: screen editor, IOCB 7 ($70) = K: keyboard, IOCB 1 ($10) = the
+; default file channel; the caller picks the IOCB by passing X = IOCB number * 16.
+; Calling conventions (shared by the routines below):
+;   - Every CIO wrapper leaves the CIO status in Y, also copies it to V_ERR and returns it in A
+;     (A = Y, so N is set on any error status >= 128; Y = 1 means OK).
+;   - Argument/work slots: ARG ($D4) = cursor into the command line, T0/T1 = scratch pointers,
+;     N0..N5 = 16-bit number scratch, V_SPL/V_SPH = pointer to a file spec,
+;     V_BLL/V_BLH = block length, V_BPL/V_BPH = block buffer pointer (default IOBUF).
+;   - putc preserves A, X and Y; most others clobber A, X, Y.
 
 ; ---- console (IOCB 0, E:) ----
+; print the character in A through CIO command 11 (put chars) with a zero length, which makes
+; CIO transfer just the single byte in A. Preserves A, X, Y.
 putc:   sta V_PCH
         stx V_PSX
         sty V_PSY
@@ -17,10 +30,13 @@ putc:   sta V_PCH
         lda V_PCH
         rts
 
+; print a newline (ATASCII EOL, $9B)
 putnl:  lda #EOL
         jmp putc
 
-; print the string that follows the JSR, ended by a zero byte
+; print the string that follows the JSR, ended by a zero byte.
+; Trick: the return address on the stack points at the last byte of the JSR, so it is used as
+; the string pointer, then pushed back past the terminating zero so RTS resumes after the text.
 putsi:  pla
         sta T0
         pla
@@ -52,7 +68,8 @@ pst_l:  lda (T0),y
         bne pst_l
 pst_d:  rts
 
-; print N0/N1 as an unsigned decimal
+; print N0/N1 as an unsigned decimal, no leading zeros (N5 = "digit printed" flag).
+; Repeated subtraction of 10000,1000,100,10,1 (ptab); Y indexes ptab in words. Clobbers N0-N2, N5.
 putdec16:
         lda #0
         sta N5
@@ -87,6 +104,7 @@ pd_nx:  iny
         rts
 ptab:   .word 10000,1000,100,10,1
 
+; print A as two hex digits (hexd prints the low nibble of A as one digit)
 puthex8:
         pha
         lsr
@@ -103,6 +121,7 @@ hexd:   clc
         adc #6
 hx_o:   jmp putc
 
+; print X(hi)/A(lo) as four hex digits
 puthex16:
         pha
         txa
@@ -119,6 +138,7 @@ putsp:  lda #' '
 
 ; ---- keyboard (IOCB 7 = K:) ----
 kspec:  .byte 'K:',EOL
+; open K: on IOCB 7 (mode 4 = read); call once at start-up
 ioinit: ldx #$70
         lda #<kspec
         sta V_SPL
@@ -128,8 +148,9 @@ ioinit: ldx #$70
         jsr fopen
         rts
 
+; wait for a key from K: (CIO get chars, one byte); lower case is folded to upper case. Returns A.
 getkey: ldx #$70
-        lda #7
+        lda #7                  ; CIO get characters
         sta ICCOM,x
         lda #0
         sta ICBLL,x
@@ -144,7 +165,7 @@ gk_r:   rts
 
 ; non-blocking: carry set and key in A if a key is waiting
 keyhit: lda CH
-        cmp #$FF
+        cmp #$FF                ; CH = $FF means no key pressed
         beq kh_n
         jsr getkey
         sec
@@ -152,13 +173,14 @@ keyhit: lda CH
 kh_n:   clc
         rts
 
-; read a line from the screen editor into LINE
+; read a line from the screen editor (IOCB 0) into LINE, max 120 bytes, EOL terminated.
+; CIO status is returned in Y (not copied to V_ERR).
 getline:
         lda #<LINE
         sta ICBAL
         lda #>LINE
         sta ICBAH
-        lda #5
+        lda #5                  ; CIO get record
         sta ICCOM
         lda #120
         sta ICBLL
@@ -168,7 +190,9 @@ getline:
         jmp CIOV
 
 ; ---- CIO files ----
-; fopen: A = ICAX1 mode, X = IOCB*16, V_SPL/V_SPH = file spec. Returns Y/N flag like CIO.
+; fopen: A = ICAX1 mode (4 read, 8 write, 9 append, 12 update, 6 directory), X = IOCB*16,
+; V_SPL/V_SPH = file spec. Returns Y/N flag like CIO. fopen1/fopen2 use FSPEC/FSPEC2 as the spec.
+; The IOCB is closed first (command 12) so a stale open channel never causes error 129.
 fopen1: pha
         lda #<FSPEC
         sta V_SPL
@@ -184,13 +208,13 @@ fopen2: pha
         pla
 fopen:  pha
         stx V_PSX
-        lda #12
+        lda #12                 ; CIO close
         sta ICCOM,x
         jsr CIOV
         ldx V_PSX
         pla
         sta ICAX1,x
-        lda #3
+        lda #3                  ; CIO open
         sta ICCOM,x
         lda V_SPL
         sta ICBAL,x
@@ -205,6 +229,7 @@ fopen:  pha
         tya
         rts
 
+; close IOCB X (CIO command 12); status in Y, V_ERR and A
 fclose: lda #12
         sta ICCOM,x
         jsr CIOV
@@ -213,11 +238,12 @@ fclose: lda #12
         rts
 
 ; block read into IOBUF, length V_BLL/V_BLH. Y = status (136 = end of file); actual length in ICBLL,x/ICBLH,x
+; bgetp is the same but reads into the buffer at V_BPL/V_BPH.
 bget:   lda #<IOBUF
         sta V_BPL
         lda #>IOBUF
         sta V_BPH
-bgetp:  lda #7
+bgetp:  lda #7                  ; CIO get characters (binary block)
         sta ICCOM,x
         lda V_BPL
         sta ICBAL,x
@@ -232,11 +258,12 @@ bgetp:  lda #7
         tya
         rts
 
+; block write from IOBUF (bput) or from V_BPL/V_BPH (bputp), length V_BLL/V_BLH, to IOCB X
 bput:   lda #<IOBUF
         sta V_BPL
         lda #>IOBUF
         sta V_BPH
-bputp:  lda #11
+bputp:  lda #11                 ; CIO put characters
         sta ICCOM,x
         lda V_BPL
         sta ICBAL,x
@@ -252,7 +279,7 @@ bputp:  lda #11
         rts
 
 ; read a text record from IOCB X into the buffer at V_SPL/V_SPH (max 79 bytes)
-rdrec:  lda #5
+rdrec:  lda #5                  ; CIO get record
         sta ICCOM,x
         lda V_SPL
         sta ICBAL,x
@@ -268,7 +295,7 @@ rdrec:  lda #5
         rts
 
 ; write a text record from V_SPL/V_SPH (ended by EOL) to IOCB X
-wrrec:  lda #9
+wrrec:  lda #9                  ; CIO put record
         sta ICCOM,x
         lda V_SPL
         sta ICBAL,x
@@ -284,6 +311,8 @@ wrrec:  lda #9
         rts
 
 ; XIO on the spec at V_SPL/V_SPH: A = command, V_FLG = ICAX1. Returns Y/N like CIO.
+; Typical commands: 32 rename, 33 delete, 35 lock, 36 unlock, 42 make dir (MyDOS/Sparta).
+; xio uses IOCB 1; xiox takes X = IOCB*16; xio1/xio2 use FSPEC/FSPEC2 as the spec.
 xio:    ldx #$10
 xiox:   sta ICCOM,x
         lda V_SPL
@@ -316,6 +345,7 @@ xio2:   pha
         jmp xio
 
 ; ---- text helpers ----
+; A = upper case of A (a-z only)
 toupper:
         cmp #'a'
         bcc tu_r
@@ -324,12 +354,14 @@ toupper:
         and #$DF
 tu_r:   rts
 
+; advance the ARG pointer by one
 arginc: inc ARG
         bne ai_r
         inc ARG+1
 ai_r:   rts
 
-; next blank-separated (or "quoted") token from ARG into TOK. Z set when there is none.
+; next blank-separated (or "quoted") token from ARG into TOK (NUL terminated, max 60 chars).
+; Z set when there is none. ARG is advanced past the token; X = token length on return.
 nexttok:
 nt_sk:  ldy #0
         lda (ARG),y
@@ -395,6 +427,8 @@ ae_n:   lda #1
         rts
 
 ; parse an unsigned decimal or $hex number from TOK into N0/N1. Carry set if TOK is not a number.
+; Decimal: N = N*10 + digit, done as (N*4 + N)*2 + digit. Hex: shift left 4 and OR the digit.
+; No overflow check: values wrap modulo 65536. Clobbers N2, N4, N5.
 parsenum:
         lda #0
         sta N0

@@ -1,5 +1,9 @@
 ; dos.asm - which DOS is running and what it can do.
+; Included by CMD.COM and the tools. dosdet runs once at start-up and stores V_DOS.
 ; V_DOS: 0 = DOS 2.0/2.5, 1 = MyDOS, 2 = SpartaDOS (X), 3 = other (BW-DOS ...)
+; Detection: the DOS entry vector at $0700 starts with 'M' for MyDOS, 'SD' for SpartaDOS;
+; zero page $0B (DOSVEC+1, high byte of the DOS run vector) = $17 appears to identify DOS 2.x.
+; Output: V_DOS. Clobbers A, X.
 dosdet: ldx #3
         lda $0700
         cmp #'M'
@@ -20,7 +24,7 @@ dd_a2:  lda $0B
 dd_go:  stx V_DOS
         rts
 
-; carry clear when this DOS has folders
+; carry clear when this DOS has folders (everything except DOS 2.x)
 hasdirs:
         lda V_DOS
         beq hd_no
@@ -29,7 +33,7 @@ hasdirs:
 hd_no:  sec
         rts
 
-; print the DOS name
+; print the DOS name (strings are inline after each JSR putsi)
 putdosname:
         ldx V_DOS
         bne pdn_1

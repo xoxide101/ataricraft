@@ -1,5 +1,13 @@
 ; file.asm - file and folder commands. Each returns carry clear for OK, carry set with V_ERR on failure.
+;
+; Part of CMD.COM (included from cmd.asm); entered through the cmdtab dispatch with ARG pointing at the
+; arguments. Common pattern: needtok (get next argument into TOK) -> mkspec/mkspec2 (build FSPEC/FSPEC2)
+; -> CIO open/XIO. IOCB use: $10 = source file, $20 = destination file, $30 = directory (dopen).
+; V_ERR error codes made here: 165 = bad parameter / missing argument (the CIO "bad filename" style code),
+; 168 = no folders on this DOS (also the CIO "invalid device command" code). Scratch: V_A0-V_A2, V_CNT.
+; Note: jcs/jmi/jcc/jne/jeq/jpl are MADS long-branch pseudo-instructions.
 
+; get the next argument into TOK; carry set with V_ERR = 165 when there is none
 needtok:
         jsr nexttok
         bne nk_ok
@@ -10,11 +18,13 @@ needtok:
 nk_ok:  clc
         rts
 
+; common exits: okr = carry clear, failr = carry set (V_ERR already set by the caller)
 okr:    clc
         rts
 failr:  sec
         rts
 
+; refuse folder commands on a DOS without folders (carry set, V_ERR = 168)
 reqdirs:
         jsr hasdirs
         bcc rq_ok
@@ -25,6 +35,7 @@ reqdirs:
         sec
 rq_ok:  rts
 
+; DEL / DELETE / ERASE file: XIO 33 (delete)
 cmd_del:
         jsr needtok
         jcs failr
@@ -37,6 +48,8 @@ cmd_del:
         clc
         rts
 
+; REN / RENAME / RENDIR old new: XIO 32 (rename). The spec handed to the DOS is "old,NEW" (the
+; new name is upper-cased and appended after a comma to FSPEC, which is the CIO rename syntax).
 cmd_ren:
         jsr needtok
         jcs failr
@@ -74,6 +87,7 @@ rn_d:   lda #EOL
         clc
         rts
 
+; ATTRIB +R file / ATTRIB -R file: XIO 35 (lock = read-only) or XIO 36 (unlock); command saved in V_A2
 cmd_attrib:
         jsr nexttok
         bne at_a
@@ -106,6 +120,7 @@ at_g:   stx V_A2
         clc
         rts
 
+; MD / MKDIR / CREDIR folder: XIO 42 (make directory, ICAX1 = 8)
 cmd_md: jsr reqdirs
         jcs failr
         jsr needtok
@@ -119,6 +134,7 @@ cmd_md: jsr reqdirs
         clc
         rts
 
+; RD / RMDIR / DELDIR folder (see rmdirx)
 cmd_rd: jsr reqdirs
         jcs failr
         jsr needtok
@@ -143,6 +159,7 @@ rmdirx: lda #0
 rx_r:   lda V_ERR
         rts
 
+; PWD: print the current folder. CD / CHDIR / CWD with no argument does the same.
 cmd_pwd:
         lda #<CWD
         ldx #>CWD
@@ -151,6 +168,9 @@ cmd_pwd:
         clc
         rts
 
+; CD folder: ".." removes the last path component (cu_*); otherwise the new path is built with
+; mkspec, a trailing '>' is ensured, and the folder is validated by opening "path*.*" as a
+; directory (cb_*) before CWD is replaced. FSPEC2 holds the candidate path while FSPEC is probed.
 cmd_cd: jsr nexttok
         beq cmd_pwd
         jsr reqdirs
@@ -252,6 +272,10 @@ cpy_fail:
         sec
         rts
 
+; COPY src dst / APPEND src dst / NGET (same as COPY): copies in 4K blocks (IOBUF) from IOCB 1 to
+; IOCB 2. V_A2 = open mode for the destination (8 write, 9 append); V_A1 = last read status.
+; End of file is CIO error 136, which is treated as success. A short block just before EOF is
+; still written because the length actually read comes from ICBLL/ICBLH.
 cmd_append:
         lda #9
         bne cpy_go
@@ -321,6 +345,8 @@ df_c:   lda CWD,x
         sta FSPEC+6
         rts
 
+; DF / CHKDSK: list *.* on the current drive, counting files and summing sizes; the free-sector
+; count comes from the directory footer (V_FREE, set by dnext). V_CNT = file count.
 cmd_df: jsr dfspec
         lda #0
         sta V_CNT
@@ -356,6 +382,9 @@ df_f:   jsr dclose
         sec
         rts
 
+; MORE / LESS / TYPE file: print a text file record by record (CIO get record into IOCB buffer).
+; MORE pauses every 20 lines (V_A1 = line count, ESC quits); TYPE (V_A2 = 0) runs until the end
+; but any key press (keyhit) stops it.
 cmd_more:
         lda #1
         bne ty_go
@@ -412,6 +441,8 @@ ty_fail:
         sec
         rts
 
+; FIND text file: case-insensitive substring search; SCR holds the upper-cased pattern, each
+; record in IOBUF is scanned from every start offset (T0) and printed when it matches.
 cmd_find:
         jsr needtok
         jcs failr
@@ -464,6 +495,7 @@ fd_hit: lda #<IOBUF
         jmp fd_l
 
 ; ---- COMP file1 file2: byte compare, first 8 differences shown ----
+; read one byte from IOCB X (length 0 = single byte via CIO); A = byte, V_ERR = status
 getb:   lda #7
         sta ICCOM,x
         lda #0
@@ -565,7 +597,9 @@ cq_len: jsr putsi
         jsr putnl
         jmp cpy_d
 
-; ---- FORMAT Dn: ----
+; ---- FORMAT Dn: ---- asks for confirmation, then XIO 254 (format) on the drive spec "Dn:".
+; Only D1: to D8: are accepted. XIO 254 is the standard CIO format command; behaviour (density
+; prompt etc.) depends on the DOS.
 cmd_format:
         jsr needtok
         jcs failr
@@ -627,8 +661,12 @@ fmt_bad:
         rts
 
 ; ---- DELTREE folder: delete a folder and everything below it ----
+; TP (= IOBUF) holds the path of the folder currently being emptied; it is rebuilt with tpcopy
+; into FSPEC for each directory scan. The routine appears to work depth-first by restarting the
+; scan after each folder entry is handled, using V_A0 as the path length.
 TP      = IOBUF
 
+; copy the TP path (EOL ended) into FSPEC; Y = length on return
 tpcopy: ldy #0
 tpc_l:  lda TP,y
         cmp #EOL

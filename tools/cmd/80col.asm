@@ -2,6 +2,25 @@
 ; The driver (res80.asm) sits in the top 12K of RAM; RAMTOP is lowered below it.  The hi-res text uses
 ; ANTIC mode F, 4 x 8 pixel characters.  BASIC GRAPHICS modes other than 0 still work and bring the
 ; normal display back; GRAPHICS 0 (and a warm start) returns to 80 columns.
+;
+; Usage: 80COL /ON or 80COL /OFF (command tail via the CMD hand-off area HAND, or prompted).
+;
+; How it works: this loader contains three prebuilt copies of the resident driver, assembled
+;   by res80.asm at BASE=$9000, $7000 and $5000 (bin\r9000.bin, r7000.bin, r5000.bin; each
+;   RESZ=$3000 bytes, see lib\r80.inc). /ON picks the copy whose BASE equals RAMTOP-RESP
+;   (RAMTOP $C0 -> $9000, $A0 -> $7000, $80 -> $5000), so the driver always sits directly
+;   below the old RAMTOP; the blob is copied there (it is an Atari binary with segments),
+;   then RAMTOP is lowered to the driver base and GRAPHICS 0 is re-opened so the OS builds its
+;   screen below the driver. The driver is then hooked in: E: entry in HATABS, DOSINI ($0C/$0D,
+;   so warm start reinstalls it) and a deferred VBI (SETVBV, vector 7).
+;   /OFF restores everything saved by /ON and re-opens GRAPHICS 0.
+; Detection (isact): the E: entry in HATABS must point into $7000-$CFFF at a table preceded 3
+;   bytes earlier by the signature '80C'; the driver base page bh is then (table page AND $F0)
+;   minus $20, i.e. the table appears to live in the third 4K block of the driver.
+; Driver variable block ("VOFF", base+$1FC0): +0/1 old E: table, +2 old RAMTOP, +3/4 old DOSINI,
+;   +5/6 old VVBLKD, +7/8 old MEMTOP; +$38.. entry points: handler table, new DOSINI,
+;   VBI routine, init routine. The driver's display list is at base+$0F00.
+; Zero page: sp,dp,vp,bh as pointers (bh = driver base page); ibuf=$0600 line buffer.
         icl 'lib\sys.asm'
         icl 'lib\r80.inc'
 
@@ -18,6 +37,8 @@ SDLSTL  = $0230
 IOCB0PT = $0346
 VOFF    = $1FC0
 
+; Get the argument: from the CMD hand-off ($A5 marker at HAND, text at HAND+1, copied to ibuf
+;   and marker cleared) or by prompting with CIO get-record (max 60 chars).
         org CODE
 start   lda #EOL
         sta ibuf
@@ -48,6 +69,8 @@ ask     lda #<m_ask
         sta ICBLH
         ldx #0
         jsr CIOV
+; Parse: find "/ON" or "/OFF" (case folded with AND $DF; separators ' ' and '/' skipped).
+;   "bne *+5" skips the following 3-byte jmp when the letter is not N.
 parse   ldy #0
 pq      lda ibuf,y          ; the screen editor hands back the prompt too: start after the "?"
         cmp #EOL
@@ -82,7 +105,8 @@ usage   lda #<m_use
 p2      iny
         bne p1
 
-; carry clear and bh = base page when the driver is installed
+; isact: carry clear and bh = base page when the driver is installed, else carry set.
+;   Scans HATABS (3-byte entries: device, handler table lo/hi) for 'E'; X = entry offset.
 isact   ldx #0
 ia1     lda HATABS,x
         beq ia_no
@@ -125,7 +149,7 @@ ia3     ldy #0
         clc
         rts
 
-; vp = the driver's variables
+; setvp: vp = address of the driver's variable block (bh*256 + VOFF). Clobbers A.
 setvp   lda #<VOFF
         sta vp
         lda bh
@@ -134,6 +158,9 @@ setvp   lda #<VOFF
         sta vp+1
         rts
 
+; /ON: refuse if already active. Otherwise choose the blob by RAMTOP ($C0/$A0/$80 pages:
+;   48K/40K/32K); bel/beh = end of the chosen blob; below 32K "requires 32K", other
+;   values unsupported.
 doon    jsr isact
         bcs on1
         lda #<m_already
@@ -181,6 +208,9 @@ on2     stx sp
         sec
         sbc #RESP
         sta bh
+; New base page bh = RAMTOP - RESP. Copy the binary blob (Atari load format): optional
+;   $FFFF, then start,end,data ... repeated until sp reaches the blob end (bel/beh).
+;   Each segment is copied to its own start address; cnt = end-start+1 bytes.
 ; copy the binary blob: optional $FFFF, then start,end,data ...
 cb1     ldy #0
         lda (sp),y
@@ -236,7 +266,8 @@ cb7     dec cnt
         beq cdone
 cb9     jmp cb1
 cdone   jsr setvp
-        ; remember what we replace
+        ; remember what we replace: save old E: table ptr, RAMTOP, DOSINI, VVBLKD and MEMTOP
+        ; into the driver's variable block (offsets 0-8) for /OFF
         ldx #0
 oe1     lda HATABS,x
         cmp #'E'
@@ -274,9 +305,9 @@ oe2     stx tx
         lda MEMTOP+1
         sta (vp),y
         lda bh
-        sta RAMTOP
-        jsr gr0
-        ; driver entry points
+        sta RAMTOP              ; hide the driver from the OS
+        jsr gr0                 ; re-open GRAPHICS 0 so the screen is rebuilt below RAMTOP
+        ; driver entry points: 4 words at variable block offset $38
         ldy #$38
         lda (vp),y
         sta tpl
@@ -301,42 +332,44 @@ oe2     stx tx
         iny
         lda (vp),y
         sta inh
-        jsr callin
+        jsr callin              ; run the driver's init routine
         ldx tx
         lda tpl
-        sta HATABS+1,x
+        sta HATABS+1,x          ; point E: at the driver's handler table
         lda tph
         sta HATABS+2,x
         lda tpl
         sta sp
         lda tph
         sta sp+1
-        ldy #6
-        lda (sp),y
+        ldy #6                  ; handler table +6/+7 is the put-byte vector, copied into
+        lda (sp),y              ; ICPTL/ICPTH of IOCB 0 ($0346) so the open E: IOCB uses it
         sta IOCB0PT
         iny
         lda (sp),y
         sta IOCB0PT+1
         lda dsl
-        sta $0C
+        sta $0C                 ; DOSINI -> driver, so a warm start reinstalls it
         lda dsh
         sta $0D
         lda bh
         clc
         adc #>$0F00
-        sta SDLSTL+1
+        sta SDLSTL+1            ; display list at base+$0F00
         lda #<$0F00
         sta SDLSTL
         ldx vbh
         ldy vbl
-        lda #7
+        lda #7                  ; SETVBV vector 7 = deferred VBI
         jsr SETVBV
         lda #<m_on
         ldy #>m_on
         jmp prx
 
+; callin: indirect call helper (6502 has no JSR (ind)).
 callin  jmp (inl)
 
+; /OFF: restore everything saved by /ON from the variable block and rebuild GRAPHICS 0.
 dooff   jsr isact
         bcc of1
         lda #<m_not
@@ -389,6 +422,7 @@ of3     ldy #0
         jmp prx
 
 ; GRAPHICS 0 through S: on IOCB 6, which makes the OS rebuild its screen below RAMTOP
+;   (open with aux1=12 = read+write; closed again right away).
 gr0     ldx #$60
         lda #3
         sta ICCOM,x
@@ -407,6 +441,7 @@ gr0     ldx #$60
         jmp CIOV
 sname   dta c'S:',EOL
 
+; adv2/adv4: advance source pointer sp by 2 / 4.
 adv2    lda sp
         clc
         adc #2
@@ -422,7 +457,8 @@ adv4    lda sp
         inc sp+1
 a4      rts
 
-; print the EOL terminated text at A/Y, then return to DOS
+; print the EOL terminated text at A(lo)/Y(hi) via CIO put-record (up to 255 bytes), then
+;   (prx only) return to DOS. pr returns to its caller.
 prx     jsr pr
         jmp (DOSVEC)
 pr      sta ICBAL
@@ -457,6 +493,7 @@ m_not   dta c'80 COLUMNS NOT ON',EOL
 m_mem   dta c'UNSUPPORTED RAMTOP (32K OR MORE)',EOL
 m_16    dta c'REQUIRES 32K OR MORE',EOL
 
+; The three driver images built from res80.asm (-d:BASE=$9000 / $7000 / $5000).
 blob9   ins 'bin\r9000.bin'
 blob9e
 blob7   ins 'bin\r7000.bin'

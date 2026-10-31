@@ -3,6 +3,31 @@
 ; CRC-32 checked. Encrypted, multi-volume and non-file entries are skipped; the last path component is mapped to 8.3.
 ; A member whose match distance reaches beyond the 22K ring stops with WINDOW TOO SMALL.
 ; At the ARJ> prompt: L ARJFILE | X ARJFILE [DEST] [MEMBER] | T ARJFILE [MEMBER]   (blank line = exit)
+;
+; Usage notes
+;   L  list: one line per file (8.3 name, unpacked size, packed size, method, month-day).
+;   X  extract: DEST is a drive/folder prefix (default D:); MEMBER limits it to one 8.3 name.
+;   T  test: decode and compare the CRC-32 without writing a file.   Q or a blank line leaves via DOSVEC.
+;   An archive name without ":" gets "D:" in front. Only the last path component of a name is used (conv83, uniq).
+;
+; ARJ layout handled (little endian). Every header: $60 $EA, basic header size (2 bytes, 0 = end of archive),
+; the basic header (copied into HDR, at most 255 bytes), its CRC-32, then extended headers (2-byte size, data,
+; 4-byte CRC; size 0 ends the list). Fields of the basic header as used here (offsets within HDR):
+;   +0 first header size (the file name starts at HDR[HDR+0], zero terminated)  +4 flags (bit 0 = encrypted)
+;   +5 method (0 stored, 1-3 LZ77+Huffman, 4 "fastest")  +6 file type (0 binary, 1 text, 2 main header/comment,
+;   3 folder, 4 label)  +10 DOS date (day = bits 0-4, month = bits 5-8)  +12 packed size  +16 original size
+;   +20 CRC-32 of the original data. The packed data follows the headers directly. Types 2, 3 and 4 are not
+;   extracted; their data (if any) is skipped.
+;
+; Structure: prompt -> members (header walk: rdhdr) -> domember -> procdata -> lzmain (methods 1-3) or
+;   fmain (method 4) -> outb (ring + CRC-32 + output buffer). Methods 1-3 use LZH-style blocks (newblk/rdpt build
+;   three canonical Huffman tables, getsym/getdist/copym expand), method 4 uses fixed unary-prefixed codes.
+;
+; Memory map: code from CODE ($3800, lib\sys.asm) up to $4CFF (checked by the .if at the end); $4D00-$50FF CRC-32
+;   tables (one page per byte); $5100 input buffer; $5200 output buffer; $5300 HDR; $5400 variables; $5600-$5C00
+;   Huffman counts/symbols; $5C00 code lengths (512); $5E00 name; $6400-$BBFF = 22K ring buffer (the window).
+; Zero page: $B0 wp (ring write), $B2 sp (match source), $B4-$BA table pointers, $BC ex, $C0 lp, $C2 q.
+;   IOCB 2 ($20) = archive, IOCB 3 ($30) = output file.
         icl 'lib\sys.asm'
 
 CRT0    = $4D00         ; CRC32 tables, one page per byte of the 32-bit entry
@@ -126,11 +151,14 @@ q       = $C2
         icl 'lib\io.asm'
         icl 'lib\hand.asm'
 
+; ---- start: build the CRC-32 tables, print the banner, fall into the command loop ----
 start:  jsr crctab
         jsr putsi
         .byte 'ARJ 0.1  ARJ LISTER/EXTRACTOR',EOL
         .byte 'L ARJ | X ARJ [DEST] [MEMBER] | T ARJ',EOL
         .byte 'STORED, METHODS 1-4. Q QUITS',EOL,0
+; ---- command loop: read a line, mode (L=0, X=1 extract, T=2 test) -> 'mode', then parse
+; ARCHIVE [DEST] [MEMBER] into FSPEC / DEST / MEMB. 'psp' keeps the stack pointer so abort can unwind.
 prompt: tsx
         stx psp
         jsr putnl
@@ -169,6 +197,7 @@ ck_l:   lda TOK,x
         beq ck_ye
         inx
         bne ck_l
+; archive name has no ':' -> prefix "D:"; DEST defaults to "D:" and MEMB to empty (= all members)
 ck_no:  lda #<FSPEC
         sta T1
         lda #>FSPEC
@@ -213,7 +242,7 @@ pm_m:   jsr nexttok
         sta T1+1
         ldy #0
         jsr cpt
-pm_go:  lda #4
+pm_go:  lda #4          ; OPEN for input on IOCB 2
         ldx #$20
         jsr fopen1
         bpl pm_ok
@@ -238,13 +267,15 @@ pm_ok:  lda #0
         .byte ' FILE(S)',EOL,0
         jmp prompt
 
+; ---- bye: close both files and return to DOS ----
 bye:    ldx #$20
         jsr fclose
         ldx #$30
         jsr fclose
         jmp (DOSVEC)
 
-; stop everything that is open and go back to the prompt
+; ---- abort: close IOCB 2 (archive) and IOCB 3 (output), restore the stack saved at the prompt and re-prompt.
+; Used by every fatal error path; the error text has already been printed.
 abort:  ldx #$30
         jsr fclose
         ldx #$20
@@ -252,6 +283,7 @@ abort:  ldx #$30
         ldx psp
         txs
         jmp prompt
+; ---- fatal error messages: print text then abort ----
 ferr_eof:
         jsr putsi
         .byte EOL,'UNEXPECTED END OF ARCHIVE',EOL,0
@@ -278,7 +310,10 @@ cp2:    lda #EOL
         sta (T1),y
         rts
 
-; ---- CRC32 tables (poly $EDB88320) ----
+; ---- CRC32 tables (poly $EDB88320, reflected) ----
+; Builds the 256 entries one byte-column per page: CRT0 = bits 0-7 ... CRT3 = bits 24-31 of each entry.
+; For each X: shift the 32-bit value (lenh:lenl:th:tl) right 8 times, XORing the polynomial ($EDB88320)
+; whenever a 1 bit falls out. Clobbers A,X,Y,tl,th,lenl,lenh.
 crctab: ldx #0
 ct_l:   stx tl
         lda #0
@@ -318,6 +353,9 @@ ct_n:   dey
         rts
 
 ; A = byte -> running CRC32
+; Table-driven update: index = (crc xor byte) & $FF, new crc = (crc >> 8) xor table[index]. The right
+; shift by 8 is done by moving c1->c0, c2->c1, c3->c2. The CRC is kept un-inverted ($FFFFFFFF start,
+; see crcinit); the final value is complemented when compared. Clobbers A,X.
 crcb:   eor c0
         tax
         lda c1
@@ -343,6 +381,8 @@ crcinit:
         rts
 
 ; ---- input ----
+; fill: read up to 255 bytes of the archive into INBUF. Out: ilen = count read, ipos = 0,
+; carry set if nothing was read (EOF). Clobbers A,X.
 fill:   lda #<INBUF
         sta V_BPL
         lda #>INBUF
@@ -377,12 +417,14 @@ gb_ok:  lda INBUF,x
 gb_c:   clc
 gb_r:   rts
 
-; same, but the end of the file is an error
+; same, but the end of the file is an error (jumps to ferr_eof, which aborts). Clobbers A,X.
 getbyt: jsr getbyte
         jcs ferr_eof
         rts
 
 ; next byte of the member's packed data (s0..s3 counts what is left; zeros after the end, like the host decoder)
+; Decrements the 32-bit count s3:s2:s1:s0 (with borrow) before reading, so the packed size bounds the reads
+; and what the decoder did not consume can be skipped later by skip32. Clobbers A,X.
 getdb:  lda s0
         ora s1
         ora s2
@@ -402,7 +444,8 @@ gdb_a:  dec s0
 gdb_z:  lda #0
         rts
 
-; one bit, most significant first
+; one bit, most significant first (the ARJ Huffman bit order). bb = current byte, bn = bits left.
+; Out: A = bit, Z set if 0. Clobbers A.
 getbit: lda bn
         bne gt_g
         jsr getdb
@@ -428,6 +471,7 @@ gl_g:   dec bn
         rts
 
 ; X = number of bits (0-16) -> vl/vh, first bit read is the most significant
+; Shifts vl/vh left and ORs in each new bit. Clobbers A,gcnt.
 getbits:
         stx gcnt
         lda #0
@@ -445,6 +489,8 @@ gbl:    lda gcnt
 gbd:    rts
 
 ; skip s0..s3 archive bytes
+; Reads and discards a 32-bit count (s3:s2:s1:s0, counted down to 0 with borrow). The file is read
+; sequentially, so skipping means reading. Clobbers A,X,s0-s3.
 skip32: lda s0
         ora s1
         ora s2
@@ -472,6 +518,9 @@ remz:   lda rm0
         rts
 
 ; ---- output: A = byte into the ring, the CRC and (when writing) the file ----
+; Stores the byte at wp (ring $6400..$BBFF, wp wraps to the start), updates the CRC, counts down the
+; remaining output size rm0..rm3, and if wr<>0 appends it to OUTBUF, flushing 256 bytes when opos wraps to 0.
+; Clobbers A,X,Y,ob.
 outb:   sta ob
         jsr crcb
         ldy #0
@@ -533,7 +582,11 @@ cl_l:   sta LENS,x
         rts
 
 ; ---- canonical Huffman tables (as in lzh.asm, code lengths up to 16) ----
+; Each table has counts per code length (17 low bytes at TCn, 17 high bytes at TCn+32) and the symbols sorted by
+; code (low/high byte arrays). 0 = literal/length (up to 510 symbols), 1 = distance, 2 = code-length codes.
+; Tables 1 and 2 have symbols < 256, so their high bytes go to the SYMZ scratch sink.
 ; X = table number -> pcl/pch/psl/psh
+; Out: pcl/pch = counts low/high, psl/psh = symbol low/high arrays. Clobbers A.
 settab: lda tcl,x
         sta pcl
         clc
@@ -559,6 +612,10 @@ thl:    .byte <SYMH0,<SYMZ,<SYMZ
 thh:    .byte >SYMH0,>SYMZ,>SYMZ
 
 ; build table X from nl/nh lengths at lp
+; Canonical Huffman construction: pass 1 (p1) counts how many symbols have each length; ofl turns the counts
+; into the first slot of each length in the sorted symbol list; pass 2 (p2) walks the lengths again and drops
+; symbol number il/ih into the next free slot of its length (length 0 = unused symbol).
+; In: lp = lengths (one byte each), nl/nh = count. Clobbers A,X,Y,q,kl,kh,il,ih,tl,th,ex.
 build:  jsr settab
         ldy #16
         lda #0
@@ -668,6 +725,11 @@ p2k:    dec kl
 p2d:    rts
 
 ; X = table -> symbol in vl/vh (bits are read most significant first)
+; Canonical decode, one bit at a time. cdl/cdh = code so far, fl/fh = first code of the current length,
+; il/ih = index of the first symbol of that length, dln = current length (1..16). For each length the code
+; is compared against first+count; if smaller the symbol is sym[index + (code - first)]. Otherwise the first
+; code doubles, the code shifts left and the next bit is read. More than 16 bits -> BAD DATA.
+; Clobbers A,Y,tl,th,kl,kh,ex and the decode state above.
 decode: jsr settab
         lda #0
         sta cdl
@@ -764,7 +826,12 @@ dsym:   lda cfl,x
 ds_d:   jmp decode
 
 ; ---- LZH block tables ----
+; Methods 1-3 code the data in blocks, each with its own tables (same scheme as LHA's -lh4/-lh5 family):
+; rdpt reads one table of code lengths. Block header: 16-bit symbol count, then the code-length table (table 2),
+; the literal/length table (table 0, 510 symbols, lengths run-length coded with table 2) and the distance table
+; (table 1, pnp symbols). A table whose length count is 0 is a single constant symbol (cfl/cvl/cvh) and costs no bits.
 ; read a table: pn symbols, pb bits for the length count, ps = position after which 2 bits of zero run follow (255 = none)
+; Each length is 3 bits; 7 means 7 plus a unary extension (one extra 1-bit per step, up to 16).
 rdpt:   jsr clrl
         ldx pb
         jsr getbits
@@ -828,6 +895,9 @@ rp_b:   lda #<LENS
         jmp build
 
 ; start of a block: size, literal/length table (table 0, coded with table 2), distance table (table 1)
+; The table-2 table has 19 symbols (5-bit count) and a 2-bit zero run after the 3rd entry. Then a 9-bit count of
+; literal/length entries is read; each decoded table-2 symbol means: 0 = one zero length, 1 = 3+4-bit zeros,
+; 2 = 20+9-bit zeros, >=3 = a length of (symbol-2). The distance table follows (pnp symbols, 5-bit count).
 newblk: ldx #16
         jsr getbits
         lda vl
@@ -947,6 +1017,8 @@ nb_p:   lda pnp
         jmp rdpt
 
 ; ---- shared LZ loop ----
+; getsym: next literal/length symbol -> vl/vh, starting a new block (newblk) when the block's symbol count
+; blkl/blkh has run out. Clobbers everything decode does.
 getsym: lda blkl
         ora blkh
         bne gs_a
@@ -958,6 +1030,8 @@ gs_b:   dec blkl
         ldx #0
         jmp dsym
 
+; getdist: distance code from table 1 -> dl/dh (distance minus 1). Code 0 and 1 are the values themselves;
+; code n >= 2 means n-1 extra bits: dl/dh = (1 << (n-1)) OR the extra bits.
 getdist:
         ldx #1
         jsr dsym
@@ -991,6 +1065,9 @@ gt_l:   asl mlk
 gt_r:   rts
 
 ; ---- LZ77 copy: lenl/lenh bytes from distance dl/dh + 1 back in the ring ----
+; A distance that does not fit the ring (high byte >= >RINGSZ) sets wf (WINDOW TOO SMALL) and zeroes the
+; remaining-output count so decoding stops. Otherwise sp = wp - dist - 1, wrapped into the ring, and bytes are
+; copied one at a time through outb (so overlapping matches work) until lenl/lenh or the output size runs out.
 copym:  lda dh
         cmp #>RINGSZ
         bcc cm_o
@@ -1045,6 +1122,7 @@ cm_3:   dec lenl
 cm_d:   rts
 
 ; methods 1-3: decode until the output size is reached
+; Symbol < 256 is a literal; otherwise it is a match with length = symbol - 253 (symbol 256 = length 3).
 lzmain: jsr remz
         beq lz_d
         jsr getsym
@@ -1065,8 +1143,11 @@ lz_m:   sec
         jmp lzmain
 lz_d:   rts
 
-; ---- method 4 ----
+; ---- method 4 ("fastest") ----
+; No Huffman tables: lengths and distances use an unary-prefixed code with a growing number of extra bits.
 ; length: vl = bits read as in the host decoder (0 = literal)
+; Counts up to 7 leading 1-bits (tk); the number of extra bits is tk and the value is the sum of the prefix
+; weights 1,2,4.. (mlk) plus those extra bits. Result in vl; 0 means a literal follows. Clobbers A,X,mlk,mhk,tk.
 declen: lda #0
         sta mlk
         sta tk
@@ -1093,6 +1174,8 @@ dl_e:   ldx tk
         rts
 
 ; distance -> dl/dh
+; Same idea starting at 9 extra bits: a unary prefix of up to 4 one-bits (tk 9..13) adds 512, 1024, ... to the
+; base (mlk/mhk, kl/kh holds the next weight), then tk extra bits are added. Result is distance minus 1.
 decptr: lda #0
         sta mlk
         sta mhk
@@ -1128,6 +1211,8 @@ dp_e:   ldx tk
         sta dh
         rts
 
+; method 4 main loop: a length of 0 is followed by an 8-bit literal, otherwise the match length is value+2
+; and a distance follows; runs until the output size is reached.
 fmain:  jsr remz
         beq fm_d
         jsr declen
@@ -1150,6 +1235,9 @@ fm_m:   clc
 fm_d:   rts
 
 ; run the member's data through the decoder; carry set when the method is not supported or the entry is encrypted
+; Rejects flag bit 0 (encrypted) and methods >= 5. Sets CRC = $FFFFFFFF, clears wf/bn/opos/blkl/blkh, sets wp to the
+; ring start, loads the remaining-output count rm0..rm3 from the original size (HDR+16). Method 0 copies bytes,
+; 1-3 -> lzmain (pnp = 17 distance symbols), 4 -> fmain. Carry clear on return means "ran".
 procdata:
         lda HDR+4
         and #1
@@ -1193,6 +1281,10 @@ pd_u:   sec
 
 ; ---- archive walk ----
 ; one header: $60 $EA, size, header bytes, CRC32, extended headers; hl/hh = 0 at the end of the archive
+; Reads the 2-byte header size (rejects >= $0B00), the header bytes into HDR (only the first 255 are stored, all
+; feed the CRC), compares the stored CRC-32 (HEADER CRC ERROR on mismatch), then skips the extended headers
+; (each: 2-byte size, that many bytes + 4 for its CRC). A bad signature on the first header gives NOT AN ARJ
+; ARCHIVE (fst = 0), later it is BAD DATA. End of file (EOF) between headers is treated as the end.
 rdhdr:  jsr getbyte
         jcs rh_z
         cmp #$60
@@ -1278,6 +1370,10 @@ rh_b:   lda fst
         .byte 'NOT AN ARJ ARCHIVE',EOL,0
         jmp abort
 
+; members: loop over headers. Type 2 (the archive's main header) is passed over; types 0 and 1 (binary, text)
+; are given a name (getname, conv83, uniq) and passed to domember; folders and labels are only skipped.
+; s0..s3 is loaded with the packed size (HDR+12) so the data after the header is skipped (skip32) whatever
+; domember did not consume. nfl/nfh counts files processed.
 members:
 mem:    jsr rdhdr
         lda hl
@@ -1309,6 +1405,7 @@ mm_k:   jsr skip32
 mem_d:  rts
 
 ; the last path component of the name that follows the fixed header part -> NAMEF, nf
+; The name is at HDR[HDR+0] (zero terminated); '/' or '\' restarts the copy; at most 127 chars kept.
 getname:
         ldy HDR
         ldx #0
@@ -1330,6 +1427,9 @@ gn_e:   stx nf
         rts
 
 ; NAMEF (nf chars) -> 8.3 name in NAMEB; NAMEB[0]=0 for a folder entry
+; Pass 1 finds st = index after the last '/', '\' or $FF and ld = index after the last '.' in that part (0 if
+; none). Then up to 8 stem chars (st..be) and up to 3 extension chars are copied through fixc. An empty stem
+; leaves NAMEB empty. Clobbers A,X,Y,st,ld,be,ec.
 conv83: ldy #0
         sty st
         sty ld
@@ -1442,6 +1542,10 @@ mq_y:   clc
         rts
 
 ; list, extract or test the entry in HDR
+; want=1 when mode is X/T and the name matches the filter. L mode prints a listing line; X opens DEST+NAMEB on
+; IOCB 3 and writes the output; both X and T run procdata, then compare the running CRC (complemented) with the
+; stored CRC-32 at HDR+20 and print OK / CRC ERROR; a match that reached outside the ring prints WINDOW TOO SMALL.
+; Encrypted entries and unsupported methods are reported and skipped.
 domember:
         lda #0
         sta want
@@ -1477,7 +1581,7 @@ dm_f:   lda NAMEB,x
         bne dm_f
 dm_g:   lda #EOL
         sta FSPEC2,y
-        lda #8
+        lda #8          ; OPEN for output on IOCB 3 (creates/overwrites)
         ldx #$30
         jsr fopen2
         bpl dm_w
@@ -1525,7 +1629,7 @@ dm_fc:  ldx #$30
 dm_v:   lda wf
         bne dm_w2
         ldx #3
-dm_k:   lda c0,x
+dm_k:   lda c0,x        ; stored CRC-32 is the complement of the running value
         eor #$FF
         cmp HDR+20,x
         bne dm_bad
@@ -1541,6 +1645,7 @@ dm_bad: jsr putsi
         .byte 'CRC ERROR',EOL,0
         rts
 
+; print 'X' (extracting) or 'T' (testing) before the name
 putc_mode:
         lda mode
         cmp #1
@@ -1560,6 +1665,7 @@ pn1:    lda NAMEB,y
 pn2:    rts
 
 ; ---- listing ----
+; print the 3-letter method name from mtab: index = method (0-4), anything higher shows '???'. Clobbers A,X,Y,tl.
 mname:  lda HDR+5
         cmp #5
         bcc mn_k
@@ -1578,6 +1684,8 @@ mn_l:   lda mtab,x
         rts
 mtab:   .byte 'STOLZ1LZ2LZ3FST???'
 
+; one listing line: name padded to 13, original size (HDR+16), packed size (HDR+12), method, then the date
+; as MM-DD. DOS date word at HDR+10: day = bits 0-4, month = bits 5-8 (the top month bit is HDR+11 bit 0).
 listline:
         ldy #0
 ll_n:   lda NAMEB,y
@@ -1632,6 +1740,7 @@ ll_c:   lda HDR+12,x
         jsr put2d
         jmp putnl
 
+; A (0-99) -> two decimal digits
 put2d:  ldx #0
 p2_l:   cmp #10
         bcc p2_d
@@ -1647,6 +1756,8 @@ p2_d:   pha
         jmp putc
 
 ; dv (32 bit) -> 8 digits in dig, leading zeros turned into spaces
+; Repeated subtraction of the powers of ten in table pw (10^7 .. 1); dv keeps the remainder (tv = scratch).
+; Clobbers A,X,Y,kl,kh,tv.
 dec32:  ldy #0
 d3_p:   sty kl
         lda #0
@@ -1694,6 +1805,7 @@ d3_z:   lda dig,y
         iny
         bne d3_z
 d3_r:   rts
+; print dig[1..7] (the top digit is dropped, so sizes above 9,999,999 would show truncated)
 putdig: ldy #1
 pg_l:   lda dig,y
         jsr putc

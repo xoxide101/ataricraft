@@ -3,6 +3,17 @@
 ; The file is read into $6000-$BBFF (about 27K, longer files are cut) and split into 40 column lines.
 ; Keys: Ctrl+Up / W / -  line up     Ctrl+Down / S / =  line down     SPACE  page down     B  page up
 ;       T  top     E  end     ESC or Q  quit.  Bottom row shows line number / number of lines.
+;
+; Structure: get file name (from the CMD hand-off area at HAND, or prompt) -> open/read the
+;   whole file with one CIO get-chars call -> build a table of line start addresses ->
+;   loop: draw screen, read a key, adjust 'top' (first visible line) -> exit via DOSVEC.
+;   Lines longer than 40 characters are split ("wrapped") into several 40-column lines.
+;
+; Memory map: CODE ($3800, lib\sys.asm) program, $5000-$57FF IDX line table (2 bytes/line,
+;   room for 2048 lines; the check below uses IDX+4096 as limit), $6000-$BBFF file data.
+; Zero page: p,q work pointers; top = first displayed line; nl = total lines; fin = end of
+;   file data; sp = screen pointer; mx = max value of top (nl-ROWS, min 0); t,cnt,src,cvt,cvu
+;   = temporaries. Display is the standard 40x24 text screen (SAVMSC); ROWS=23, row 24 = status.
         icl 'lib\sys.asm'
 
 IDX     = $5000         ; line start table, 2 bytes per line, 2048 lines
@@ -24,9 +35,12 @@ src     = $92
 cvt     = $94
 cvu     = $95
 
+; Get the file name into fn. If HAND holds the $A5 marker the CMD shell left a command
+;   tail at HAND+1: skip leading blanks, copy up to 58 chars until EOL/space, then clear the
+;   marker. Otherwise prompt and read a line with CIO get-record (command 5) on IOCB 0.
         org CODE
 start   lda #1
-        sta CRSINH
+        sta CRSINH              ; hide the cursor
         lda HAND
         cmp #$A5
         bne ask
@@ -68,6 +82,8 @@ ask     jsr putsi
         ldx #0
         jsr CIOV
 
+; Empty name quits. If the name has no ':' device prefix (nodev), prepend "D:" by shifting
+;   the name up two bytes (copy loop nd3 runs backwards from the end).
 named   lda fn
         cmp #EOL
         bne vv1
@@ -103,6 +119,9 @@ nd3     lda fn-1,x
         sta fn
         lda #':'
         sta fn+1
+; Open the file for read on IOCB 1 (X=$10), read up to BUFEND-BUF bytes in one CIO call
+;   (command 7). Y=136 (EOF) after a partial read is fine; any other error fails. The actual
+;   byte count returned in ICBL is added to BUF to give 'fin'. Then close the file.
 opened0 ldx #$10
         lda #3
         sta ICCOM,x
@@ -148,7 +167,7 @@ rd1     ldx #$10
         sta ICCOM,x
         jsr CIOV
 
-; open the keyboard on IOCB 7
+; open the keyboard on IOCB 7 (close first in case it is open; errors ignored)
         ldx #$70
         lda #12
         sta ICCOM,x
@@ -168,7 +187,9 @@ rd1     ldx #$10
         sta ICBLH,x
         jsr CIOV
 
-; build the line table
+; build the line table: IDX[n] = address of line n. A line ends at an EOL or after 40 chars;
+;   p scans the data, q walks IDX, X counts characters in the current line. Stops at end of
+;   data or when IDX is full.
         lda #<BUF
         sta p
         lda #>BUF
@@ -242,7 +263,7 @@ sw1     ldy #0
 bdone   lda #0
         sta top
         sta top+1
-; mx = max(nl - ROWS, 0)
+; mx = max(nl - ROWS, 0)   (carry clear after sbc means it went negative)
         lda nl
         sec
         sbc #ROWS
@@ -255,6 +276,8 @@ bdone   lda #0
         sta mx
         sta mx+1
 
+; Main loop: draw, wait for key (upper-cased), dispatch. Key codes: 27 ESC, 28 Ctrl+Up,
+;   29 Ctrl+Down. quit prints 125 (clear screen) before leaving.
 loop    jsr draw
         jsr getkey
         cmp #27
@@ -344,6 +367,9 @@ clamp   jsr atend
 cl1     rts
 
 ; ---- screen ----
+; draw: clear the 1K text screen (4 pages from SAVMSC; also resets attract mode) and
+;   render ROWS lines starting at line 'top', converting each ATASCII byte to a screen code.
+;   Writes characters straight to screen memory; Clobbers A,X,Y,p/q/sp/t/src/cnt.
 draw    lda SAVMSC
         sta sp
         lda SAVMSC+1
@@ -378,7 +404,8 @@ dr1     lda cnt
         lda t+1
         sbc nl+1
         bcs drend
-; src = IDX[t]
+; src = IDX[t]  (address = IDX + 2*t; asl/rol doubles the 16-bit t, the carry from the
+;   rol is zero so the later adc #>IDX is safe)
         lda t
         asl
         sta q
@@ -436,7 +463,8 @@ dr6     inc cnt
 drend   jsr status
         rts
 
-; screen code for the ATASCII byte in A (result in A)
+; conv: screen code for the ATASCII byte in A (result in A; bit 7 inverse kept).
+;   $00-$1F -> +64 (graphics), $20-$5F -> -32, $60-$7F unchanged.
 conv    sta cvt
         and #$7F
         cmp #32
@@ -454,6 +482,7 @@ cv2     sta cvu
         rts
 
 ; bottom row: "nnnn/nnnn  W/S line  SPACE/B page  ESC", inverse video
+;   (row 23 = SAVMSC + 23*40; blanked with $80 = inverse space; number shown is top+1 / nl)
 status  lda SAVMSC
         clc
         adc #<(23*40)
@@ -496,13 +525,15 @@ st2     lda stxt,x
         bne st2
 st3     rts
 
+; stc: put ATASCII char A at (sp),Y as inverse video; Y++.
 stc     jsr conv
         ora #$80
         sta (sp),y
         iny
         rts
 
-; 4 digits of t at column Y, leading zeros as spaces
+; 4 digits of t at column Y, leading zeros as spaces. Repeated subtraction of 1000/100/10/1
+;   (tables dl/dh); cnt+1 = digit, cnt = "non-zero digit seen" flag; last digit always shown.
 num     ldx #0
         lda #0
         sta cnt
@@ -541,6 +572,7 @@ dl      .byte <1000,<100,<10,<1
 dh      .byte >1000,>100,>10,>1
 
 ; ---- console / keyboard ----
+; putc: print char A via CIO put-char (command 11) on IOCB 0 with length 0.
 putc    ldx #0
         stx ICBLL
         stx ICBLH
@@ -549,6 +581,9 @@ putc    ldx #0
         ldx #0
         jmp CIOV
 
+; putsi: print the zero-terminated string following the JSR inline, then return after it.
+;   Pops the return address (which points at the last byte of the JSR), walks the string
+;   and pushes the address of the terminating 0 back so RTS resumes at the next instruction.
 putsi   pla
         sta T0
         pla
@@ -568,6 +603,8 @@ ps3     lda T0+1
         pha
         rts
 
+; getkey: wait for a key on IOCB 7 (K:), return it in A, lower case folded to upper.
+;   Resets ATRACT so the screen does not dim.
 getkey  ldx #$70
         lda #7
         sta ICCOM,x
@@ -583,6 +620,7 @@ getkey  ldx #$70
         and #$DF
 gk1     rts
 
+; fail falls through into bye. bye closes IOCB 1 and returns to DOS/CMD via DOSVEC.
 fail    jsr putsi
         .byte 'CAN',39,'T OPEN OR READ THE FILE',EOL,0
 bye     ldx #$10
@@ -591,7 +629,7 @@ bye     ldx #$10
         jsr CIOV
         jmp (DOSVEC)
 
-HAND    = $0480
+HAND    = $0480                 ; command-tail hand-off area ($A5 marker + text), see lib\hand.asm
 kspec   .byte 'K:',EOL
 stxt    .byte '  W/S line  SPACE/B page  ESC',0
 fn      .ds 64

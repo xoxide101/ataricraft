@@ -1,5 +1,19 @@
 ; Shared equates and helpers for the Ataricraft test programs (MADS). Text goes straight to GR.0 screen RAM.
-CIOV    = $E456
+;
+; PROVIDES: OS/hardware equates, a few zero-page temporaries, and small routines:
+;   eput   CIO put-char to E:        locate  X,Y -> sp        putc   ATASCII -> screen code at (sp)
+;   puts   zero-terminated string    puthex  A as 2 hex digits putdec 16-bit v16 as decimal
+;   cpudet CPU type (0/1/2)          vsync   wait one frame   getkey wait for a key
+; Text is written directly into screen RAM (not through CIO), so output is fast and can target either
+; the OS screen (sbase = 0, uses SAVMSC) or a custom buffer (sbase <> 0, set up by cscreen.inc).
+;
+; ZERO PAGE used here: $80/$81 sp (screen write ptr), $82/$83 sa (string ptr), $84 si (string index),
+;   $86/$87 v16 (value for putdec), $88-$8B t1-t4 (scratch). cscreen.inc adds $B7-$B9.
+;
+; EXTENDING: a test program includes this file (normally after its own `org`), then defines its own
+;   entry point and code; it must not use $80-$8B for state that has to survive calls to these helpers.
+;   Routines here are plain subroutines (JSR/RTS); none are reentrant.
+CIOV     = $E456
 ICCOM   = $0342
 ICBAL   = $0344
 ICBAH   = $0345
@@ -38,9 +52,10 @@ t2      = $89
 t3      = $8A
 t4      = $8B
 
-; A = ATASCII char to the E: device (clear screen = $7D)
+; eput: A = ATASCII char to the E: device (clear screen = $7D). Assumes IOCB 0 is open on E: (the OS does
+; this at boot). Clobbers A, X, Y (and ICCOM/ICBLL/ICBLH).
 eput    tax
-        lda #11
+        lda #11         ; CIO command 11 = put binary record/char; length 0 = just the char in A
         sta ICCOM
         lda #0
         sta ICBLL
@@ -49,7 +64,9 @@ eput    tax
         ldx #0
         jmp CIOV
 
-; X = column, Y = row -> sp
+; locate: X = column, Y = row (40 columns per row) -> sp = row base + column.
+; Base is SAVMSC if sbase+1 = 0, else the custom buffer in sbase. Clobbers A, X, Y. The row offset
+; is computed by repeated +40.
 locate  lda sbase+1
         bne lcb
         lda SAVMSC
@@ -79,7 +96,8 @@ loc2    txa
         inc sp+1
 loc4    rts
 
-; A = ATASCII -> screen code written at sp, sp advances
+; putc: A = ATASCII -> screen code stored at (sp), sp advances by one. Clobbers A, Y.
+; Conversion: $00-$1F -> +$40 (control graphics), $20-$5F -> -$20, $60+ unchanged (lower case etc.).
 putc    cmp #$20
         bcs pc1
         clc
@@ -96,8 +114,9 @@ pc3     ldy #0
         inc sp+1
 pc4     rts
 
-; A/Y = address of a zero-terminated string
-puts    sta sa
+; puts: A/Y = low/high address of a zero-terminated string (max 255 chars), printed at sp.
+; Clobbers A, X, Y, sa, si.
+puts     sta sa
         sty sa+1
         lda #0
         sta si
@@ -109,6 +128,7 @@ ps1     ldy si
         bne ps1
 ps2     rts
 
+; puthex: A = byte, printed as two hex digits (hexd prints just the low nibble of A). Clobbers A, X, Y.
 puthex  pha
         lsr
         lsr
@@ -122,7 +142,9 @@ hexd    tax
         jmp putc
 hextab  .byte '0123456789ABCDEF'
 
-; v16 -> decimal, leading zeros suppressed
+; putdec: v16 (0..65535) -> decimal at sp, leading zeros suppressed (the last digit is always printed).
+; Method: for each power in declo/dechi (10000..1) subtract repeatedly, counting in t1; t3 = "a digit
+; has been printed" flag. X = power index. Clobbers A, X, Y, t1, t3; v16 is destroyed (ends as 0).
 putdec  lda #0
         sta t3
         ldx #0
@@ -161,16 +183,21 @@ dechi   .byte >10000,>1000,>100,>10,0
 
 sbase   .word 0         ; custom text buffer (cscreen.inc); 0 = the OS screen
 
-; CPU type -> A: 0 = 6502, 1 = 65C02, 2 = 65C816. Call before any NMI-driven screen is set up.
+; cpudet: CPU type -> A: 0 = 6502, 1 = 65C02, 2 = 65C816. Call before any NMI-driven screen is set up
+; (it briefly disables NMIs, then re-enables VBI only: $40). Clobbers A.
+; Test 1: decimal-mode $99+1. On an NMOS 6502 the Z flag is invalid in decimal mode (stays clear, since
+;   the binary result $9A is non-zero); a CMOS part sets Z correctly (result 0). So Z clear => 6502.
+; Test 2: $EB is XBA (swap A/B) on a 65C816 but a NOP on a 65C02. With A=$FF, B=0 the swap brings
+;   B ($00) into A; the 2nd XBA restores; PHA/PLA then compares against $FF. A = $FF => no swap => 65C02.
 cpudet  sei
         lda #0
-        sta NMIEN
+        sta NMIEN       ; no NMIs while probing
         sed
         lda #$99
         clc
         adc #1
         cld
-        beq cd1
+        beq cd1         ; Z set => CMOS decimal behaviour (65C02 or 65C816)
         lda #$40
         sta NMIEN
         cli
@@ -192,17 +219,20 @@ cd1     lda #$FF
 cd2     lda #2
         rts
 
-; wait for the next frame
-vsync   lda RTCLOK+2
+; vsync: wait for the next frame (RTCLOK+2, the low byte of the OS jiffy clock, ticks each VBI).
+; Clobbers A.
+vsync    lda RTCLOK+2
 vs1     cmp RTCLOK+2
         beq vs1
         rts
 
-; wait for a key; returns the CH code in A (and clears it)
+; getkey: wait for a key; returns the CH (keyboard code, not ATASCII) in A and clears it ($FF = none).
+; Flushes any pending key first. Keeps ATRACT at 0 so attract-mode colour cycling never starts.
+; Clobbers A.
 getkey  lda #$FF
         sta CH
 gk1     lda #0
-        sta ATRACT
+        sta ATRACT      ; reset attract-mode timer each poll
         lda CH
         cmp #$FF
         beq gk1

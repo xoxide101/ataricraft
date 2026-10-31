@@ -1,8 +1,23 @@
 ; AFM - Ataricraft File Manager.  Two-pane file manager for Atari DOS 2 / MyDOS (uses CIO only).
 ; Version/revision/date appear in the info and help screens: bump V0.5 REV n and BUILD date there on every release.
 ; Build: mads afm.asm -o:afm.com
+;        mads afm.asm -d:COLS80=1 -o:afm.com   (80-column software-bitmap build)
+;
+; Overview: the key dispatcher (main) reads keys and runs commands on the active pane. All
+; disk access is through CIO; panes hold up to MAXE directory entries of 17 bytes each.
+;
+; Memory map (approximate, see equates below): code and data from $2000; display list,
+; screen and directory buffers (PANE0/PANE1, EBUF, IOBUF, MARKS) in $5000-$7500+; the
+; XEX loader is a separate segment at $0600; the properties overlay is assembled at
+; PROPORG; "run start" gives the entry point in RUNAD.
+;
+; Data structures: entry = 17 bytes (flags, name, ext, sector count); per-pane arrays
+; drv/cnt/sel/top/plen indexed by pane; PATHS = 4 x 40-byte paths; MARKS = tag flags
+; (128 per pane). Zero page: ZP/ZP3 pointers at $D4/$D8, editor pairs at $E0-$F3,
+; SP/SQ = 80-column bitmap pointers.
 
-CIOV    = $E456
+; ---- OS equates.  IC* are IOCB #0 addresses; code adds IOCB number*16 in X to reach others.
+CIOV    = $E456         ; CIO entry point (X = IOCB*16, command in ICCOM)
 ICCOM   = $0342
 ICBAL   = $0344
 ICBAH   = $0345
@@ -12,20 +27,32 @@ ICAX1   = $034A
 ICAX2   = $034B
 ROWCRS  = $54
 COLCRS  = $55
-CRSINH  = $02F0
-DOSVEC  = $0A
+CRSINH  = $02F0         ; cursor inhibit (non-zero hides the text cursor)
+DOSVEC  = $0A           ; DOS run vector (DOSVEC/DOSVEC+1), used to return to DOS
+; LDHDR..LDNAME appear to be scratch for the built-in binary-file loader used by "run" (dorun)
 LDHDR   = $05F0
 LDST    = $05F2
 LDBA    = $05F4
 LDBL    = $05F6
 LDNAME  = $0580
-RUNAD   = $02E0
-INITAD  = $02E2
+RUNAD   = $02E0         ; binary-load run address vector
+INITAD  = $02E2         ; binary-load init address vector
 
+; Zero-page work pointers: ZP/ZP+1 is the main 16-bit pointer (usually the current directory
+; entry or a string); ZP3/ZP3+1 is a second scratch pointer.
 ZP      = $D4
 ZP3     = $D8
 
 ; COLS80=1 builds the software 80-column version (AFM80): 4x8 glyphs in an ANTIC mode F bitmap.
+; Build-dependent constants (40-column vs 80-column):
+;   SH      shift added to the data buffers (80-col build moves them up $600)
+;   DS      extra shift for the display-list/line buffers ($400 in the 80-col build)
+;   PC1     screen column of the right-hand pane's first column
+;   PW      path-display width in columns (compared against the path length)
+;   CLRW    number of characters blanked when a screen row is cleared
+;   TW      text width of a screen row
+;   PROPORG origin ($5200 / $5700) of the overlay code assembled after the main program
+;   SP      (80-col only) zero-page pointer into the bitmap screen for the glyph renderer
         .ifndef COLS80
 COLS80  = 0
         .endif
@@ -48,24 +75,26 @@ DS      = 0
 PROPORG = $5200
         .endif
 
-MAXE    = 120
-PANE0   = $5C00+SH
-PANE1   = $6400+SH
-MARKS   = $6C00+SH
-LINE    = $5100+SH+DS
-FSPEC   = $5140+SH+DS
-FSPEC2  = $5180+SH+DS
-INBUF   = $51C0+SH+DS
-IOBUF   = $5800+SH
-VROWS   = 18
-MAXLV   = 6
-SDLSTL  = $0230
-DLB     = $5000+SH+DS
-RULE    = $5030+SH+DS
-VBUF    = $7500+SH
+; Data buffers (all above the code, which starts at $2000):
+MAXE    = 120           ; max directory entries per pane
+PANE0   = $5C00+SH      ; left-pane directory entry table
+PANE1   = $6400+SH      ; right-pane directory entry table
+MARKS   = $6C00+SH      ; per-entry tag flags, one byte per entry (see mky)
+LINE    = $5100+SH+DS   ; text line buffer
+FSPEC   = $5140+SH+DS   ; file-spec buffer (e.g. "D1:*.*")
+FSPEC2  = $5180+SH+DS   ; second file-spec buffer
+INBUF   = $51C0+SH+DS   ; line-input buffer for prompts
+IOBUF   = $5800+SH      ; general CIO data buffer
+VROWS   = 18            ; visible file rows per pane
+MAXLV   = 6             ; maximum nesting depth used by the tree walker
+SDLSTL  = $0230         ; OS shadow of the display-list pointer
+DLB     = $5000+SH+DS   ; custom display list
+RULE    = $5030+SH+DS   ; ruler/separator line data referenced by the display list
+VBUF    = $7500+SH      ; viewer text buffer
 
-; editor / viewer
-SAVMSC  = $58
+; ---- editor / viewer zero-page variables ($E0-$F3, word pairs) and buffer
+; (purposes are described where the editor code uses them)
+SAVMSC  = $58           ; OS pointer to screen memory
 EC      = $E0
 EE      = $E2
 ET      = $E4
@@ -76,8 +105,8 @@ EL      = $EC
 EN      = $EE
 EV      = $F0
 EW      = $F2
-EBUF    = $6D00+SH
-EMAXPG  = $A5
+EBUF    = $6D00+SH      ; text editor buffer
+EMAXPG  = $A5           ; editor limit in 256-byte pages (buffer ends below VBUF/other data)
 
 ; 16-bit compare: carry set if a>=b, Z set if equal
         .macro cmw
@@ -101,6 +130,10 @@ EMAXPG  = $A5
 
         org $2000
 
+; ---- start: entry point (load address $2000).  Saves the OS display list pointer, hides the
+; cursor, sets default state (left pane active, drives 1 and 2, spec "kspec"), opens the
+; screen (IOCB 3, X=$30, mode 4 via openF), shows the info screen, draws the UI, loads
+; both directories and falls into the main key loop.
 start:
         lda SDLSTL
         sta osdl
@@ -139,11 +172,20 @@ ks1:    lda kspec,x
         jsr reloadall
         jsr redraw
         jmp main
+; Trampolines: the key dispatcher below uses short BEQs, which cannot reach the handlers,
+; so each branches to a nearby JMP.
 jdn:    jmp k_dn
 jtab:   jmp k_tab
 jup:    jmp k_up
 jpgu:   jmp k_pgup
 jpgd:   jmp k_pgdn
+; ---- main: key loop.  Redraws the path line, waits for a key (getkey -> A, ATASCII) and
+; dispatches.  Cursor movement accepts arrows ($1C-$1F, no CTRL), ,/. or </> for paging,
+; -/= or W/S for up/down, Tab ($7F) or Space to switch panes, '1'-'8' to change drive.
+; Other keys are a compare chain (c1..c23) that JMPs to the command handler.
+; Commands: C copy, D delete, R rename, L lock, U unlock, F format, X clear tags, Q quit,
+; Return ($9B) run, M mkdir, K rmdir, T tag, A tag all, P properties, / find, N find next,
+; ? help, B bulk, I info, E edit, V view, G new file, O move.  Unknown keys loop to main.
 main:
         jsr drawpath
         jsr getkey
@@ -254,6 +296,8 @@ c23:    cmp #'O'
         jmp domove
 c18:    jmp main
 
+; ---- k_tab: switch active pane (act ^= 1).  Redraws both pane headers, then re-draws the
+; selected row of the old pane (un-highlight) and of the new pane (highlight).
 k_tab:
         lda act
         eor #1
@@ -272,6 +316,8 @@ k_tab:
         jsr drawrow
         jmp main
 
+; ---- k_pgup: page up in the active pane.  If the selection is not at the top of the window
+; it moves to the top row; otherwise it scrolls up by VROWS-1 rows (clamped at 0).
 k_pgup:
         ldx act
         lda sel,x
@@ -291,6 +337,9 @@ pg_draw:
         jsr drawpane
         jmp main
 
+; ---- k_pgdn: page down.  If the selection is above the last visible row it moves to the
+; window bottom (or the last entry); otherwise scrolls the window by VROWS-1 rows.
+; tmp = cnt-1 (last index), tmp+1 = bottom visible index.  Carry out of the ADC means >255.
 k_pgdn:
         ldx act
         lda cnt,x
@@ -328,6 +377,8 @@ pd_s2:  sta sel,x
         jmp pg_draw
 pd_end: jmp main
 
+; ---- k_up: move selection up one entry.  Scrolls the window (full pane redraw) when the
+; selection leaves it, else just redraws the old and new rows.  oldsel = previous index.
 k_up:
         ldx act
         lda sel,x
@@ -349,6 +400,8 @@ ku_row:
         jsr drawrow
 ku_end: jmp main
 
+; ---- k_dn: move selection down one entry (no-op at the last entry); same redraw logic as
+; k_up.  Also used by dotag to advance after tagging.
 k_dn:
         ldx act
         lda sel,x
@@ -380,6 +433,8 @@ kd_row:
         jsr drawrow
 kd_end: jmp main
 
+; ---- k_drive: key '1'-'8' pressed (A = ATASCII digit).  Sets the active pane's drive number,
+; resets its path length, selection and scroll, then reloads that directory and redraws.
 k_drive:
         sec
         sbc #'0'
@@ -394,6 +449,11 @@ k_drive:
         jsr redraw
         jmp main
 
+; ---- endir: Return pressed on a directory entry (ZP -> entry; name starts at offset 2).
+; ".." (name begins with '.') pops the last path component: scan back in PATHS for the
+; previous '>' and set plen.  Otherwise append the name (up to 8 chars, stops at a space)
+; plus '>' to the pane's path in PATHS (pbase[x] = start of this pane's path, 40 bytes
+; max; refuses with "PATH TOO LONG").  Then reloads the directory.
 endir:  ldy #2
         lda (ZP),y
         cmp #'.'
@@ -460,6 +520,8 @@ en_rl:  ldx act
         jsr redraw
         jmp main
 
+; ---- dotag: T key.  Toggles the tag flag (MARKS byte, bit 0) of the selected entry and moves
+; down.  Entries whose first or second byte is ':' (directory entries) cannot be tagged.
 dotag:  ldx act
         lda cnt,x
         bne tg_go
@@ -485,6 +547,8 @@ tg_go:  lda sel,x
         jsr drawrow
 tg_mv:  jmp k_dn
 
+; ---- doall: A key.  If any entries are tagged, clears all tags; otherwise tags every
+; non-directory entry of the active pane (cmiv = loop index).  Redraws the pane.
 doall:  jsr cntmk
         beq da_set
         ldx act
@@ -516,6 +580,7 @@ da_dr:  ldx act
         jsr drawpane
         jmp main
 
+; ---- dig: in: (ZP),Y = ASCII char.  out: A = digit value 0-9, or 0 if not a digit.
 dig:    lda (ZP),y
         sec
         sbc #'0'
@@ -524,6 +589,7 @@ dig:    lda (ZP),y
         lda #0
 dg_r:   rts
 
+; ---- mulacc: tsec(16-bit) += X * mlo, by repeated addition (X = count, mlo = 1/10/100).
 mulacc: cpx #0
         beq ma_r
 ma_l:   lda tsec
@@ -536,6 +602,9 @@ ma_n:   dex
         bne ma_l
 ma_r:   rts
 
+; ---- putd16: print pvl/pvh (16-bit, destroyed) as decimal via putc, suppressing leading
+; zeros (pzf = "digit printed" flag; the last digit is always printed).  Subtracts the
+; table powers of ten ptlo/pthi (10000..1) repeatedly, pdg counting each digit.
 putd16: ldx #0
         stx pzf
 pd16_n: lda #0
@@ -572,6 +641,11 @@ pd16_x: inx
 ptlo:   .byte <10000,<1000,<100,<10,<1
 pthi:   .byte >10000,>1000,>100,>10,>1
 
+; ---- doprops: P key.  Walks the tagged entries (or the selected one) with bstart/bnext
+; totalling: tlk = locked files, tfil/tdir = files/dirs, tsec = sectors (summed by addsec
+; from the 3-digit count at entry offset 14..16).  A single selected directory is counted
+; recursively with dotree and shown as FILES/DIRS/SECTORS; a single file opens the
+; properties screen (propscr); several entries show a one-line summary.
 doprops:
         jsr needf
         bne pr_go
@@ -607,6 +681,7 @@ pr_nl:  lda (ZP),y
 pr_d:   inc tdir
 pr_s:   jsr addsec
         jmp pr_l
+; addsec: tsec += decimal sector count at (ZP),14..16 (hundreds, tens, units).
 addsec: ldy #14
         jsr dig
         tax
@@ -706,6 +781,8 @@ pr_multi:
         jsr putfs
         jmp main
 
+; ---- dofind: '/' key.  Prompts for a search string (rdline -> A = length, 0 = cancelled),
+; copies it to fbuf and falls into fnext.
 dofind: jsr rowprompt
         jsr putsi
         .byte 'FIND: ',0
@@ -719,6 +796,9 @@ fd_c:   lda INBUF,y
         iny
         cpy fl
         bcc fd_c
+; ---- fnext: 'N' key.  Searches the active pane forward from the selection (wrapping around,
+; fpos = candidate index, fcnt = entries tested) for an entry whose name contains fbuf
+; (see matchent).  On a hit selects it and scrolls the window if needed.
 fnext:  lda fl
         bne fn_go
         jmp main
@@ -761,6 +841,9 @@ fn_top: lda sel,x
 fn_dr:  jsr drawpane
         jmp main
 
+; ---- matchent: substring test of fbuf[0..fl-1] against entry fpos of the active pane.
+; The name field is entry bytes 2..13; fs = start offset tried, fj = compare index.
+; out: carry set = found, clear = not found.
 matchent:
         ldx act
         lda fpos
@@ -793,6 +876,9 @@ me_n:   inc fs
         rts
 
 ; ---------- new file (text or hex, saved from the editor) ----------
+; (donew: asks for a name of up to 12 chars, builds "Dn:" + current path + name in FSPEC,
+; and refuses if opening it for read (aux 4) succeeds - i.e. the file exists.  Otherwise
+; starts the editor with ednew=1 on an empty buffer.  rlmax is the rdline length limit.)
 donew:  jsr rowprompt
         jsr putsi
         .byte 'NEW FILE NAME: ',0
@@ -843,6 +929,8 @@ nw_new: lda #1
         jmp ed_ld
 
 ; ---------- editor / viewer ----------
+; doview/doedit share one body: edro=1 means read-only viewer, 0 means editor.
+; The 'lda #1 / bne' pair is a branch-always trick to skip the 'lda #0' of doedit.
 doview: lda #1
         bne ed_set
 doedit: lda #0
@@ -870,6 +958,11 @@ ed_nf:  jsr msgrow
         jsr putsi
         .byte 'NOT A FILE',0
         jmp main
+; ed_ld: load the file into EBUF.  elim = highest usable address, derived from the OS
+; RAMTOP page ($6A) minus 5 pages for screen memory, capped at EMAXPG (and at b80h in the
+; 80-col build).  EE = end of text, EC = cursor pointer, ET = top-of-window pointer
+; (apparently).  Reads with CIO command 7 (get chars) in chunks until status 136 ($88,
+; EOF); if the buffer fills it probes with one more byte to distinguish "too big" from EOF.
 ed_ld:  lda $6A
         sec
         sbc #5
@@ -974,6 +1067,9 @@ ed_rs:  sta rsa,x
         dex
         bpl ed_rs
         .endif
+; ---- ed_loop: editor main loop.  Fix cursor/window, render, show status (unless edkeep says
+; a message is on screen), read a raw key (getraw) and dispatch via edkey.  edkey returns
+; carry set to leave the editor, which then reloads the active pane.
 ed_loop:
         jsr edfix
         jsr edrender
@@ -989,6 +1085,11 @@ ed_k:   lda #0
         jsr drawui
         jmp main
 
+; ---- edkey: in A = key.  out: carry set = quit editor, clear = continue.
+; ctk/ctl: control keys CTRL-S,Q,H,U,D,T,E are translated to the letters S,Q,H,U,D,T,E and
+; handled by edcmd (same commands as ESC followed by the letter).  Arrow keys ($1C-$1F)
+; move the cursor, $7E (backspace) deletes; in hex mode edhexk gets first refusal;
+; printable chars ($20-$7C) and EOL ($9B) are inserted.
 edkey:  ldx #6
 ekc:    cmp ctk,x
         beq ekc_h
@@ -1048,6 +1149,10 @@ eh_no:  lda #0
         rts
 eh_x:   sec
         rts
+; edhexk: hex-mode key entry.  in A = key.  Two hex digits (0-9, A-F, case-folded with AND $DF)
+; form one byte (ehh = high nibble, ehn = digits entered so far); the byte overwrites at the
+; cursor or is appended at the end of text.  Read-only mode and non-hex keys clear ehn and
+; return with carry clear (key handed back to edkey); consumed keys return carry set.
 edhexk: sta ehk
         lda edro
         bne eh_no
@@ -1107,6 +1212,9 @@ eh_m:   lda #1
         sec
         rts
 
+; ---- edesc/edcmd: editor commands.  edesc waits for the key after ESC; edcmd (A = letter)
+; handles S save, Q quit, H hex/text toggle, U/D move 20 lines up/down, T go to top,
+; E go to end.  Returns carry clear to continue (or carry set via edquit to exit).
 edesc:  jsr getkey
 edcmd:  cmp #'S'
         bne es1
@@ -1148,6 +1256,8 @@ es6:    cmp #'E'
 es7:    clc
         rts
 
+; edtoggle: flip edhex.  Entering hex mode sets ET to the buffer start; leaving it sets ET
+; to the byte after the cursor (apparently re-anchoring the display position).
 edtoggle:
         lda edhex
         eor #1
@@ -1161,6 +1271,8 @@ et_t:   mwa EC ET
         clc
         rts
 
+; edquit: if the buffer was modified (edmod) ask "DISCARD CHANGES? (Y/N)" on row 22.
+; out: carry set = exit, clear = stay.
 edquit: lda edmod
         beq eq_y
         jsr edclr22
@@ -1177,6 +1289,8 @@ edquit: lda edmod
 eq_y:   sec
         rts
 
+; edmsg22: clear row 22, position the cursor there and set edkeep so the status line is not
+; redrawn over the message.
 edmsg22:
         jsr edclr22
         lda #22
@@ -1186,6 +1300,8 @@ edmsg22:
         sta edkeep
         rts
 
+; edsave: CTRL-S.  Refused in view mode.  Opens the file for write (OPEN aux 8), then writes
+; EBUF..EE-1 with CIO command 11 (put chars).  Errors go to sv_err.
 edsave: lda edro
         beq sv_go
         jsr edmsg22
@@ -1244,6 +1360,8 @@ sv_ok:  lda #0
         clc
         rts
 
+; edclr22: blank screen row 22 (the editor's message/status row), in either column mode.
+; 40-col: clears 40 bytes of screen RAM directly at SAVMSC+880 (22*40); 80-col: prints blanks.
 edclr22:
         .if COLS80
         lda #0
@@ -1273,6 +1391,10 @@ ec_l:   sta (ES),y
         rts
         .endif
 
+; edstat: redraw the editor status area: row 0 is an inverse-video title bar (EDIT/VIEW,
+; file spec, '*' if modified; inv=$80 = inverse), row 22 shows LEN / FREE bytes (and HEX
+; when in hex mode), row 23 shows the command help.  The help string sets bit 7 on the
+; hotkey letters ('S'+$80 ...) so they print in inverse video.
 edstat: .if COLS80
         lda #$80
         sta inv
@@ -1345,7 +1467,11 @@ est5:   lda #23
         .byte 'ESC/CTRL: ','S'+$80,'AVE ','Q'+$80,'UIT ','H'+$80,'EX ','U'+$80,'P ','D'+$80,'N ','T'+$80,'OP ','E'+$80,'ND',0
         rts
 
-; keep cursor on screen by adjusting the top-of-window pointer
+; keep cursor on screen by adjusting the top-of-window pointer ET.
+; Text mode: if EC < ET, ET is set to the start of the display row containing EC (using edls
+; and mod40 to find the column offset within a wrapped line).  Otherwise walks forward from
+; ET row by row (edadv) counting rows in edrw; when more than 20 rows precede the cursor row,
+; EP (start of the first shown row) is advanced one row (scroll), so EC ends up visible.
 edfix:  lda edhex
         beq ef_t
         jmp ef_hex
@@ -1393,6 +1519,10 @@ ef_ct:  inc edrw
 ef_dn:  mwa EP ET
         rts
 
+; ef_hex: hex-mode version.  Clamps EC to EE (one byte back in view mode), rounds the
+; cursor's offset down to a multiple of 8 (AND $F8; 8 bytes per hex row) into EN, and
+; moves ET so that row is within the 21-row/168-byte window ($A8 = 168; scroll sets
+; ET = row start - 160).
 ef_hex: cmw EC EE
         bcc ef_h0
         mwa EE EC
@@ -1457,6 +1587,7 @@ ea_l:   cmw EL EE
         bcc ea_l
 ea_r:   rts
 
+; mod40: EV = EV mod TW (despite the name, TW is 40 or 80), by repeated 16-bit subtraction.
 mod40:  lda EV+1
         bne m40s
         lda EV
@@ -1494,6 +1625,7 @@ edle:   cmw EL EE
         jmp edle
 ele_r:  rts
 
+; edlf/edrt: cursor left/right one character (clamped to EBUF..EE); hex mode uses hxlf/hxrt.
 edlf:   lda edhex
         beq lf_t
         jmp hxlf
@@ -1510,6 +1642,10 @@ rt_t:   cmw EC EE
         inw EC
 rt_r:   rts
 
+; eddn: cursor down one display row (text lines wrap every TW chars).  If the rest of the
+; current line is longer than TW the cursor simply moves TW forward; otherwise it moves to the
+; next logical line at the same column (EV, via mod40), clamped to that line's length.
+; Hex mode: hxdn.
 eddn:   lda edhex
         beq dn_t
         jmp hxdn
@@ -1567,6 +1703,9 @@ dn_c:   clc
         sta EC+1
 dn_rt:  rts
 
+; edup: cursor up one display row; mirror image of eddn.  If the cursor is beyond the first TW
+; chars of its line it moves back TW; otherwise it goes to the previous line, keeping the
+; column (edcol) within the last wrapped row of that line.  Hex mode: hxup.
 edup:   lda edhex
         beq up_t
         jmp hxup
@@ -1626,6 +1765,8 @@ up_r:   rts
 up_p:   sbw EC #TW
         rts
 
+; edins insert is done by shifting EC..EE up one byte (copy backwards from EE), then storing
+; the character; ignored in view/hex mode or when the buffer is full (EE >= elim).
 ; A = character to insert at the cursor
 edins:  sta edtmp
         lda edro
@@ -1671,7 +1812,8 @@ dl_d:   lda #1
         sta edmod
 dl_r:   rts
 
-; ATASCII -> screen code
+; ATASCII -> screen code (A in/out; bit 7 inverse flag preserved).
+; $00-$1F -> +$40 (graphics), $20-$5F -> -$20, $60-$7F unchanged.
 tosc:   sta edtmp
         and #$7F
         cmp #$20
@@ -1689,6 +1831,8 @@ ts_m:   sta ecv
         ora ecv
         rts
 
+; tohc: like tosc but for the hex-dump character column: non-printables (outside $20-$7B)
+; become screen code $0E ('.').
 tohc:   sta edtmp
         and #$7F
         cmp #$20
@@ -1699,6 +1843,11 @@ tohc:   sta edtmp
 th_d:   lda #$0E
         rts
 
+; ---- edrender: draw the text window (rows 1-21).  Hex mode goes to edhrender.  80-col build
+; delegates to edr80.  40-col: converts the buffer from ET to screen codes and stores them
+; straight into screen RAM (ES = destination, edse = end = SAVMSC+880, ecol = column).
+; EOL pads the row with zeros (blanks) to the right edge; text wraps every 40 chars.
+; The cell under the cursor (EC) is remembered in EN and inverted (EOR $80) at the end.
 edrender:
         lda edhex
         beq er_t
@@ -1787,6 +1936,8 @@ er_x:   rts
         .endif
 
 ; hex dump: offset, 8 bytes, 8 chars per row
+; Row layout (40-col): cols 0-3 = 16-bit offset in hex, cols 5+3*i = byte i as two hex digits,
+; cols 30+i = its character.  21 rows from ET; cursor byte and its character are inverted.
 edhrender:
         .if COLS80
         jmp edh80
@@ -1916,6 +2067,9 @@ hr_m2:  lda edi
 hr_x:   rts
         .endif
 
+; hr_h2: store A as two hex-digit screen codes at (ES),Y (Y advances by 2).
+; Digits: 0-9 -> $10-$19 (ORA $10); A-F -> $21-$26 (CMP #10 leaves carry set, so ADC #$16
+; adds $17).  hr_n is the entry for the low nibble.
 hr_h2:  pha
         lsr
         lsr
@@ -1933,6 +2087,8 @@ hr_s:   sta (ES),y
         iny
         rts
 
+; hxlf/hxrt/hxup/hxdn: hex-mode cursor moves (+/-1 byte, +/-8 bytes), clamped to EBUF..EE.
+; In view mode the cursor may not go onto EE (one past the last byte).
 hxlf:   cmi EC EBUF
         beq hl_r
         dew EC
@@ -1968,8 +2124,15 @@ hxdn:   mwa EC EL
 hd_ok:  mwa EL EC
 hd_r:   rts
 
-; extended RAM probe. Must live below $4000 (the PORTB bank window). Only one byte per bank is touched and restored.
+; ---- xdet: extended RAM probe (130XE-style PORTB banking at $4000-$7FFF).
+; Must live below $4000 (the PORTB bank window).  Only one byte per bank is touched and restored.
 ; returns A = number of distinct 16 KB banks (0 = none). Combo bits map to PORTB bits 1,2,3,5,6,7.
+; Only run on XL/XE OS ($FCD8 holds a JMP opcode $4C there; otherwise returns 0).  Method:
+; with IRQs masked (SEI) and NMIs off ($D40E=0), set PORTB ($D301) bit 4 high = main RAM in the
+; window, save $4000, write $A5 there; for each of the 64 PORTB combos (xpv) save its
+; $4000 byte to $0600+x, then write the combo number x into each; read back and count the
+; combos whose byte still equals their own number (aliases overwrite each other).  If the
+; main-RAM $A5 got clobbered, the count is forced to 0.  Everything is restored, NMIEN set to $40.
 xdet:   lda $FCD8
         cmp #$4C
         beq xd_go
@@ -2044,6 +2207,8 @@ xd_4:   jsr xpv
         lda xcnt
         rts
 
+; xpv: in X = bank combo 0-63.  out: A = PORTB value selecting it: X bits 0-2 -> PORTB bits
+; 1-3, X bits 3-5 -> PORTB bits 5-7, bit 0 = 1 (OS ROM on), bit 4 = 0 (bank window enabled).
 xpv:    txa
         and #7
         asl
@@ -2064,7 +2229,11 @@ xtmp:   .byte 0
 xkl:    .byte 0
 xkh:    .byte 0
 
-; system information screen (also shown at startup, I key)
+; ---- doinfo: system information screen (also shown at startup, I key).
+; Clears the screen (putraw 125) and prints version/build, computer type (OS ROM at $FCD8
+; = $4C -> XL/XE, OS revision from $FFF7), PAL/NTSC (GTIA PAL register $D014, bits 1-3
+; zero = PAL), RAM size from RAMTOP ($6A pages /4 = KB; 64 on XL/XE when RAMTOP>=$C0),
+; extended RAM from xdet (banks*16 KB), MEMLO ($02E7/8) and the DOS name.
 doinfo:
         lda #125
         jsr putraw
@@ -2156,6 +2325,10 @@ in_xd:  jsr putsi
         jsr puthex
         jsr putsi
         .byte ' (MEMLO)',$9B,'DOS:      ',0
+; DOS identification (dosid): 0 = Atari DOS 2.x, 1 = MyDOS, 2 = SpartaDOS, 3 = unknown.
+; MyDOS is recognised by 'M' at $0700, SpartaDOS by "SD" at $0700/$0701, DOS 2 by $17 in
+; $0B (appears to be the high byte of the DOS vector).  Each DOS then gets its own
+; capability text (the three in_my / in_sd / in_d2 strings), all ended by in_end.
         ldx #3
         lda $0700
         cmp #'M'
@@ -2217,6 +2390,8 @@ in_end: jsr putsi
         jsr getkey
         rts
 
+; puthex: print A as two hex digits via putc.  Trick: for A-F, CMP #10 leaves carry set so
+; ADC #6 adds 7, then ADC #'0' lands on 'A'-'F'.  ph_n is the entry for the low nibble.
 puthex: pha
         lsr
         lsr
@@ -2231,6 +2406,8 @@ ph_n:   cmp #10
 ph_d:   adc #'0'
         jmp putc
 
+; ---- dohelp: '?' key.  Full-screen key help (text is inline after putsi), waits for a key,
+; then redraws the UI.
 dohelp: lda #125
         jsr putraw
         jsr putsi
@@ -2259,6 +2436,8 @@ dohelp: lda #125
         jsr drawui
         jmp main
 
+; ---- doquit: Q key.  Restores the stock display list, shows the cursor, clears the screen and
+; returns to DOS through the DOS vector (indirect JMP via zero page $0A).
 doquit:
         jsr dlstock
         lda #0
@@ -2269,6 +2448,12 @@ doquit:
 
 ; ---------- operations ----------
 
+; ---- dorun: Return key on an entry.  Directories are entered (endir).  Otherwise the 3-char
+; extension at entry offsets 10..12 is compared against the 3 three-byte patterns in exts
+; (ei steps by 3); a match runs the file: FSPEC is copied to LDNAME ($0580), the file
+; channel is closed, the stock screen is restored and control passes to the built-in binary
+; loader at ldrun.  ".BAS" files cannot run, so it just prints a 'REM RUN "name"' hint.
+; The "cpy #13 / bcc / bcs ru_yes" pair is a branch-always (carry is set after the loop).
 dorun:
         jsr need
         bne ru_go
@@ -2341,6 +2526,7 @@ ru_cp:  lda FSPEC,x
         jsr putraw
         jmp ldrun
 
+; need: out A=1 (Z clear) if the active pane has entries; else prints NO FILE SELECTED, A=0.
 need:
         ldx act
         lda cnt,x
@@ -2354,6 +2540,8 @@ need_ok:
         lda #1
         rts
 
+; needf: like need, but also rejects the ".." entry (name starting with '.') with NOT A FILE.
+; out: A=1 and Z clear if usable, else A=0.
 needf:  jsr need
         beq nf_r
         ldx act
@@ -2371,12 +2559,15 @@ needf:  jsr need
 nf_ok:  lda #1
 nf_r:   rts
 
+; ---- tag-mark helpers.  MARKS is 256 bytes: indexes 0-127 belong to pane 0, 128-255 to pane 1.
+; mky: in X = pane, A = entry index.  out: Y = MARKS index (A, or A|$80 for pane 1).
 mky:    cpx #0
         beq mky_0
         ora #$80
 mky_0:  tay
         rts
 
+; clrmk: in X = pane.  Zeroes that pane's 128 MARKS bytes (mkn counts 0..127 via BPL).
 clrmk:  lda #0
         cpx #0
         beq cm_s
@@ -2391,6 +2582,7 @@ cm_l:   lda #0
         bpl cm_l
         rts
 
+; cntmk: out A = number of tagged entries in the active pane (mc); Z set if none.
 cntmk:  lda #0
         sta mc
         sta cmiv
@@ -2407,6 +2599,8 @@ cn_n:   inc cmiv
 cn_d:   lda mc
         rts
 
+; ---- batch iteration over "the tagged entries, or the selected one if none are tagged".
+; bstart: bn = tag count; bsing = 1 when iterating just the selected entry; bidx = cursor.
 bstart: jsr cntmk
         sta bn
         bne bs_m
@@ -2421,6 +2615,8 @@ bs_m:   lda #0
         sta bidx
         rts
 
+; bnext: out carry set + A = next entry index to process; carry clear = finished.
+; (single mode returns the selection once, then sets bidx=$FF.)
 bnext:  lda bsing
         beq bn_m
         lda bidx
@@ -2448,6 +2644,9 @@ bn_l:   lda bidx
 bn_s:   inc bidx
         jmp bn_l
 
+; batchx: in A = CIO XIO command number (e.g. 33 delete, 35 lock, 36 unlock).  Applies it
+; to every entry from bnext (mkspec builds the name in FSPEC, xioA issues the XIO), stopping on
+; the first error; finishes through xioFin with Y = CIO status (1 = OK).
 batchx: sta bcmd
 bx_l:   jsr bnext
         bcc bx_d
@@ -2463,6 +2662,12 @@ bx_l:   jsr bnext
 bx_d:   ldy #1
         jmp xioFin
 
+; ---- domove / docopy: O and C keys (mvf = 1 move, 0 copy; qmsg = failure reason code).
+; Refuses if both panes show the same drive and path.  For each selected/tagged entry:
+; directories are copied recursively with dotree; files are copied with buildcp + cpfile;
+; a move then verifies the copy (vfile) and deletes the source (XIO 33).
+; qmsg: 1 = verify failed, 2 = folder into itself, 3 = nested too deep, other = path too long.
+; On exit both panes are reloaded and a result message is shown.
 domove: lda #1
         sta mvf
         jmp dc_s
@@ -2571,6 +2776,7 @@ da_mv:  jsr putsi
         .byte 'MOVED OK (VERIFIED)',0
         jmp main
 
+; isdir: (ZP) = entry.  out: Z set if it is a directory (':' in byte 0 or 1).
 isdir:  ldy #0
         lda (ZP),y
         cmp #':'
@@ -2581,6 +2787,9 @@ isdir:  ldy #0
 id_r:   rts
 
 ; FSPEC holds the source name; build the destination spec in FSPEC2
+; Trick: FSPEC2 = FSPEC+$40, so X=$43 (index relative to FSPEC) is "FSPEC2+3", just after
+; the "Dn:" prefix; apath appends the destination pane's path there, then the bare file
+; name (from FSPEC offset plen+3 = after the source's "Dn:" + path) is copied after it.
 buildcp:
         ldx cps
         lda plen,x
@@ -2608,6 +2817,8 @@ bc_cp:  lda FSPEC,y
         rts
 
 ; copy FSPEC -> FSPEC2; carry set on error (est holds the code)
+; Source opened on IOCB 1 (X=$10) for read (aux 4), destination on IOCB 2 (X=$20) for write
+; (aux 8); data is moved block by block through bget/bput until a short/zero read.
 cpfile: jsr msgrow
         jsr putsi
         .byte 'COPYING ',0
@@ -2629,6 +2840,10 @@ cf_o2:  jsr usef2
         jsr close1
         sec
         rts
+; (cpfile loop) read up to one buffer from IOCB 1 (bget; ICBLL/H on return = bytes actually
+; read, saved as lenlo/lenhi), write exactly that many to IOCB 2 (bput).  cpst keeps the read
+; status: 1 = OK -> continue, 136 (EOF) with the last partial block -> finish; anything else is
+; an error.  A zero-length read ends the copy.
 cf_lp:  ldx #$10
         jsr bget
         sty cpst
@@ -2671,6 +2886,9 @@ cf_ok2: jsr close1
         rts
 
 ; compare FSPEC with FSPEC2 byte for byte; carry set if they differ
+; Reads 1 KB blocks from both files (bget into IOBUF, bget2 into VBUF) and compares the
+; byte counts and then the data with (ZP),y / (ZP3),y; Y wraps -> both high bytes advance.
+; The remaining length is counted down in lenlo/lenhi; vz notes whether the block was non-empty.
 vfile:  jsr usef1
         ldx #$10
         lda #4
@@ -2743,6 +2961,8 @@ vf_bad0:
         sec
         rts
 
+; bget2: CIO get-chars (command 7) of up to $0400 bytes into VBUF on the IOCB in X;
+; the verify pass uses it for the second file.  Returns with Y = status.
 bget2:  lda #7
         sta ICCOM,x
         lda #<VBUF
@@ -2757,6 +2977,13 @@ bget2:  lda #7
 
 ; ---------- recursive folder copy / move ----------
 ; pane 2 = source folder being walked (listing in EBUF), pane 3 = matching destination path.
+; Pseudo-panes 2 and 3 have their own drv/plen/pbase entries (PATHS+80 and PATHS+120).
+; mvf=2 means "count only" (used by properties: no copying, just tfil/tdir/tsec totals).
+; lvl = current depth (max MAXLV); idx[lvl] = next entry to process at that depth; at each
+; level the directory is re-read into pane 2 (trload).  Per entry: file -> copy (+verify,
+; delete for a move); folder -> create it at the destination (XIO 42, mkdir), descend.
+; When a level is exhausted (tr_end) the source folder is removed for a move (rmtree, XIO 43,
+; falling back to 33) and the paths are stripped back one component (stripp).
 ; Entry: ZP = folder entry (bcu) in the active pane.  Carry set on error.
 dotree: lda act
         ldx #2
@@ -2941,6 +3168,8 @@ tr_fail:
         sec
         rts
 
+; trload: read the directory of pane 2's current path and set idx[lvl] = 1 (entry 0 is
+; skipped; it appears to be the ".." entry).
 trload: ldx #2
         jsr loaddir
         ldx lvl
@@ -2949,6 +3178,8 @@ trload: ldx #2
         rts
 
 ; remove the folder named by pane 2's path
+; Builds "Dn:path" in FSPEC (trailing '>' replaced by EOL via DEX), tries XIO 43 (rmdir) and
+; if that fails XIO 33 (delete).  out: carry set on error (est = status).
 rmtree: lda drv+2
         ora #'0'
         sta FSPEC+1
@@ -3002,6 +3233,7 @@ ds2:    lda #$9B
         sta FSPEC,x
         rts
 
+; setpp: copy pane A's drive and path into pane X (used to set up pseudo-panes 2/3).
 ; pane A -> pane X: drive and path
 setpp:  sta spp
         stx dpp
@@ -3025,6 +3257,8 @@ sp_l:   lda PATHS,y
 sp_x:   rts
 
 ; append the folder name at ZP to pane X's path; carry set if it won't fit
+; (name = entry bytes 2..9, stops at a space; '>' is added; fails when plen+9 >= 41).
+; PATHS holds four 40-byte path strings, one per pane (pbase[x] = offset of pane x's path).
 appname:
         stx apx
         lda plen,x
@@ -3081,11 +3315,14 @@ sr_set: lda tmp
         sta plen,x
         rts
 
+; close1/close2: close IOCB 1 / IOCB 2 (via closeF with X = IOCB*16).
 close1: ldx #$10
         jmp closeF
 close2: ldx #$20
         jmp closeF
 
+; ---- dodel: D key.  Prompts "DELETE name" (or "DELETE n TAGGED FILES"), askyn confirms,
+; then batchx with XIO 33 (delete).  dolock/dounlock below do the same with XIO 35/36.
 dodel:
         jsr needf
         bne dd_go
@@ -3134,6 +3371,9 @@ du_go:  jsr bstart
         lda #36
         jmp batchx
 
+; ---- doformat: F key.  Self-modifying text: the drive digit inside the prompt string is
+; patched into fmtdrv (the '1' byte inside the .byte string) before it is printed.  After a
+; Y confirmation the pane's path is reset and XIO 254 (format, DOS 2 style) is issued on "Dn:".
 doformat:
         ldx act
         lda drv,x
@@ -3153,6 +3393,8 @@ df_do:  ldx act
         lda #254
         jmp xioDone
 
+; ---- doclear: X key.  Confirms, then on the drive spec (mkdrvspec) unlocks everything
+; (XIO 36) and deletes everything (XIO 33); result is reported through xioDone.
 doclear:
         ldx act
         jsr mkdrvspec
@@ -3168,6 +3410,10 @@ dx_do:  lda #36
         lda #33
         jmp xioDone
 
+; ---- doren: R key.  Reads a new name (up to 12 chars, DEL $7E = backspace, printable only)
+; into INBUF, builds the DOS rename spec "old,new" in FSPEC2 (a ',' joins the two names;
+; max 13 name chars copied) and issues XIO 32 (rename) via xioA2 with spl/sph -> FSPEC2.
+; Empty input cancels.
 doren:
         jsr needf
         bne dr_go
@@ -3245,6 +3491,7 @@ dr_e:   lda #<FSPEC2
         jsr xioA2
         jmp xioFin
 
+; cancel: redraw and show CANCELLED, back to main.
 cancel:
         jsr redraw
         jsr msgrow
@@ -3252,6 +3499,9 @@ cancel:
         .byte 'CANCELLED',0
         jmp main
 
+; ---- domkdir: M key.  Prompts for a name with rdline (defined just below), then at mk_ok builds
+; "Dn:" + current path (apath) + name in FSPEC and issues XIO 42 (mkdir) with aux1 = 8.
+; isd=1 marks a directory operation so DOS-without-folders errors are reported nicely.
 domkdir:
         jsr rowprompt
         jsr putsi
@@ -3259,6 +3509,9 @@ domkdir:
         jsr rdline
         bne mk_ok
         jmp cancel
+; rdline: line input at the cursor.  Cursor is un-hidden during entry.  Keys: Return ends,
+; $7E (backspace) deletes (echoing it), other chars $20-$7A are added while ri < rlmax.
+; out: INBUF holds the text, ri = A = length (Z set if empty).
 rdline: lda #0
         sta CRSINH
         sta ri
@@ -3315,6 +3568,8 @@ mk_c:   lda INBUF,y
         lda #42
         jmp xioDone
 
+; ---- dormdir: K key.  Needs a selected directory entry (not ".."); asks confirmation, then
+; XIO 43 (rmdir) and, if that fails, XIO 33 (delete) for DOSes that remove folders that way.
 dormdir:
         jsr need
         bne rm_go
@@ -3357,6 +3612,8 @@ rm_do:  lda #1
 rm_fin: jmp xioFin
 
 ; B: make one-character folders A-Z and/or 0-9; existing ones are skipped
+; bkm = mode (1 = A-Z, 2 = 0-9, 3 = both: bit tests select each loop); bkn = created count,
+; bke = last error code seen, bkch = current letter.
 dobulk:
         jsr rowprompt
         jsr putsi
@@ -3431,6 +3688,9 @@ bk_end: ldy #1
 bk_fin: jmp main
 
 ; carry set only when this DOS has no directories
+; (CIO status 146 = function not implemented, 168 = illegal command/device-type error;
+; either means mkdir is unsupported -> carry set.  Other errors, e.g. "exists", are only
+; recorded in bke and the loop carries on.)
 bkone:  jsr msgrow
         jsr putsi
         .byte 'MAKING ',0
@@ -3472,6 +3732,9 @@ bko_e:  sty bke
 bko_x:  sec
         rts
 
+; xioDone: A = XIO command; issues it on FSPEC and falls into xioFin.
+; xioFin: Y = CIO status.  Clears aux1, reloads the active pane(s), redraws and shows DONE
+; or an error (showerr).  With isd set, status 146/168 becomes "NO DIRS ON THIS DOS".
 xioDone:
         jsr xioA
 xioFin: sty est
@@ -3504,6 +3767,9 @@ xd_ok:  lda #0
         .byte 'DONE',0
         jmp main
 
+; xioA: in A = CIO command (32 rename, 33 delete, 35 lock, 36 unlock, 42 mkdir, 43 rmdir,
+; 254 format).  Issues it on IOCB 1 ($10) with the filespec at (spl/sph) (xioA defaults to
+; FSPEC; xioA2 uses the caller's spl/sph), aux1 = xa1, aux2 = 0.  out: Y = status.
 xioA:   ldx #<FSPEC
         stx spl
         ldx #>FSPEC
@@ -3521,6 +3787,7 @@ xioA2:  ldx #$10
         jmp CIOV
 
 ; ---------- CIO helpers ----------
+; usef1/usef2: point spl/sph (the CIO filespec pointer) at FSPEC or FSPEC2.
 usef1:  lda #<FSPEC
         sta spl
         lda #>FSPEC
@@ -3532,6 +3799,9 @@ usef2:  lda #<FSPEC2
         sta sph
         rts
 
+; openF: CIO OPEN (command 3).  in X = IOCB*16, A = aux1 (4 read, 8 write, 6 dir read),
+; spl/sph = filespec.  Also zeroes aux2 and the following aux bytes ($34B..$34F) so any
+; extra aux values used by MyDOS/SpartaDOS are clean.  out: Y/N = CIO status.
 openF:  sta ICAX1,x
         lda #3
         sta ICCOM,x
@@ -3547,10 +3817,14 @@ openF:  sta ICAX1,x
         sta ICAX2+4,x
         jmp CIOV
 
+; closeF: CIO CLOSE (command 12), X = IOCB*16.
 closeF: lda #12
         sta ICCOM,x
         jmp CIOV
 
+; bget: CIO get-chars (command 7): read up to $0400 bytes into IOBUF from IOCB X.
+; on return ICBLL/H = bytes read, Y = status.   bput: command 11 (put-chars) of lenlo/lenhi bytes
+; from IOBUF.
 bget:   lda #7
         sta ICCOM,x
         lda #<IOBUF
@@ -3575,6 +3849,8 @@ bput:   lda #11
         sta ICBLH,x
         jmp CIOV
 
+; getkey: wait for a key and fold lower case to upper case (AND $DF clears bit 5).
+; getraw: CIO get-chars on IOCB 3 ($30, the keyboard) with length 0 = return one byte in A.
 getkey: jsr getraw
         cmp #'a'
         bcc gk_r
@@ -3591,6 +3867,7 @@ getraw: ldx #$30
         sta ICBLH,x
         jmp CIOV
 
+; askyn: prints "  (Y/N)" and waits for a key.  out: Z set (BEQ) if the answer was 'Y'.
 askyn:  jsr putsi
         .byte '  (Y/N)',0
         jsr getkey
@@ -3629,6 +3906,8 @@ reloadpn:
 rp_x:   rts
 rpn:    .byte 0
 
+; ---- mkdrvspec: in X = pane.  Builds "Dn:" + pane path + "*.*" EOL in FSPEC (wildcard
+; directory spec for that pane).  Clobbers A,X,Y, pn.
 mkdrvspec:
         stx pn
         lda drv,x
@@ -3653,6 +3932,8 @@ mkdrvspec:
         sta FSPEC,x
         rts
 
+; apath: append pane pn's path string (PATHS+pbase, plen chars, e.g. "GAMES>") to FSPEC at X.
+; in: X = index into FSPEC, pn = pane.  out: X advanced.
 apath:  ldy pn
         lda plen,y
         beq ap_z
@@ -3667,6 +3948,16 @@ ap_l:   lda PATHS,y
         bne ap_l
 ap_z:   rts
 
+; ---- loaddir: (re)read the directory of pane X into its entry table.
+; Directory entries are 17 bytes: [0-1] flag chars ('*' locked, ':' = directory marker),
+; [2-9] name, [10-12] extension, [13] blank, [14-16] sector count (decimal digits) - i.e.
+; the DOS directory text record as returned by CIO.  When the pane is inside a folder
+; (plen>0) entry 0 is a synthetic ".." entry (':' flag, name "..").  Opens "Dn:path*.*"
+; with aux1 = 6 (directory read), then reads records with CIO command 5 (get record, up to
+; 40 bytes, into LINE).  A record starting with a digit is the "nnn FREE SECTORS" trailer:
+; its number is copied into the free-space field frb (frbase[x]) and not added as an entry.
+; Others are copied (17 bytes) to the table, up to MAXE entries.  Afterwards cnt/sel/top are
+; clamped so the selection stays valid and visible.  Clobbers A,X,Y,ZP,tmp.
 loaddir:
         stx lp
         lda #0
@@ -3806,6 +4097,8 @@ ld_c3:  lda sel,x
         sta top,x
 ld_c4:  rts
 
+; entp: in A = entry index, X = pane (0/1 = PANE0/PANE1; 2/3 = EBUF for the tree walker).
+; out: ZP -> entry.  Address = base + index*17 (index*16 via four ASL/ROL, plus index).
 entp:   sta eidx
         sta tmp
         lda #0
@@ -3832,6 +4125,9 @@ ep2:    clc
 panelo: .byte <PANE0,<PANE1,<EBUF,<EBUF
 panehi: .byte >PANE0,>PANE1,>EBUF,>EBUF
 
+; mkspec: in X = pane, A = entry index.  Builds the full file spec in FSPEC:
+; "Dn:" + path + NAME[.EXT] + EOL (name from entry bytes 2-9, extension bytes 10-12, padding
+; spaces dropped).  Leaves ZP -> the entry.  Clobbers A,X,Y.
 mkspec: stx pn
         pha
         lda drv,x
@@ -3879,12 +4175,17 @@ mn4:    lda #$9B
         rts
 
 ; ---------- screen ----------
+; setpos: A = row, X = column -> OS ROWCRS/COLCRS (column high byte cleared).
 setpos: sta ROWCRS
         stx COLCRS
         lda #0
         sta COLCRS+1
         rts
 
+; putc: print character A (ORed with inv; inv=$80 gives inverse video).
+; putraw: print A unmodified.  Both preserve X and Y (saved in pc_x/pc_y); A is not preserved.
+; Uses CIO put-chars (command 11, length 0 = single char in A) on IOCB 0 (the E: screen);
+; in the 80-column build with m80 set it calls the software driver p80 instead.
 putc:   ora inv
 putraw: sta pc_a
         stx pc_x
@@ -3907,6 +4208,10 @@ pr_cio:
         ldx pc_x
         rts
 
+; putsi: print an inline string.  Usage:  jsr putsi / .byte 'text',0 / next instruction.
+; Trick: pulls its own return address (pointing at the last byte of the JSR) into ZP3, walks
+; the bytes that follow until the 0 terminator, then pushes the terminator's address back so
+; RTS resumes right after the string.  Clobbers A,Y,ZP3.
 putsi:  pla
         sta ZP3
         pla
@@ -3925,6 +4230,7 @@ ps3:    lda ZP3+1
         pha
         rts
 
+; putfs: print the EOL-terminated (ATASCII $9B) string in FSPEC.
 putfs:  ldx #0
 pf1:    lda FSPEC,x
         cmp #$9B
@@ -3934,6 +4240,7 @@ pf1:    lda FSPEC,x
         bne pf1
 pf2:    rts
 
+; putdec: print A (0-255) as exactly three decimal digits (hundreds, tens, units).
 putdec: sta dv
         ldx #0
 pd_h:   cmp #100
@@ -4015,6 +4322,7 @@ dpt_x2: lda (ZP),y
         cpy #13
         bcc dpt_x2
 dpt_x:  rts
+; dpc: print one char of the path line via putc, but never more than CLRW chars (fi = count).
 dpc:    ldx fi
         cpx #CLRW
         bcs dpc_r
@@ -4022,6 +4330,8 @@ dpc:    ldx fi
         jmp putc
 dpc_r:  rts
 
+; msgrow: clear row 20 (message line) and put the cursor at its start.  rowprompt: same for
+; row 21 (prompt line).  clrrow: A = row; blanks CLRW chars and repositions at column 0.
 msgrow: lda #0
         sta inv
         lda #20
@@ -4043,6 +4353,7 @@ cr1:    lda #$20
         jsr setpos
         rts
 
+; showerr: print "ERROR nnn" on the message row, nnn = CIO status in est.
 showerr:
         jsr msgrow
         jsr putsi
@@ -4050,6 +4361,8 @@ showerr:
         lda est
         jmp putdec
 
+; dlstock: switch back to the OS display list saved at startup (osdl) and clear m80
+; (so putc uses CIO again).
 dlstock:
         lda #0
         sta m80
@@ -4060,6 +4373,11 @@ dlstock:
         rts
 
         .if COLS80
+; ---- dlfancy (80-column build): install the custom ANTIC mode F display list at DLB and
+; set m80.  DL bytes: $70 x3 = 8 blank scan lines each; $4F = mode F + LMS (load memory scan
+; address: low/high bytes follow); 24 text rows x 8 lines of mode $0F; a second LMS ($4F)
+; is inserted at line dlcut5 because ANTIC's screen counter cannot cross a 4K boundary;
+; the list ends with $41 (JVB: jump and wait for vertical blank) back to DLB.
 dlfancy:
         lda #1
         sta m80
@@ -4150,6 +4468,9 @@ mr_l:   lda SP
         rts
 
 ; software 80-column driver: draws char pc_a at ROWCRS/COLCRS, handles EOL ($9B), backspace ($7E) and clear (125)
+; Called from putraw when m80 is set.  Clear fills 31 pages (7936 bytes) from the bitmap base
+; (the screen is 24 rows x 320 bytes = 7680) and homes the cursor.  Restores X/Y and returns
+; the char in A, mirroring the CIO path.
 p80:    lda pc_a
         cmp #125
         bne p8_1
@@ -4192,6 +4513,13 @@ p8_d:   ldy pc_y
         lda pc_a
         rts
 
+; g80: draw glyph pc_a at (COLCRS,ROWCRS), then advance COLCRS.  Off-screen positions (col>=80
+; or row>=24) are skipped.  Char mapping: bit 7 = inverse (mask gm = $0F), $7C is the
+; vertical bar (glyph 64), $60-$7B are shifted down by $20, then glyph index = code-$20
+; (clamped to 0).  The 8-byte cell gb[0..7] is blank row, 5 font rows (each f80_n[y]<<1,
+; EOR mask), 2 blank rows (see font80.inc).  Each screen byte holds two 4-pixel cells, so
+; an even column replaces the high nibble and an odd column the low nibble (godd), 8
+; scan lines down in steps of 40 bytes (mode F line width).  rowlo/rowhi = row start addresses.
 g80:    lda COLCRS
         cmp #80
         bcs g8_j
@@ -4286,6 +4614,10 @@ g8_n:   inx
 g8_r:   inc COLCRS
         rts
 
+; ---- 80-col data: rowlo/rowhi = bitmap address of each of 24 text rows; b80l/h = bitmap base;
+; dlcut5/dlcuth = display-list index / high address of the second LMS (4K boundary split);
+; gb = current glyph cell, gl = left cell while blitting a pair, gm = inverse mask,
+; WL = one 80-char screen-code text row for edr80/edh80, rsa/rsb = per-row checksum cache.
 rowlo:  .ds 24
 rowhi:  .ds 24
 b80l:   .byte 0
@@ -4311,7 +4643,10 @@ rsa:    .ds 24
 rsb:    .ds 24
 SQ      = $CE
 
-; editor text row: build WL (80 screen codes), then blitrow draws it
+; ---- edr80 (80-col editor render): for each of 21 rows (brow) build WL = 80 screen codes
+; from the text at EP (wraps at 80 columns, EOL ends the row, edeof set at EE), invert the
+; cursor cell (wcur = its column or $FF), then blitrow draws it.  SQ ($CE) is the zero-page
+; pointer blitrow uses for the destination row.
 edr80:  mwa ET EP
         lda #0
         sta edeof
@@ -4364,6 +4699,8 @@ er8_n:  jsr blitrow
         jmp er8_row
 er8_x:  rts
 
+; edh80: 80-col hex-dump render; same row layout as edhrender (offset, 8 bytes, 8 chars) built
+; into WL via hr_h2 and tohc, cursor byte (hxcr = row, hxci = byte index) inverted.
 edh80:  mwa ET EP
         lda #$FF
         sta hxcr
@@ -4476,6 +4813,9 @@ eh8_n:  jsr blitrow
 eh8_x:  rts
 
 ; draw WL on text row brow+1 unless it matches the cached checksum for that row
+; Checksum = (sum of bytes, running sum of those sums) in ca/cb, a Fletcher-style pair stored
+; in rsa/rsb[brow].  Drawing: for each pair of characters (bk = 0..39) mkg builds the left
+; glyph (copied to gl) and right glyph (gb); each scan line byte = left<<4 | right.
 blitrow:
         lda #0
         sta ca
@@ -4556,6 +4896,8 @@ bl_q:   inc bk
         rts
 
 ; screen code in A -> 8 glyph nibble rows in gb
+; Mapping: bit 7 = inverse; $7C -> glyph 64 (bar); $60-$7B -> code&$3F; $40-$5F (graphics)
+; -> blank glyph 0; $00-$3F -> glyph = code.
 mkg:    sta gsc
         and #$7F
         cmp #$7C
@@ -4603,6 +4945,10 @@ mg_k:   sta gm
         rts
         icl 'font80.inc'
         .else
+; ---- dlfancy (40-column build): builds the custom display list.  RULE gets 40 x $FF (a solid
+; one-scan-line bar, drawn in ANTIC mode F via the $4F LMS entries) used as separators.
+; The template dlt (47 bytes) is copied to DLB, then the three/four LMS screen addresses
+; are patched using SAVMSC + dro[i] (row offsets 0,40,80,880) stored at DLB offsets dpo[i].
 dlfancy:
         ldy #39
         lda #$FF
@@ -4641,13 +4987,19 @@ dlf2:   lda dro,x
         rts
         .endif
 
+; ---- screen layout (ATASCII rows): 0 title bar, 1 pane headers, 2-19 file rows (VROWS=18),
+; 20 message line, 21 prompt / current path, 22-23 command hints (hotkeys in inverse video
+; via the +$80 trick in the strings).  drawui builds the display list and redraws all;
+; redraw only repaints the text.
 dlt:    .byte $70,$70,$70,$42,0,0,$4F,<RULE,>RULE,$42,0,0,$4F,<RULE,>RULE,$42,0,0
         :19 .byte 2
         .byte $4F,<RULE,>RULE,$42,0,0,2,$41,<DLB,>DLB
-dpo:    .byte 4,10,16,41
-dro:    .word 0,40,80,880
-osdl:   .word 0
+dpo:    .byte 4,10,16,41        ; offsets in dlt of the LMS address words to patch
+dro:    .word 0,40,80,880       ; screen-RAM offset added to SAVMSC for each of them
+osdl:   .word 0                 ; OS display list pointer saved at startup (restored by dlstock)
 
+; ---- drawui: install the display list, clear the screen and fall into redraw.
+; redraw: repaint title bar, command-hint rows 22/23, both pane headers and both panes.
 drawui:
         jsr dlfancy
         lda #0
@@ -4691,6 +5043,10 @@ dr_tp:  lda #' '
         jsr drawpane
         rts
 
+; ---- drawhdr: in X = pane.  Row 1 header "Dn: <free> FREE <path tail>" at column 0 or PC1.
+; Inverse video when this is the active pane.  The free-sector text comes from frb
+; (5 chars at frbase[pane]; "-" when unknown) and the last PW characters of the path
+; are shown (hs = number of leading path chars skipped), padded with blanks.
 drawhdr:
         stx hp
         lda #0
@@ -4758,6 +5114,7 @@ hp_p:   jsr putc
         sta inv
         rts
 
+; drawpane: in X = pane.  Draws all VROWS rows starting at top[X].
 drawpane:
         stx dp
         lda #0
@@ -4773,6 +5130,11 @@ dp1:    ldx dp
         bcc dp1
         rts
 
+; drawrow: in A = entry index, X = pane.  Redraws that entry's screen row if it is currently
+; visible (nothing otherwise).  Row text: marker char (' ' normal, '+' tagged, '>' cursor,
+; '#' cursor on a tagged entry) + the 17 entry bytes + padding, and a '|' separator after
+; the left pane.  The selected row of the active pane is printed in inverse video; indexes
+; beyond cnt print blanks.  (drawrow is just a JMP to drawrow2; dr_r0 is a shared RTS.)
 drawrow:
         jmp drawrow2
 dr_r0:  rts
@@ -4860,15 +5222,17 @@ dr_ret: lda #0
         rts
 
 ; ---------- data ----------
-kspec:  .byte 'K:',$9B
-exts:   .byte 'COMXEXOBX'
+; Per-pane arrays are indexed by pane 0-3 (0 = left, 1 = right, 2/3 = temporary source/dest
+; panes used by the recursive folder copy / properties count).
+kspec:  .byte 'K:',$9B          ; keyboard device spec, opened on IOCB 3 (getraw)
+exts:   .byte 'COMXEXOBX'       ; runnable extensions COM, XEX, OBX (3 bytes each, see dorun)
 ei:     .byte 0
-drv:    .byte 1,2,0,0
-cnt:    .byte 0,0,0,0
-sel:    .byte 0,0,0,0
-top:    .byte 0,0,0,0
-frb:    .byte ' ',' ',' ',' ','-',' ',' ',' ',' ','-',' ',' ',' ',' ','-'
-frbase: .byte 0,5,10,10
+drv:    .byte 1,2,0,0           ; drive number per pane
+cnt:    .byte 0,0,0,0           ; number of entries per pane
+sel:    .byte 0,0,0,0           ; selected entry index per pane
+top:    .byte 0,0,0,0           ; index of first visible entry per pane
+frb:    .byte ' ',' ',' ',' ','-',' ',' ',' ',' ','-',' ',' ',' ',' ','-'   ; 5-char free-sector text x3
+frbase: .byte 0,5,10,10         ; offset of each pane's field in frb (panes 2/3 share a dummy one)
 mvf:    .byte 0
 qmsg:   .byte 0
 cps:    .byte 0
@@ -4881,11 +5245,11 @@ dpp:    .byte 0
 apx:    .byte 0
 fi:     .byte 0
 fj:     .byte 0
-act:    .byte 0
-inv:    .byte 0
-spl:    .byte 0
+act:    .byte 0                 ; active pane (0/1)
+inv:    .byte 0                 ; $80 = print inverse video (ORed into chars by putc), else 0
+spl:    .byte 0                 ; CIO filespec pointer (low/high) used by openF/xioA
 sph:    .byte 0
-est:    .byte 0
+est:    .byte 0                 ; last error/status code (CIO status)
 cpst:   .byte 0
 lenlo:  .byte 0
 lenhi:  .byte 0
@@ -4922,9 +5286,9 @@ fcnt:   .byte 0
 fs:     .byte 0
 fbuf:   .ds 8
 hs:     .byte 0
-plen:   .byte 0,0,0,0
-pbase:  .byte 0,40,80,120
-PATHS:  .ds 160
+plen:   .byte 0,0,0,0           ; path length per pane (chars in PATHS, includes trailing '>')
+pbase:  .byte 0,40,80,120       ; offset of each pane's path in PATHS
+PATHS:  .ds 160                 ; four 40-byte folder path strings, components ended by '>'
 xa1:    .byte 0
 dv:     .byte 0
 hp:     .byte 0
@@ -4964,12 +5328,20 @@ bkch:   .byte 0
 pc_a:   .byte 0
 pc_x:   .byte 0
 pc_y:   .byte 0
-m80:    .byte 0
-        run start
+m80:    .byte 0                 ; 80-col build: 1 = software 80-column screen is active
+        run start               ; RUNAD = start (the first segment, AFM itself)
 
 ; ---------- XEX loader (own segment at $0600, runs after AFM exits) ----------
+; Page 6 is outside AFM's data, so it stays intact while the loaded program is read.  dorun
+; jumps to ldrun after copying the file spec to LDNAME ($0580).  The loader reads Atari
+; binary-load format with CIO on IOCB 1: $FFFF header, then segments of start,end,data;
+; a segment that sets INITAD ($02E2) has it called right after loading; RUNAD ($02E0) is
+; jumped to when the file ends, or DOS is entered via DOSVEC if there is none / on error.
+; LDHDR/LDST ($05F0/$05F2) are 2-byte read buffers, LDBA/LDBL ($05F4/$05F6) the CIO
+; buffer address and length for ld_io.
 
         org $0600
+; ld_io: in X = IOCB*16, A = CIO command.  Issues it with buffer LDBA and length LDBL.
 ld_io:  sta ICCOM,x
         lda LDBA
         sta ICBAL,x
@@ -4980,6 +5352,8 @@ ld_io:  sta ICCOM,x
         lda LDBL+1
         sta ICBLH,x
         jmp CIOV
+; ld_rd2: read 2 bytes (CIO command 7) into the page-5 address whose low byte is in A
+; (high byte = >LDHDR).  out: carry set if the status is >= $80 (error or EOF).
 ld_rd2: sta LDBA
         lda #>LDHDR
         sta LDBA+1
@@ -4992,9 +5366,15 @@ ld_rd2: sta LDBA
         jsr ld_io
         cpy #$80
         rts
+; ld_init/ld_run: indirect JMPs used as JSR targets so the loaded program's INIT/RUN routines
+; return here (INIT) or never return (RUN).
 ld_init: jmp (INITAD)
 ld_run: jmp (RUNAD)
 ld_fail: jmp (DOSVEC)
+; ldrun: close IOCB 1, open LDNAME for read (aux1 = 4, aux2..aux6 cleared), clear RUNAD/INITAD,
+; require the $FFFF header, then loop over segments (ld_seg): read start (a further $FFFF is
+; skipped), read end, compute length = end-start+1 and read the data straight to its
+; load address; call INITAD if a segment set it.
 ldrun:  ldx #$10
         lda #12
         jsr ld_io
@@ -5072,9 +5452,12 @@ ld_fin: ldx #$10
         jsr ld_run
 ld_dos: jmp (DOSVEC)
 
-; props routines live in the free gap above the data buffers
+; props routines live in the free gap above the data buffers (assembled at PROPORG)
         org PROPORG
 ; ---------- single item properties screen ----------
+; propscr: shows NAME, PATH, KIND, SIZE (sectors; tsec), plus the "DOS:" date line if getdate
+; finds one and the extended long-name fields (LONG/ADDED/BYTES/FROM) if getlong finds them.
+; Waits for a key.  ppy = read position in IOBUF for ppfld.
 propscr:
         lda #125
         jsr putraw
@@ -5156,6 +5539,8 @@ pp_nol: jsr putsi
         .byte $9B,'PRESS ANY KEY',0
         jmp getkey
 
+; ppfld: print one '|'-terminated (or EOL-terminated) field from IOBUF starting at ppy, then
+; leave ppy just past the terminator.
 ppfld:  ldy ppy
 pf_l:   lda IOBUF,y
         cmp #$9B
@@ -5170,6 +5555,7 @@ pf_r:   sty ppy
 ppy:    .byte 0
 
 ; build the dotted name (padded to 12) in pnm and print it
+; (in: bcu = entry index in the active pane; name from entry bytes 2-9, ".", ext bytes 10-12)
 prnm:   ldx act
         lda bcu
         jsr entp
@@ -5213,6 +5599,7 @@ pn_p:   cpy pnl
         bne pn_p
 pn_r:   rts
 
+; rdrec: CIO get-record (command 5) into IOBUF, max 127 bytes, IOCB 1.  out: N set on error/EOF.
 rdrec:  ldx #$10
         lda #5
         sta ICCOM,x
@@ -5227,6 +5614,10 @@ rdrec:  ldx #$10
         jmp CIOV
 
 ; SpartaDOS-style dir record (open aux2=128) for the selected file; carry set if found, record in IOBUF
+; Opens the directory with aux1 = 6 and aux2 = 128 (the extended listing that includes the
+; file date; only DOSes that support it return useful text), reads records and compares the
+; 8-char name (IOBUF[0..7]) and 3-char extension (IOBUF[9..11]) with the entry.
+; out: carry set = found (record in IOBUF, channel closed), clear = not found or open failed.
 getdate:
         lda bcu
         ldx act
@@ -5281,6 +5672,9 @@ gd_no:  clc
         rts
 
 ; find the LONGNAME.TXT record for pnm in the pane's folder; carry set if found, record in IOBUF
+; Appends "LONGNAME.TXT" (lnm) to the "Dn:path" spec in place of the '*' of "*.*", opens it
+; for read and scans its records for one whose first 12 chars equal pnm and whose 13th char is
+; '|' (fields after it are shown by ppfld).  Appears to be an AFM convention for long names.
 getlong:
         ldx act
         jsr mkdrvspec
