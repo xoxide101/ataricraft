@@ -3941,7 +3941,7 @@
     const id = Date.now() + '_' + n;
     await idbSet('bk:' + id, d.bytes);
     BK.list.unshift({ id, n, name: d.name, size: d.bytes.length, ts: Date.now(), why });
-    while (BK.list.length > 12) { const o = BK.list.pop(); idbSet('bk:' + o.id, null); }
+    while (BK.list.length > 20) { const o = BK.list.pop(); idbSet('bk:' + o.id, null); }
     await bkSave(); bkRender();
   }
   function bkRender() {
@@ -3982,6 +3982,43 @@
     const orig = d.orig; await snapDisk(d, n, 'before revert'); shadow[n] = null;
     await putDisk(n, d.name, orig, null); log(`D${n}: reverted to ${d.name} as loaded`);
   };
+  // Autosave: edited disks are written to a PC folder you pick (as "<name> (edited Dn).atr", never over the original), plus timed backups.
+  const AS = { dir: null, state: 'off' };
+  const asUi = () => { const e = $('asinfo'); if (e) e.textContent = AS.state === 'on' ? 'on: ' + AS.dir.name : AS.state === 'perm' ? 'click Autosave folder… to re-enable ' + AS.dir.name : 'off'; };
+  const asName = (d, n) => d.name.replace(/\.[^.]*$/, '').replace(/[\\/:*?"<>|]/g, '_') + ' (edited D' + n + ').atr';
+  const unsavedDisks = () => [1, 2, 3, 4, 5, 6, 7, 8].filter((n) => S.disks[n] && S.disks[n].rev && (S.disks[n].savedRev || 0) < S.disks[n].rev);
+  async function asWrite() {
+    if (!AS.dir || AS.state !== 'on') return;
+    for (const n of unsavedDisks()) {
+      const d = S.disks[n], rev = d.rev;
+      if (performance.now() - (S.io[n] || 0) < 1500) continue;
+      try {
+        const fh = await AS.dir.getFileHandle(asName(d, n), { create: true }), w = await fh.createWritable();
+        await w.write(d.bytes); await w.close(); d.savedRev = rev; log(`D${n}: autosaved ${asName(d, n)}`);
+      } catch (e) { AS.state = 'perm'; asUi(); log('autosave failed: ' + e.message); return; }
+    }
+  }
+  async function asInit() {
+    try { AS.dir = await idbGet('autosave:dir'); } catch (e) { AS.dir = null; }
+    if (AS.dir) { AS.state = (await AS.dir.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt')) === 'granted' ? 'on' : 'perm'; }
+    asUi();
+  }
+  $('asbtn').onclick = async () => {
+    try {
+      if (AS.dir && AS.state === 'perm' && (await AS.dir.requestPermission({ mode: 'readwrite' })) === 'granted') AS.state = 'on';
+      else if (!AS.dir || AS.state !== 'on') { AS.dir = await showDirectoryPicker({ id: 'ac-autosave', mode: 'readwrite' }); await idbSet('autosave:dir', AS.dir); AS.state = 'on'; }
+      else if (confirm('Autosave is writing to ' + AS.dir.name + '. Choose a different folder?\n(Cancel keeps it; use OK to pick another.)')) { AS.dir = await showDirectoryPicker({ id: 'ac-autosave', mode: 'readwrite' }); await idbSet('autosave:dir', AS.dir); AS.state = 'on'; }
+      asUi(); asWrite();
+    } catch (e) { if (e.name !== 'AbortError') log('autosave folder: ' + e.message); }
+  };
+  $('asoff').onclick = async () => { AS.dir = null; AS.state = 'off'; await idbSet('autosave:dir', null); asUi(); };
+  asInit();
+  setInterval(asWrite, 3000);
+  const lastAuto = {};
+  setInterval(async () => {
+    for (let n = 1; n <= 8; n++) { const d = S.disks[n]; if (d && d.rev && lastAuto[n] !== d.rev && performance.now() - (S.io[n] || 0) > 1500) { lastAuto[n] = d.rev; await snapDisk(d, n, 'auto'); } }
+  }, 300000);
+  window.addEventListener('beforeunload', (e) => { syncDisks(true); if (unsavedDisks().length) { e.preventDefault(); e.returnValue = ''; } });
   $('bkrest').onclick = async () => {
     const b = BK.list.find((x) => x.id === $('bklist').value);
     if (!b) return;

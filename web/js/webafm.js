@@ -390,21 +390,31 @@
     } catch (e) { log('could not write ' + r.name + ' in place (' + e.message + '); use Save disk…'); }
     if (!r.handle) { host().save(r.name, r.m.bytes); r.unsaved = false; log('downloaded ' + r.name); }
   }
+  // Save disk: the picker lists every format we can write. The chosen extension decides the conversion (ATX cannot be created).
+  const SAVE_FMT = { atr: null, xfd: 'atrToXfd', pro: 'atrToPro', dcm: 'atrToDcm', dsk: 'atrToXfd', img: 'atrToXfd' };
+  function encodeFor(bytes, fname) {
+    const ext = (fname.match(/\.([^.]+)$/) || [, 'atr'])[1].toLowerCase(), fn = SAVE_FMT[ext];
+    if (!fn) return bytes;
+    const out = AC.DiskConv[fn](bytes);
+    if (!out) throw new Error('this disk cannot be written as .' + ext);
+    return out;
+  }
   async function saveAs(r) {
-    const name = /\.(atr|xfd|dsk|img)$/i.test(r.name) ? r.name : r.name.replace(/\.(atx|dcm|pro)$/i, '') + '.atr';
+    const base = r.name.replace(/\.[^.]*$/, ''), ext0 = (r.name.match(/\.([^.]+)$/) || [, ''])[1].toLowerCase();
+    const first = SAVE_FMT[ext0] !== undefined ? ext0 : 'atr', name = base + '.' + first;
     if (r.kind === 'drive') { const d = host().disk(r.n); if (d && d.bytes) r.m.bytes = d.bytes; }
-    const ext = (name.match(/\.[^.]+$/) || ['.atr'])[0].toLowerCase();
+    const T = { atr: ['ATR disk image', '.atr'], xfd: ['XFD raw sectors', '.xfd'], pro: ['PRO (protected-disk format)', '.pro'], dcm: ['DiskComm compressed', '.dcm'], dsk: ['DSK raw sectors', '.dsk'], img: ['IMG raw sectors', '.img'] };
+    const types = [first, ...Object.keys(T).filter((k) => k !== first)].map((k) => ({ description: T[k][0], accept: { 'application/octet-stream': [T[k][1]] } }));
     try {
       if (window.showSaveFilePicker) {
-        const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Atari disk image', accept: { 'application/octet-stream': [ext] } }] });
-        const w = await h.createWritable(); await w.write(r.m.bytes); await w.close();
-        if (r.kind === 'file') { r.handle = h; r.name = h.name; }
-        r.unsaved = false; log('saved ' + h.name); render(); return;
+        const h = await showSaveFilePicker({ suggestedName: name, types });
+        const data = encodeFor(r.m.bytes, h.name), w = await h.createWritable(); await w.write(data); await w.close();
+        if (r.kind === 'file' && /\.atr$/i.test(h.name)) { r.handle = h; r.name = h.name; }
+        r.unsaved = false; if (r.kind === 'drive' && host().markSaved) host().markSaved(r.n); log('saved ' + h.name); render(); return;
       }
-    } catch (e) { if (e.name === 'AbortError') return; log('Save disk failed (' + e.name + ': ' + e.message + '); downloading instead'); }
-    host().save(name, r.m.bytes); r.unsaved = false; render();
-  }
-  function snapshot(label, recs) {
+    } catch (e) { if (e.name === 'AbortError') return; log('Save disk failed (' + e.name + ': ' + e.message + ')' + (window.showSaveFilePicker ? '' : '; downloading instead')); if (window.showSaveFilePicker) return; }
+    host().save(base + '.atr', r.m.bytes); r.unsaved = false; if (r.kind === 'drive' && host().markSaved) host().markSaved(r.n); render();
+  }  function snapshot(label, recs) {
     const seen = new Set(), snaps = [];
     for (const r of recs) if (r && r.m.bytes && !seen.has(r.key)) { seen.add(r.key); snaps.push({ key: r.key, bytes: r.m.bytes.slice() }); }
     if (recs.some((r) => r && r.kind === 'folder')) W.undo.length = 0; // PC folders are written straight away and cannot be undone
