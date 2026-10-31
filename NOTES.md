@@ -42,6 +42,7 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 - Hover property cards for drives, cartridges and tape (Load, Add file, Save, Save + Eject); autosave folder, timed backups, unsaved-disk warning, multi-format Save disk; Print Shop viewer selected/all x separate/sheet saves.
 - Tools: NANO, CALC, 80COL, VIEW, SNDTEST stereo ditty. Shareable tools disk (see below). AFM/AFM80 rebuilt as V0.5 REV 14 (no code change from REV 13, version strings only).
 - Release v0.5.0 (pre-release) ships the emulator zip, the tools disk and AFM separately.
+- After v0.5.0 (in the repo, not in the release zip): Print Shop font glyph sheets (FO.* files, PNG save); WebAFM picture viewer for .MIC/.PIC/.GR15 (160x192, 4 colours, approximate palette), .GR8/.G8 (320x192) and .FNT/.CHR/.SET character sets; "Find executables" on raw disks (pattern search for FF FF binary-load programs, may give false hits). Not yet decoded: Print Shop F0-F8 fonts, MAINPICS, tiled border preview, PrintMaster .SHP.
 
 ## v0.4.0 (2026-10-28)
 
