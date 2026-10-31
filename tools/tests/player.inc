@@ -1,6 +1,7 @@
 ; player.inc - shared shell for MIDIPLAY.COM and MP3PLAY.COM (needs common.inc first, MADS).
-; The including program defines: s_title (zero-terminated), s_kind (zero-terminated), magic (4 bytes), and doplay
-; (plays the file in BUF; returns when it ends or a key is pressed; keeps interrupts as it found them).
+; The including program defines: s_title (zero-terminated), s_kind (zero-terminated), magic (4 bytes), doplay
+; (plays the file in BUF; returns when it ends or a key is pressed; keeps interrupts as it found them), and prepfile
+; (called after a file is loaded, may convert BUF in place; rts if nothing to do).
 ; Flow: ask for a file name, load it to BUF, check the 4-byte magic, then L / R / B pick the output (left POKEY,
 ; right POKEY, both), SPACE plays, N loads another file, ESC exits to DOS.
 AUDF1   = $D200
@@ -217,7 +218,8 @@ lf3     lda size+1
         lda size
         cmp #8
         bcc lfbad
-lf4     ldx #3
+lf4     jsr prepfile
+        ldx #3
 lf5     lda BUF,x
         cmp magic,x
         bne lfbad
