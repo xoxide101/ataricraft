@@ -40,7 +40,7 @@ for (const f of fs.readdirSync(root).filter((x) => /\.zip$/i.test(x)).sort()) {
     const own = mm.find((x) => x.set === short || x.parent === short) || mm[0];
     rows.push({ zip: f, file: e.name, size: e.data.length, crc32: crc, sha1: crypto.createHash('sha1').update(e.data).digest('hex'), md5,
       mameSet: own ? own.set : '', mameParent: own ? own.parent : '', mameDesc: own ? own.desc : '', tosec: tosec.get(md5) || '', nointro: nointro.get(crc) || '',
-      mameOwn: own ? (own.set === short || own.parent === short || short === own.set) : false });
+      mameOwn: own ? (own.set === short || own.parent === short || short === own.set) : false, mameAll: mm.map((x) => (x.parent || x.set) + '|' + x.set + '|' + x.desc).join(';;') });
   }
 }
 fs.writeFileSync(outBase + '.json', JSON.stringify(rows, null, 1));
