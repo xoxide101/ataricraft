@@ -2733,6 +2733,7 @@
         $('fspath').value = p; $('fsadd').click();
       }) },
       { label: 'Save disk image', run: () => viaVal('savedrv', n, () => $('savedisk').click()) },
+      { label: 'Save disk image and eject', run: () => { viaVal('savedrv', n, () => $('savedisk').click()); $('de' + n).click(); } },
       { label: 'Save all files (.zip)', run: () => pick('fsdrv', () => $('fszip').click()) },
       { label: 'Sync back to folder', run: () => pick('fsdrv', () => $('fssync').click()) });
     items.push({ label: 'Mount host folder as SDFS…', run: () => {
@@ -2746,7 +2747,10 @@
   const cartItems = (n) => [
     { label: 'Load from file explorer…', run: () => $('c' + n).click() },
     { label: 'Eject', run: () => $('ce' + n).click() },
+    { label: 'Save cartridge image', run: () => saveCart(n) },
+    { label: 'Save cartridge image and eject', run: () => { saveCart(n); $('ce' + n).click(); } },
   ];
+  const saveCart = (n) => { const c = S.carts[n]; if (!c) return log(`Cart ${n}: nothing inserted`); saveBlob(c.name, [c.bytes]); log(`Cart ${n}: saved ${c.name} (${c.bytes.length} bytes) to your Downloads`); };
   for (const [host, n] of [['drvviz', 1], ['drvviz', 2]]) {
     const d = document.createElement('div');
     d.className = 'xf cart';
@@ -2776,7 +2780,10 @@
     { label: 'Eject', run: () => $('te').click() },
     { label: 'Boot tape (Start held)', run: () => $('tboot').click() },
     { label: 'Rewind', run: () => $('trew').click() },
+    { label: 'Save tape image', run: () => saveTape() },
+    { label: 'Save tape image and eject', run: () => { saveTape(); $('te').click(); } },
   ];
+  const saveTape = () => { const t = S.tape; if (!t || !t.bytes) return log('Tape: nothing loaded'); saveBlob(t.name, [t.bytes]); log(`Tape: saved ${t.name} (${t.bytes.length} bytes) to your Downloads`); };
   {
     const d = document.createElement('div');
     d.className = 'xf tape';
@@ -3032,6 +3039,7 @@
       { label: 'Load...', run: () => $('f' + n).click() },
       have && { label: 'Eject', run: () => $('de' + n).click() },
       have && { label: 'Save image...', run: () => viaVal('savedrv', n, () => $('savedisk').click()) },
+      have && { label: 'Save + Eject', run: () => { viaVal('savedrv', n, () => $('savedisk').click()); $('de' + n).click(); } },
       { label: 'Blank...', run: (r) => blankMenu(n, r.left, r.bottom) },
       have && { label: 'WebAFM', run: () => AC.WebAfm.openDrive(0, n) },
       { label: 'More...', run: (r) => drvMenu(n, r.left, r.bottom) },
