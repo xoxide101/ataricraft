@@ -152,7 +152,7 @@
       <div class="dim" style="margin:4px 0 6px">Click a picture to tag it. Nothing on the disk is changed.</div>
       <div class="pst" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
         <span class="dim">PNG size</span><select class="psz"><option value="1">1× (88×52)</option><option value="2">2×</option><option value="4" selected>4× (352×208)</option><option value="8">8×</option></select>
-        <button class="p1">Save tagged PNG(s)</button><button class="pa">All PNGs (ZIP)</button><button class="pc">Contact sheet PNG</button><button class="pr">Raw files (ZIP)</button><button class="pt">Tag all</button></div>
+        <button class="p1" title="Each tagged picture as its own PNG (one file if one is tagged, otherwise a ZIP)">Selected: separate PNGs</button><button class="ps" title="All tagged pictures tiled on one sheet PNG, names underneath">Selected: one SHEET</button><button class="pa" title="Every graphic as its own PNG in a ZIP">All: separate PNGs (ZIP)</button><button class="pc" title="Every graphic tiled on one sheet PNG">All: one SHEET</button><button class="pr">Raw files (ZIP)</button><button class="pt">Tag all</button><span class="dim pn"></span></div>
       <div class="pgrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:8px;max-height:46vh;overflow:auto"></div>
       <div class="pother"></div>`;
     const q = (s) => w.querySelector(s), grid = q('.pgrid'), tag = new Set();
@@ -191,7 +191,13 @@
       const z = []; for (const g of l) z.push({ name: safe(g.name) + '.png', data: await one(g) }); host().save(base + '-tagged.zip', host().zip(z), 'application/zip');
     };
     q('.pa').onclick = async () => { const z = []; for (const g of gfx) z.push({ name: safe(g.name) + '.png', data: await one(g) }); host().save(base + '-pngs.zip', host().zip(z), 'application/zip'); };
-    q('.pc').onclick = async () => host().save(base + '-sheet.png', await P.png(P.sheet(sel(), Math.min(scale(), 3), 5)), 'image/png');
+    q('.pc').onclick = async () => host().save(base + '-sheet.png', await P.png(P.sheet(gfx, Math.min(scale(), 3), 5)), 'image/png');
+    q('.ps').onclick = async () => {
+      if (!tag.size) return log('tag one or more pictures first (click them)');
+      host().save(base + '-selected-sheet.png', await P.png(P.sheet(sel(), Math.min(scale(), 3), 5)), 'image/png');
+    };
+    const count = () => { q('.pn').textContent = tag.size + ' of ' + gfx.length + ' tagged'; };
+    w.addEventListener('click', () => setTimeout(count, 0)); count();
     q('.pr').onclick = () => host().save(base + '-raw.zip', host().zip(items.map((e) => ({ name: safe(e.name) + (e.kind === 'graphic' ? '.gfx' : '.bin'), data: e.data }))), 'application/zip');
     const p = dlg('Print Shop disk', w, [{ label: 'Close', value: null, pri: true }, { label: 'Put in emulator drive', value: 'drive' }]);
     const box = W.el.querySelector('.wdlg:last-child .wdb'); if (box) box.style.maxWidth = '94vw';
