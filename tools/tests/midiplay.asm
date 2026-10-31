@@ -8,6 +8,8 @@
 
 ; music file layout: 'PMD',1, then 3-byte records: frames to wait, register 0-7 (AUDF1,AUDC1,AUDF2,...), value.
 ; Register $FE = nothing (long waits), $FF = end of song.
+prepfile rts
+
 doplay  jsr silence
         lda #<(BUF+4)
         sta pp
