@@ -140,6 +140,16 @@
     render();
     if (W.lnLoad) makeNames(r, true);
   }
+  // Picture / character-set file (MIC, PIC, GR8, FNT...): preview with PNG save. Returns true if it was shown.
+  async function picViewer(name, data, extra) {
+    const P = AC.PrintShop, pic = P && P.decodePic(name, data); if (!pic) return false;
+    const w = document.createElement('div'), sc = pic.w >= 300 ? 2 : pic.w <= 128 ? 4 : 3;
+    w.innerHTML = `<div><b>${esc(name)}</b> · ${esc(pic.info)}</div><div class="dim" style="margin:4px 0">Colours are approximate. Nothing is changed.</div>`;
+    const c = P.picCanvas(pic, sc); c.style.cssText = 'max-width:86vw;height:auto;image-rendering:pixelated;border:1px solid #555;background:#000'; w.append(c);
+    const v = await dlg('Picture', w, [{ label: 'Close', value: null, pri: true }, { label: 'Save PNG', value: 'png' }].concat(extra || []));
+    if (v === 'png') host().save(name.replace(/\.[^.]*$/, '') + '.png', await P.png(P.picCanvas(pic, 2)), 'image/png');
+    return v || true;
+  }
   // Print Shop data disk: thumbnails of every graphic, border and font on it, with PNG / raw extraction.
   async function psViewer(file, b) {
     const P = AC.PrintShop, info = P.parse(b), base = file.name.replace(/\.[^.]*$/, '');
@@ -249,6 +259,7 @@
   }  async function openFile(i, file, handle) {
     if (window.AC && AC.Archives && AC.Archives.looksLikeArchive(file.name)) return openArchive(i, file, handle);
     const bytes = AC.Progress ? await AC.Progress.read(file, 'Loading ' + file.name) : new Uint8Array(await file.arrayBuffer());
+    if (window.AC && AC.PrintShop && AC.PrintShop.PICEXT.test(file.name) && await picViewer(file.name, bytes)) return;
     const m = C.mount(bytes, file.name);
     if (!m) {
       if (/\.(atx|atr|xfd|pro|dcm|dsk|img)$/i.test(file.name)) return rawInfo(file, bytes);
@@ -1029,6 +1040,7 @@
     const e = C.entries(r.m).find((x) => x.path === path); if (!e || e.dir) return;
     if (W.ed) return;
     const data = r.m.vol.read(e.raw), ro = !!r.m.vol.readOnly;
+    if (!mode && window.AC && AC.PrintShop && AC.PrintShop.decodePic(e.name, data)) { const v = await picViewer(e.name, data, [{ label: 'Edit as bytes', value: 'edit' }]); if (v !== 'edit') return; }
     await AC.WEdit.open({
       parent: W.el, title: (e.long || e.name) + (e.long ? '  [' + e.name + ']' : ''), data, readOnly: ro, mode,
       onReady: (a) => { W.ed = a; W.dlgKey = () => a.focus(); },

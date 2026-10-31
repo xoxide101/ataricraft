@@ -124,5 +124,51 @@
     return c;
   }
 
-  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, fontGlyphs, fontSheet, GW, GH };
+  // Standard Atari graphics files, chosen by extension and size.
+  //   MIC / PIC / GR15 : 160x192, 2 bits per pixel (4 colours), 40 bytes per line, optional 4 trailing colour bytes
+  //   GR8 / G8         : 320x192, 1 bit per pixel, 40 bytes per line
+  //   FNT / CHR / SET  : 1024-byte (or 512) character set, 8 bytes per character
+  // An optional $FFFF binary-load header is skipped.
+  const PICEXT = /\.(mic|pic|gr15|gr8|g8|g15|fnt|chr|set)$/i;
+  function atariColor(c) {
+    const hue = c >> 4, lum = c & 15;
+    if (!hue) { const v = Math.round(lum * 255 / 15); return [v, v, v]; }
+    const a = ((hue - 1) / 15) * 2 * Math.PI + 0.35, y = 0.12 + lum / 15 * 0.85;
+    const cl = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
+    return [cl(y + 0.956 * 0.28 * Math.cos(a) + 0.621 * 0.28 * Math.sin(a)), cl(y - 0.272 * 0.28 * Math.cos(a) - 0.647 * 0.28 * Math.sin(a)), cl(y - 1.106 * 0.28 * Math.cos(a) + 1.703 * 0.28 * Math.sin(a))];
+  }
+  function decodePic(name, d) {
+    if (!PICEXT.test(name)) return null;
+    let o = 0; if (d.length > 6 && d[0] === 0xff && d[1] === 0xff) o = 6;
+    const n = d.length - o, ext = name.match(PICEXT)[1].toLowerCase();
+    if (/^(fnt|chr|set)$/.test(ext)) {
+      if (n < 512) return null;
+      const cnt = n >= 1024 ? 128 : 64, w = 16 * 8, h = Math.ceil(cnt / 16) * 8, px = new Uint8Array(w * h);
+      for (let k = 0; k < cnt; k++) for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++)
+        px[((k >> 4) * 8 + y) * w + (k & 15) * 8 + x] = (d[o + k * 8 + y] >> (7 - x)) & 1;
+      return { px, w, h, pal: [[255, 255, 255], [0, 0, 0]], info: cnt + ' characters of 8x8' };
+    }
+    if (n < 7680) return null;
+    if (/^(gr8|g8)$/.test(ext)) {
+      const px = new Uint8Array(320 * 192);
+      for (let y = 0; y < 192; y++) for (let x = 0; x < 320; x++) px[y * 320 + x] = (d[o + y * 40 + (x >> 3)] >> (7 - (x & 7))) & 1;
+      return { px, w: 320, h: 192, pal: [[255, 255, 255], [0, 0, 0]], info: '320x192, 1 bit per pixel' };
+    }
+    const c = n >= 7684 ? [d[o + 7680], d[o + 7681], d[o + 7682], d[o + 7683]] : [0x28, 0xca, 0x94, 0x00];
+    const pal = [atariColor(c[3]), atariColor(c[0]), atariColor(c[1]), atariColor(c[2])];
+    const px = new Uint8Array(160 * 192);
+    for (let y = 0; y < 192; y++) for (let x = 0; x < 160; x++) px[y * 160 + x] = (d[o + y * 40 + (x >> 2)] >> (6 - (x & 3) * 2)) & 3;
+    return { px, w: 160, h: 192, pal, aspect: 2, info: '160x192, 4 colours' + (n >= 7684 ? ' (colour bytes $' + c.map((v) => v.toString(16).padStart(2, '0')).join(' $') + ')' : ' (no colour bytes, default palette)') };
+  }
+  function picCanvas(pic, scale) {
+    const sx = scale * (pic.aspect || 1), c = document.createElement('canvas'); c.width = pic.w * sx; c.height = pic.h * scale;
+    const g = c.getContext('2d'), img = g.createImageData(c.width, c.height);
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const v = pic.pal[pic.px[((y / scale) | 0) * pic.w + ((x / sx) | 0)]], i = (y * c.width + x) * 4;
+      img.data[i] = v[0]; img.data[i + 1] = v[1]; img.data[i + 2] = v[2]; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0); return c;
+  }
+
+  return { parse, read, gfxPixels, borderPixels, canvasOf, png, sheet, fontGlyphs, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
 });
