@@ -14,7 +14,8 @@ const progs = [
   ['AFM.COM', 'tools/afm/afm.com'], ['AFM80.COM', 'tools/afm/afm80.com'], ['CMD.COM', 'tools/cmd/bin/cmd.com'],
   ['VIEW.COM', 'tools/cmd/bin/view.com'], ['NANO.COM', 'tools/cmd/bin/nano.com'], ['CALC.COM', 'tools/cmd/bin/calc.com'], ['80COL.COM', 'tools/cmd/bin/80col.com'],
   ...['arc', 'zip', 'lzh', 'alf', 'zoo', 'arj', 'dcm', 'disc'].map((n) => [n.toUpperCase() + '.COM', 'tools/cmd/bin/' + n + '.com']),
-  ...['KEYTEST', 'SNDTEST', 'GFXTEST', 'MEMTEST', 'CPUTEST'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
+  ...['KEYTEST', 'SNDTEST', 'GFXTEST', 'MEMTEST', 'CPUTEST', 'MIDIPLAY', 'MP3PLAY'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
+  ['TEST.PMD', 'tools/tests/TEST.PMD'],
 ];
 
 const readme = `ATARICRAFT TOOLS DISK
@@ -66,6 +67,10 @@ SNDTEST  POKEY audio: 4 voices, noise, sweeps,
 GFXTEST  every graphics mode, I = scroll
 MEMTEST  extended RAM, B = burn-in loop
 CPUTEST  6502 and 65C816 instruction check
+MIDIPLAY play a .PMD song: L left, R right,
+  B both, SPACE play. Try TEST.PMD.
+MP3PLAY  play a .SMP sample, same keys. Make
+  files on a PC with audioconv.cjs.
 
 Not on this disk: games, BASIC programs, word
 processor, spreadsheet, RAM disk.
