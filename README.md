@@ -2,7 +2,7 @@
 
 A web-based Atari 8-bit emulator in the Craft family: humans and agents drive the same engine.
 
-Status: **v0.4.0, working browser emulator** with two cores (libatari800 and AltirraSDL) (see `NOTES.md` for done / to-do). Open `web/index.html` directly from disk; no server needed.
+Status: **v0.5.0, working browser emulator** with two cores (libatari800 and AltirraSDL) (see `NOTES.md` for done / to-do). Open `web/index.html` directly from disk; no server needed.
 
 ![ataricraft running Atari BASIC](docs/screenshots/01-desktop-basic.png)
 
@@ -62,7 +62,7 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 
 ![Phone layout](docs/screenshots/03-phone.png)
 
-## File managers (v0.4)
+## File managers (v0.5)
 
 **AFM / AFM80** (`web/library/craftapps/AFM/`, source in `tools/afm/`) are native 6502 two-pane file managers that run inside the emulated Atari under DOS 2.0/2.5, MyDOS and SpartaDOS X: copy, move, rename, delete, folders, tags, find, viewer, hex view, text/hex editor, and a **Properties** screen that shows the long name, added date and byte size from `LONGNAME.TXT` plus the DOS date/time on SpartaDOS X. `AFM.COM` is 40 columns, `AFM80.COM` uses an 80-column bitmap screen. Both are bundled on the Ready to run disks you build locally. See [tools/afm/README.md](tools/afm/README.md).
 
