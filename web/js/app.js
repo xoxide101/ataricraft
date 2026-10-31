@@ -3864,7 +3864,33 @@
   $('cold').onclick = () => S.emu && coldOrExe();
   $('coldbolt').onclick = () => S.emu && coldOrExe();
   $('pause').onclick = () => { S.running = !S.running; $('pause').textContent = S.running ? 'Pause' : 'Run'; };
-  $('speed').oninput = (e) => { S.speed = Math.pow(2, +e.target.value); const s = S.speed.toFixed(S.speed < 1 ? 2 : 1); $('speedv').textContent = s + '×'; $('spd').textContent = s; };
+  // System speed: one factor drives every chip (frames are stepped whole), so CPU, ANTIC, GTIA and POKEY stay in sync.
+  const NATIVE_MHZ = () => ($('tv').value === 'pal' ? 1.7734475 : 1.7897725);
+  const CLOCKS = [0.9, 1.79, 3.58, 7.16, 14.32, 28.64, 57.27];
+  function setSpeed(x, fromSlider) {
+    S.speed = Math.min(16, Math.max(0.05, x));
+    const pct = S.speed * 100, s = S.speed.toFixed(S.speed < 1 ? 2 : 1);
+    if (!fromSlider) $('speed').value = Math.log2(S.speed);
+    if (document.activeElement !== $('spdnum')) $('spdnum').value = Math.round(pct);
+    $('speedv').textContent = (S.speed * NATIVE_MHZ()).toFixed(2) + ' MHz'; $('spd').textContent = s;
+    for (const b of document.querySelectorAll('#clkchips button')) b.classList.toggle('on', Math.abs(+b.dataset.mhz / NATIVE_MHZ() - S.speed) < 0.005);
+    localStorage.setItem('ac.speedx', String(S.speed));
+  }
+  $('speed').oninput = (e) => setSpeed(Math.pow(2, +e.target.value), true);
+  $('spdnum').oninput = (e) => { const v = parseFloat(e.target.value); if (v > 0) setSpeed(v / 100); };
+  $('spdnum').onchange = () => setSpeed(S.speed);
+  const holdStep = (btn, fn) => {
+    let tm = null, iv = null;
+    const stop = () => { clearTimeout(tm); clearInterval(iv); tm = iv = null; };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); const k = e.shiftKey ? 10 : 1; fn(k); tm = setTimeout(() => { iv = setInterval(() => fn(k), 60); }, 350); });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) btn.addEventListener(ev, stop);
+    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(e.shiftKey ? 10 : 1); } });
+  };
+  holdStep($('spdn'), (k) => setSpeed(Math.round(S.speed * 100 - k) / 100));
+  holdStep($('spup'), (k) => setSpeed(Math.round(S.speed * 100 + k) / 100));
+  for (const mhz of CLOCKS) { const b = document.createElement('button'); b.textContent = mhz + ' MHz'; b.dataset.mhz = mhz; b.title = 'Run at ' + mhz + ' MHz effective 6502 clock'; b.onclick = () => setSpeed(mhz / NATIVE_MHZ()); $('clkchips').appendChild(b); }
+  $('tv').addEventListener('change', () => setSpeed(S.speed));
+  { const sx = parseFloat(localStorage.getItem('ac.speedx')); setSpeed(sx > 0 ? sx : 1); }
 
   // ---- remembered settings and last-used media (survive reloads) ----
   const CTL = ['model', 'ram', 'tv', 'xep80', 'kblayout', 'speed', 'blankfmt', 'blanksdfs', 'blankmydos', 'blankdos2'];
@@ -3889,7 +3915,7 @@
     };
     // The model rebuilds the RAM list and keyboard layout, so it goes first.
     put('model', 'change'); put('ram'); put('kblayout', 'change'); put('tv'); put('xep80');
-    put('speed', 'input'); put('blankfmt'); put('blanksdfs'); put('blankmydos'); put('blankdos2');
+    put('speed'); { const sx = parseFloat(localStorage.getItem('ac.speedx')); if (sx > 0) setSpeed(sx); } put('blankfmt'); put('blanksdfs'); put('blankmydos'); put('blankdos2');
   }
 
   // ---- edited disks: pull the emulated image back into S.disks so reboots, reloads and sets keep your changes ----
@@ -4004,7 +4030,11 @@
   renderMap();
   $('mapbtn').onclick = () => { renderMap(); $('mapdlg').showModal(); };
   $('sndbtn').onclick = () => { SND.on = !SND.on; localStorage.setItem('ac.sound', SND.on ? '1' : '0'); sndCtx(); syncSndUi(); };
-  $('vol').oninput = (e) => { SND.vol = +e.target.value; localStorage.setItem('ac.vol', SND.vol); sndCtx(); };
+  function setVol(v) { SND.vol = Math.min(1, Math.max(0, Math.round(v * 100) / 100)); localStorage.setItem('ac.vol', SND.vol); $('vol').value = SND.vol; $('volv').textContent = Math.round(SND.vol * 100) + '%'; sndCtx(); }
+  $('vol').oninput = (e) => setVol(+e.target.value);
+  holdStep($('voldn'), (k) => setVol(SND.vol - k / 100));
+  holdStep($('volup'), (k) => setVol(SND.vol + k / 100));
+  $('volv').textContent = Math.round(SND.vol * 100) + '%';
   window.addEventListener('pointerdown', () => sndCtx(), { once: true });
   window.addEventListener('keydown', () => sndCtx(), { once: true });
   syncSndUi();
