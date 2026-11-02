@@ -493,6 +493,23 @@ sd1     sec
         bne sd1
         rts
 
+; Hold-plate check; the tile lookup only runs when actor X is within 16 px of the plate (the VBI has little spare time).
+chkplate sec
+        lda axl,x
+        sbc #<(HPX-12)
+        sta t3
+        lda axh,x
+        sbc #>(HPX-12)
+        and #7
+        bne cpn
+        lda t3
+        cmp #32
+        bcs cpn
+        lda #44
+        jmp onplate
+cpn     clc
+        rts
+
 ; Carry set when actor X is within 8 pixels of the hold door.
 nearD2  sec
         lda axl,x
@@ -604,12 +621,10 @@ pb1     sta PB0
 nog
 ; hold plate: the door stays open only while an actor stands on it
         ldx #0
-        lda #44
-        jsr onplate
+        jsr chkplate
         bcs hq1
         ldx #1
-        lda #44
-        jsr onplate
+        jsr chkplate
 hq1     lda #0
         rol a
         sta p2
