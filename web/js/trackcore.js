@@ -110,6 +110,63 @@
     return song;
   }
 
+  // Reads note events from a format 0/1 MIDI file: [{sec, on, ch, n, vel}] sorted by time.
+  function midiNotes(b) {
+    const u16 = (p) => (b[p] << 8) | b[p + 1], u32 = (p) => ((b[p] << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3]) >>> 0;
+    if (!b || b.length < 14 || String.fromCharCode(b[0], b[1], b[2], b[3]) !== 'MThd') throw new Error('not a MIDI file');
+    const ntr = u16(10), div = u16(12); if (div & 0x8000 || !div) throw new Error('SMPTE time division is not supported');
+    const ev = [], tempos = [{ tick: 0, us: 500000 }]; let p = 14;
+    for (let t = 0; t < ntr && p + 8 <= b.length; t++) {
+      if (String.fromCharCode(b[p], b[p + 1], b[p + 2], b[p + 3]) !== 'MTrk') break;
+      const end = Math.min(b.length, p + 8 + u32(p + 4)); p += 8; let tick = 0, run = 0;
+      const vl = () => { let v = 0, c; do { c = b[p++]; v = v * 128 + (c & 0x7F); } while (c & 0x80 && p < end); return v; };
+      while (p < end) {
+        tick += vl(); let s = b[p];
+        if (s === 0xFF) { const type = b[p + 1]; p += 2; const len = vl(); if (type === 0x51 && len === 3) tempos.push({ tick, us: (b[p] << 16) | (b[p + 1] << 8) | b[p + 2] }); p += len; continue; }
+        if (s === 0xF0 || s === 0xF7) { p++; p += vl(); continue; }
+        if (s & 0x80) { run = s; p++; } else s = run;
+        const kind = s & 0xF0, ch = s & 15;
+        if (kind === 0xC0 || kind === 0xD0) { p++; continue; }
+        const d1 = b[p++], d2 = b[p++];
+        if (kind === 0x90 && d2 > 0) ev.push({ tick, on: true, ch, n: d1, vel: d2 }); else if (kind === 0x80 || kind === 0x90) ev.push({ tick, on: false, ch, n: d1 });
+      }
+      p = end;
+    }
+    tempos.sort((x, y) => x.tick - y.tick);
+    const toSec = (tick) => { let sec = 0, last = 0, us = 500000; for (const tp of tempos) { if (tp.tick > tick) break; sec += (tp.tick - last) * us / 1e6 / div; last = tp.tick; us = tp.us; } return sec + (tick - last) * us / 1e6 / div; };
+    ev.forEach((e) => (e.sec = toSec(e.tick)));
+    return ev.sort((x, y) => x.sec - y.sec || (x.on ? 1 : 0) - (y.on ? 1 : 0));
+  }
+
+  // Builds a song from MIDI: notes are quantised to rows (song.speed frames each) and placed on free tracks, drums on the noise tracks.
+  function fromMidi(bytes, base) {
+    const song = newSong(base.stereo); Object.assign(song, { name: base.name, pal: base.pal, speed: base.speed, scale: { root: base.scale.root, name: base.scale.name }, loop: base.loop });
+    const fps = song.pal ? 50 : 60, rowSec = song.speed / fps, ev = midiNotes(bytes), nt = song.tracks.length;
+    const noise = song.stereo ? [3, 7] : [3], tonal = (song.stereo ? [0, 4, 1, 5, 2, 6] : [0, 1, 2]);
+    const open = new Map(), notes = [];
+    for (const e of ev) {
+      const key = e.ch + ':' + e.n;
+      if (e.on) { const o = open.get(key) || []; o.push({ row: Math.round(e.sec / rowSec), n: e.n, vel: e.vel, drum: e.ch === 9 }); open.set(key, o); }
+      else { const o = open.get(key); if (o && o.length) { const nn = o.shift(); nn.end = Math.max(nn.row + 1, Math.round(e.sec / rowSec)); notes.push(nn); } }
+    }
+    for (const o of open.values()) for (const nn of o) { nn.end = nn.row + 2; notes.push(nn); }
+    notes.sort((a, b) => a.row - b.row || b.n - a.n);
+    const busy = new Array(nt).fill(-1), place = [];
+    let dropped = 0;
+    for (const nn of notes) {
+      const pool = nn.drum ? noise : tonal; let t = pool.find((x) => busy[x] <= nn.row);
+      if (t == null) { dropped++; continue; }
+      busy[t] = nn.end; place.push({ t, row: nn.row, end: nn.end, n: nn.drum ? 36 + (nn.n % 12) : nn.n, v: Math.max(1, Math.round(nn.vel / 127 * 15)) });
+    }
+    const total = place.reduce((m, x) => Math.max(m, x.end), 1), PR = 32, np = Math.min(64, Math.ceil(total / PR));
+    song.patterns = Array.from({ length: np }, () => newPattern(PR, nt)); song.order = song.patterns.map((_, i) => i);
+    const at = (t, r) => (r < np * PR ? song.patterns[Math.floor(r / PR)].cells[t] : null);
+    place.sort((a, b) => a.row - b.row);
+    for (const x of place) { const c = at(x.t, x.row); if (c) c[x.row % PR] = { n: Math.max(0, Math.min(127, x.n)), v: x.v }; }
+    for (const x of place) { const c = at(x.t, x.end); if (c && !c[x.end % PR]) c[x.end % PR] = { n: -1 }; }
+    return { song, notes: place.length, dropped, truncated: total > np * PR, rows: total };
+  }
+
   const inScale = (song, n) => SCALES[song.scale.name].includes(((n - song.scale.root) % 12 + 12) % 12);
   // Nearest scale note (ties go down).
   function snap(song, n) {
@@ -123,5 +180,5 @@
     return Math.max(0, Math.min(127, n));
   }
 
-  return { NOTE, SCALES, WAVES, noteName, newSong, newPattern, setStereo, resizePattern, sanitize, pitch, compile, inScale, snap, degree, CLOCK };
+  return { NOTE, SCALES, WAVES, noteName, newSong, newPattern, setStereo, resizePattern, sanitize, fromMidi, midiNotes, pitch, compile, inScale, snap, degree, CLOCK };
 });
