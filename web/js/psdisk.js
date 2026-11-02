@@ -54,24 +54,23 @@
     for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) px[y * GW + x] = (d[y * 11 + (x >> 3)] >> (7 - (x & 7))) & 1;
     return px;
   }
+  // Border (BO.*): 148 bytes, each byte one pixel COLUMN (MSB at the top), so the file is an image 148 wide x 8 tall.
+  // It is six 24-column tiles (1 blank row on top) followed by a 4-byte tail; tiles 1/2, 3/4 and 5/6 are mirror pairs.
+  // Which tile is a corner and which is a side is not confirmed, so tiles are only numbered.
+  const BTILE = 24, BTILES = 6;
   function borderPixels(d) {
-    const h = d.length, px = new Uint8Array(8 * h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < 8; x++) px[y * 8 + x] = (d[y] >> (7 - x)) & 1;
-    return { px, w: 8, h };
+    const w = d.length, px = new Uint8Array(8 * w);
+    for (let x = 0; x < w; x++) for (let y = 0; y < 8; y++) px[y * w + x] = (d[x] >> (7 - y)) & 1;
+    return { px, w, h: 8 };
   }
-
-  // Frame preview: the strip down the left and right edges, turned 90 degrees along the top and bottom. A guess at how Print Shop lays a border out.
-  function borderFrame(d) {
-    const n = d.length, bp = borderPixels(d).px, px = new Uint8Array(n * n);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-      let v = 0;
-      if (x < 8) v = bp[y * 8 + x];
-      else if (x >= n - 8) v = bp[y * 8 + (n - 1 - x)];
-      if (y < 8) v = bp[x * 8 + y];
-      else if (y >= n - 8) v = bp[x * 8 + (n - 1 - y)];
-      px[y * n + x] = v;
+  function borderTiles(d) {
+    const out = [];
+    for (let t = 0; t < BTILES && (t + 1) * BTILE <= d.length; t++) {
+      const px = new Uint8Array(BTILE * 8);
+      for (let x = 0; x < BTILE; x++) for (let y = 0; y < 8; y++) px[y * BTILE + x] = (d[t * BTILE + x] >> (7 - y)) & 1;
+      out.push({ px, w: BTILE, h: 8, name: 'tile ' + (t + 1) });
     }
-    return { px, w: n, h: n };
+    return out;
   }
   function canvasOf(px, w, h, scale) {
     const c = document.createElement('canvas'); c.width = w * scale; c.height = h * scale;
@@ -95,6 +94,22 @@
       g.drawImage(canvasOf(it.px, GW, GH, scale), x, y);
       g.strokeStyle = '#999'; g.strokeRect(x - 0.5, y - 0.5, GW * scale + 1, GH * scale + 1);
       g.fillText(it.name.slice(0, 18), x + (GW * scale) / 2, y + GH * scale + 15);
+    });
+    return c;
+  }
+
+  // Border components: one row per border, its six tiles left to right, the name above. items = [{name, data}].
+  function borderSheet(items, scale) {
+    const cell = BTILE * scale, gap = 6, lab = 16, rowH = 8 * scale + lab + gap;
+    const c = document.createElement('canvas'); c.width = BTILES * (cell + gap) + gap; c.height = items.length * rowH + gap;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.font = '12px sans-serif'; g.fillStyle = '#000';
+    items.forEach((it, i) => {
+      const y = gap + i * rowH; g.fillText(it.name, gap, y + 12);
+      borderTiles(it.data).forEach((t, k) => {
+        const x = gap + k * (cell + gap); g.drawImage(canvasOf(t.px, t.w, t.h, scale), x, y + lab);
+        g.strokeStyle = '#bbb'; g.strokeRect(x - 0.5, y + lab - 0.5, cell + 1, 8 * scale + 1);
+      });
     });
     return c;
   }
@@ -199,5 +214,5 @@
     g.putImageData(img, 0, 0); return c;
   }
 
-  return { parse, read, gfxPixels, borderPixels, borderFrame, canvasOf, png, sheet, fontGlyphs, fontGlyphsF, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
+  return { parse, read, gfxPixels, borderPixels, borderTiles, borderSheet, canvasOf, png, sheet, fontGlyphs, fontGlyphsF, fontSheet, decodePic, picCanvas, PICEXT, GW, GH };
 });

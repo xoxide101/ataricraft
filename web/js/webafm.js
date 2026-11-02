@@ -183,7 +183,11 @@
         const r = document.createElement('div'); r.style.cssText = 'display:flex;gap:8px;align-items:center;margin:2px 0';
         const nm = Object.assign(document.createElement('span'), { textContent: `${e.name} · ${describe(e)}${e.short ? ' · incomplete' : ''}` }); nm.style.flex = '1';
         r.append(nm);
-        if (e.kind === 'border') { const bp = P.borderPixels(e.data), c = P.canvasOf(bp.px, bp.w, bp.h, 2); c.style.cssText = 'background:#fff;height:48px;width:auto;image-rendering:pixelated'; r.append(c); const fp = P.borderFrame(e.data), fc = P.canvasOf(fp.px, fp.w, fp.h, 1); fc.title = 'Frame preview (guess)'; fc.style.cssText = 'background:#fff;height:72px;width:auto;image-rendering:pixelated;border:1px solid #888'; r.append(fc); }
+        if (e.kind === 'border') {
+          const bp = P.borderPixels(e.data), c = P.canvasOf(bp.px, bp.w, bp.h, 2); c.title = 'Whole file as one strip (148 x 8)'; c.style.cssText = 'background:#fff;height:32px;width:auto;max-width:300px;image-rendering:pixelated'; r.append(c);
+          const tb = document.createElement('button'); tb.textContent = 'Tiles PNG'; tb.title = 'The six components on one sheet'; tb.onclick = async () => host().save(safe(e.name) + '-tiles.png', await P.png(P.borderSheet([e], Math.max(scale(), 4))), 'image/png'); r.append(tb);
+          const zb = document.createElement('button'); zb.textContent = 'Tiles ZIP'; zb.title = 'Each component as its own PNG, plus the whole strip'; zb.onclick = async () => host().save(safe(e.name) + '-tiles.zip', host().zip(borderParts(e)), 'application/zip'); r.append(zb);
+        }
         if (e.kind === 'font') {
           const gl = P.fontGlyphs(e.data, e.addr);
           if (gl && gl.length) {
@@ -196,10 +200,23 @@
         oq.append(r); rows.push(r);
       }
     };
-    addRow('Borders (tiled strips, 8 pixels wide)', bor, (e) => `${e.len} bytes`);
+    addRow('Borders (6 tiles of 24 x 8 pixels; which are corners and which are sides is not confirmed)', bor, (e) => `${e.len} bytes`);
+    if (bor.length) {
+      const h = document.createElement('div'); h.style.cssText = 'margin:6px 0;display:flex;gap:6px;flex-wrap:wrap';
+      const b1 = document.createElement('button'); b1.textContent = 'All borders: one SHEET'; b1.onclick = async () => host().save(base + '-borders-sheet.png', await P.png(P.borderSheet(bor, Math.max(scale(), 4))), 'image/png');
+      const b2 = document.createElement('button'); b2.textContent = 'All borders: tiles (ZIP)'; b2.onclick = async () => host().save(base + '-borders.zip', host().zip((await Promise.all(bor.map(borderParts))).flat()), 'application/zip');
+      h.append(b1, b2); oq.insertBefore(h, oq.children[1] || null);
+    }
     addRow('Fonts (glyph sheet; PNG or raw data)', fon, (e) => `${e.len} bytes`);
     addRow('Other files (program code, menus, picture data: saved as raw data)', oth, (e) => `${e.len} bytes, load address $${e.addr.toString(16).toUpperCase().padStart(4, '0')}`);
     const scale = () => +q('.psz').value;
+    async function borderParts(e) {
+      const s = Math.max(scale(), 4), n = safe(e.name), bp = P.borderPixels(e.data);
+      const z = [{ name: n + '/strip.png', data: await P.png(P.canvasOf(bp.px, bp.w, bp.h, s)) }];
+      const tl = P.borderTiles(e.data);
+      for (let i = 0; i < tl.length; i++) z.push({ name: `${n}/tile${i + 1}.png`, data: await P.png(P.canvasOf(tl[i].px, tl[i].w, tl[i].h, s)) });
+      return z;
+    }
     const sel = () => (tag.size ? [...tag].map((i) => gfx[i]) : gfx);
     const one = async (g) => P.png(P.canvasOf(g.px, P.GW, P.GH, scale()));
     q('.pt').onclick = () => { const all = tag.size < gfx.length; tag.clear(); if (all) gfx.forEach((_, i) => tag.add(i)); [...grid.children].forEach((c) => { const on = tag.has(+c.dataset.i); c.style.borderColor = on ? '#e8a33d' : '#555'; c.style.background = on ? '#ffe9bf' : '#fff'; }); };
