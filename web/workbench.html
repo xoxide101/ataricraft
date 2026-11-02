@@ -27,7 +27,7 @@
 </head>
 <body>
 <header><b>ATARICRAFT WORKBENCH</b><small>Works offline. Nothing leaves this page.</small></header>
-<nav><button data-t="midi" class="on">MIDI to POKEY</button><button data-t="sap">SAP files</button><button data-t="rmt">RMT modules</button></nav>
+<nav><button data-t="midi" class="on">MIDI to POKEY</button><button data-t="sap">SAP files</button><button data-t="rmt">RMT modules</button><button data-t="sprites">Sprites</button></nav>
 <main>
 <section id="midi" class="on">
   <div class="drop" id="dmidi">Drop a .mid file here, or <button class="b" id="pickmidi">choose one</button></div>
@@ -59,8 +59,9 @@
   <pre id="rout">The module is run through a JavaScript port of the RMT player (GPL-3.0, see LICENSE-GPL-3.0-RMT.txt) and saved as a register stream that a small routine replays on the Atari.</pre>
   <small>The port was checked register for register against the original 6502 player on RMT4 songs. RMT8 is untested. Preview plays the first POKEY only, and is approximate.</small>
 </section>
+<section id="sprites"></section>
 </main>
-<script src="js/pmd.js?v=2"></script><script src="js/sapxex.js?v=1"></script><script src="js/asm6502.js"></script><script src="js/rmtplay.js"></script><script src="js/rmtsap.js"></script>
+<script src="js/palette.js"></script><script src="js/spriteed.js"></script><script src="js/pmd.js?v=2"></script><script src="js/sapxex.js?v=1"></script><script src="js/asm6502.js"></script><script src="js/rmtplay.js"></script><script src="js/rmtsap.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id), P = AC.Pmd;
