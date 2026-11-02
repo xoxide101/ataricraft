@@ -103,7 +103,7 @@ start   lda #0
         sta $D407
         lda #3
         sta $D01D
-        lda #1
+        lda #8
         sta $026F
         ldx #0
         lda #0
