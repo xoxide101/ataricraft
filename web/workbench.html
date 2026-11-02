@@ -27,7 +27,7 @@
 </head>
 <body>
 <header><b>ATARICRAFT WORKBENCH</b><small>Works offline. Nothing leaves this page.</small></header>
-<nav><button data-t="midi" class="on">MIDI to POKEY</button><button data-t="sap">SAP files</button></nav>
+<nav><button data-t="midi" class="on">MIDI to POKEY</button><button data-t="sap">SAP files</button><button data-t="rmt">RMT modules</button></nav>
 <main>
 <section id="midi" class="on">
   <div class="drop" id="dmidi">Drop a .mid file here, or <button class="b" id="pickmidi">choose one</button></div>
@@ -51,8 +51,16 @@
   <pre id="sout">Edit the header text fields (NAME, AUTHOR, DATE and others). The music data is copied byte for byte.</pre>
   <small>The .XEX has the SAP data plus a tiny player stub (types B and C only). Drop it onto Ataricraft, or run it on a real Atari. Set NTSC or PAL to match the file.</small>
 </section>
+<section id="rmt">
+  <div class="drop" id="drmt">Drop an .rmt file (Raster Music Tracker module) here, or <button class="b" id="pickrmt">choose one</button></div>
+  <div class="row"><label><input type="checkbox" id="rpal" checked> PAL timing (50 Hz)</label>
+    <button class="b" id="rplay" disabled>Play preview</button><button class="b" id="rstop" disabled>Stop</button>
+    <button class="b" id="rsap" disabled>Save .SAP</button><button class="b" id="rxex" disabled>Save .XEX to play on an Atari</button></div>
+  <pre id="rout">The module is run through a JavaScript port of the RMT player (GPL-3.0, see LICENSE-GPL-3.0-RMT.txt) and saved as a register stream that a small routine replays on the Atari.</pre>
+  <small>The port was checked register for register against the original 6502 player on RMT4 songs. RMT8 is untested. Preview plays the first POKEY only, and is approximate.</small>
+</section>
 </main>
-<script src="js/pmd.js?v=2"></script><script src="js/sapxex.js?v=1"></script>
+<script src="js/pmd.js?v=2"></script><script src="js/sapxex.js?v=1"></script><script src="js/asm6502.js"></script><script src="js/rmtplay.js"></script><script src="js/rmtsap.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id), P = AC.Pmd;
@@ -85,9 +93,9 @@
   $('drums').onchange = $('pal').onchange = $('smart').onchange = $('decay').onchange = convert;
   $('savepmd').onclick = () => save(midi.name.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase() + '.PMD', result.pmd);
   $('stop').onclick = stopAudio;
-  $('play').onclick = () => {
+  const preview = (ev, stopBtn) => {
     stopAudio(); ctx = new AudioContext();
-    const ev = P.events(result.pmd, result.fps), t0 = ctx.currentTime + 0.1;
+    const t0 = ctx.currentTime + 0.1;
     const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), nd = nbuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
     const voices = [0, 1, 2, 3].map(() => {
       const osc = ctx.createOscillator(), g = ctx.createGain(), ns = ctx.createBufferSource(), ng = ctx.createGain();
@@ -101,7 +109,29 @@
       v.g.gain.setValueAtTime(noise ? 0 : vol, t); v.ng.gain.setValueAtTime(noise ? vol * 1.5 : 0, t);
     };
     for (const e of ev.list) { const v = voices[e.reg >> 1]; if (e.reg & 1) v.c = e.val; else v.f = e.val; apply(v, t0 + e.t); }
-    $('stop').disabled = false; const c = ctx; setTimeout(() => { if (ctx === c) stopAudio(); }, (ev.end + 0.5) * 1000);
+    stopBtn.disabled = false; const c = ctx; setTimeout(() => { if (ctx === c) stopAudio(); }, (ev.end + 0.5) * 1000);
+  };
+  $('play').onclick = () => preview(P.events(result.pmd, result.fps), $('stop'));
+
+  // RMT
+  let rmt = null, rname = '', rres = null;
+  const rbuild = () => {
+    if (!rmt) return; stopAudio();
+    try {
+      rres = AC.RmtSap.build(rmt, { pal: $('rpal').checked, name: rname.replace(/\.[^.]*$/, '') });
+      $('rout').className = ''; $('rout').textContent = `${rname}: RMT${rres.tracks}${rres.stereo ? ' (stereo)' : ''}\n${rres.frames} frames, ${rres.seconds.toFixed(1)} s, ${rres.loop >= 0 ? 'loops back to frame ' + rres.loop : 'no loop point found, repeats from the start'}\nstream ${rres.streamBytes} bytes`;
+      $('rplay').disabled = $('rsap').disabled = $('rxex').disabled = false;
+    } catch (e) { rres = null; $('rout').className = 'err'; $('rout').textContent = e.message; $('rplay').disabled = $('rsap').disabled = $('rxex').disabled = true; }
+  };
+  wire($('drmt'), $('pickrmt'), '.rmt', async (f) => { rmt = new Uint8Array(await f.arrayBuffer()); rname = f.name; rbuild(); });
+  $('rpal').onchange = rbuild; $('rstop').onclick = stopAudio;
+  const rbase = () => rname.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+  $('rsap').onclick = () => save(rbase() + '.SAP', rres.sap);
+  $('rxex').onclick = () => { try { save(rbase() + '.XEX', AC.SapXex.build(P.parseSap(rres.sap), {}).xex); } catch (e) { $('rout').className = 'err'; $('rout').textContent = e.message; } };
+  $('rplay').onclick = () => {
+    const m = AC.Rmt.load(rmt), fr = AC.RmtSap.render(m, {}).frames, fps = $('rpal').checked ? 50 : 60, list = [], prev = [];
+    fr.forEach((r, i) => { for (let k = 0; k < 8; k++) if (r[k] !== prev[k]) { list.push({ t: i / fps, reg: k, val: r[k] }); prev[k] = r[k]; } });
+    preview({ list, end: fr.length / fps }, $('rstop'));
   };
 
   // SAP

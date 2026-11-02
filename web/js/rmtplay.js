@@ -127,6 +127,7 @@
           s.idx[x] = 0; s.pause[x] = 1; s.instrx2[x] = 0x80;
         }
         if (jumped) continue;
+        s.lineStart = psong;
         psong = (psong + TR) & 0xFFFF;
         return getTrackLine();
       }

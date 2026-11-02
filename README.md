@@ -103,6 +103,8 @@ WAV tapes, 5200 / 7800 carts and saved states are not supported. DCM and PRO are
 
 atari800 / libatari800 is GPL-2.0, and ataricraft ships a WASM build of it, so this project is distributed under **GPL-2.0** (see `LICENSE`). Source for the build is in this repository (`build/`, `scripts/`) plus upstream atari800 with `build/atari800-sio-hook.patch`.
 
+**Exception: RMT player.** `web/js/rmtplay.js` and `web/js/rmtsap.js` are a JavaScript port of the Raster Music Tracker player routine (Radek Sterba, GPL-3.0, text in `LICENSE-GPL-3.0-RMT.txt`). Those files are GPL-3.0. Whether the whole distribution can stay GPL-2.0-only alongside them has not been resolved (it depends on the atari800 licence terms), so treat the combined work as needing GPL-3.0 until that is checked.
+
 ## Using it (short)
 
 - Pick a model and memory size, scan your ROM folder (OS and BASIC), choose the ROMs, then **Boot**. Scanned ROMs and your selection are kept in the browser (IndexedDB / localStorage); **Reset ROMs** clears them.
