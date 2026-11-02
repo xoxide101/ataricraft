@@ -89,16 +89,8 @@ const COLS = 256, ROWS = 23, rows = Array.from({ length: ROWS }, () => new Array
 
 // ---- sprites (8 pixels wide): 'b' goes to the first player, 'w' to the second
 const mirror = (rs) => rs.map((r) => [...r].reverse().join(''));
-const HERO = {
-  idle: ['..bbbb..', '.bbbbbb.', '.bwbbwb.', '..bbbb..', '........', '.bbbbbb.', 'b.bwwb.b', 'b.bwwb.b', 'b.bbbb.b', '........', '..bbbb..', '..bbbb..', '..b..b..', '..b..b..', '........', '.bb..bb.'],
-  run1: ['..bbbb..', '.bbbbbb.', '.bwbbwb.', '..bbbb..', '........', '.bbbbbb.', '..bwwb.b', 'b.bwwb.b', 'b.bbbb..', '........', '..bbbb..', '..bbbb..', '..b...b.', '.b.....b', '........', '.bb...bb'],
-  run2: ['..bbbb..', '.bbbbbb.', '.bwbbwb.', '..bbbb..', '........', '.bbbbbb.', 'b.bwwb..', 'b.bwwb.b', '..bbbb.b', '........', '..bbbb..', '..bbbb..', '...bb...', '...bb...', '........', '..bbbb..'],
-  jump: ['..bbbb..', '.bbbbbb.', '.bwbbwb.', '..bbbb..', '........', 'b.bbbb.b', 'b.bwwb.b', '..bwwb..', '..bbbb..', '........', '..bbbb..', '.b....b.', '.bb..bb.', '........', '........', '........'],
-};
-const DOG = {
-  a: ['.w...b.b', 'ww..bbbb', '.bbbbwbb', 'bbbbbbbb', '.bbbbbb.', '.bbbbbb.', '.b.bb.b.', '.b.bb.b.'],
-  b: ['.w...b.b', 'ww..bbbb', '.bbbbwbb', 'bbbbbbbb', '.bbbbbb.', '.bbbbbb.', 'b..bb..b', 'b..bb..b'],
-};
+const ASSETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'assets.json'), 'utf8')).sheets;
+const HERO = ASSETS.hero.frames, DOG = ASSETS.dog.frames;
 const plane = (rs, ch) => rs.map((r) => [...r].reduce((v, c) => (v << 1) | (c === ch ? 1 : 0), 0));
 const heroFrames = ['idle', 'run1', 'run2', 'jump'].map((k) => HERO[k]);
 const heroAll = heroFrames.concat(heroFrames.map(mirror)), dogAll = [DOG.a, DOG.b, mirror(DOG.a), mirror(DOG.b)];

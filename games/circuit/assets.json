@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "note": "Edited by the Workbench Sprites tab. b = first player colour, w = second player colour, . = clear",
+  "sheets": {
+    "hero": {
+      "w": 8,
+      "h": 16,
+      "players": [
+        "$52",
+        "$76"
+      ],
+      "frames": {
+        "idle": [
+          "..bbbb..",
+          ".bbbbbb.",
+          ".bwbbwb.",
+          "..bbbb..",
+          "........",
+          ".bbbbbb.",
+          "b.bwwb.b",
+          "b.bwwb.b",
+          "b.bbbb.b",
+          "........",
+          "..bbbb..",
+          "..bbbb..",
+          "..b..b..",
+          "..b..b..",
+          "........",
+          ".bb..bb."
+        ],
+        "run1": [
+          "..bbbb..",
+          ".bbbbbb.",
+          ".bwbbwb.",
+          "..bbbb..",
+          "........",
+          ".bbbbbb.",
+          "..bwwb.b",
+          "b.bwwb.b",
+          "b.bbbb..",
+          "........",
+          "..bbbb..",
+          "..bbbb..",
+          "..b...b.",
+          ".b.....b",
+          "........",
+          ".bb...bb"
+        ],
+        "run2": [
+          "..bbbb..",
+          ".bbbbbb.",
+          ".bwbbwb.",
+          "..bbbb..",
+          "........",
+          ".bbbbbb.",
+          "b.bwwb..",
+          "b.bwwb.b",
+          "..bbbb.b",
+          "........",
+          "..bbbb..",
+          "..bbbb..",
+          "...bb...",
+          "...bb...",
+          "........",
+          "..bbbb.."
+        ],
+        "jump": [
+          "..bbbb..",
+          ".bbbbbb.",
+          ".bwbbwb.",
+          "..bbbb..",
+          "........",
+          "b.bbbb.b",
+          "b.bwwb.b",
+          "..bwwb..",
+          "..bbbb..",
+          "........",
+          "..bbbb..",
+          ".b....b.",
+          ".bb..bb.",
+          "........",
+          "........",
+          "........"
+        ]
+      }
+    },
+    "dog": {
+      "w": 8,
+      "h": 8,
+      "players": [
+        "$3A",
+        "$FA"
+      ],
+      "frames": {
+        "a": [
+          ".w...b.b",
+          "ww..bbbb",
+          ".bbbbwbb",
+          "bbbbbbbb",
+          ".bbbbbb.",
+          ".bbbbbb.",
+          ".b.bb.b.",
+          ".b.bb.b."
+        ],
+        "b": [
+          ".w...b.b",
+          "ww..bbbb",
+          ".bbbbwbb",
+          "bbbbbbbb",
+          ".bbbbbb.",
+          ".bbbbbb.",
+          "b..bb..b",
+          "b..bb..b"
+        ]
+      }
+    }
+  }
+}
