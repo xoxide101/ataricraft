@@ -126,7 +126,7 @@
       const s = b[d] | (b[d + 1] << 8), e = b[d + 2] | (b[d + 3] << 8);
       if (e < s) break;
       const len = e - s + 1; if (d + 4 + len > b.length) { blocks.push({ start: s, end: e, truncated: true }); break; }
-      blocks.push({ start: s, end: e, len }); d += 4 + len;
+      blocks.push({ start: s, end: e, len, data: b.subarray(d + 4, d + 4 + len) }); d += 4 + len;
     }
     return { fields, binary: b.subarray(p), blocks, get: (k) => (fields.find((f) => f.key === k) || {}).value };
   }
