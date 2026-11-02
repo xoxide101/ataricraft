@@ -127,7 +127,28 @@ for (let r = 0; r < ROWS; r++) {
   const row = []; for (let c = 0; c < COLS + 44; c++) row.push(rows[r][c % COLS]);
   out.push('        org $' + (0x4000 + r * 0x200).toString(16).toUpperCase()); bytes(row);
 }
-const src = 'NAMEOFF = ' + NAMEOFF + '\n' + PUZ + fs.readFileSync(path.join(__dirname, 'game.asm'), 'utf8') + '\n' + out.join('\n') + '\n        org $02E0\n        .word start\n';
+// optional music: games/circuit/music.json (a Tracker song) is compiled to raw POKEY frames played from the VBI
+const MUSIC_PATH = path.join(__dirname, 'music.json');
+if (fs.existsSync(MUSIC_PATH)) {
+  const T = require('../../web/js/trackcore.js');
+  const song = T.sanitize(JSON.parse(fs.readFileSync(MUSIC_PATH, 'utf8')));
+  const c = T.compile(song), N = song.stereo ? 18 : 9, MAXF = Math.floor((0xC000 - 0x7000) / N);
+  if (c.frames.length > MAXF) throw new Error('music too long: ' + c.frames.length + ' frames, max ' + MAXF);
+  const end = 0x7000 + c.frames.length * N;
+  out.push('        org $2C00', 'music   lda #3', '        sta $D20F');
+  if (song.stereo) out.push('        sta $D21F');
+  out.push('        ldy #0', 'mp1     lda (mptr),y', '        sta $D200,y', '        iny', '        cpy #9', '        bne mp1');
+  if (song.stereo) out.push('mp2     lda (mptr),y', '        sta $D207,y', '        iny', '        cpy #18', '        bne mp2');
+  out.push('        clc', '        lda mptr', '        adc #' + N, '        sta mptr', '        bcc mp3', '        inc mptr+1',
+    'mp3     lda mptr+1', '        cmp #>' + end, '        bcc mp4', '        bne mp5', '        lda mptr', '        cmp #<' + end, '        bcc mp4',
+    'mp5     lda #0', '        sta mptr', '        lda #$70', '        sta mptr+1', 'mp4     rts');
+  out.push('        org $7000');
+  const bs = []; for (const f of c.frames) { for (let i = 0; i < 9; i++) bs.push(f[i]); if (song.stereo) for (let i = 9; i < 18; i++) bs.push(f[i]); }
+  bytes(bs);
+  out.unshift('mptr = $B2');
+  out.push('        org mptr', '        .word $7000');
+  console.log('music:', c.frames.length, 'frames,', c.seconds.toFixed(1) + 's', song.stereo ? 'stereo' : 'mono');
+} else out.push('music   rts');const src = 'NAMEOFF = ' + NAMEOFF + '\n' + PUZ + fs.readFileSync(path.join(__dirname, 'game.asm'), 'utf8') + '\n' + out.join('\n') + '\n        org $02E0\n        .word start\n';
 const r = assemble(src);
 const file = process.argv[2] || path.join(__dirname, '..', '..', 'out', 'circuit.xex');
 fs.writeFileSync(file, Buffer.from(r.xex));
