@@ -3612,7 +3612,16 @@
   const fsBytes = (n) => { const b = S.emu && S.emu.readDisk(n); return b || (S.disks[n] && S.disks[n].bytes) || null; };
   const saveBlob = (name, parts, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(parts, { type: type || 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
   const crcNum = (b) => parseInt(crc32(b), 16);
-  AC.BasicHost = { emu: () => (S.emu && !S.off ? S.emu : null) };
+  AC.BasicHost = {
+    emu: () => (S.emu && !S.off ? S.emu : null),
+    // the standard character set from the user's own OS ROM (XL/XE ROM: $E000 is offset $2000; 800 OS ROM: offset $0800)
+    romFont: () => {
+      const pick = [[S.roms.osxl, 0x2000], [S.roms.os800, 0x0800]].find(([b, o]) => b && b.length >= o + 1024);
+      if (!pick) return null;
+      const f = new Uint8Array(pick[0].buffer ? pick[0].subarray(pick[1], pick[1] + 1024) : pick[0].slice(pick[1], pick[1] + 1024));
+      return f.slice(0, 8).every((v) => v === 0) && f.some((v) => v) ? f : null;
+    },
+  };
   AC.WebAfmHost = {
     disk: (n) => { const d = S.disks[n]; if (!d) return null; return { name: d.name, bytes: (S.emu && S.emu.readDisk(n)) || d.bytes }; },
     commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes);     S.disks[n] = { name: d.name, bytes, orig: d.orig || d.bytes, rev: (d.rev || 0) + 1 }; S.dirty[n] = true; },
