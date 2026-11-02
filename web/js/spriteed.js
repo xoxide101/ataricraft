@@ -16,7 +16,7 @@
     '<label>P1 colour $<input type="text" id="spc1" size="2" style="width:48px"></label><label>P2 colour $<input type="text" id="spc2" size="2" style="width:48px"></label>' +
     '<button class="b" id="spundo">Undo</button><button class="b" id="spfh">Flip H</button><button class="b" id="spfv">Flip V</button><button class="b" id="spclr">Clear</button>' +
     '<button class="b" id="spl">&#8592;</button><button class="b" id="spr">&#8594;</button><button class="b" id="spu">&#8593;</button><button class="b" id="spd">&#8595;</button></div>' +
-    '<div class="row" id="sptile" style="display:none"><label>Band <select id="spband"><option>far</option><option>mid</option><option>near</option></select></label><label>Background $<input type="text" id="spt0" style="width:48px"></label><label>PF0 (a) $<input type="text" id="spt1" style="width:48px"></label><label>PF1 (b) $<input type="text" id="spt2" style="width:48px"></label><label>PF2 (c) $<input type="text" id="spt3" style="width:48px"></label><label>PF3 $<input type="text" id="spt4" style="width:48px"></label><label><input type="checkbox" id="spp3"> show c as PF3</label></div>' +
+    '<div class="row" id="sptile" style="display:none"><label>Band <select id="spband"><option>far</option><option>mid</option><option>near</option><option>sky</option></select></label><label>Background $<input type="text" id="spt0" style="width:48px"></label><label>PF0 (a) $<input type="text" id="spt1" style="width:48px"></label><label>PF1 (b) $<input type="text" id="spt2" style="width:48px"></label><label>PF2 (c) $<input type="text" id="spt3" style="width:48px"></label><label>PF3 $<input type="text" id="spt4" style="width:48px"></label><label><input type="checkbox" id="spp3"> show c as PF3</label></div>' +
     '<div class="row" style="align-items:flex-start"><canvas id="spcv" style="border:1px solid #3a4150;cursor:crosshair;touch-action:none"></canvas>' +
     '<div><div><small>Preview, all frames (as on screen)</small></div><canvas id="sppv" style="background:#222;border:1px solid #3a4150"></canvas>' +
     '<div class="row"><label>Animate <input type="checkbox" id="spanim"></label><label>Frames per second <input type="text" id="spfps" value="6" style="width:40px"></label></div>' +
@@ -44,8 +44,10 @@
     }
     if (obj.map != null) {
       const m = obj.map;
-      if (typeof m !== 'object' || m.cols !== 256 || !Array.isArray(m.rows) || m.rows.length !== 23 || m.rows.some((r) => typeof r !== 'string' || !/^[0-9a-fA-F]{512}$/.test(r))) throw new Error('"map" must have cols 256 and 23 rows of 512 hex digits');
+      const bad = AC.CircuitMap.check(m); if (bad) throw new Error(bad);
+      obj.map = AC.CircuitMap.upgrade(m);
     }
+    for (const n of names) if (obj.sheets[n].kind === 'tile') AC.CircuitMap.ensureSky(obj.sheets[n].bands);
     const keep = [data, sheet, frame, undo];
     try {
       data = obj; sheet = names[0]; frame = Object.keys(S().frames)[0]; undo = []; fill();

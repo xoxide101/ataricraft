@@ -19,9 +19,6 @@ wxh   = $81
 anim  = $88
 oldy  = $8B
 oldd  = $8C
-hs1   = $8D
-hs2   = $8E
-hs3   = $8F
 dlin  = $90
 cxl   = $91
 cxh   = $92
@@ -49,6 +46,12 @@ t3    = $AD
 t4    = $AE
 pla   = $AF
 plb   = $B0
+hsf   = $B4
+hs1   = $B5
+hs2   = $B6
+hs3   = $B7
+colnh = $B8
+cols  = $B9
 ; actor tables, index 0 = ONE, 1 = TASK
 axl   = $0600
 axh   = $0602
@@ -81,15 +84,15 @@ start   lda #0
         sta $0231
         lda #$38
         sta $02F4
-        lda farpal+0
+        lda skypal+0
         sta $02C4
-        lda farpal+1
+        lda skypal+1
         sta $02C5
-        lda farpal+2
+        lda skypal+2
         sta $02C6
-        lda farpal+3
+        lda skypal+3
         sta $02C7
-        lda farpal+4
+        lda skypal+4
         sta $02C8
         lda plpal+0
         sta $02C0
@@ -172,10 +175,9 @@ tile    lda tyy
         bcc tzero
         cmp #23
         bcs tzero
-        asl a
-        clc
-        adc #$40
-        sta tptr+1
+        sec
+        sbc #12
+        tay
         lda txh
         asl a
         asl a
@@ -188,7 +190,18 @@ tile    lda tyy
         lsr a
         lsr a
         ora t3
+        clc
+        adc nbl,y
         sta tptr
+        lda nbh,y
+        adc #0
+        sta tptr+1
+        lda txh
+        lsr a
+        lsr a
+        clc
+        adc tptr+1
+        sta tptr+1
         ldy #0
         lda (tptr),y
         and #$7F
@@ -231,7 +244,7 @@ hmove   lda dirv
         sta nxl
         lda axh,x
         adc #0
-        and #3
+        and #7
         sta nxh
         clc
         lda nxl
@@ -239,7 +252,7 @@ hmove   lda dirv
         sta txl
         lda nxh
         adc #0
-        and #3
+        and #7
         sta txh
         jmp hchk
 hl      sec
@@ -248,7 +261,7 @@ hl      sec
         sta nxl
         lda axh,x
         sbc #0
-        and #3
+        and #7
         sta nxh
         lda nxl
         sta txl
@@ -325,7 +338,7 @@ inr     lda #0
         sta txl
         lda axh,x
         adc #0
-        and #3
+        and #7
         sta txh
         jsr tile
         jsr topsol
@@ -336,7 +349,7 @@ inr     lda #0
         sta txl
         lda axh,x
         adc #0
-        and #3
+        and #7
         sta txh
         jsr tile
         jsr topsol
@@ -406,7 +419,7 @@ onplate sta t4
         sta txl
         lda axh,x
         adc #0
-        and #3
+        and #7
         sta txh
         lda ayh,x
         clc
@@ -424,12 +437,16 @@ opno    clc
 
 opendoor lda #DOORR0
         sta row
-od1     asl a
+od1     sec
+        sbc #12
+        tay
         clc
-        adc #$40
-        sta tptr+1
-        lda #DOORCOL
+        lda nbl,y
+        adc #DOORCL
         sta tptr
+        lda nbh,y
+        adc #DOORCH
+        sta tptr+1
         lda #0
         ldy #0
         sta (tptr),y
@@ -450,9 +467,9 @@ hpos    sec
         sta t3
         lda axh,x
         sbc wxh
-        and #3
+        and #7
         beq hpp
-        cmp #3
+        cmp #7
         bne hph
         lda t3
         cmp #206
@@ -556,7 +573,7 @@ hn      lda nm,x
         sta cxl
         lda wxh
         sbc #0
-        and #3
+        and #7
         sta cxh
         lda cxl
         sta t1
@@ -565,6 +582,7 @@ hn      lda nm,x
         ror t1
         lsr a
         ror t1
+        sta colnh
         lda t1
         sta coln
         lda cxl
@@ -605,8 +623,33 @@ hn      lda nm,x
         lsr a
         and #3
         eor #3
+        sta hsf
+        lda cxl
+        sta t1
+        lda cxh
+        lsr a
+        ror t1
+        lsr a
+        ror t1
+        lsr a
+        ror t1
+        lsr a
+        ror t1
+        lsr a
+        ror t1
+        lda t1
+        sta cols
+        lda cxl
+        lsr a
+        lsr a
+        lsr a
+        and #3
+        eor #3
         sta HSCROL
-        ldy #4
+        lda cols
+        sta dl+2
+        sta dl+5
+        ldy #8
         ldx #6
         lda colf
 lp1     sta dl,y
@@ -623,15 +666,20 @@ lp2     sta dl,y
         iny
         dex
         bne lp2
-        ldx #11
-        lda coln
-lp3     sta dl,y
+        ldx #0
+lp3     clc
+        lda nbl,x
+        adc coln
+        sta dl,y
+        iny
+        lda nbh,x
+        adc colnh
+        sta dl,y
         iny
         iny
-        iny
-        dex
+        inx
+        cpx #11
         bne lp3
-
 ; sprites: clear old, draw new
         lda oldy
         sta dst
@@ -781,7 +829,7 @@ dli     pha
         txa
         pha
         ldx dlin
-        lda hs1,x
+        lda hsf,x
         tay
         lda cbk,x
         sta WSYNC
@@ -795,7 +843,7 @@ dli     pha
         sta COLPF2
         lda cp3,x
         sta COLPF3
-        cpx #2
+        cpx #3
         bne nohud
         lda #$E0
         sta CHBASE
