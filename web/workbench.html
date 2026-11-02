@@ -45,12 +45,12 @@
 <section id="sap">
   <div class="drop" id="dsap">Drop a .sap file here, or <button class="b" id="picksap">choose one</button></div>
   <table id="fields"></table>
-  <div class="row"><button class="b" id="addf" disabled>Add field</button><button class="b" id="savesap" disabled>Save .SAP</button></div>
+  <div class="row"><button class="b" id="addf" disabled>Add field</button><button class="b" id="savesap" disabled>Save .SAP</button><span style="flex:1"></span><label>Subsong <input type="text" id="song" value="0" style="width:50px"></label><button class="b" id="savexex" disabled>Save .XEX to play on an Atari</button></div>
   <pre id="sout">Edit the header text fields (NAME, AUTHOR, DATE and others). The music data is copied byte for byte.</pre>
-  <small>This does not play SAP files yet: that needs a 6502 player running against emulated POKEYs.</small>
+  <small>The .XEX has the SAP data plus a tiny player stub (types B and C only). Drop it onto Ataricraft, or run it on a real Atari. Set NTSC or PAL to match the file.</small>
 </section>
 </main>
-<script src="js/pmd.js?v=1"></script>
+<script src="js/pmd.js?v=2"></script><script src="js/sapxex.js?v=1"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id), P = AC.Pmd;
@@ -115,12 +115,19 @@
   };
   wire($('dsap'), $('picksap'), '.sap', async (f) => {
     try {
-      const s = P.parseSap(new Uint8Array(await f.arrayBuffer())); sap = { fields: s.fields, binary: s.binary }; sname = f.name; render();
+      const s = P.parseSap(new Uint8Array(await f.arrayBuffer())); sap = { fields: s.fields, binary: s.binary, parsed: s }; sname = f.name; render();
       $('sout').className = ''; $('sout').textContent = `${f.name}: ${s.binary.length} bytes of music data\n` + s.blocks.map((b) => `  $${b.start.toString(16).toUpperCase().padStart(4, '0')}-$${b.end.toString(16).toUpperCase().padStart(4, '0')}  ${b.len || '?'} bytes${b.truncated ? ' (truncated)' : ''}`).join('\n');
-      $('addf').disabled = $('savesap').disabled = false;
+      $('addf').disabled = $('savesap').disabled = $('savexex').disabled = false; $('song').value = s.get('DEFSONG') || 0;
     } catch (e) { $('sout').className = 'err'; $('sout').textContent = e.message; }
   });
   $('addf').onclick = () => { sap.fields.push({ key: 'NAME', value: '' }); render(); };
+  $('savexex').onclick = () => {
+    try {
+      const s = P.parseSap(P.buildSap(sap.fields, sap.binary)), r = AC.SapXex.build(s, { song: +$('song').value || 0 });
+      save(sname.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase() + '.XEX', r.xex);
+      $('sout').className = ''; $('sout').textContent = `Saved: type ${r.type}, subsong ${r.song}, player stub at $${r.stub.toString(16).toUpperCase()}.\n` + r.warnings.join('\n');
+    } catch (e) { $('sout').className = 'err'; $('sout').textContent = e.message; }
+  };
   $('savesap').onclick = () => save(sname, P.buildSap(sap.fields, sap.binary));
 })();
 </script>

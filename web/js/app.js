@@ -2169,7 +2169,7 @@
       document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
       localStorage.setItem('ac.sidetab', t);
     };
-    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : show(b.dataset.t)); });
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : show(b.dataset.t)); });
     const t0 = localStorage.getItem('ac.sidetab');
     show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
   }
