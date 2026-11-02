@@ -422,13 +422,13 @@ onplate sta t4
 opno    clc
         rts
 
-opendoor lda #13
+opendoor lda #DOORR0
         sta row
 od1     asl a
         clc
         adc #$40
         sta tptr+1
-        lda #208
+        lda #DOORCOL
         sta tptr
         lda #0
         ldy #0
@@ -437,10 +437,10 @@ od1     asl a
         sta (tptr),y
         inc row
         lda row
-        cmp #20
+        cmp #DOORR1
         bne od1
         lda #$97
-        sta $58D0
+        sta LEDADR
         rts
 
 ; hpos of actor X relative to the camera (wxl/wxh); 0 hides it
@@ -513,14 +513,14 @@ ai      sta istk
         ldy pla
         beq pa1
         ora #$80
-pa1     sta $66BE
-        sta $66BF
+pa1     sta PA0
+        sta PA1
         lda #22
         ldy plb
         beq pb1
         ora #$80
-pb1     sta $66C8
-        sta $66C9
+pb1     sta PB0
+        sta PB1
         lda gate
         bne nog
         lda pla

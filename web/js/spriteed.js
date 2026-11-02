@@ -155,5 +155,5 @@
   d.ondragover = (e) => { e.preventDefault(); d.classList.add('over'); };
   d.ondragleave = () => d.classList.remove('over');
   d.ondrop = (e) => { e.preventDefault(); d.classList.remove('over'); if (e.dataTransfer.files[0]) read(e.dataTransfer.files[0]); };
-  AC.SpriteEd = { load };
+  AC.SpriteEd = { load, get: () => data, save: () => $('spsave').click() };
 })();
