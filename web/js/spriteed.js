@@ -16,6 +16,7 @@
     '<label>P1 colour $<input type="text" id="spc1" size="2" style="width:48px"></label><label>P2 colour $<input type="text" id="spc2" size="2" style="width:48px"></label>' +
     '<button class="b" id="spundo">Undo</button><button class="b" id="spfh">Flip H</button><button class="b" id="spfv">Flip V</button><button class="b" id="spclr">Clear</button>' +
     '<button class="b" id="spl">&#8592;</button><button class="b" id="spr">&#8594;</button><button class="b" id="spu">&#8593;</button><button class="b" id="spd">&#8595;</button></div>' +
+    '<div class="row" id="sptile" style="display:none"><label>Band <select id="spband"><option>far</option><option>mid</option><option>near</option></select></label><label>Background $<input type="text" id="spt0" style="width:48px"></label><label>PF0 (a) $<input type="text" id="spt1" style="width:48px"></label><label>PF1 (b) $<input type="text" id="spt2" style="width:48px"></label><label>PF2 (c) $<input type="text" id="spt3" style="width:48px"></label><label>PF3 $<input type="text" id="spt4" style="width:48px"></label><label><input type="checkbox" id="spp3"> show c as PF3</label></div>' +
     '<div class="row" style="align-items:flex-start"><canvas id="spcv" style="border:1px solid #3a4150;cursor:crosshair;touch-action:none"></canvas>' +
     '<div><div><small>Preview, all frames (as on screen)</small></div><canvas id="sppv" style="background:#222;border:1px solid #3a4150"></canvas>' +
     '<div class="row"><label>Animate <input type="checkbox" id="spanim"></label><label>Frames per second <input type="text" id="spfps" value="6" style="width:40px"></label></div>' +
@@ -37,12 +38,21 @@
   }
   function fill() {
     $('spsheet').innerHTML = ''; for (const k of Object.keys(data.sheets)) $('spsheet').append(new Option(k, k)); $('spsheet').value = sheet;
-    fillFrames(); $('spc1').value = S().players[0].replace('$', ''); $('spc2').value = S().players[1].replace('$', '');
+    fillFrames(); brushes(isTile());
+    $('sptile').style.display = isTile() ? '' : 'none';
+    for (const id of ['spc1', 'spc2']) $(id).parentElement.style.display = isTile() ? 'none' : '';
+    if (isTile()) fillBand(); else { $('spc1').value = S().players[0].replace('$', ''); $('spc2').value = S().players[1].replace('$', ''); }
     redraw();
   }
+  function fillBand() { const b = band(), v = [b.bk, ...b.pf]; v.forEach((c, i) => { $('spt' + i).value = String(c).replace('$', ''); }); }
   function fillFrames() { $('spframe').innerHTML = ''; for (const k of Object.keys(S().frames)) $('spframe').append(new Option(k, k)); $('spframe').value = frame; }
   const snap = () => { undo.push(JSON.stringify(data)); if (undo.length > 100) undo.shift(); };
-  const colOf = (ch) => (ch === 'b' ? css(hex(S().players[0])) : ch === 'w' ? css(hex(S().players[1])) : null);
+  const isTile = () => S().kind === 'tile', ZX = () => (isTile() ? Z * 2 : Z), band = () => S().bands[$('spband').value];
+  const colOf = (ch) => {
+    if (isTile()) { const b = band(); return css(hex(ch === '.' ? b.bk : ch === 'a' ? b.pf[0] : ch === 'b' ? b.pf[1] : ch === 'c' ? b.pf[spp3.checked ? 3 : 2] : b.bk)); }
+    return ch === 'b' ? css(hex(S().players[0])) : ch === 'w' ? css(hex(S().players[1])) : null;
+  };
+  const brushes = (t) => { $('spbrush').innerHTML = ''; for (const [v, n] of t ? [['a', 'a: PF0'], ['b', 'b: PF1'], ['c', 'c: PF2 or PF3'], ['.', 'Background']] : [['b', 'Player 1 colour'], ['w', 'Player 2 colour'], ['.', 'Clear']]) $('spbrush').append(new Option(n, v)); };
 
   function drawFrame(g, rows, s, xs) {
     for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) { const c = colOf(rows[y][x]); if (c) { g.fillStyle = c; g.fillRect(x * s * xs, y * s, s * xs, s); } }
@@ -50,10 +60,10 @@
   function redraw() {
     if (!data) return;
     const sh = S(), cv = $('spcv'), g = cv.getContext('2d');
-    cv.width = sh.w * Z; cv.height = sh.h * Z; g.fillStyle = '#111'; g.fillRect(0, 0, cv.width, cv.height);
-    drawFrame(g, F(), Z, 1);
+    const zx = ZX(); cv.width = sh.w * zx; cv.height = sh.h * Z; g.fillStyle = '#111'; g.fillRect(0, 0, cv.width, cv.height);
+    drawFrame(g, F(), Z, zx / Z);
     g.strokeStyle = '#2d3340'; g.lineWidth = 1; g.beginPath();
-    for (let x = 0; x <= sh.w; x++) { g.moveTo(x * Z + .5, 0); g.lineTo(x * Z + .5, cv.height); }
+    for (let x = 0; x <= sh.w; x++) { g.moveTo(x * zx + .5, 0); g.lineTo(x * zx + .5, cv.height); }
     for (let y = 0; y <= sh.h; y++) { g.moveTo(0, y * Z + .5); g.lineTo(cv.width, y * Z + .5); }
     g.stroke();
     const names = Object.keys(sh.frames), pv = $('sppv'), pg = pv.getContext('2d'), sc = 3;
@@ -67,7 +77,7 @@
     for (let h = 0; h < 16; h++) for (let l = 0; l < 8; l++) { qg.fillStyle = css(h * 16 + l * 2); qg.fillRect(h * 18, l * 18, 18, 18); }
   }
 
-  function cell(e) { const r = $('spcv').getBoundingClientRect(); return [Math.floor((e.clientX - r.left) / Z), Math.floor((e.clientY - r.top) / Z)]; }
+  function cell(e) { const r = $('spcv').getBoundingClientRect(); return [Math.floor((e.clientX - r.left) / ZX()), Math.floor((e.clientY - r.top) / Z)]; }
   function paint(e) {
     const [x, y] = cell(e), sh = S(); if (x < 0 || y < 0 || x >= sh.w || y >= sh.h) return;
     const rows = F(), row = [...rows[y]]; if (row[x] === paintCh) return; row[x] = paintCh; rows[y] = row.join(''); redraw();
@@ -78,9 +88,12 @@
   $('spcv').oncontextmenu = (e) => e.preventDefault();
   $('sppal').onclick = (e) => {
     if (!data) return; const r = $('sppal').getBoundingClientRect(), v = Math.floor((e.clientX - r.left) / 18) * 16 + Math.floor((e.clientY - r.top) / 18) * 2;
+    if (isTile()) { const i = { '.': 0, a: 1, b: 2, c: $('spp3').checked ? 4 : 3 }[$('spbrush').value], b = band(), c = '$' + v.toString(16).toUpperCase().padStart(2, '0'); snap(); if (i === 0) b.bk = c; else b.pf[i - 1] = c; fillBand(); redraw(); return; }
     const k = $('spbrush').value === 'w' ? 1 : 0; snap(); S().players[k] = '$' + v.toString(16).toUpperCase().padStart(2, '0'); $(k ? 'spc2' : 'spc1').value = S().players[k].slice(1); redraw();
   };
   const setCol = (k) => () => { if (!data) return; snap(); S().players[k] = '$' + hex($(k ? 'spc2' : 'spc1').value).toString(16).toUpperCase().padStart(2, '0'); redraw(); };
+  for (let i = 0; i < 5; i++) $('spt' + i).onchange = () => { snap(); const b = band(), c = '$' + hex($('spt' + i).value).toString(16).toUpperCase().padStart(2, '0'); if (i === 0) b.bk = c; else b.pf[i - 1] = c; fillBand(); redraw(); };
+  $('spband').onchange = () => { fillBand(); redraw(); }; $('spp3').onchange = redraw;
   $('spc1').onchange = setCol(0); $('spc2').onchange = setCol(1);
   $('sppv').onclick = (e) => {
     if (!data) return; const sh = S(), r = $('sppv').getBoundingClientRect(), i = Math.floor((e.clientX - r.left - 3) / (sh.w * 6 + 6)), n = Object.keys(sh.frames)[i];
@@ -101,9 +114,15 @@
   $('spd').onclick = edit((r) => { r.pop(); r.unshift('.'.repeat(S().w)); return r; });
   $('spundo').onclick = () => { if (!undo.length) return; data = JSON.parse(undo.pop()); if (!data.sheets[sheet]) sheet = Object.keys(data.sheets)[0]; if (!S().frames[frame]) frame = Object.keys(S().frames)[0]; fill(); };
   const uniq = (base) => { let n = base, i = 2; while (S().frames[n]) n = base + i++; return n; };
-  $('spnewf').onclick = need(() => { snap(); const n = uniq('frame'); S().frames[n] = Array(S().h).fill('.'.repeat(S().w)); frame = n; fillFrames(); redraw(); });
-  $('spdup').onclick = need(() => { snap(); const n = uniq(frame + '_copy'); S().frames[n] = F().slice(); frame = n; fillFrames(); redraw(); });
-  $('spmir').onclick = need(() => { snap(); const n = uniq(frame + '_mirror'); S().frames[n] = F().map(rev); frame = n; fillFrames(); redraw(); });
+  function newName(base) {
+    if (!isTile()) return uniq(base);
+    const n = (prompt('Tile id (1 to 127) and name, e.g. 24 spike', '') || '').trim();
+    if (!(parseInt(n, 10) > 0 && parseInt(n, 10) < 128) || Object.keys(S().frames).some((k) => parseInt(k, 10) === parseInt(n, 10))) { say('Needs an unused id from 1 to 127 first.', 1); return null; }
+    return n;
+  }
+  $('spnewf').onclick = need(() => { const n = newName('frame'); if (!n) return; snap(); S().frames[n] = Array(S().h).fill('.'.repeat(S().w)); frame = n; fillFrames(); redraw(); });
+  $('spdup').onclick = need(() => { const n = newName(frame + '_copy'); if (!n) return; snap(); S().frames[n] = F().slice(); frame = n; fillFrames(); redraw(); });
+  $('spmir').onclick = need(() => { const n = newName(frame + '_mirror'); if (!n) return; snap(); S().frames[n] = F().map(rev); frame = n; fillFrames(); redraw(); });
   $('spdel').onclick = need(() => {
     if (Object.keys(S().frames).length < 2) return say('A sheet needs at least one frame.', 1);
     snap(); delete S().frames[frame]; frame = Object.keys(S().frames)[0]; fillFrames(); redraw();

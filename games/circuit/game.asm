@@ -81,23 +81,23 @@ start   lda #0
         sta $0231
         lda #$38
         sta $02F4
-        lda #$84
+        lda farpal+0
         sta $02C4
-        lda #$96
+        lda farpal+1
         sta $02C5
-        lda #$AC
+        lda farpal+2
         sta $02C6
-        lda #$2E
+        lda farpal+3
         sta $02C7
-        lda #$00
+        lda farpal+4
         sta $02C8
-        lda #$9A
+        lda plpal+0
         sta $02C0
-        lda #$0E
+        lda plpal+1
         sta $02C1
-        lda #$2A
+        lda plpal+2
         sta $02C2
-        lda #$9C
+        lda plpal+3
         sta $02C3
         lda #$80
         sta $D407
