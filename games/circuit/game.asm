@@ -52,6 +52,9 @@ hs2   = $B6
 hs3   = $B7
 colnh = $B8
 cols  = $B9
+p2    = $BA
+p2s   = $BB
+dval  = $BC
 ; actor tables, index 0 = ONE, 1 = TASK
 axl   = $0600
 axh   = $0602
@@ -122,6 +125,7 @@ clr     sta $8400,x
         sta oldd
         sta ctl
         sta gate
+        sta p2s
         sta afc
         sta afc+1
         sta amv
@@ -212,6 +216,8 @@ tzero   lda #0
 ; Tile ids 19 (block) and 20 (door) stop movement from every side.
 fullsol cmp #19
         beq fsy
+        cmp #45
+        beq fsy
         cmp #20
         beq fsy
         clc
@@ -221,6 +227,8 @@ fsy     sec
 
 ; Landing: ground top (11), platforms (13-15), block and door.
 topsol  cmp #19
+        beq tsy
+        cmp #45
         beq tsy
         cmp #20
         beq tsy
@@ -460,6 +468,53 @@ od1     sec
         sta LEDADR
         rts
 
+; Fill the hold-door column (2 tiles wide) with tile A.
+setdoor2 sta dval
+        lda #D2R0
+        sta row
+sd1     sec
+        sbc #12
+        tay
+        clc
+        lda nbl,y
+        adc #D2CL
+        sta tptr
+        lda nbh,y
+        adc #D2CH
+        sta tptr+1
+        lda dval
+        ldy #0
+        sta (tptr),y
+        iny
+        sta (tptr),y
+        inc row
+        lda row
+        cmp #D2R1
+        bne sd1
+        rts
+
+; Carry set when actor X is within 8 pixels of the hold door.
+nearD2  sec
+        lda axl,x
+        sbc #<D2X
+        sta t3
+        lda axh,x
+        sbc #>D2X
+        and #7
+        beq nd1
+        cmp #7
+        bne ndn
+        lda t3
+        cmp #249
+        bcs nds
+ndn     clc
+        rts
+nd1     lda t3
+        cmp #8
+        bcs ndn
+nds     sec
+        rts
+
 ; hpos of actor X relative to the camera (wxl/wxh); 0 hides it
 hpos    sec
         lda axl,x
@@ -547,6 +602,45 @@ pb1     sta PB0
         sta gate
         jsr opendoor
 nog
+; hold plate: the door stays open only while an actor stands on it
+        ldx #0
+        lda #44
+        jsr onplate
+        bcs hq1
+        ldx #1
+        lda #44
+        jsr onplate
+hq1     lda #0
+        rol a
+        sta p2
+        lda #44
+        ldy p2
+        beq hq2
+        ora #$80
+hq2     sta HOLDA
+        sta HOLDB
+        lda p2
+        beq hq3
+        lda p2s
+        bne hqd
+        lda #0
+        jsr setdoor2
+        lda #1
+        sta p2s
+        bne hqd
+hq3     lda p2s
+        beq hqd
+        ldx #0
+        jsr nearD2
+        bcs hqd
+        ldx #1
+        jsr nearD2
+        bcs hqd
+        lda #45
+        jsr setdoor2
+        lda #0
+        sta p2s
+hqd
 
 ; who is controlled, shown on the status line
         lda ctl
