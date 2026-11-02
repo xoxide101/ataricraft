@@ -1,6 +1,7 @@
-; Circuit Runner demo: parallax side scroller. Hero robot plus robot Pomeranian following.
+; Circuit Runner demo: ONE (robot) and TASK (robot Pomeranian). SELECT swaps who you control.
 ; Screen: ANTIC mode 4, three bands scrolling at 1/4, 1/2 and full speed (DLI sets HSCROL and colours per band).
 ; Rows live at $4000 + row*$200 (256 columns plus 44 repeated), so a coarse scroll is just a new LMS low byte.
+; Puzzle: ONE stands on plate A while TASK crawls through the vent to plate B. Both pressed (AND) latches the door open.
 WSYNC  = $D40A
 HSCROL = $D404
 CHBASE = $D409
@@ -11,18 +12,11 @@ COLPF3 = $D019
 COLBK  = $D01A
 HPOSP0 = $D000
 dl     = $3E00
+hud    = $3E80
 
 wxl   = $80
 wxh   = $81
-yl    = $82
-yh    = $83
-vyl   = $84
-vyh   = $85
-gnd   = $86
-face  = $87
 anim  = $88
-acnt  = $89
-mov   = $8A
 oldy  = $8B
 oldd  = $8C
 hs1   = $8D
@@ -37,15 +31,36 @@ row   = $95
 colf  = $96
 colm  = $97
 coln  = $98
-hidx  = $99
-dogx  = $9A
-dogy  = $9B
 src   = $9C
 dst   = $9E
 tptr  = $A0
-histxl = $0600
-histxh = $0620
-histy  = $0640
+txl   = $A2
+txh   = $A3
+tyy   = $A4
+nxl   = $A5
+nxh   = $A6
+dirv  = $A7
+istk  = $A8
+ifir  = $A9
+ctl   = $AA
+selp  = $AB
+gate  = $AC
+t3    = $AD
+t4    = $AE
+pla   = $AF
+plb   = $B0
+; actor tables, index 0 = ONE, 1 = TASK
+axl   = $0600
+axh   = $0602
+ayl   = $0604
+ayh   = $0606
+avl   = $0608
+avh   = $060A
+agd   = $060C
+afc   = $060E
+amv   = $0610
+aac   = $0612
+aht   = $0614
 
         org $2000
 start   lda #0
@@ -99,12 +114,26 @@ clr     sta $8400,x
         inx
         bne clr
         sta hs3
-        sta mov
         sta anim
-        sta acnt
-        sta face
         sta oldy
         sta oldd
+        sta ctl
+        sta gate
+        sta afc
+        sta afc+1
+        sta amv
+        sta amv+1
+        sta aac
+        sta aac+1
+        lda #2
+        sta selp
+        lda #16
+        sta aht
+        lda #8
+        sta aht+1
+        ldx #0
+        jsr respawn
+        ldx #1
         jsr respawn
         lda #$3E
         sta $022F
@@ -112,187 +141,415 @@ clr     sta $8400,x
         sta $D40E
 main    jmp main
 
-respawn lda #64
-        sta wxl
+respawn txa
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc #64
+        sta axl,x
         lda #0
-        sta wxh
-        sta yl
-        sta vyl
-        sta vyh
-        sta gnd
+        sta axh,x
+        sta ayl,x
+        sta avl,x
+        sta avh,x
+        sta agd,x
         lda #100
-        sta yh
-        ldx #31
-rh      lda wxl
-        sta histxl,x
-        lda wxh
-        sta histxh,x
-        lda yh
-        sta histy,x
-        dex
-        bpl rh
-        lda #0
-        sta hidx
+        sta ayh,x
         rts
 
-; A = sample offset into the hero; tptr = row base. Carry set if the tile is solid on top.
-chk     clc
-        adc wxl
-        sta t1
-        lda wxh
-        adc #0
-        lsr a
-        ror t1
-        lsr a
-        ror t1
-        ldy t1
-        lda (tptr),y
-        and #$7F
-        cmp #11
-        bcc nosol
-        cmp #12
-        beq nosol
-        cmp #16
-        bcs nosol
-        sec
-        rts
-nosol   clc
-        rts
-
-vbi     lda #0
-        sta dlin
-        sta mov
-        sta $4D
-        lda $0278
-        sta t1
-        and #4
-        bne nl
-        sec
-        lda wxl
-        sbc #2
-        sta wxl
-        lda wxh
-        sbc #0
-        and #3
-        sta wxh
-        lda #1
-        sta face
-        sta mov
-nl      lda t1
-        and #8
-        bne nr
-        clc
-        lda wxl
-        adc #2
-        sta wxl
-        lda wxh
-        adc #0
-        and #3
-        sta wxh
-        lda #0
-        sta face
-        lda #1
-        sta mov
-nr      lda gnd
-        beq nojump
-        lda $0284
-        bne nojump
-        lda #$FC
-        sta vyh
-        lda #$D0
-        sta vyl
-        lda #0
-        sta gnd
-nojump  clc
-        lda vyl
-        adc #$20
-        sta vyl
-        lda vyh
-        adc #0
-        sta vyh
-        bmi vok
-        cmp #6
-        bcc vok
-        lda #6
-        sta vyh
-        lda #0
-        sta vyl
-vok     clc
-        lda yl
-        adc vyl
-        sta yl
-        lda yh
-        adc vyh
-        sta yh
-        cmp #224
-        bcc inr
-        jsr respawn
-inr     lda #0
-        sta gnd
-        lda vyh
-        bmi noland
-        lda yh
-        clc
-        adc #16
+; Reads the tile id at world pixel (txh:txl, tyy). Near band rows only, else 0.
+tile    lda tyy
         sec
         sbc #32
-        sta t2
+        bcc tzero
         lsr a
         lsr a
         lsr a
         sta row
         cmp #12
-        bcc noland
+        bcc tzero
         cmp #23
-        bcs noland
-        lda t2
-        and #7
-        cmp #7
-        bcs noland
-        lda #0
-        sta tptr
-        lda row
+        bcs tzero
         asl a
         clc
         adc #$40
         sta tptr+1
-        lda #1
-        jsr chk
-        bcs land
+        lda txh
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        sta t3
+        lda txl
+        lsr a
+        lsr a
+        ora t3
+        sta tptr
+        ldy #0
+        lda (tptr),y
+        and #$7F
+        rts
+tzero   lda #0
+        rts
+
+; Tile ids 19 (block) and 20 (door) stop movement from every side.
+fullsol cmp #19
+        beq fsy
+        cmp #20
+        beq fsy
+        clc
+        rts
+fsy     sec
+        rts
+
+; Landing: ground top (11), platforms (13-15), block and door.
+topsol  cmp #19
+        beq tsy
+        cmp #20
+        beq tsy
+        cmp #11
+        bcc tsn
+        cmp #12
+        beq tsn
+        cmp #16
+        bcs tsn
+tsy     sec
+        rts
+tsn     clc
+        rts
+
+; Move actor X two pixels in dirv (1 right, $FF left) unless a solid tile is in the way.
+hmove   lda dirv
+        bmi hl
+        clc
+        lda axl,x
+        adc #2
+        sta nxl
+        lda axh,x
+        adc #0
+        and #3
+        sta nxh
+        clc
+        lda nxl
+        adc #7
+        sta txl
+        lda nxh
+        adc #0
+        and #3
+        sta txh
+        jmp hchk
+hl      sec
+        lda axl,x
+        sbc #2
+        sta nxl
+        lda axh,x
+        sbc #0
+        and #3
+        sta nxh
+        lda nxl
+        sta txl
+        lda nxh
+        sta txh
+hchk    lda ayh,x
+        sta tyy
+        jsr tile
+        jsr fullsol
+        bcs hblk
+        lda ayh,x
+        clc
+        adc #7
+        sta tyy
+        jsr tile
+        jsr fullsol
+        bcs hblk
+        lda ayh,x
+        clc
+        adc aht,x
+        sec
+        sbc #1
+        sta tyy
+        jsr tile
+        jsr fullsol
+        bcs hblk
+        lda nxl
+        sta axl,x
+        lda nxh
+        sta axh,x
+hblk    rts
+
+; Gravity, fall, respawn and landing for actor X.
+vphys   clc
+        lda avl,x
+        adc #$20
+        sta avl,x
+        lda avh,x
+        adc #0
+        sta avh,x
+        bmi vok
+        cmp #6
+        bcc vok
         lda #6
-        jsr chk
-        bcc noland
+        sta avh,x
+        lda #0
+        sta avl,x
+vok     clc
+        lda ayl,x
+        adc avl,x
+        sta ayl,x
+        lda ayh,x
+        adc avh,x
+        sta ayh,x
+        cmp #224
+        bcc inr
+        jmp respawn
+inr     lda #0
+        sta agd,x
+        lda avh,x
+        bmi vret
+        lda ayh,x
+        clc
+        adc aht,x
+        sta tyy
+        sec
+        sbc #32
+        and #7
+        cmp #7
+        bcs vret
+        lda axl,x
+        clc
+        adc #1
+        sta txl
+        lda axh,x
+        adc #0
+        and #3
+        sta txh
+        jsr tile
+        jsr topsol
+        bcs land
+        lda axl,x
+        clc
+        adc #6
+        sta txl
+        lda axh,x
+        adc #0
+        and #3
+        sta txh
+        jsr tile
+        jsr topsol
+        bcc vret
 land    lda row
         asl a
         asl a
         asl a
         clc
-        adc #16
-        sta yh
+        adc #32
+        sec
+        sbc aht,x
+        sta ayh,x
         lda #0
-        sta yl
-        sta vyl
-        sta vyh
+        sta ayl,x
+        sta avl,x
+        sta avh,x
         lda #1
-        sta gnd
-noland  lda gnd
-        bne ong
-        lda #3
-        bne seta
-ong     lda mov
-        bne mv
-        lda #0
-        beq seta
-mv      inc acnt
-        lda acnt
-        lsr a
-        lsr a
-        and #1
-        clc
-        adc #1
-seta    sta anim
+        sta agd,x
+vret    rts
 
-; camera and scroll bands
+; One actor's turn using istk (joystick bits) and ifir (0 = fire held).
+act     lda #0
+        sta amv,x
+        lda istk
+        and #4
+        bne a1
+        lda #$FF
+        sta dirv
+        jsr hmove
+        lda #1
+        sta afc,x
+        sta amv,x
+a1      lda istk
+        and #8
+        bne a2
+        lda #1
+        sta dirv
+        jsr hmove
+        lda #0
+        sta afc,x
+        lda #1
+        sta amv,x
+a2      lda agd,x
+        beq a3
+        lda ifir
+        bne a3
+        lda #$FC
+        sta avh,x
+        lda #$D0
+        sta avl,x
+        lda #0
+        sta agd,x
+a3      jsr vphys
+        lda amv,x
+        beq a4
+        inc aac,x
+a4      rts
+
+; Carry set when actor X stands on tile A.
+onplate sta t4
+        lda agd,x
+        beq opno
+        lda axl,x
+        clc
+        adc #4
+        sta txl
+        lda axh,x
+        adc #0
+        and #3
+        sta txh
+        lda ayh,x
+        clc
+        adc aht,x
+        sec
+        sbc #1
+        sta tyy
+        jsr tile
+        cmp t4
+        bne opno
+        sec
+        rts
+opno    clc
+        rts
+
+opendoor lda #13
+        sta row
+od1     asl a
+        clc
+        adc #$40
+        sta tptr+1
+        lda #208
+        sta tptr
+        lda #0
+        ldy #0
+        sta (tptr),y
+        iny
+        sta (tptr),y
+        inc row
+        lda row
+        cmp #20
+        bne od1
+        lda #$97
+        sta $58D0
+        rts
+
+; hpos of actor X relative to the camera (wxl/wxh); 0 hides it
+hpos    sec
+        lda axl,x
+        sbc wxl
+        sta t3
+        lda axh,x
+        sbc wxh
+        and #3
+        beq hpp
+        cmp #3
+        bne hph
+        lda t3
+        cmp #206
+        bcc hph
+        bcs hpo
+hpp     lda t3
+        cmp #108
+        bcs hph
+hpo     lda t3
+        clc
+        adc #100
+        rts
+hph     lda #0
+        rts
+
+vbi     lda #0
+        sta dlin
+        sta $4D
+        lda $D01F
+        and #2
+        tay
+        bne sw0
+        lda selp
+        beq sw0
+        lda ctl
+        eor #1
+        sta ctl
+sw0     sty selp
+        ldx #0
+av      cpx ctl
+        beq ac
+        lda #$0F
+        ldy #1
+        bne ai
+ac      lda $0278
+        ldy $0284
+ai      sta istk
+        sty ifir
+        jsr act
+        inx
+        cpx #2
+        bne av
+
+; plates and the AND gate
+        ldx #0
+        lda #21
+        jsr onplate
+        lda #0
+        rol a
+        sta pla
+        ldx #1
+        lda #22
+        jsr onplate
+        lda #0
+        rol a
+        sta plb
+        lda #21
+        ldy pla
+        beq pa1
+        ora #$80
+pa1     sta $66BE
+        sta $66BF
+        lda #22
+        ldy plb
+        beq pb1
+        ora #$80
+pb1     sta $66C8
+        sta $66C9
+        lda gate
+        bne nog
+        lda pla
+        and plb
+        beq nog
+        lda #1
+        sta gate
+        jsr opendoor
+nog
+
+; who is controlled, shown on the status line
+        lda ctl
+        asl a
+        asl a
+        tax
+        ldy #0
+hn      lda nm,x
+        sta hud+NAMEOFF,y
+        inx
+        iny
+        cpy #4
+        bne hn
+
+; camera follows the controlled actor
+        ldx ctl
+        lda axl,x
+        sta wxl
+        lda axh,x
+        sta wxh
         sec
         lda wxl
         sbc #52
@@ -375,43 +632,6 @@ lp3     sta dl,y
         dex
         bne lp3
 
-; follow history for the dog
-        ldx hidx
-        lda wxl
-        sta histxl,x
-        lda wxh
-        sta histxh,x
-        lda yh
-        sta histy,x
-        txa
-        clc
-        adc #1
-        and #31
-        sta hidx
-        clc
-        adc #8
-        and #31
-        tax
-        lda wxl
-        sec
-        sbc histxl,x
-        sta t1
-        lda histy,x
-        clc
-        adc #8
-        sta dogy
-        lda #100
-        sec
-        sbc t1
-        ldx face
-        beq dr
-        clc
-        adc #12
-        jmp dsx
-dr      sec
-        sbc #12
-dsx     sta dogx
-
 ; sprites: clear old, draw new
         lda oldy
         sta dst
@@ -442,7 +662,22 @@ cl3     sta (dst),y
         dey
         bpl cl3
 
-        lda face
+        lda agd
+        beq hair
+        lda amv
+        beq hid
+        lda aac
+        lsr a
+        lsr a
+        and #1
+        clc
+        adc #1
+        bne hset
+hid     lda #0
+        beq hset
+hair    lda #3
+hset    sta anim
+        lda afc
         asl a
         asl a
         clc
@@ -452,7 +687,7 @@ cl3     sta (dst),y
         asl a
         asl a
         sta t1
-        lda yh
+        lda ayh
         sta oldy
         sta dst
         lda #$84
@@ -483,14 +718,14 @@ dh1     lda (src),y
         dey
         bpl dh1
 
-        lda mov
+        lda amv+1
         beq still
-        lda acnt
+        lda aac+1
         lsr a
         lsr a
         and #1
 still   sta t2
-        lda face
+        lda afc+1
         asl a
         clc
         adc t2
@@ -498,7 +733,7 @@ still   sta t2
         asl a
         asl a
         sta t1
-        lda dogy
+        lda ayh+1
         sta oldd
         sta dst
         lda #$86
@@ -529,13 +764,17 @@ dd1     lda (src),y
         dey
         bpl dd1
 
-        lda #100
+        ldx #0
+        jsr hpos
         sta HPOSP0
         sta HPOSP0+1
-        lda dogx
+        ldx #1
+        jsr hpos
         sta HPOSP0+2
         sta HPOSP0+3
         jmp $E462
+
+nm      .byte 47,46,37,0,52,33,51,43
 
 dli     pha
         txa
