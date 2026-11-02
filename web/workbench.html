@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ataricraft workbench: MIDI and SAP</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;background:#1e2128;color:#d8dce4;font:14px system-ui,sans-serif}
+  header{background:#14161a;padding:10px 16px;display:flex;gap:14px;align-items:baseline}
+  header b{color:#ff9d3a;font-size:17px;letter-spacing:1px}
+  nav{display:flex;gap:6px;padding:8px 16px;background:#181b21}
+  nav button,button.b{background:#2a2f39;color:#d8dce4;border:1px solid #3a4150;border-radius:5px;padding:5px 12px;font:inherit;cursor:pointer}
+  nav button.on{background:#ff9d3a;color:#111;border-color:#ff9d3a}
+  button.b:disabled{opacity:.4;cursor:default}
+  main{max-width:900px;margin:0 auto;padding:16px}
+  section{display:none}section.on{display:block}
+  .drop{border:2px dashed #4a5160;border-radius:8px;padding:22px;text-align:center;color:#8a93a3;margin-bottom:12px}
+  .drop.over{border-color:#ff9d3a;color:#ff9d3a}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  pre{background:#000;color:#9bd1ff;padding:10px;border-radius:6px;overflow:auto;font:12px Consolas,monospace;min-height:40px;white-space:pre-wrap}
+  pre.err{color:#ff7b7b}
+  table{border-collapse:collapse;width:100%}
+  td{padding:3px 4px}td.k{width:120px;color:#8a93a3;font-family:Consolas,monospace}
+  input[type=text]{background:#0d0f12;color:#e6e6e6;border:1px solid #3a4150;border-radius:4px;padding:4px 6px;font:13px Consolas,monospace;width:100%;box-sizing:border-box}
+  small{color:#8a93a3}
+</style>
+</head>
+<body>
+<header><b>ATARICRAFT WORKBENCH</b><small>Works offline. Nothing leaves this page.</small></header>
+<nav><button data-t="midi" class="on">MIDI to POKEY</button><button data-t="sap">SAP files</button></nav>
+<main>
+<section id="midi" class="on">
+  <div class="drop" id="dmidi">Drop a .mid file here, or <button class="b" id="pickmidi">choose one</button></div>
+  <div class="row">
+    <label><input type="checkbox" id="drums" checked> Drums on channel 10 as noise</label>
+    <label><input type="checkbox" id="pal"> PAL timing (50 Hz)</label>
+  </div>
+  <div class="row">
+    <button class="b" id="play" disabled>Play preview</button><button class="b" id="stop" disabled>Stop</button>
+    <button class="b" id="savepmd" disabled>Save .PMD</button>
+  </div>
+  <pre id="mout">Output goes here. The .PMD plays on the Atari with MIDIPLAY.COM from the tools disk.</pre>
+  <small>Preview is an approximation: four square-wave voices and filtered noise, not an exact POKEY. 4 voices, so dense MIDI files lose notes (counted above).</small>
+</section>
+<section id="sap">
+  <div class="drop" id="dsap">Drop a .sap file here, or <button class="b" id="picksap">choose one</button></div>
+  <table id="fields"></table>
+  <div class="row"><button class="b" id="addf" disabled>Add field</button><button class="b" id="savesap" disabled>Save .SAP</button></div>
+  <pre id="sout">Edit the header text fields (NAME, AUTHOR, DATE and others). The music data is copied byte for byte.</pre>
+  <small>This does not play SAP files yet: that needs a 6502 player running against emulated POKEYs.</small>
+</section>
+</main>
+<script src="js/pmd.js?v=1"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id), P = AC.Pmd;
+  document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => {
+    document.querySelectorAll('nav button,section').forEach((e) => e.classList.remove('on'));
+    b.classList.add('on'); $(b.dataset.t).classList.add('on');
+  }));
+  const save = (name, bytes) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes])); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+  const wire = (drop, pick, accept, handler) => {
+    const fi = document.createElement('input'); fi.type = 'file'; fi.accept = accept; fi.onchange = () => { if (fi.files[0]) handler(fi.files[0]); fi.value = ''; };
+    pick.onclick = () => fi.click();
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+    drop.ondragleave = () => drop.classList.remove('over');
+    drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]); };
+  };
+
+  // MIDI
+  let midi = null, result = null, ctx = null;
+  const stopAudio = () => { if (ctx) { ctx.close(); ctx = null; } $('stop').disabled = true; };
+  const convert = () => {
+    if (!midi) return; stopAudio();
+    try {
+      result = P.convert(midi.bytes, { pal: $('pal').checked, drums: $('drums').checked });
+      $('mout').className = '';
+      $('mout').textContent = `${midi.name}\n${result.seconds.toFixed(1)} s, ${result.notes} notes, ${result.dropped} stolen or dropped (4-voice limit)\n${result.records} records, ${result.pmd.length} bytes` + (result.tooBig ? '\nTOO BIG: MIDIPLAY takes at most 30720 bytes.' : '');
+      $('play').disabled = $('savepmd').disabled = false;
+    } catch (e) { result = null; $('mout').className = 'err'; $('mout').textContent = e.message; $('play').disabled = $('savepmd').disabled = true; }
+  };
+  wire($('dmidi'), $('pickmidi'), '.mid,.midi', async (f) => { midi = { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }; convert(); });
+  $('drums').onchange = $('pal').onchange = convert;
+  $('savepmd').onclick = () => save(midi.name.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase() + '.PMD', result.pmd);
+  $('stop').onclick = stopAudio;
+  $('play').onclick = () => {
+    stopAudio(); ctx = new AudioContext();
+    const ev = P.events(result.pmd, result.fps), t0 = ctx.currentTime + 0.1;
+    const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), nd = nbuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const voices = [0, 1, 2, 3].map(() => {
+      const osc = ctx.createOscillator(), g = ctx.createGain(), ns = ctx.createBufferSource(), ng = ctx.createGain();
+      osc.type = 'square'; osc.frequency.value = 440; g.gain.value = 0; ng.gain.value = 0; ns.buffer = nbuf; ns.loop = true;
+      osc.connect(g).connect(ctx.destination); ns.connect(ng).connect(ctx.destination); osc.start(); ns.start();
+      return { osc, g, ns, ng, f: 0, c: 0 };
+    });
+    const apply = (v, t) => {
+      const vol = (v.c & 15) / 15 * 0.12, noise = (v.c & 0xE0) === 0x80, hz = 63921 / (2 * (v.f + 1));
+      v.osc.frequency.setValueAtTime(Math.min(hz, 20000), t); v.ns.playbackRate.setValueAtTime(Math.min(Math.max(hz / 2000, 0.1), 8), t);
+      v.g.gain.setValueAtTime(noise ? 0 : vol, t); v.ng.gain.setValueAtTime(noise ? vol * 1.5 : 0, t);
+    };
+    for (const e of ev.list) { const v = voices[e.reg >> 1]; if (e.reg & 1) v.c = e.val; else v.f = e.val; apply(v, t0 + e.t); }
+    $('stop').disabled = false; const c = ctx; setTimeout(() => { if (ctx === c) stopAudio(); }, (ev.end + 0.5) * 1000);
+  };
+
+  // SAP
+  let sap = null, sname = '';
+  const render = () => {
+    const tb = $('fields'); tb.textContent = '';
+    sap.fields.forEach((f, i) => {
+      const tr = tb.insertRow(), k = tr.insertCell(), v = tr.insertCell(), x = tr.insertCell();
+      k.className = 'k'; const ki = document.createElement('input'); ki.type = 'text'; ki.value = f.key; ki.oninput = () => { f.key = ki.value.toUpperCase().replace(/\W/g, ''); }; k.append(ki);
+      const vi = document.createElement('input'); vi.type = 'text'; vi.value = f.value; vi.oninput = () => { f.value = vi.value; }; v.append(vi);
+      const d = document.createElement('button'); d.className = 'b'; d.textContent = 'x'; d.onclick = () => { sap.fields.splice(i, 1); render(); }; x.append(d);
+    });
+  };
+  wire($('dsap'), $('picksap'), '.sap', async (f) => {
+    try {
+      const s = P.parseSap(new Uint8Array(await f.arrayBuffer())); sap = { fields: s.fields, binary: s.binary }; sname = f.name; render();
+      $('sout').className = ''; $('sout').textContent = `${f.name}: ${s.binary.length} bytes of music data\n` + s.blocks.map((b) => `  $${b.start.toString(16).toUpperCase().padStart(4, '0')}-$${b.end.toString(16).toUpperCase().padStart(4, '0')}  ${b.len || '?'} bytes${b.truncated ? ' (truncated)' : ''}`).join('\n');
+      $('addf').disabled = $('savesap').disabled = false;
+    } catch (e) { $('sout').className = 'err'; $('sout').textContent = e.message; }
+  });
+  $('addf').onclick = () => { sap.fields.push({ key: 'NAME', value: '' }); render(); };
+  $('savesap').onclick = () => save(sname, P.buildSap(sap.fields, sap.binary));
+})();
+</script>
+</body>
+</html>
