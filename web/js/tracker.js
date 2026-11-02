@@ -25,7 +25,7 @@
     <small>(on the selected track, or the whole pattern if you click a header)</small></div>
   <div id="tkgrid" tabindex="0" style="overflow:auto;max-height:420px;background:#0d0f12;border:1px solid #3a4150;border-radius:6px;outline:none"></div>
   <small>Keys: Z S X D C V G B H N J M = low octave, Q 2 W 3 E R 5 T 6 Y 7 U = upper. Arrows move. Enter = note off. Backspace/Delete clears. On the volume column type 0-9 or A-F.</small>
-  <div class="row"><button class="b" id="tkjson">Save song JSON</button><button class="b" id="tkload">Load song JSON</button>
+  <div class="row"><button class="b" id="tkjson">Save song JSON</button><button class="b" id="tkload">Load song JSON</button><button class="b" id="tkmidi">Import MIDI</button>
     <button class="b" id="tksap">Export SAP</button><button class="b" id="tkxex">Export XEX</button></div>
   <pre id="tkout"></pre>`;
 
@@ -164,7 +164,17 @@
     };
     fi.click();
   });
-  const sapOf = () => AC.RmtSap.pack(comp.frames, comp.loop, song.stereo, { pal: song.pal, name: song.name });
+  bind('tkmidi', () => {
+    const fi = document.createElement('input'); fi.type = 'file'; fi.accept = '.mid,.midi';
+    fi.onchange = async () => {
+      try {
+        const r = T.fromMidi(new Uint8Array(await fi.files[0].arrayBuffer()), song); T.compile(r.song);
+        song = r.song; pi = 0; cur = { r: 0, t: 0, col: 0 }; sel = -1; refresh();
+        $$('tkout').textContent += `\nImported ${r.notes} notes (${r.dropped} dropped: no free track), ${r.rows} rows${r.truncated ? ', TRUNCATED to 64 patterns' : ''}. Speed ${song.speed} frames per row, change it to retime.`;
+      } catch (e) { err('Could not import: ' + e.message); }
+    };
+    fi.click();
+  });  const sapOf = () => AC.RmtSap.pack(comp.frames, comp.loop, song.stereo, { pal: song.pal, name: song.name });
   bind('tksap', () => { try { report(); dl(fname() + '.SAP', sapOf().sap, 'application/octet-stream'); } catch (e) { err(e.message); } });
   bind('tkxex', () => { try { report(); dl(fname() + '.XEX', AC.SapXex.build(AC.Pmd.parseSap(sapOf().sap), {}).xex, 'application/octet-stream'); } catch (e) { err(e.message); } });
 
