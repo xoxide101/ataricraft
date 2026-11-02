@@ -772,6 +772,7 @@ dd1     lda (src),y
         jsr hpos
         sta HPOSP0+2
         sta HPOSP0+3
+        jsr music
         jmp $E462
 
 nm      .byte 47,46,37,0,52,33,51,43
