@@ -86,6 +86,30 @@
     return { frames, loop: song.loop ? 0 : -1, warnings: [...warn], seconds: frames.length / (song.pal ? 50 : 60) };
   }
 
+  // Rebuilds an untrusted object into a valid song (clamping every field) or throws.
+  function sanitize(o) {
+    if (!o || typeof o !== 'object' || Array.isArray(o) || !Array.isArray(o.tracks) || !Array.isArray(o.patterns) || !o.patterns.length) throw new Error('Not a tracker song file');
+    const int = (v, lo, hi, d) => { v = Math.round(Number(v)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+    const stereo = o.tracks.length > 4, nt = stereo ? 8 : 4;
+    const sc = o.scale && SCALES[o.scale.name] ? o.scale.name : 'Minor pentatonic';
+    const song = { name: String(o.name == null ? 'Untitled' : o.name).slice(0, 40), pal: !!o.pal, speed: int(o.speed, 1, 32, 6), stereo, scale: { root: int(o.scale && o.scale.root, 0, 11, 0), name: sc }, tracks: [], patterns: [], order: [], loop: o.loop !== false };
+    for (let i = 0; i < nt; i++) {
+      const t = o.tracks[i] && typeof o.tracks[i] === 'object' ? o.tracks[i] : {};
+      song.tracks.push({ name: String(t.name == null ? 'T' + (i + 1) : t.name).slice(0, 8), wave: WAVES.includes(t.wave) ? t.wave : 'pure', vol: int(t.vol, 0, 15, 12), decay: int(t.decay, 0, 16, 0) });
+    }
+    for (const p of o.patterns.slice(0, 64)) {
+      const rows = int(p && p.rows, 1, 128, 16), pp = newPattern(rows, nt);
+      for (let t = 0; t < nt; t++) for (let r = 0; r < rows; r++) {
+        const c = p && Array.isArray(p.cells) && Array.isArray(p.cells[t]) ? p.cells[t][r] : null;
+        if (c && typeof c === 'object' && Number.isFinite(Number(c.n))) pp.cells[t][r] = { n: Number(c.n) === -1 ? -1 : int(c.n, 0, 127, 60), v: c.v == null ? null : int(c.v, 0, 15, 12) };
+      }
+      song.patterns.push(pp);
+    }
+    for (const x of Array.isArray(o.order) ? o.order.slice(0, 256) : []) { const n = Number(x); if (Number.isInteger(n) && n >= 0 && n < song.patterns.length) song.order.push(n); }
+    if (!song.order.length) song.order = [0];
+    return song;
+  }
+
   const inScale = (song, n) => SCALES[song.scale.name].includes(((n - song.scale.root) % 12 + 12) % 12);
   // Nearest scale note (ties go down).
   function snap(song, n) {
@@ -99,5 +123,5 @@
     return Math.max(0, Math.min(127, n));
   }
 
-  return { NOTE, SCALES, WAVES, noteName, newSong, newPattern, setStereo, resizePattern, pitch, compile, inScale, snap, degree, CLOCK };
+  return { NOTE, SCALES, WAVES, noteName, newSong, newPattern, setStereo, resizePattern, sanitize, pitch, compile, inScale, snap, degree, CLOCK };
 });
