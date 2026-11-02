@@ -4,7 +4,8 @@ const fs = require('fs'), path = require('path');
 const { assemble } = require('../../web/js/asm6502.js');
 
 // ---- tiles: 4 pixels wide x 8 tall, '.'=background a=COLPF0 b=COLPF1 c=COLPF2 (or COLPF3 when the map byte has bit 7)
-const SHEETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'assets.json'), 'utf8')).sheets;
+const ASSETS_PATH = path.join(__dirname, 'assets.json');
+const ASSETS = JSON.parse(fs.readFileSync(ASSETS_PATH, 'utf8')), SHEETS = ASSETS.sheets;
 const G = {};
 for (const [k, rows] of Object.entries(SHEETS.tiles.frames)) {
   const id = parseInt(k, 10);
@@ -66,6 +67,30 @@ const COLS = 256, ROWS = 23, rows = Array.from({ length: ROWS }, () => new Array
   rows[12][208] = 23;
 }
 
+// ---- the map in assets.json (hex, two digits per column; bit 7 = COLPF3 variant) replaces the generated one
+const toHex = (r) => r.map((v) => v.toString(16).padStart(2, '0')).join('');
+if (process.argv.includes('--dump-map')) {
+  ASSETS.map = { cols: COLS, note: 'rows 0-5 far, 6-11 mid, 12-22 near; two hex digits per column', rows: rows.map(toHex) };
+  fs.writeFileSync(ASSETS_PATH, JSON.stringify(ASSETS, null, 1)); console.log('map written to assets.json'); process.exit(0);
+}
+if (ASSETS.map) {
+  if (ASSETS.map.cols !== COLS || ASSETS.map.rows.length !== ROWS) throw new Error('map must be ' + COLS + ' columns by ' + ROWS + ' rows');
+  ASSETS.map.rows.forEach((h, r) => { if (h.length !== COLS * 2) throw new Error('map row ' + r + ' has the wrong length'); for (let c = 0; c < COLS; c++) rows[r][c] = parseInt(h.substr(c * 2, 2), 16); });
+}
+// puzzle positions come from the map: plates 21 and 22 (two tiles wide), door 20 (one column, rows top to bottom), LED 23
+const find = (id) => { const o = []; for (let r = 12; r < ROWS; r++) for (let c = 0; c < COLS; c++) if ((rows[r][c] & 127) === id) o.push([r, c]); return o; };
+const at = (r, c) => '$' + (0x4000 + r * 0x200 + c).toString(16).toUpperCase();
+const pA = find(21), pB = find(22), door = find(20), led = find(23);
+const lowest = (l) => l.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+if (!pA.length || !pB.length || !door.length) console.warn('warning: map needs tile 21 (plate A), 22 (plate B) and 20 (door) for the AND gate; using dummies');
+const dum = '', pa = lowest(pA)[0], pb = lowest(pB)[0], dc = lowest(door)[0];
+const PUZ = [
+  'PA0 = ' + (pa ? at(pa[0], pa[1]) : dum), 'PA1 = ' + (pa && pA.length > 1 ? at(pa[0], pa[1] + 1) : dum),
+  'PB0 = ' + (pb ? at(pb[0], pb[1]) : dum), 'PB1 = ' + (pb && pB.length > 1 ? at(pb[0], pb[1] + 1) : dum),
+  'LEDADR = ' + (led.length ? at(led[0][0], led[0][1]) : dum),
+  'DOORCOL = ' + (dc ? dc[1] : 255), 'DOORR0 = ' + (dc ? Math.min(...door.map((d) => d[0])) : 22), 'DOORR1 = ' + (dc ? Math.max(...door.map((d) => d[0])) + 1 : 23),
+].join('\n') + '\n';
+
 // ---- sprites (8 pixels wide): 'b' goes to the first player, 'w' to the second
 const mirror = (rs) => rs.map((r) => [...r].reverse().join(''));
 const HERO = SHEETS.hero.frames, DOG = SHEETS.dog.frames;
@@ -102,7 +127,7 @@ for (let r = 0; r < ROWS; r++) {
   const row = []; for (let c = 0; c < COLS + 44; c++) row.push(rows[r][c % COLS]);
   out.push('        org $' + (0x4000 + r * 0x200).toString(16).toUpperCase()); bytes(row);
 }
-const src = 'NAMEOFF = ' + NAMEOFF + '\n' + fs.readFileSync(path.join(__dirname, 'game.asm'), 'utf8') + '\n' + out.join('\n') + '\n        org $02E0\n        .word start\n';
+const src = 'NAMEOFF = ' + NAMEOFF + '\n' + PUZ + fs.readFileSync(path.join(__dirname, 'game.asm'), 'utf8') + '\n' + out.join('\n') + '\n        org $02E0\n        .word start\n';
 const r = assemble(src);
 const file = process.argv[2] || path.join(__dirname, '..', '..', 'out', 'circuit.xex');
 fs.writeFileSync(file, Buffer.from(r.xex));
