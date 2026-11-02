@@ -92,7 +92,7 @@ const PUZ = [
   'LEDADR = ' + (led.length ? at(led[0][0], led[0][1]) : dum),
   'DOORCL = ' + (dc ? dc[1] & 255 : 255), 'DOORCH = ' + (dc ? dc[1] >> 8 : 0), 'DOORR0 = ' + (dc ? Math.min(...door.map((d) => d[0])) : 22), 'DOORR1 = ' + (dc ? Math.max(...door.map((d) => d[0])) + 1 : 23),
   'HOLDA = ' + (hp ? at(hp[0], hp[1]) : dum), 'HOLDB = ' + (hp ? at(hp[0], hp[1] + 1) : dum),
-  'D2CL = ' + (d2 ? d2[1] & 255 : 255), 'D2CH = ' + (d2 ? d2[1] >> 8 : 0), 'D2X = ' + (d2 ? d2[1] * 4 : 0), 'D2R0 = ' + (d2 ? Math.min(...door2.map((d) => d[0])) : 22), 'D2R1 = ' + (d2 ? Math.max(...door2.map((d) => d[0])) + 1 : 23),
+  'HPX = ' + (hp ? hp[1] * 4 : 0), 'D2CL = ' + (d2 ? d2[1] & 255 : 255), 'D2CH = ' + (d2 ? d2[1] >> 8 : 0), 'D2X = ' + (d2 ? d2[1] * 4 : 0), 'D2R0 = ' + (d2 ? Math.min(...door2.map((d) => d[0])) : 22), 'D2R1 = ' + (d2 ? Math.max(...door2.map((d) => d[0])) + 1 : 23),
 ].join('\n') + '\n';
 
 // ---- sprites (8 pixels wide): 'b' goes to the first player, 'w' to the second

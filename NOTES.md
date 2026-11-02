@@ -166,3 +166,5 @@ WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack
 
 
 - Circuit Runner puzzle 2: hold plate (tile 44, cols 348-349) keeps door (tile 45, cols 360-361) open only while someone stands on it; it won't close on a character. Emulator-tested only.
+
+- Circuit Runner: puzzle logic runs inside the VBI; extra tile lookups there overran vertical blank and broke DLI palettes and the sky. The hold-plate check is now gated by a proximity test (chkplate). Keep new per-frame work in the VBI cheap.
