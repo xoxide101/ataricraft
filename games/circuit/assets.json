@@ -1,118 +1,385 @@
 {
-  "format": 1,
-  "note": "Edited by the Workbench Sprites tab. b = first player colour, w = second player colour, . = clear",
-  "sheets": {
-    "hero": {
-      "w": 8,
-      "h": 16,
-      "players": [
-        "$52",
-        "$76"
-      ],
-      "frames": {
-        "idle": [
-          "..bbbb..",
-          ".bbbbbb.",
-          ".bwbbwb.",
-          "..bbbb..",
-          "........",
-          ".bbbbbb.",
-          "b.bwwb.b",
-          "b.bwwb.b",
-          "b.bbbb.b",
-          "........",
-          "..bbbb..",
-          "..bbbb..",
-          "..b..b..",
-          "..b..b..",
-          "........",
-          ".bb..bb."
-        ],
-        "run1": [
-          "..bbbb..",
-          ".bbbbbb.",
-          ".bwbbwb.",
-          "..bbbb..",
-          "........",
-          ".bbbbbb.",
-          "..bwwb.b",
-          "b.bwwb.b",
-          "b.bbbb..",
-          "........",
-          "..bbbb..",
-          "..bbbb..",
-          "..b...b.",
-          ".b.....b",
-          "........",
-          ".bb...bb"
-        ],
-        "run2": [
-          "..bbbb..",
-          ".bbbbbb.",
-          ".bwbbwb.",
-          "..bbbb..",
-          "........",
-          ".bbbbbb.",
-          "b.bwwb..",
-          "b.bwwb.b",
-          "..bbbb.b",
-          "........",
-          "..bbbb..",
-          "..bbbb..",
-          "...bb...",
-          "...bb...",
-          "........",
-          "..bbbb.."
-        ],
-        "jump": [
-          "..bbbb..",
-          ".bbbbbb.",
-          ".bwbbwb.",
-          "..bbbb..",
-          "........",
-          "b.bbbb.b",
-          "b.bwwb.b",
-          "..bwwb..",
-          "..bbbb..",
-          "........",
-          "..bbbb..",
-          ".b....b.",
-          ".bb..bb.",
-          "........",
-          "........",
-          "........"
-        ]
-      }
+ "format": 1,
+ "note": "Edited by the Workbench Sprites tab. b = first player colour, w = second player colour, . = clear",
+ "sheets": {
+  "tiles": {
+   "kind": "tile",
+   "w": 4,
+   "h": 8,
+   "note": "a=COLPF0 b=COLPF1 c=COLPF2 (COLPF3 when the map byte has bit 7). . = background",
+   "bands": {
+    "far": {
+     "bk": "$00",
+     "pf": [
+      "$84",
+      "$96",
+      "$AC",
+      "$2E"
+     ]
     },
-    "dog": {
-      "w": 8,
-      "h": 8,
-      "players": [
-        "$3A",
-        "$FA"
-      ],
-      "frames": {
-        "a": [
-          ".w...b.b",
-          "ww..bbbb",
-          ".bbbbwbb",
-          "bbbbbbbb",
-          ".bbbbbb.",
-          ".bbbbbb.",
-          ".b.bb.b.",
-          ".b.bb.b."
-        ],
-        "b": [
-          ".w...b.b",
-          "ww..bbbb",
-          ".bbbbwbb",
-          "bbbbbbbb",
-          ".bbbbbb.",
-          ".bbbbbb.",
-          "b..bb..b",
-          "b..bb..b"
-        ]
-      }
+    "mid": {
+     "bk": "$02",
+     "pf": [
+      "$C2",
+      "$C6",
+      "$CC",
+      "$2E"
+     ]
+    },
+    "near": {
+     "bk": "$04",
+     "pf": [
+      "$52",
+      "$76",
+      "$3A",
+      "$FA"
+     ]
     }
+   },
+   "frames": {
+    "1 far skyline top": [
+     "..a.",
+     ".aaa",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab"
+    ],
+    "2 far skyline wall": [
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab"
+    ],
+    "3 far skyline window": [
+     "aaab",
+     "acab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "acab",
+     "aaab",
+     "aaab"
+    ],
+    "4 far skyline roof": [
+     "bbbb",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab",
+     "aaab"
+    ],
+    "5 mid trace horizontal": [
+     "....",
+     "....",
+     "....",
+     "cccc",
+     "bbbb",
+     "....",
+     "....",
+     "...."
+    ],
+    "6 mid trace vertical": [
+     ".bc.",
+     ".bc.",
+     ".bc.",
+     ".bc.",
+     ".bc.",
+     ".bc.",
+     ".bc.",
+     ".bc."
+    ],
+    "7 mid trace corner": [
+     "....",
+     "....",
+     "....",
+     ".ccc",
+     ".bbb",
+     ".bc.",
+     ".bc.",
+     ".bc."
+    ],
+    "8 mid via": [
+     "....",
+     ".cc.",
+     "cbbc",
+     "cbbc",
+     ".cc.",
+     "....",
+     "....",
+     "...."
+    ],
+    "9 mid chip top": [
+     "bbbb",
+     "bccb",
+     "bacb",
+     "bacb",
+     "bacb",
+     "bccb",
+     "bbbb",
+     "aaaa"
+    ],
+    "10 mid chip legs": [
+     "b.b.",
+     "b.b.",
+     "bbbb",
+     "bccb",
+     "bacb",
+     "bbbb",
+     "b.b.",
+     "b.b."
+    ],
+    "11 ground top": [
+     "cccc",
+     "bbbb",
+     "abab",
+     "aaaa",
+     "abab",
+     "aaaa",
+     "abab",
+     "aaaa"
+    ],
+    "12 ground fill": [
+     "abab",
+     "aaaa",
+     "baba",
+     "aaaa",
+     "abab",
+     "aaaa",
+     "baba",
+     "aaaa"
+    ],
+    "13 platform left": [
+     "cccc",
+     "cbbb",
+     "cbab",
+     "cbbb",
+     "aaaa",
+     "....",
+     "....",
+     "...."
+    ],
+    "14 platform middle": [
+     "cccc",
+     "bbbb",
+     "babb",
+     "bbbb",
+     "aaaa",
+     "....",
+     "....",
+     "...."
+    ],
+    "15 platform right": [
+     "cccc",
+     "bbbc",
+     "babc",
+     "bbbc",
+     "aaaa",
+     "....",
+     "....",
+     "...."
+    ],
+    "16 pillar top": [
+     "....",
+     "aaaa",
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba"
+    ],
+    "17 pillar body": [
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba"
+    ],
+    "18 pillar LED": [
+     "abba",
+     "abba",
+     "acba",
+     "abba",
+     "abba",
+     "abba",
+     "abba",
+     "abba"
+    ],
+    "19 heatsink block": [
+     "cccc",
+     "bbbb",
+     "cbbc",
+     "bbbb",
+     "cbbc",
+     "bbbb",
+     "cbbc",
+     "aaaa"
+    ],
+    "20 gate door": [
+     "cbcb",
+     "bcbc",
+     "cbcb",
+     "bcbc",
+     "cbcb",
+     "bcbc",
+     "cbcb",
+     "bcbc"
+    ],
+    "21 plate A": [
+     "....",
+     "....",
+     "....",
+     "....",
+     "....",
+     "....",
+     "cccc",
+     "bbbb"
+    ],
+    "22 plate B": [
+     "....",
+     "....",
+     "....",
+     "....",
+     "....",
+     ".cc.",
+     "cccc",
+     "bbbb"
+    ],
+    "23 gate LED": [
+     "....",
+     "....",
+     ".cc.",
+     "cbbc",
+     "cbbc",
+     ".cc.",
+     "....",
+     "...."
+    ]
+   }
+  },
+  "hero": {
+   "w": 8,
+   "h": 16,
+   "players": [
+    "$9A",
+    "$0E"
+   ],
+   "frames": {
+    "idle": [
+     "..bbbb..",
+     ".bbbbbb.",
+     ".bwbbwb.",
+     "..bbbb..",
+     "........",
+     ".bbbbbb.",
+     "b.bwwb.b",
+     "b.bwwb.b",
+     "b.bbbb.b",
+     "........",
+     "..bbbb..",
+     "..bbbb..",
+     "..b..b..",
+     "..b..b..",
+     "........",
+     ".bb..bb."
+    ],
+    "run1": [
+     "..bbbb..",
+     ".bbbbbb.",
+     ".bwbbwb.",
+     "..bbbb..",
+     "........",
+     ".bbbbbb.",
+     "..bwwb.b",
+     "b.bwwb.b",
+     "b.bbbb..",
+     "........",
+     "..bbbb..",
+     "..bbbb..",
+     "..b...b.",
+     ".b.....b",
+     "........",
+     ".bb...bb"
+    ],
+    "run2": [
+     "..bbbb..",
+     ".bbbbbb.",
+     ".bwbbwb.",
+     "..bbbb..",
+     "........",
+     ".bbbbbb.",
+     "b.bwwb..",
+     "b.bwwb.b",
+     "..bbbb.b",
+     "........",
+     "..bbbb..",
+     "..bbbb..",
+     "...bb...",
+     "...bb...",
+     "........",
+     "..bbbb.."
+    ],
+    "jump": [
+     "..bbbb..",
+     ".bbbbbb.",
+     ".bwbbwb.",
+     "..bbbb..",
+     "........",
+     "b.bbbb.b",
+     "b.bwwb.b",
+     "..bwwb..",
+     "..bbbb..",
+     "........",
+     "..bbbb..",
+     ".b....b.",
+     ".bb..bb.",
+     "........",
+     "........",
+     "........"
+    ]
+   }
+  },
+  "dog": {
+   "w": 8,
+   "h": 8,
+   "players": [
+    "$2A",
+    "$9C"
+   ],
+   "frames": {
+    "a": [
+     ".w...b.b",
+     "ww..bbbb",
+     ".bbbbwbb",
+     "bbbbbbbb",
+     ".bbbbbb.",
+     ".bbbbbb.",
+     ".b.bb.b.",
+     ".b.bb.b."
+    ],
+    "b": [
+     ".w...b.b",
+     "ww..bbbb",
+     ".bbbbwbb",
+     "bbbbbbbb",
+     ".bbbbbb.",
+     ".bbbbbb.",
+     "b..bb..b",
+     "b..bb..b"
+    ]
+   }
   }
+ }
 }

@@ -4,35 +4,15 @@ const fs = require('fs'), path = require('path');
 const { assemble } = require('../../web/js/asm6502.js');
 
 // ---- tiles: 4 pixels wide x 8 tall, '.'=background a=COLPF0 b=COLPF1 c=COLPF2 (or COLPF3 when the map byte has bit 7)
+const SHEETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'assets.json'), 'utf8')).sheets;
 const G = {};
-const T = (id, rows) => { if (rows.length !== 8 || rows.some((r) => r.length !== 4)) throw new Error('bad glyph ' + id); G[id] = rows; };
-// far skyline
-T(1, ['..a.', '.aaa', 'aaab', 'aaab', 'aaab', 'aaab', 'aaab', 'aaab']);
-T(2, Array(8).fill('aaab'));
-T(3, ['aaab', 'acab', 'aaab', 'aaab', 'aaab', 'acab', 'aaab', 'aaab']);
-T(4, ['bbbb', 'aaab', 'aaab', 'aaab', 'aaab', 'aaab', 'aaab', 'aaab']);
-// mid traces and chips
-T(5, ['....', '....', '....', 'cccc', 'bbbb', '....', '....', '....']);
-T(6, Array(8).fill('.bc.'));
-T(7, ['....', '....', '....', '.ccc', '.bbb', '.bc.', '.bc.', '.bc.']);
-T(8, ['....', '.cc.', 'cbbc', 'cbbc', '.cc.', '....', '....', '....']);
-T(9, ['bbbb', 'bccb', 'bacb', 'bacb', 'bacb', 'bccb', 'bbbb', 'aaaa']);
-T(10, ['b.b.', 'b.b.', 'bbbb', 'bccb', 'bacb', 'bbbb', 'b.b.', 'b.b.']);
-// near ground, platforms, pillars
-T(11, ['cccc', 'bbbb', 'abab', 'aaaa', 'abab', 'aaaa', 'abab', 'aaaa']);
-T(12, ['abab', 'aaaa', 'baba', 'aaaa', 'abab', 'aaaa', 'baba', 'aaaa']);
-T(13, ['cccc', 'cbbb', 'cbab', 'cbbb', 'aaaa', '....', '....', '....']);
-T(14, ['cccc', 'bbbb', 'babb', 'bbbb', 'aaaa', '....', '....', '....']);
-T(15, ['cccc', 'bbbc', 'babc', 'bbbc', 'aaaa', '....', '....', '....']);
-T(16, ['....', 'aaaa', 'abba', 'abba', 'abba', 'abba', 'abba', 'abba']);
-T(17, Array(8).fill('abba'));
-T(18, ['abba', 'abba', 'acba', 'abba', 'abba', 'abba', 'abba', 'abba']);
-// puzzle: heatsink block (19, solid), gate door (20, solid), plates A and B (21, 22), gate LED (23)
-T(19, ['cccc', 'bbbb', 'cbbc', 'bbbb', 'cbbc', 'bbbb', 'cbbc', 'aaaa']);
-T(20, ['cbcb', 'bcbc', 'cbcb', 'bcbc', 'cbcb', 'bcbc', 'cbcb', 'bcbc']);
-T(21, ['....', '....', '....', '....', '....', '....', 'cccc', 'bbbb']);
-T(22, ['....', '....', '....', '....', '....', '.cc.', 'cccc', 'bbbb']);
-T(23, ['....', '....', '.cc.', 'cbbc', 'cbbc', '.cc.', '....', '....']);
+for (const [k, rows] of Object.entries(SHEETS.tiles.frames)) {
+  const id = parseInt(k, 10);
+  if (!(id > 0 && id < 128)) throw new Error('tile name must start with an id from 1 to 127: ' + k);
+  if (rows.length !== 8 || rows.some((r) => r.length !== 4 || /[^.abc]/.test(r))) throw new Error('bad tile ' + k);
+  if (G[id]) throw new Error('duplicate tile id ' + id);
+  G[id] = rows;
+}
 const GT = 11, GF = 12, PL = 13, PM = 14, PR = 15, PT = 16, PB = 17, PLED = 18; // ground top, fill, platform L/M/R, pillar top/body/led
 
 const charset = new Uint8Array(1024);
@@ -45,7 +25,6 @@ for (const [id, rows] of Object.entries(G)) rows.forEach((r, y) => {
 let seed = 12345; const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF; return (seed >> 8) % n; };
 const COLS = 256, ROWS = 23, rows = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
 
-// far skyline (rows 0-5), period 64 columns
 {
   const h = []; let c = 0;
   while (c < 64) { const w = Math.min(64 - c, 3 + rnd(4)), ht = 1 + rnd(5); for (let i = 0; i < w; i++) h[c + i] = ht; c += w; }
@@ -89,8 +68,7 @@ const COLS = 256, ROWS = 23, rows = Array.from({ length: ROWS }, () => new Array
 
 // ---- sprites (8 pixels wide): 'b' goes to the first player, 'w' to the second
 const mirror = (rs) => rs.map((r) => [...r].reverse().join(''));
-const ASSETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'assets.json'), 'utf8')).sheets;
-const HERO = ASSETS.hero.frames, DOG = ASSETS.dog.frames;
+const HERO = SHEETS.hero.frames, DOG = SHEETS.dog.frames;
 const plane = (rs, ch) => rs.map((r) => [...r].reduce((v, c) => (v << 1) | (c === ch ? 1 : 0), 0));
 const heroFrames = ['idle', 'run1', 'run2', 'jump'].map((k) => HERO[k]);
 const heroAll = heroFrames.concat(heroFrames.map(mirror)), dogAll = [DOG.a, DOG.b, mirror(DOG.a), mirror(DOG.b)];
@@ -108,7 +86,12 @@ out.push('        org $3000', 'hp0');
 bytes(flat(heroAll, 'b')); out.push('hp1'); bytes(flat(heroAll, 'w'));
 out.push('dp2'); bytes(flat(dogAll, 'b')); out.push('dp3'); bytes(flat(dogAll, 'w'));
 // palettes per band: mid, near, status line
-out.push('cbk', '        .byte $02,$04,$00', 'cp0', '        .byte $C2,$52,$00', 'cp1', '        .byte $C6,$76,$0E', 'cp2', '        .byte $CC,$3A,$82', 'cp3', '        .byte $2E,$FA,$00');
+const hx = (v) => '$' + (parseInt(String(v).replace('$', ''), 16) & 255).toString(16).toUpperCase().padStart(2, '0');
+const bd = SHEETS.tiles.bands, st = ['$00', '$0E', '$00', '$00', '$00'];
+out.push('cbk', '        .byte ' + [bd.mid.bk, bd.near.bk, '$00'].map(hx));
+for (let i = 0; i < 4; i++) out.push('cp' + i, '        .byte ' + [bd.mid.pf[i], bd.near.pf[i], '$00'].map(hx));
+out.push('farpal', '        .byte ' + [bd.far.pf[0], bd.far.pf[1], bd.far.pf[2], bd.far.pf[3], bd.far.bk].map(hx));
+out.push('plpal', '        .byte ' + [SHEETS.hero.players[0], SHEETS.hero.players[1], SHEETS.dog.players[0], SHEETS.dog.players[1]].map(hx));
 out.push('        org $3800'); bytes([...charset]);
 const dlb = [0x70, 0x70, 0x70];
 for (let r = 0; r < ROWS; r++) dlb.push((r === 5 || r === 11 || r === 22) ? 0xD4 : 0x54, 0, 0x40 + 2 * r);
