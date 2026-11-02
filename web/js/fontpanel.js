@@ -10,7 +10,10 @@
     if (win) { win.style.display = 'flex'; return; }
     const host = AC.BasicHost || {};
     const font = new Uint8Array(1024); let cur = 33, inv = false;
-    try { const s = localStorage.getItem('ac.font'); if (s) font.set(JSON.parse(s)); } catch (e) { /* ignore */ }
+    let saved = false;
+    try { const s = localStorage.getItem('ac.font'); if (s) { font.set(JSON.parse(s)); saved = true; } } catch (e) { /* ignore */ }
+    const rf = !saved && host.romFont && host.romFont();
+    if (rf) font.set(rf);
     const save = () => localStorage.setItem('ac.font', JSON.stringify(Array.from(font)));
     win = el('div', 'position:fixed;z-index:9000;right:24px;top:24px;width:min(94vw,760px);height:min(90vh,640px);background:#1e2128;color:#d8dce4;border:1px solid #4a5160;border-radius:10px;box-shadow:0 8px 30px #000a;display:flex;flex-direction:column;font:13px system-ui,sans-serif;overflow:auto');
     const bar = el('div', 'display:flex;gap:6px;align-items:center;padding:6px 8px;background:#14161a;cursor:move;flex-wrap:wrap');
@@ -63,7 +66,9 @@
     fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const b = new Uint8Array(await f.arrayBuffer()); if (b.length < 1024) say('That file is too short for a character set (need 1024 bytes).'); else { font.set(b.subarray(0, 1024)); say(`Loaded ${f.name} (${b.length} bytes${b.length > 1024 ? ', only the first 1024 used' : ''}).`); draw(); } fi.value = ''; };
 
     const fromRom = () => {
-      const emu = host.emu && host.emu(); if (!emu) { say('The Atari is not running, so there is no ROM character set to read. Boot it first.'); return; }
+      const rom = host.romFont && host.romFont();
+      if (rom) { font.set(rom); say('Loaded the standard Atari character set from your OS ROM file.'); draw(); return; }
+      const emu = host.emu && host.emu(); if (!emu) { say('No OS ROM is loaded and the Atari is not running, so there is no ROM character set to read. Load a ROM or boot first.'); return; }
       const b = emu.peek(0xE000, 1024); font.set(b); say('Copied the ROM character set from $E000 (check it looks right; it is blank if the OS ROM is not mapped).'); draw();
     };
     const install = () => {
@@ -92,6 +97,7 @@
     window.addEventListener('mousemove', (e) => { if (drag) { win.style.left = e.clientX - dx + 'px'; win.style.top = e.clientY - dy + 'px'; win.style.right = 'auto'; } });
     window.addEventListener('mouseup', () => { drag = false; });
     document.body.append(win); draw();
+    if (rf) say('Started from the standard Atari character set in your OS ROM. Changes are kept in this browser.');
   }
   AC.FontPanel = { open };
 })();
