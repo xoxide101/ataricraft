@@ -2169,7 +2169,7 @@
       document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
       localStorage.setItem('ac.sidetab', t);
     };
-    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : show(b.dataset.t)); });
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : show(b.dataset.t)); });
     const t0 = localStorage.getItem('ac.sidetab');
     show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
   }
@@ -3612,6 +3612,7 @@
   const fsBytes = (n) => { const b = S.emu && S.emu.readDisk(n); return b || (S.disks[n] && S.disks[n].bytes) || null; };
   const saveBlob = (name, parts, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(parts, { type: type || 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
   const crcNum = (b) => parseInt(crc32(b), 16);
+  AC.BasicHost = { emu: () => (S.emu && !S.off ? S.emu : null) };
   AC.WebAfmHost = {
     disk: (n) => { const d = S.disks[n]; if (!d) return null; return { name: d.name, bytes: (S.emu && S.emu.readDisk(n)) || d.bytes }; },
     commit: (n, bytes) => { const d = S.disks[n]; if (!d) return; if (S.emu) S.emu.mountDisk(n, d.name, bytes);     S.disks[n] = { name: d.name, bytes, orig: d.orig || d.bytes, rev: (d.rev || 0) + 1 }; S.dirty[n] = true; },
