@@ -1,35 +1,35 @@
 // Workbench map editor for games/circuit/assets.json. Shares the loaded file with the Sprites tab (AC.SpriteEd).
-// map.rows: 23 hex strings of 256 columns (2 digits each, bit 7 = COLPF3 variant); rows 0-5 far, 6-11 mid, 12-22 near.
+// map.rows: 25 hex strings of 512 columns (2 digits each, bit 7 = COLPF3 variant); rows 0-5 far, 6-11 mid, 12-22 near, 23-24 sky.
 (function () {
   const AC = (window.AC = window.AC || {});
   const root = document.getElementById('maped');
   if (!root) return;
-  const COLS = 256, CW = 16, CH = 16, BANDS = { far: [0, 6], mid: [6, 12], near: [12, 23] };
+  const COLS = 512, CW = 16, CH = 16, BANDS = { far: [0, 6], mid: [6, 12], near: [12, 23], sky: [23, 25] };
   const pal = AC.buildPalette('ntsc', {});
   const rgb = (v) => { const c = pal[parseInt(String(v).replace('$', ''), 16) & 254]; return [c & 255, (c >> 8) & 255, (c >> 16) & 255]; };
   const $ = (id) => document.getElementById(id);
 
   root.innerHTML = '<div class="row"><small>Load assets.json in the Sprites tab first (the map and tiles live in the same file).</small></div>' +
-    '<div class="row"><label>Layer <select id="mpband"><option value="near">near (rows 12-22)</option><option value="mid">mid (rows 6-11)</option><option value="far">far (rows 0-5)</option></select></label>' +
+    '<div class="row"><label>Layer <select id="mpband"><option value="near">near (rows 12-22)</option><option value="mid">mid (rows 6-11)</option><option value="far">far (rows 0-5)</option><option value="sky">sky (rows 23-24, slowest)</option></select></label>' +
     '<label>Tool <select id="mptool"><option value="paint">Paint</option><option value="rect">Rectangle</option><option value="pick">Pick tile</option></select></label>' +
     '<label><input type="checkbox" id="mpp3"> PF3 colour variant</label><button class="b" id="mpundo">Undo</button>' +
     '<button class="b" id="mpsave">Download assets.json</button></div>' +
     '<div class="row"><canvas id="mppal" style="border:1px solid #3a4150;cursor:pointer"></canvas><small id="mpinfo"></small></div>' +
     '<div style="overflow-x:auto;max-width:100%;border:1px solid #3a4150"><canvas id="mpcv" style="display:block;cursor:crosshair;touch-action:none"></canvas></div>' +
-    '<div class="row"><small>Left button paints, right button erases. Rectangle: drag. The layers scroll at 1/4 (far), 1/2 (mid) and full speed (near).</small></div>' +
-    '<div class="row"><label>Preview camera <input type="range" id="mpcam" min="0" max="1020" step="4" value="0" style="width:420px"></label><small id="mpcamv"></small></div>' +
+    '<div class="row"><small>Left button paints, right button erases. Rectangle: drag. The layers scroll at 1/32 (sky), 1/4 (far), 1/2 (mid) and full speed (near). Sky repeats every 64 columns.</small></div>' +
+    '<div class="row"><label>Preview camera <input type="range" id="mpcam" min="0" max="2044" step="4" value="0" style="width:420px"></label><small id="mpcamv"></small></div>' +
     '<canvas id="mppv" style="background:#000;border:1px solid #3a4150;max-width:100%"></canvas>' +
     '<pre id="mpout">Tiles 21 and 22 are the two AND-gate plates (two tiles wide), 20 is the door column, 23 its LED. The build finds them in the map, so they can go anywhere in the near layer.</pre>';
 
   let rows = null, lastData = null, band = 'near', cur = 11, undo = [], drag = null, cache = new Map();
   const data = () => (AC.SpriteEd && AC.SpriteEd.get && AC.SpriteEd.get()) || null;
-  const bandOf = (r) => (r < 6 ? 'far' : r < 12 ? 'mid' : 'near');
+  const bandOf = (r) => (r < 6 ? 'far' : r < 12 ? 'mid' : r < 23 ? 'near' : 'sky');
   const say = (m, err) => { $('mpout').textContent = m; $('mpout').className = err ? 'err' : ''; };
 
   function sync() {
     const d = data();
     if (!d || !d.sheets || !d.sheets.tiles) { rows = null; return false; }
-    if (!d.map) { d.map = { cols: COLS, note: 'rows 0-5 far, 6-11 mid, 12-22 near; two hex digits per column', rows: Array.from({ length: 23 }, () => '00'.repeat(COLS)) }; }
+    if (!d.map) { d.map = { cols: COLS, note: AC.CircuitMap.noteText, rows: Array.from({ length: 25 }, () => '00'.repeat(COLS)) }; }
     if (d !== lastData) {
       lastData = d; undo = [];
       rows = d.map.rows.map((h) => Uint8Array.from({ length: COLS }, (_, c) => parseInt(h.substr(c * 2, 2), 16)));
@@ -78,13 +78,13 @@
   }
   function preview() {
     const cam = +$('mpcam').value, pv = $('mppv'), g = pv.getContext('2d');
-    pv.width = 40 * CW; pv.height = 23 * CH; g.imageSmoothingEnabled = false;
-    const off = { far: cam >> 4, mid: (cam >> 1) >> 2, near: cam >> 2 };
-    for (let r = 0; r < 23; r++) {
-      const b = bandOf(r); g.fillStyle = 'rgb(' + rgb(lastData.sheets.tiles.bands[b].bk) + ')'; g.fillRect(0, r * CH, pv.width, CH);
-      for (let c = 0; c < 40; c++) put(g, rows[r][(c + off[b]) % COLS], c * CW, r * CH, b);
+    pv.width = 40 * CW; pv.height = 25 * CH; g.imageSmoothingEnabled = false;
+    const off = { sky: cam >> 5, far: cam >> 4, mid: (cam >> 1) >> 2, near: cam >> 2 };
+    for (let r = 0; r < 25; r++) {
+      const b = bandOf(r), y = (r >= 23 ? r - 23 : r + 2) * CH; g.fillStyle = 'rgb(' + rgb(lastData.sheets.tiles.bands[b].bk) + ')'; g.fillRect(0, y, pv.width, CH);
+      for (let c = 0; c < 40; c++) put(g, rows[r][(c + off[b]) % (b === 'sky' ? 64 : COLS)], c * CW, y, b);
     }
-    $('mpcamv').textContent = 'camera ' + cam + ' px (far col ' + off.far + ', mid col ' + off.mid + ', near col ' + off.near + ')';
+    $('mpcamv').textContent = 'camera ' + cam + ' px (sky col ' + off.sky + ', far col ' + off.far + ', mid col ' + off.mid + ', near col ' + off.near + ')';
   }
   function refresh() { cache.clear(); if (!sync()) return; draw(); }
 
