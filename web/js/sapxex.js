@@ -25,6 +25,8 @@
       if (fast > 0 && fast <= 255 && frame % fast === 0) calls = frame / fast;
       else warnings.push(`FASTPLAY ${fast} does not divide the frame evenly; PLAYER is called once per frame, so the tempo will be wrong.`);
     }
+    const stereo = sap.fields.some((f) => f.key === 'STEREO');
+    if (stereo) warnings.push('Stereo (SAPX2) file: turn Stereo on in Ataricraft before booting it, so the second POKEY at $D210 is heard.');
     if (sap.fields.some((f) => f.key === 'COVOX')) warnings.push('COVOX is not played.');
     warnings.push(`The file expects ${ntsc ? 'NTSC' : 'PAL'}; the emulator should be set to the same.`);
 
@@ -49,7 +51,7 @@
     const out = [0xFF, 0xFF], seg = (a, d) => { out.push(a & 255, a >> 8, (a + d.length - 1) & 255, (a + d.length - 1) >> 8); for (const x of d) out.push(x); };
     for (const b of sap.blocks) seg(b.start, b.data);
     seg(S, code); seg(0x2E0, [S & 255, S >> 8]);
-    return { xex: new Uint8Array(out), stub: S, warnings, type, song };
+    return { xex: new Uint8Array(out), stub: S, warnings, type, song, stereo };
   }
   return { build };
 });

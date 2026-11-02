@@ -14,6 +14,8 @@ r = X.build(sap('FASTPLAY 156\r\n'));
 assert.strictEqual(r.warnings.filter((w) => /FASTPLAY/.test(w)).length, 0);
 assert.strictEqual(Buffer.from(r.xex).indexOf(Buffer.from([0xA2, 156, 0x8D, 0x0A, 0xD4, 0xCA, 0xD0, 0xFA])) > 0, true, 'two calls per frame');
 assert(X.build(sap('FASTPLAY 100\r\n')).warnings.some((w) => /FASTPLAY/.test(w)));
+r = X.build(sap('STEREO\r\n'));
+assert(r.stereo && r.warnings.some((w) => /Stereo/.test(w)), 'stereo flagged');
 assert.throws(() => X.build(sap('SONGS 2\r\n'), { song: 5 }), /does not exist/);
 assert.throws(() => X.build(P.parseSap(Uint8Array.from([...Buffer.from('SAP\r\nTYPE D\r\nINIT 0600\r\n'), ...body]))), /not supported/);
 console.log('sapxex: all ok');
