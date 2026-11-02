@@ -33,6 +33,8 @@
   <div class="drop" id="dmidi">Drop a .mid file here, or <button class="b" id="pickmidi">choose one</button></div>
   <div class="row">
     <label><input type="checkbox" id="drums" checked> Drums on channel 10 as noise</label>
+    <label><input type="checkbox" id="smart"> Smart voices (melody+bass priority, chord arpeggio, low-note poly4)</label>
+    <label><input type="checkbox" id="decay"> Decay</label>
     <label><input type="checkbox" id="pal"> PAL timing (50 Hz)</label>
   </div>
   <div class="row">
@@ -73,14 +75,14 @@
   const convert = () => {
     if (!midi) return; stopAudio();
     try {
-      result = P.convert(midi.bytes, { pal: $('pal').checked, drums: $('drums').checked });
+      result = P.convert(midi.bytes, { pal: $('pal').checked, drums: $('drums').checked, smart: $('smart').checked, decay: $('decay').checked });
       $('mout').className = '';
       $('mout').textContent = `${midi.name}\n${result.seconds.toFixed(1)} s, ${result.notes} notes, ${result.dropped} stolen or dropped (4-voice limit)\n${result.records} records, ${result.pmd.length} bytes` + (result.tooBig ? '\nTOO BIG: MIDIPLAY takes at most 30720 bytes.' : '');
       $('play').disabled = $('savepmd').disabled = false;
     } catch (e) { result = null; $('mout').className = 'err'; $('mout').textContent = e.message; $('play').disabled = $('savepmd').disabled = true; }
   };
   wire($('dmidi'), $('pickmidi'), '.mid,.midi', async (f) => { midi = { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }; convert(); });
-  $('drums').onchange = $('pal').onchange = convert;
+  $('drums').onchange = $('pal').onchange = $('smart').onchange = $('decay').onchange = convert;
   $('savepmd').onclick = () => save(midi.name.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase() + '.PMD', result.pmd);
   $('stop').onclick = stopAudio;
   $('play').onclick = () => {

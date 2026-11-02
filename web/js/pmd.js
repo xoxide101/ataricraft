@@ -12,7 +12,7 @@
     if (ascii(b, 0, 4) !== 'MThd') throw new Error('not a MIDI file');
     const ntr = u16(b, 10), div = u16(b, 12);
     if (div & 0x8000) throw new Error('SMPTE time division is not supported');
-    const ev = [], tempos = [{ tick: 0, us: 500000 }];
+    const ev = [], ctl = [], tempos = [{ tick: 0, us: 500000 }];
     let p = 14;
     for (let t = 0; t < ntr && p < b.length; t++) {
       if (ascii(b, p, p + 4) !== 'MTrk') break;
@@ -28,6 +28,7 @@
         const kind = s & 0xF0, ch = s & 15;
         if (kind === 0xC0 || kind === 0xD0) { p++; continue; }
         const d1 = b[p++], d2 = b[p++];
+        if (kind === 0xB0) { ctl.push({ tick, ch, cc: d1, val: d2 }); continue; }
         if (kind === 0x90 && d2 > 0) ev.push({ tick, on: true, ch, n: d1, vel: d2 });
         else if (kind === 0x80 || kind === 0x90) ev.push({ tick, on: false, ch, n: d1 });
       }
@@ -41,6 +42,8 @@
     };
     ev.forEach((e) => (e.f = Math.round(toSec(e.tick) * FPS)));
     ev.sort((x, y) => x.f - y.f || (x.on ? 1 : 0) - (y.on ? 1 : 0));
+    ctl.forEach((e) => (e.f = Math.round(toSec(e.tick) * FPS)));
+    ctl.sort((x, y) => x.f - y.f);
 
     const audf = (note) => {
       let n = note;
@@ -62,7 +65,63 @@
     };
     const frames = ev.length ? ev[ev.length - 1].f : 0;
     let i = 0, notes = 0, dropped = 0;
-    for (let f = 0; f <= frames + 1; f++) {
+    const finish = (notes, dropped, extra) => {
+      for (let k = 0; k < 4; k++) { curF = frames + 2; put(k * 2 + 1, 0); }
+      recs.push([0, 0xFF, 0]);
+      const pmd = new Uint8Array(4 + recs.length * 3);
+      pmd.set([0x50, 0x4D, 0x44, 1]);
+      recs.forEach((r, k) => pmd.set(r, 4 + k * 3));
+      return Object.assign({ pmd, records: recs.length, seconds: frames / FPS, notes, dropped, fps: FPS, tooBig: pmd.length > 30720 }, extra);
+    };
+    if (o.smart) {
+      // Priority allocation: keep the highest and lowest notes on their own voices, share the rest by arpeggio on the last free voice.
+      // Notes below about B2 use the 4-bit poly distortion ($C0) instead of being moved up octaves.
+      const pitch = (note) => {
+        if (note >= 47) { let n = note; while (n > 108) n -= 12; return { f: audf(n), c: 0xA0 }; }
+        let n = note; for (;;) { const hz = 440 * Math.pow(2, (n - 69) / 12), d = Math.round(63921 / (15 * hz)) - 1; if (d <= 255 || n > 108) return { f: Math.max(0, Math.min(255, d)), c: 0xC0 }; n += 12; }
+      };
+      const chVol = new Array(16).fill(100 / 127), expr = new Array(16).fill(1), active = new Map(), owner = [null, null, null, null], hits = [], sharedSet = new Set();
+      let ci = 0, notes2 = 0, drumVoice = false;
+      for (let f = 0; f <= frames + 1; f++) {
+        curF = f;
+        while (ci < ctl.length && ctl[ci].f <= f) { const c = ctl[ci++]; if (c.cc === 7) chVol[c.ch] = c.val / 127; else if (c.cc === 11) expr[c.ch] = c.val / 127; else if (c.cc === 123 || c.cc === 120) { for (const k of [...active.keys()]) if (((k / 128) | 0) === c.ch) active.delete(k); } }
+        while (i < ev.length && ev[i].f <= f) {
+          const e = ev[i++];
+          if (e.ch === 9) { if (drums && e.on) { hits.push({ until: f + 3, n: e.n, vel: e.vel }); notes2++; } continue; }
+          const key = e.ch * 128 + e.n;
+          if (e.on) { active.set(key, { ch: e.ch, n: e.n, vel: e.vel, start: f }); notes2++; } else active.delete(key);
+        }
+        while (hits.length && hits[0].until <= f) hits.shift();
+        const drum = hits.length ? hits[hits.length - 1] : null, cap = drum ? 3 : 4;
+        if (drum) {
+          if (owner[3] !== 'drum') { owner[3] = 'drum'; put(7, 0); }
+          put(6, drumF(drum.n)); put(7, 0x80 | Math.max(4, Math.round(drum.vel / 127 * 15)));
+          drumVoice = true;
+        } else if (drumVoice) { drumVoice = false; owner[3] = null; put(7, 0); }
+        const list = [...active.entries()].map(([key, a]) => ({ key, a })).sort((x, y) => y.a.n - x.a.n || x.a.start - y.a.start);
+        let sel = list, arp = null;
+        if (list.length > cap) {
+          const direct = [list[0], list[list.length - 1]];
+          for (let q = 1; q < list.length - 1 && direct.length < cap - 1; q++) direct.push(list[q]);
+          const pool = list.filter((x) => !direct.includes(x));
+          pool.forEach((x) => sharedSet.add(x.key));
+          sel = direct; arp = pool[f % pool.length];
+        }
+        const want = new Map(); sel.forEach((x) => want.set(x.key, x));
+        for (let v = 0; v < cap; v++) if (owner[v] !== null && owner[v] !== 'arp' && !want.has(owner[v])) { put(v * 2 + 1, 0); owner[v] = null; }
+        if (!arp) for (let v = 0; v < cap; v++) if (owner[v] === 'arp') { put(v * 2 + 1, 0); owner[v] = null; }
+        const free = () => { for (let v = 0; v < cap; v++) if (owner[v] === null) return v; return -1; };
+        const play = (v, x) => {
+          const pt = pitch(x.a.n); let vol = Math.round(x.a.vel / 127 * 15 * chVol[x.a.ch] * expr[x.a.ch] * 1.15);
+          if (o.decay) vol -= Math.floor((f - x.a.start) / 6);
+          vol = Math.max(o.decay ? 2 : 1, Math.min(15, vol));
+          put(v * 2, pt.f); put(v * 2 + 1, pt.c | vol);
+        };
+        for (const x of sel) { let v = owner.indexOf(x.key); if (v < 0 || v >= cap) { v = free(); if (v < 0) continue; owner[v] = x.key; } play(v, x); }
+        if (arp) { let v = owner.indexOf('arp'); if (v < 0) { v = free(); if (v >= 0) owner[v] = 'arp'; } if (v >= 0) play(v, arp); }
+      }
+      return finish(notes2, 0, { shared: sharedSet.size, smart: true });
+    }    for (let f = 0; f <= frames + 1; f++) {
       curF = f;
       for (const v of voices) if (v.until && v.until <= f) { put(v.i * 2 + 1, 0); v.ch = -1; v.until = 0; }
       while (i < ev.length && ev[i].f <= f) {
