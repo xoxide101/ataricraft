@@ -32,6 +32,10 @@
     <button class="b" id="pmup">Shift up</button><button class="b" id="pmdn">Shift down</button><button class="b" id="pmcopy">Copy to next</button></div>
   <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap"><div style="overflow:auto;max-height:520px;border:1px solid #3a4150"><canvas id="pmcv" style="cursor:crosshair"></canvas></div>
     <div><canvas id="pmpv" width="360" height="300" style="background:#000;border:1px solid #3a4150"></canvas><br><small>Preview: pixels are colour clocks. Left click paints, right click erases.</small></div></div>
+  <div class="row"><b>Game sprites</b><label>Sheet <select id="pgs"></select></label><label>Frame <select id="pgf"></select></label>
+    <label>Players <select id="pgp"><option value="0">P0 + P1</option><option value="2">P2 + P3</option></select></label>
+    <button class="b" id="pgload">Load frame from game</button><button class="b" id="pgsend">Send to game frame</button>
+    <small>First player = b pixels, second = w pixels (the Sprites tab format). After sending, save from the Sprites tab and rebuild.</small></div>
   <div class="row"><button class="b" id="pmsave">Save JSON</button><button class="b" id="pmasm">Export asm data</button></div><pre id="pmout"></pre>`;
 
   const ids = ['p0', 'p1', 'p2', 'p3', 'm0', 'm1', 'm2', 'm3'];
@@ -100,6 +104,45 @@
   $('pmcol').onchange = () => { const v = parseInt($('pmcol').value.replace('$', ''), 16); if (Number.isFinite(v) && v >= 0 && v < 256) d.colors[isP() || d.missiles === 'player' ? idx() : 3] = v; fillUi(); };
   $('pmsize').onchange = () => { (isP() ? d.size : d.msize)[idx()] = +$('pmsize').value; fillUi(); };
   $('pmx').onchange = () => { d.x[slot()] = Math.max(0, Math.min(255, Math.round(+$('pmx').value) || 0)); fillUi(); };
+
+  // bridge to the game's sprite sheets (AC.SpriteEd)
+  const sheets = () => { const g = AC.SpriteEd && AC.SpriteEd.get(); return g && g.sheets ? Object.entries(g.sheets).filter(([, s]) => s.kind !== 'tile') : []; };
+  function gameFill() {
+    const list = sheets(), keep = [$('pgs').value, $('pgf').value];
+    $('pgs').innerHTML = list.map(([k]) => `<option>${k}</option>`).join(''); if (list.some(([k]) => k === keep[0])) $('pgs').value = keep[0];
+    const sh = list.find(([k]) => k === $('pgs').value); $('pgf').innerHTML = sh ? Object.keys(sh[1].frames).map((k) => `<option>${k}</option>`).join('') : '';
+    if (keep[1] && sh && sh[1].frames[keep[1]]) $('pgf').value = keep[1];
+  }
+  $('pgs').onchange = gameFill;
+  document.querySelector('nav button[data-t=pmg]').addEventListener('click', gameFill);
+  function setHeight(h) {
+    for (const [a, w] of [[d.players, 8], [d.miss, 2]]) for (let i = 0; i < 4; i++) { while (a[i].length < h) a[i].push('.'.repeat(w)); a[i].length = h; }
+    d.height = h;
+  }
+  const hexc = (n) => '$' + n.toString(16).toUpperCase().padStart(2, '0');
+  $('pgload').onclick = () => {
+    const sh = (sheets().find(([k]) => k === $('pgs').value) || [])[1]; if (!sh) return say('Load an assets.json in the Sprites tab first.', 1);
+    const rows = sh.frames[$('pgf').value], a = +$('pgp').value;
+    if (!rows || sh.w !== 8 || sh.h > 128) return say('Only 8 pixel wide sheets up to 128 tall can be loaded as players.', 1);
+    snap(); setHeight(sh.h);
+    d.players[a] = rows.map((r) => r.replace(/[^b]/g, '.').replace(/b/g, '#')); d.players[a + 1] = rows.map((r) => r.replace(/[^w]/g, '.').replace(/w/g, '#'));
+    const c = sh.players.map((v) => parseInt(String(v).replace('$', ''), 16)); if (c.every(Number.isFinite)) { d.colors[a] = c[0]; d.colors[a + 1] = c[1]; }
+    sel = 'p' + a; fillUi(); say(`Loaded ${$('pgs').value}/${$('pgf').value} into P${a} and P${a + 1}.`);
+  };
+  $('pgsend').onclick = () => {
+    const g = AC.SpriteEd && AC.SpriteEd.get(), sh = g && g.sheets[$('pgs').value]; if (!sh) return say('Load an assets.json in the Sprites tab first.', 1);
+    const a = +$('pgp').value; if (sh.w !== 8) return say('The game sheet must be 8 pixels wide.', 1);
+    const rows = [], notes = []; let both = 0;
+    for (let r = 0; r < sh.h; r++) {
+      let s = ''; for (let c = 0; c < 8; c++) { const p0 = d.players[a][r] && d.players[a][r][c] === '#', p1 = d.players[a + 1][r] && d.players[a + 1][r][c] === '#'; if (p0 && p1) both++; s += p1 ? 'w' : p0 ? 'b' : '.'; }
+      rows.push(s);
+    }
+    if (d.height !== sh.h) notes.push(`PMG height ${d.height} vs sheet height ${sh.h}: ${d.height > sh.h ? 'bottom rows cut' : 'padded with empty rows'}`);
+    if (both) notes.push(`${both} pixels set in both players, kept as the second colour`);
+    g.sheets[$('pgs').value].frames[$('pgf').value] = rows; sh.players = [hexc(d.colors[a]), hexc(d.colors[a + 1])];
+    try { AC.SpriteEd.load(g); } catch (e) { return say('Sprites tab rejected it: ' + e.message, 1); }
+    gameFill(); say(`Sent to ${$('pgs').value}/${$('pgf').value}.${notes.length ? '\n' + notes.join('\n') : ''}\nIn the Sprites tab, use Save then replace games/circuit/assets.json.`);
+  };
 
   const bits = (s) => parseInt(s.replace(/#/g, '1').replace(/\./g, '0'), 2);
   const byteRows = (a, h) => Array.from({ length: h }, (_, r) => bits(a[r]));
