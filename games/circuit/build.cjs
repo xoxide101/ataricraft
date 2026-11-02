@@ -27,6 +27,12 @@ T(15, ['cccc', 'bbbc', 'babc', 'bbbc', 'aaaa', '....', '....', '....']);
 T(16, ['....', 'aaaa', 'abba', 'abba', 'abba', 'abba', 'abba', 'abba']);
 T(17, Array(8).fill('abba'));
 T(18, ['abba', 'abba', 'acba', 'abba', 'abba', 'abba', 'abba', 'abba']);
+// puzzle: heatsink block (19, solid), gate door (20, solid), plates A and B (21, 22), gate LED (23)
+T(19, ['cccc', 'bbbb', 'cbbc', 'bbbb', 'cbbc', 'bbbb', 'cbbc', 'aaaa']);
+T(20, ['cbcb', 'bcbc', 'cbcb', 'bcbc', 'cbcb', 'bcbc', 'cbcb', 'bcbc']);
+T(21, ['....', '....', '....', '....', '....', '....', 'cccc', 'bbbb']);
+T(22, ['....', '....', '....', '....', '....', '.cc.', 'cccc', 'bbbb']);
+T(23, ['....', '....', '.cc.', 'cbbc', 'cbbc', '.cc.', '....', '....']);
 const GT = 11, GF = 12, PL = 13, PM = 14, PR = 15, PT = 16, PB = 17, PLED = 18; // ground top, fill, platform L/M/R, pillar top/body/led
 
 const charset = new Uint8Array(1024);
@@ -65,12 +71,20 @@ const COLS = 256, ROWS = 23, rows = Array.from({ length: ROWS }, () => new Array
     if (solid[c]) { rows[20][c] = GT | (rnd(4) === 0 ? 0x80 : 0); rows[21][c] = GF | (rnd(5) === 0 ? 0x80 : 0); rows[22][c] = GF; }
   }
   const plat = (r, c, len) => { for (let i = 0; i < len; i++) rows[r][c + i] = i === 0 ? PL : i === len - 1 ? PR : PM; };
-  for (const [r, c, l] of [[16, 24, 5], [16, 56, 4], [16, 88, 6], [13, 96, 4], [16, 120, 4], [16, 150, 7], [13, 158, 4], [16, 190, 4], [16, 216, 6], [13, 222, 3]]) plat(r, c, l);
+  for (const [r, c, l] of [[16, 24, 5], [16, 56, 4], [16, 88, 6], [13, 96, 4], [16, 120, 4], [16, 150, 7], [13, 158, 4], [16, 216, 6], [13, 222, 3]]) plat(r, c, l);
   for (let c = 8; c < 250; c += 9 + rnd(12)) {
+    if (c > 182 && c < 216) continue;
     if (!solid[c] || !solid[c + 1] || rows[16][c] || rows[16][c + 1] || rows[13][c] || rows[13][c + 1]) continue;
     const ht = 3 + rnd(4);
     for (let i = 0; i < 2; i++) for (let r = 20 - ht; r < 20; r++) rows[r][c + i] = r === 20 - ht ? PT : (r === 20 - ht + 2 && i === 0 ? PLED | (rnd(2) ? 0x80 : 0) : PB);
   }
+  // AND-gate puzzle: ONE's plate A (cols 190-191), a heatsink block with a low vent under it (196-205, vent row 19)
+  // holding TASK's plate B (200-201), then the door (208-209, rows 13-19) with its LED above it
+  for (const c of [190, 191]) rows[19][c] = 21;
+  for (const c of [200, 201]) rows[19][c] = 22;
+  for (let c = 196; c < 206; c++) for (let r = 16; r < 19; r++) rows[r][c] = 19;
+  for (const c of [208, 209]) for (let r = 13; r < 20; r++) rows[r][c] = 20;
+  rows[12][208] = 23;
 }
 
 // ---- sprites (8 pixels wide): 'b' goes to the first player, 'w' to the second
@@ -91,7 +105,8 @@ const heroAll = heroFrames.concat(heroFrames.map(mirror)), dogAll = [DOG.a, DOG.
 const flat = (fr, ch) => [].concat(...fr.map((f) => plane(f, ch)));
 
 // ---- text for the status line (ANTIC mode 2 screen codes)
-const hud = ' CIRCUIT RUNNER DEMO  JOY MOVE  FIRE JUMP ';
+const hud = ' ONE+TASK FIRE=JUMP SELECT=SWAP NOW:';
+const NAMEOFF = hud.length;
 const hudBytes = [...hud.padEnd(40)].map((c) => { const a = c.charCodeAt(0); return a < 96 ? a - 32 : a; });
 
 // ---- emit assembly
@@ -112,7 +127,7 @@ for (let r = 0; r < ROWS; r++) {
   const row = []; for (let c = 0; c < COLS + 44; c++) row.push(rows[r][c % COLS]);
   out.push('        org $' + (0x4000 + r * 0x200).toString(16).toUpperCase()); bytes(row);
 }
-const src = fs.readFileSync(path.join(__dirname, 'game.asm'), 'utf8') + '\n' + out.join('\n') + '\n        org $02E0\n        .word start\n';
+const src = 'NAMEOFF = ' + NAMEOFF + '\n' + fs.readFileSync(path.join(__dirname, 'game.asm'), 'utf8') + '\n' + out.join('\n') + '\n        org $02E0\n        .word start\n';
 const r = assemble(src);
 const file = process.argv[2] || path.join(__dirname, '..', '..', 'out', 'circuit.xex');
 fs.writeFileSync(file, Buffer.from(r.xex));
