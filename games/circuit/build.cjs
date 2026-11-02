@@ -84,12 +84,15 @@ const at = (r, c) => '$' + NB(r, c).toString(16).toUpperCase();
 const pA = find(21), pB = find(22), door = find(20), led = find(23);
 const lowest = (l) => l.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
 if (!pA.length || !pB.length || !door.length) console.warn('warning: map needs tile 21 (plate A), 22 (plate B) and 20 (door) for the AND gate; using dummies');
+const hplate = find(44), door2 = find(45), hp = lowest(hplate)[0], d2 = lowest(door2)[0];
 const dum = '', pa = lowest(pA)[0], pb = lowest(pB)[0], dc = lowest(door)[0];
 const PUZ = [
   'PA0 = ' + (pa ? at(pa[0], pa[1]) : dum), 'PA1 = ' + (pa && pA.length > 1 ? at(pa[0], pa[1] + 1) : dum),
   'PB0 = ' + (pb ? at(pb[0], pb[1]) : dum), 'PB1 = ' + (pb && pB.length > 1 ? at(pb[0], pb[1] + 1) : dum),
   'LEDADR = ' + (led.length ? at(led[0][0], led[0][1]) : dum),
   'DOORCL = ' + (dc ? dc[1] & 255 : 255), 'DOORCH = ' + (dc ? dc[1] >> 8 : 0), 'DOORR0 = ' + (dc ? Math.min(...door.map((d) => d[0])) : 22), 'DOORR1 = ' + (dc ? Math.max(...door.map((d) => d[0])) + 1 : 23),
+  'HOLDA = ' + (hp ? at(hp[0], hp[1]) : dum), 'HOLDB = ' + (hp ? at(hp[0], hp[1] + 1) : dum),
+  'D2CL = ' + (d2 ? d2[1] & 255 : 255), 'D2CH = ' + (d2 ? d2[1] >> 8 : 0), 'D2X = ' + (d2 ? d2[1] * 4 : 0), 'D2R0 = ' + (d2 ? Math.min(...door2.map((d) => d[0])) : 22), 'D2R1 = ' + (d2 ? Math.max(...door2.map((d) => d[0])) + 1 : 23),
 ].join('\n') + '\n';
 
 // ---- sprites (8 pixels wide): 'b' goes to the first player, 'w' to the second

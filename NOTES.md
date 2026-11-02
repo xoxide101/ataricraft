@@ -164,3 +164,5 @@ WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack
 ## 5200
 - Keypad layout (Keys: 5200 keypad) sends the 5200 key codes (start 0x39, pause 0x31, reset 0x29, 0-9 * #). 5200 carts are typed by size (16K defaults to two-chip). 5200 carts run on the Atari800 core only: Altirra maps the cart but shows black. Raw 5200 dumps get a CAR header on Altirra (not enough on its own).
 
+
+- Circuit Runner puzzle 2: hold plate (tile 44, cols 348-349) keeps door (tile 45, cols 360-361) open only while someone stands on it; it won't close on a character. Emulator-tested only.
