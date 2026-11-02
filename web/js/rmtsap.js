@@ -102,11 +102,11 @@ rtab    .byte ${rtab.join(',')}
     return { segments: r.segments, init: r.symbols.init, play: r.symbols.play };
   }
 
-  // rmtBytes: a binary-load .rmt file. opt: pal (default true), name, author, songline, maxFrames.
-  function build(rmtBytes, opt) {
+  // frames: per-frame register arrays (9 per POKEY: AUDF1,AUDC1..AUDF4,AUDC4,AUDCTL; 18 when stereo); loop: frame to repeat from or -1.
+  function pack(frames, loop, stereo, opt) {
     opt = opt || {};
-    const m = Rmt.load(rmtBytes), r = render(m, opt), nreg = m.stereo ? 18 : 9;
-    const enc = encode(r.frames, r.loop, nreg), end = DATA + enc.bytes.length;
+    const nreg = stereo ? 18 : 9;
+    const enc = encode(frames, loop, nreg), end = DATA + enc.bytes.length;
     if (end > LIMIT) throw new Error(`Register stream is ${enc.bytes.length} bytes (max ${LIMIT - DATA}). The song is too long to store as a stream.`);
     const pl = player(nreg, enc.mb, end, DATA + enc.loopOffset);
     const bin = [];
@@ -118,9 +118,15 @@ rtab    .byte ${rtab.join(',')}
     const fields = [{ key: 'AUTHOR', value: opt.author || '' }, { key: 'NAME', value: opt.name || 'RMT export' }, { key: 'DATE', value: '' },
       { key: 'TYPE', value: 'B' }, { key: 'FASTPLAY', value: pal ? '312' : '262' }, { key: 'INIT', value: hx(pl.init) }, { key: 'PLAYER', value: hx(pl.play) }];
     if (!pal) fields.push({ key: 'NTSC', value: '' });
-    if (m.stereo) fields.push({ key: 'STEREO', value: '' });
-    return { sap: Pmd.buildSap(fields, new Uint8Array(bin)), frames: r.frames.length, loop: r.loop, streamBytes: enc.bytes.length, stereo: m.stereo, tracks: m.tracks, seconds: r.frames.length / (pal ? 50 : 60) };
+    if (stereo) fields.push({ key: 'STEREO', value: '' });
+    return { sap: Pmd.buildSap(fields, new Uint8Array(bin)), frames: frames.length, loop, streamBytes: enc.bytes.length, stereo, seconds: frames.length / (pal ? 50 : 60) };
   }
 
-  return { build, render };
+  // rmtBytes: a binary-load .rmt file. opt: pal (default true), name, author, songline, maxFrames.
+  function build(rmtBytes, opt) {
+    opt = opt || {};
+    const m = Rmt.load(rmtBytes), r = render(m, opt);
+    return Object.assign(pack(r.frames, r.loop, m.stereo, opt), { tracks: m.tracks });
+  }
+  return { build, render, pack };
 });
