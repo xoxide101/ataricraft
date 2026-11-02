@@ -4,7 +4,7 @@
   if (!root) return;
   const KEYS = { z: 0, s: 1, x: 2, d: 3, c: 4, v: 5, g: 6, b: 7, h: 8, n: 9, j: 10, m: 11, q: 12, 2: 13, w: 14, 3: 15, e: 16, r: 17, 5: 18, t: 19, 6: 20, y: 21, 7: 22, u: 23 };
   let song = T.newSong(false), pi = 0, cur = { r: 0, t: 0, col: 0 }, oct = 3, ctx = null, comp = null;
-  try { const s = localStorage.getItem('ac_tracker'); if (s) song = JSON.parse(s); } catch (e) { /* keep default */ }
+  try { const s = localStorage.getItem('ac_tracker'); if (s) song = T.sanitize(JSON.parse(s)); } catch (e) { /* keep default */ }
   const store = () => { try { localStorage.setItem('ac_tracker', JSON.stringify(song)); } catch (e) { /* ignore */ } };
 
   root.innerHTML = `
@@ -157,8 +157,8 @@
     const fi = document.createElement('input'); fi.type = 'file'; fi.accept = '.json';
     fi.onchange = async () => {
       try {
-        const s = JSON.parse(await fi.files[0].text());
-        if (!s.tracks || !s.patterns || !s.order || !s.scale || !T.SCALES[s.scale.name]) throw new Error('Not a tracker song file');
+        const s = T.sanitize(JSON.parse(await fi.files[0].text()));
+        T.compile(s);
         song = s; pi = 0; cur = { r: 0, t: 0, col: 0 }; sel = -1; refresh();
       } catch (e) { err('Could not load: ' + e.message); }
     };

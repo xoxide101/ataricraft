@@ -32,8 +32,24 @@
   const F = () => S().frames[frame];
 
   function load(obj) {
-    if (!obj || !obj.sheets) throw new Error('No "sheets" in this file');
-    data = obj; sheet = Object.keys(obj.sheets)[0]; frame = Object.keys(S().frames)[0]; undo = []; fill();
+    if (!obj || typeof obj !== 'object' || !obj.sheets || typeof obj.sheets !== 'object') throw new Error('No "sheets" in this file');
+    const names = Object.keys(obj.sheets);
+    if (!names.length) throw new Error('The file has no sheets');
+    for (const n of names) {
+      const sh = obj.sheets[n], tile = sh && sh.kind === 'tile', w = sh && sh.w, h = sh && sh.h;
+      if (!sh || !Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 64 || h > 64) throw new Error(`Sheet "${n}" needs integer w and h from 1 to 64`);
+      if (!sh.frames || typeof sh.frames !== 'object' || !Object.keys(sh.frames).length) throw new Error(`Sheet "${n}" has no frames`);
+      for (const [fn, rows] of Object.entries(sh.frames)) if (!Array.isArray(rows) || rows.length !== h || rows.some((r) => typeof r !== 'string' || r.length !== w)) throw new Error(`Sheet "${n}" frame "${fn}" must be ${h} rows of ${w} characters`);
+      if (tile ? !sh.bands || !['far', 'mid', 'near'].every((k) => sh.bands[k] && Array.isArray(sh.bands[k].pf) && sh.bands[k].pf.length === 4) : !Array.isArray(sh.players) || sh.players.length < 2) throw new Error(`Sheet "${n}" is missing its ${tile ? 'bands' : 'players'} colours`);
+    }
+    if (obj.map != null) {
+      const m = obj.map;
+      if (typeof m !== 'object' || m.cols !== 256 || !Array.isArray(m.rows) || m.rows.length !== 23 || m.rows.some((r) => typeof r !== 'string' || !/^[0-9a-fA-F]{512}$/.test(r))) throw new Error('"map" must have cols 256 and 23 rows of 512 hex digits');
+    }
+    const keep = [data, sheet, frame, undo];
+    try {
+      data = obj; sheet = names[0]; frame = Object.keys(S().frames)[0]; undo = []; fill();
+    } catch (e) { [data, sheet, frame, undo] = keep; throw e; }
     say('Loaded ' + Object.keys(obj.sheets).length + ' sheets.');
   }
   function fill() {
