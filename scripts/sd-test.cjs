@@ -64,7 +64,7 @@ async function session(b, relayPort, steps) {
     ]);
     const r = A.r;
     ok(r.o1 === 67 && r.rd1 === 'FROM SD', 'read a file from SD:', r.rd1);
-    ok(r.o2 === 67 && /\*games/.test(r.ls) && / hello\.txt/.test(r.ls), 'directory listing marks folders', r.ls);
+    ok(r.o2 === 67 && /\/ GAMES {3}DIR 001/.test(r.ls) && /  HELLO {3}TXT 001/.test(r.ls) && /999\+FREE SECTORS/.test(r.ls), 'directory listing uses the firmware 8.3 records and a free-sectors trailer', r.ls);
     ok(r.c3 === 67 && r.c4 === 67 && fs.readFileSync(f('renamed.txt'), 'latin1') === 'ONETWO', 'write then append, then rename keeps data');
     ok(r.mk === 67 && r.rm === 67 && !fs.existsSync(f('made')), 'mkdir and rmdir');
     ok(r.del === 67 && !fs.existsSync(f('hello.txt')), 'delete');
