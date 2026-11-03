@@ -53,7 +53,30 @@ plen    = $9F
 ti      = $A0
 skipc   = $A1
 
-start   lda #<prompt
+start   lda $0480
+        cmp #$A5
+        bne ask
+        ldy #0
+hc1     lda $0481,y
+        cmp #' '
+        bne hc2
+        iny
+        bne hc1
+hc2     ldx #0
+hc3     lda $0481,y
+        sta SPEC+2,x
+        iny
+        inx
+        cmp #$9B
+        bne hc3
+        lda #$5A
+        sta $0480
+        lda #'N'
+        sta SPEC
+        lda #':'
+        sta SPEC+1
+        jmp fetchit
+ask     lda #<prompt
         ldy #>prompt
         jsr puts
         jsr getline

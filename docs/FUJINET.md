@@ -79,3 +79,7 @@ ode scripts/wget-test.cjs (both cores, live relay). Typing : into the emulator b
 	ools/tests/lynx.asm is a small text browser: it fetches a page over N1:, strips tags (skips <script>, <style>, <title>), decodes &amp; &lt; &gt; &quot;, breaks lines on block tags, word-wraps to 37 columns and pages with a --more-- prompt (Q quits). Links print as word[n]; at the prompt type 1-9 to follow (absolute, root-relative and relative hrefs), a URL starting with http, or Q. Not handled: forms, images, tables as tables, UTF-8, #fragments. Test: 
 ode scripts/lynx-test.cjs (both cores).
 
+
+### Running from CMD
+
+WGET.COM and LYNX.COM read the command line CMD.COM leaves at $0480 ($A5, text, EOL), so WGET http://host/file and LYNX http://host/ run directly from the CMD prompt; with no argument they ask for a URL. Tested for WGET (`HAND=1 node scripts/wget-test.cjs`, both cores); the LYNX path shares the same code but was only assembled, not run.
