@@ -44,13 +44,9 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
     return out;
   });
   const key = async (k, w) => { await p.evaluate((k) => ataricraft.type(k), k); await idle(); await p.waitForTimeout(w || 1500); };
-  console.log('--- before'); console.log(await p.evaluate(() => FujiNet.emu.screenText()));
   await key(' ', 8000);
-  console.log('--- after space'); console.log(await p.evaluate(() => FujiNet.emu.screenText()));
   await key(process.env.K9 || '9', 1000);
-  console.log(await p.evaluate(() => FujiNet.emu.screenText().split('\n').slice(0, 26).join('\n')));
   await key('\n', 3000);
-  console.log(await p.evaluate(() => FujiNet.emu.screenText()));
   let e = await pane(); console.log(e);
   ok(e.some((l) => /HELLO {3}TXT/.test(l)), 'N: pane lists hello.txt', e);
   ok(e.some((l) => /^ :GAMES {5}/.test(l)), 'folder shows as a directory entry', e);
@@ -59,13 +55,51 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
   const gi = e.findIndex((l) => /^ :GAMES/.test(l));
   for (let i = 0; i < gi; i++) await key('S', 400);
   await key('\n', 3000);
-  console.log(await p.evaluate(() => FujiNet.emu.screenText()));
   e = await pane(); console.log(e);
   ok(e.some((l) => /^ :\.\./.test(l)) && e.some((l) => /PACMAN {2}COM/.test(l)), 'entered folder: .. and PACMAN.COM', e);
   await key('\n', 3000);
-  console.log(await p.evaluate(() => FujiNet.emu.screenText()));
   e = await pane();
   ok(e.some((l) => /HELLO {3}TXT/.test(l)) && !e.some((l) => /PACMAN/.test(l)), 'back at the SD root through ..', e);
+
+  const lsd = () => fs.readdirSync(dir).map((s) => s.toLowerCase());
+  const msg = () => p.evaluate(() => FujiNet.emu.screenText().split('\n').slice(-4).join(' | '));
+  const top = async (n) => { for (let i = 0; i < 14; i++) await key('W', 150); for (let i = 0; i < n; i++) await key('S', 300); };
+  const pane1 = () => p.evaluate(() => {
+    const a = Array.from(FujiNet.emu.peek(0x6400, 17 * 100)), out = [];
+    for (let i = 0; i < 100; i++) out.push(String.fromCharCode(...a.slice(i * 17, i * 17 + 17).map((c) => (c >= 32 && c < 127 ? c : 46))));
+    return out;
+  });
+  // mkdir
+  await key('M', 1500); await key('NEWD\n', 4000);
+  ok(lsd().includes('newd'), 'M makes a folder on the SD card', [lsd(), await msg()]);
+  // copy N: -> D:
+  await key(' ', 800); await key('1', 6000); await key(' ', 800);
+  e = await pane();
+  await top(e.findIndex((l) => /HELLO {3}TXT/.test(l)));
+  await key('C', 6000);
+  console.log(await msg());
+  const q = await pane1();
+  ok(q.some((l) => /HELLO {3}TXT/.test(l)), 'C copies N: -> D1:', [q, await msg()]);
+  // rename
+  await key('R', 1500); await key('HI.TXT\n', 4000);
+  ok(lsd().includes('hi.txt') && !lsd().includes('hello.txt'), 'R renames on the SD card', [lsd(), await msg()]);
+  // delete
+  e = await pane();
+  await top(e.findIndex((l) => /HI {6}TXT/.test(l)));
+  await key('D', 1500); await key('Y', 4000);
+  ok(!lsd().includes('hi.txt'), 'D deletes on the SD card', [lsd(), await msg()]);
+  // copy D: -> N:
+  await key(' ', 1000);
+  const q2 = await pane1();
+  const ai = q2.findIndex((l) => /AFMN {4}COM/.test(l));
+  ok(ai >= 0, 'AFMN.COM is listed on D1:', q2);
+  await top(Math.max(ai, 0));
+  await key('C', 15000);
+  const f = lsd().find((s) => s === 'afmn.com');
+  ok(f && fs.statSync(path.join(dir, f)).size === xex.length, 'C copies D1: -> N: with the right size', [lsd(), f && fs.statSync(path.join(dir, f)).size, xex.length, await msg()]);
+  // guarded commands
+  await key(' ', 1000); await key('L', 1500);
+  ok(/NOT SUPPORTED ON N:/.test(await p.evaluate(() => FujiNet.emu.screenText())), 'lock is refused on N:');
   ok(!errs.length, 'no page errors', errs);
   await b.close(); relay.kill(); fs.rmSync(dir, { recursive: true, force: true });
   console.log(bad ? 'FAILED ' + bad : 'all passed');

@@ -165,6 +165,15 @@ ks1:    lda kspec,x
         bcc ks1
         lda #0
         sta nhown
+        sta nhno
+        .if COLS80
+        lda $6A
+        cmp #$C0
+        bcs st_n1
+        inc nhno
+        jmp st_nh
+st_n1:
+        .endif
         jsr nh_install
         bcs st_nh
         inc nhown
@@ -467,7 +476,13 @@ k_drive:
 ; URL (SD:/ = the relay SD folder, TNFS://host/dir/ ...), stored in PATHS with '>' for '/'
 ; and kept as the pane's root (nroot) so '..' stops there.
 k_ndrv:
-        ldx act
+        ldx nhno
+        beq kn_go
+        jsr msgrow
+        jsr putsi
+        .byte 'N: NEEDS BASIC OFF IN AFM80',0
+        jmp main
+kn_go:  ldx act
         sta drv,x
         jsr rowprompt
         jsr putsi
@@ -712,7 +727,10 @@ pthi:   .byte >10000,>1000,>100,>10,>1
 ; recursively with dotree and shown as FILES/DIRS/SECTORS; a single file opens the
 ; properties screen (propscr); several entries show a one-line summary.
 doprops:
-        jsr needf
+        jsr isn
+        bcc pr_n
+        jmp nnsup
+pr_n:   jsr needf
         bne pr_go
         jmp main
 pr_go:  jsr bstart
@@ -3420,15 +3438,31 @@ dd_do:  jsr bstart
         jmp batchx
 
 dolock:
-        jsr needf
+        jsr isn
+        bcc dl_n
+        jmp nnsup
+dl_n:   jsr needf
         bne dl_go
         jmp main
 dl_go:  jsr bstart
         lda #35
         jmp batchx
 
+; isn: C set if the active pane is an N: drive.  nnsup: shows the "not supported" message.
+isn:    ldx act
+        lda drv,x
+        cmp #9
+        rts
+nnsup:  jsr msgrow
+        jsr putsi
+        .byte 'NOT SUPPORTED ON N:',0
+        jmp main
+
 dounlock:
-        jsr needf
+        jsr isn
+        bcc du_n
+        jmp nnsup
+du_n:   jsr needf
         bne du_go
         jmp main
 du_go:  jsr bstart
@@ -3439,7 +3473,10 @@ du_go:  jsr bstart
 ; patched into fmtdrv (the '1' byte inside the .byte string) before it is printed.  After a
 ; Y confirmation the pane's path is reset and XIO 254 (format, DOS 2 style) is issued on "Dn:".
 doformat:
-        ldx act
+        jsr isn
+        bcc fm_n
+        jmp nnsup
+fm_n:   ldx act
         lda drv,x
         ora #'0'
         sta fmtdrv
@@ -3460,7 +3497,10 @@ df_do:  ldx act
 ; ---- doclear: X key.  Confirms, then on the drive spec (mkdrvspec) unlocks everything
 ; (XIO 36) and deletes everything (XIO 33); result is reported through xioDone.
 doclear:
-        ldx act
+        jsr isn
+        bcc dx_n
+        jmp nnsup
+dx_n:   ldx act
         jsr mkdrvspec
         jsr rowprompt
         jsr putsi
@@ -5382,6 +5422,7 @@ tmp:    .word 0
 tmpd:   .byte 0
 tmpl:   .byte 0
 nhown:  .byte 0                 ; 1 = AFM installed the N: handler (removed again on quit)
+nhno:   .byte 0                 ; 1 = N: unavailable (80-col bitmap with BASIC on overlaps the handler's RAM)
 nroot:  .byte 0,0,0,0           ; per-pane length of the N: URL root in PATHS
 aps:    .byte '>'               ; character apath writes for a '>' path separator
 pn:     .byte 0
