@@ -324,8 +324,11 @@
 
   // Raw dump -> RGBA. By default pixels are widened to a 320x192 picture so the aspect matches the TV (opts.native keeps 160 / 80).
   I.decodeAtari = function (bytes, fmt, opts) {
-    const b = u8(bytes), rgb = I.atariPalette(opts), cols = I.atariColors(fmt, opts), F = I.FORMATS[fmt], idx = new Uint8Array(F.w * F.h);
+    const b = u8(bytes), rgb = I.atariPalette(opts), F = I.FORMATS[fmt], idx = new Uint8Array(F.w * F.h);
     if (b.length < I.ATARI_SIZE) throw new Error('Atari picture must be at least 7680 bytes');
+    let cols = I.atariColors(fmt, opts);
+    // MicroPainter files carry 4 colour bytes after the pixels: COLPF0, COLPF1, COLPF2, COLBAK (708-710, 712).
+    if (fmt === 'gr15' && b.length >= 7684 && !(opts && (opts.colors || opts.ignoreTrailer))) cols = [b[7683], b[7680], b[7681], b[7682]];
     for (let y = 0; y < F.h; y++) for (let x = 0; x < F.w; x++) {
       const by = b[y * 40 + (fmt === 'gr8' ? x >> 3 : fmt === 'gr15' ? x >> 2 : x >> 1)];
       idx[y * F.w + x] = fmt === 'gr8' ? (by >> (7 - (x & 7))) & 1 : fmt === 'gr15' ? (by >> (6 - 2 * (x & 3))) & 3 : (x & 1 ? by & 15 : by >> 4);
@@ -391,6 +394,7 @@
       else if (fmt === 'gr15') out[y * 40 + (x >> 2)] |= v << (6 - 2 * (x & 3));
       else out[y * 40 + (x >> 1)] |= x & 1 ? v : v << 4;
     }
+    if (opts.trailer && fmt === 'gr15') { const t = new Uint8Array(I.ATARI_SIZE + 4); t.set(out); t.set([cols[1], cols[2], cols[3], cols[0]], I.ATARI_SIZE); return t; }
     return out;
   };
 
