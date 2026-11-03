@@ -997,14 +997,16 @@
     const dir = W.panes[W.active].dir || '', w = document.createElement('div');
     const opt = (v, t, on) => `<label style="display:block;margin:4px 0"><input type="radio" name="pk" value="${v}"${on ? ' checked' : ''}> ${t}</label>`;
     w.innerHTML = `<div class="dim" style="margin-bottom:6px">${esc(PR.rootName(r))}${dir ? ' \\' + esc(dir.replace(/\//g, '\\')) : ''}</div>
-      ${opt('dir', 'Directory of this folder', 1)}${opt('tree', 'Directory with all folders below')}${opt('label', 'Disk label (name and file list on a card)')}${opt('cat', `Catalog of all ${all.length} open disk${all.length === 1 ? '' : 's'}, with an A-Z file index`)}`;
+      ${opt('dir', 'Directory of this folder', 1)}${opt('tree', 'Directory with all folders below')}${opt('label', 'Disk label (name and file list on a card)')}${opt('cat', `Catalog of all ${all.length} open disk${all.length === 1 ? '' : 's'}, with an A-Z file index`)}<div style="margin-top:10px">Paper <select class="pp">${Object.entries(PR.PAPER).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('')}</select> <select class="po"><option value="p">Portrait</option><option value="l">Landscape</option></select></div>`;
+    w.querySelector('.pp').value = localStorage.getItem('ac.wafm.paper') || 'letter'; w.querySelector('.po').value = localStorage.getItem('ac.wafm.orient') || 'p';
     const v = await dlg('Print', w, [{ label: 'Cancel', value: null }, { label: 'Save text', value: 'txt' }, { label: 'Print', value: 'print', pri: true }]);
     if (!v) return;
-    const k = w.querySelector('input:checked').value;
+    const k = w.querySelector('input:checked').value, po = { paper: w.querySelector('.pp').value, landscape: w.querySelector('.po').value === 'l' };
+    localStorage.setItem('ac.wafm.paper', po.paper); localStorage.setItem('ac.wafm.orient', w.querySelector('.po').value);
     const text = k === 'cat' ? PR.catalog(C, all) : k === 'label' ? PR.listing(C, r, { recursive: true }) : PR.listing(C, r, { dir, recursive: k === 'tree' });
     const base = (PR.rootName(r).replace(/[^\w.-]+/g, '_') || 'disk') + (k === 'cat' ? '-catalog' : k === 'label' ? '-label' : '-dir');
     if (v === 'txt') return host().save(base + '.txt', new TextEncoder().encode(text.replace(/\n/g, '\r\n')), 'text/plain');
-    const html = k === 'label' ? PR.labelPage(C, r, { recursive: false }) : PR.textPage(base, text);
+    const html = k === 'label' ? PR.labelPage(C, r, po) : PR.textPage(base, text, po);
     const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; f.srcdoc = html;
     f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { log('print failed: ' + e.message); } setTimeout(() => f.remove(), 60000); };
     document.body.append(f); log('printing ' + base);

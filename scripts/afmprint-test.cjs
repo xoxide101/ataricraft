@@ -34,6 +34,7 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
       document.querySelector('#wafm .wdlg input[value="cat"]').click();
       [...document.querySelectorAll('#wafm .wdlg button')].find((x) => x.textContent === 'Print').click();
       await new Promise((x) => setTimeout(x, 600));
+      out.pages = ['letter', 'legal', 'tabloid'].map((k) => PR.textPage('t', 'x', { paper: k, landscape: k === 'tabloid' })).map((h) => (h.match(/@page\{size:([^;]*);/) || [])[1] + ' / cols ' + (h.match(/column-count:(\d)/) || [])[1]);
       out.iframe = !!document.querySelector('iframe[srcdoc]') && document.querySelector('iframe[srcdoc]').srcdoc.includes('FILE INDEX');
       return out;
     });
@@ -42,6 +43,7 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
     ok(/PACMAN\.COM\s+\d+\s+3000/.test(R.tree), 'tree lists nested file with its size', R.tree);
     ok(/FILE INDEX/.test(R.cat) && /PACMAN\.COM/.test(R.cat.split('FILE INDEX')[1]), 'catalog has the A-Z index', R.cat);
     ok(/class="card"/.test(R.label) && /README\.TXT/.test(R.label), 'label page has the card and file names');
+    ok(R.pages[0] === '8.5in 11in portrait / cols 1' && R.pages[1] === '8.5in 14in portrait / cols 1' && R.pages[2] === '11in 17in landscape / cols 3', 'page size and columns for Letter, Legal, Tabloid', R.pages);
     ok(R.dlg, 'Print dialog opens');
     ok(R.iframe, 'Print builds the catalog page');
     ok(!errs.length, 'no page errors', errs);
