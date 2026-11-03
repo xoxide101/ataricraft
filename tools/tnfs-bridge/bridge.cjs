@@ -5,6 +5,7 @@
 const dgram = require('dgram');
 const net = require('net');
 const http = require('http');
+const netapi = require('./netapi.cjs');
 
 const TIMEOUT = 2000, RETRIES = 2;
 
@@ -244,11 +245,20 @@ async function file(hostSpec, path) {
   }));
   return out;
 }
+const flag = (n) => process.argv.includes(n);
+const relayNet = netapi.create({ token: process.env.AC_TOKEN, allowLan: flag('--allow-lan'), extra: {
+  '/net/tnfs/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(await list(a.host, a.path || '/'))) }),
+  '/net/tnfs/file': async (a) => ({ meta: {}, body: await file(a.host, a.path) }),
+} });
 const server = http.createServer(async (rq, rs) => {
   const u = new URL(rq.url, 'http://x');
   rs.setHeader('Access-Control-Allow-Origin', '*');
   rs.setHeader('Access-Control-Allow-Private-Network', 'true');
+  rs.setHeader('Access-Control-Allow-Headers', 'X-AC-Token, X-AC-Args');
+  rs.setHeader('Access-Control-Expose-Headers', 'X-AC-Meta, X-AC-Err');
+  rs.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (rq.method === 'OPTIONS') { rs.writeHead(204); rs.end(); return; }
+  if (u.pathname.startsWith('/net/')) { relayNet.handle(rq, rs, u.pathname); return; }
   if (u.pathname === '/ping') { rs.end('ataricraft-tnfs-bridge'); return; }
   if (u.pathname === '/status') {
     try { rs.end(await (await fetch('https://fujinet.online/tnfs-server-status/')).text()); } catch (e) { rs.writeHead(502); rs.end(String(e.message)); }
@@ -264,9 +274,9 @@ const server = http.createServer(async (rq, rs) => {
   } catch (e) { rs.writeHead(502); rs.end(String(e.message)); }
 });
 const port = +process.argv[2] || 8765;
-server.listen(port, '127.0.0.1', () => console.log('TNFS bridge on http://127.0.0.1:' + port));
+server.listen(port, '127.0.0.1', () => { console.log('TNFS bridge on http://127.0.0.1:' + port); console.log('N: token (paste into Workbench > FujiNet): ' + relayNet.token + (flag('--allow-lan') ? '  [LAN targets ALLOWED]' : '  [LAN/loopback targets blocked]')); });
 
 // Unmount cleanly so the servers don't keep our sessions open.
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-  process.on(sig, () => { conns.forEach((c) => c.close()); setTimeout(() => process.exit(0), 700); });
+  process.on(sig, () => { conns.forEach((c) => c.close()); relayNet.closeAll(); setTimeout(() => process.exit(0), 700); });
 }

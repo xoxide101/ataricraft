@@ -51,7 +51,7 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 
 - Messages pop up as a bubble over the screen; the last one stays on the second header line next to FPS.
 - **H: host drive**: in BASIC, `LIST "H:PROG.LST"` saves your program as text in the browser, `ENTER "H:PROG.LST"` loads it back. Import / Copy move it in and out.
-- **FujiNet** (header toggle): virtual SIO device `$70`. **Boot FujiNet CONFIG**, pick a folder as a host, mount disks into slots. Hosts and slots persist; **Reset config** clears them.
+- **FujiNet** (header toggle): virtual SIO device `$70`. **Boot FujiNet CONFIG**, pick a folder as a host, mount disks into slots. Hosts and slots persist; **Reset config** clears them. Network devices **N1:-N8:** ($71-$78) speak the FujiNet command set for TEST, HTTP(S), TCP, UDP and TNFS URLs plus a JSON/XML parser; everything except N:TEST:// needs the local relay and its token. Coverage and limits: [docs/FUJINET.md](docs/FUJINET.md).
 - **XEP80 80-column**: see the "80-column display" section below.
 - **RAM disk**: DOS 2.5 on a 128 KB+ machine gives `D8:` automatically (verified: copy to `D8:` lowers free sectors).
 - **Big disks**: blank 4 / 10 / 16 MB ATRs (256 B sectors); a 16 MB SpartaDOS image boots and lists with 63,471 free sectors. Fresh blank HD images still need formatting from SpartaDOS/MyDOS (4 MB verified by Jeff: formats to 16,369 free sectors on D1:).
@@ -109,7 +109,7 @@ atari800 / libatari800 is GPL-2.0-or-later and the RMT player port (Radek Sterba
 - **Media**: disks (ATR, XFD, ATX, DCM, PRO, gzipped), cartridges (CART, raw ROM with type picker; two slots), cassette (CAS), and programs (XEX, COM, BAS, LST). Formats are detected from contents. The Media library panel scans a folder and filters by text and type; ROMs have their own filter.
 - On-screen keyboard shows Atari glyphs; **Show: Lower / Caps / Special** toggles which legends appear. It scales to the available width.
 - Physical and on-screen keys can be mixed (Shift/Control latch). Sound and key-click are optional.
-- **FujiNet** (header toggle): a virtual device `$70` on SIO. **Boot FujiNet CONFIG** loads the CONFIG boot disk, lists hosts, browses the folder you picked, and mounts disks into slots. Hosts and slots persist; **Reset config** clears them.
+- **FujiNet** (header toggle): a virtual device `$70` on SIO. **Boot FujiNet CONFIG** loads the CONFIG boot disk, lists hosts, browses the folder you picked, and mounts disks into slots. Hosts and slots persist; **Reset config** clears them. Network devices **N1:-N8:** ($71-$78) speak the FujiNet command set for TEST, HTTP(S), TCP, UDP and TNFS URLs plus a JSON/XML parser; everything except N:TEST:// needs the local relay and its token. Coverage and limits: [docs/FUJINET.md](docs/FUJINET.md).
 - The side panel collapses (☰); phone and tablet layouts are supported (tested at Pixel 6 Pro XL and Galaxy Tab S sizes).
 
 ## Building the WASM core

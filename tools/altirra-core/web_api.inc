@@ -144,8 +144,8 @@ IATDeviceVideoOutput *WebXepOutput() {
 
 // Virtual FujiNet: SIO device $70 forwarded to JavaScript (Module.fnSio). The protocol table
 // (direction and length per command) is registered by the page through aw_fn_proto().
-EM_JS(int, ac_fn_sio, (int cmd, int dstats, int aux, int buf, int len), {
-	return Module.fnSio ? Module.fnSio(cmd, dstats, aux, buf, len) : 0;
+EM_JS(int, ac_fn_sio, (int cmd, int dstats, int aux, int buf, int len, int dev), {
+	return Module.fnSio ? Module.fnSio(cmd, dstats, aux, buf, len, dev) : 0;
 });
 
 namespace {
@@ -153,6 +153,23 @@ namespace {
 struct FnProto { uint8_t dir; uint16_t len; bool known; };
 FnProto g_fnProto[256];
 uint8_t g_fnBuf[2048];
+
+// N1:-N8: (-): direction and data length per command (FujiNet network device protocol).
+bool NProto(int cmd, int aux, uint8_t& dir, uint16_t& len) {
+	switch (cmd) {
+	case 0x53: dir = 1; len = 4; return true;
+	case 0x52: dir = 1; len = (uint16_t)aux; return true;
+	case 0x30: dir = 1; len = 256; return true;
+	case 0x26: dir = 1; len = 4; return true;
+	case 0x3f: case 0x45: case 0xff: dir = 1; len = 1; return true;
+	case 0x57: dir = 2; len = (uint16_t)aux; return true;
+	case 0x4f: case 0x2c: case 0x51: case 0xfd: case 0xfe: case 0x20: case 0x21: case 0x23: case 0x24: case 0x2a: case 0x2b: case 0x44: case 0x4c: case 0x25:
+		dir = 2; len = 256; return true;
+	case 0x43: case 0x50: case 0x41: case 0x63: case 0xfc: case 0x54: case 0x5a: case 0xfb: case 0x4d: case 0x72:
+		dir = 0; len = 0; return true;
+	}
+	return false;
+}
 
 class ATWebFujiNet final : public ATDeviceT<IATDeviceSIO> {
 public:
@@ -169,8 +186,16 @@ public:
 	}
 
 	CmdResponse OnSerialBeginCommand(const ATDeviceSIOCommand& c) override {
+		if (c.mDevice >= 0x71 && c.mDevice <= 0x78) {
+			uint8_t dir; uint16_t len;
+			if (!NProto(c.mCommand, c.mAUX[0] | (c.mAUX[1] << 8), dir, len))
+				return kCmdResponse_Fail_NAK;
+			mDev = c.mDevice;
+			return Run(c, dir, len);
+		}
 		if (c.mDevice != 0x70)
 			return kCmdResponse_NotHandled;
+		mDev = 0x70;
 		const FnProto& p = g_fnProto[c.mCommand];
 		if (!p.known)
 			return kCmdResponse_Fail_NAK;
@@ -178,8 +203,9 @@ public:
 	}
 
 	CmdResponse OnSerialAccelCommand(const ATDeviceSIORequest& r) override {
-		if (r.mDevice != 0x70)
+		if (r.mDevice < 0x70 || r.mDevice > 0x78)
 			return kCmdResponse_NotHandled;
+		mDev = r.mDevice;
 		return Run(r, (r.mMode & 0x80) ? 2 : (r.mMode & 0x40) ? 1 : 0, r.mLength);
 	}
 
@@ -189,7 +215,7 @@ public:
 		if (!mpIf)
 			return;
 		memcpy(g_fnBuf, data, len < sizeof g_fnBuf ? len : sizeof g_fnBuf);
-		const int r = ac_fn_sio(mCmd, 0x80, mAux, (int)(intptr_t)g_fnBuf, (int)len);
+		const int r = ac_fn_sio(mCmd, 0x80, mAux, (int)(intptr_t)g_fnBuf, (int)len, mDev);
 		if (r == 'C')
 			mpIf->SendComplete();
 		else
@@ -212,7 +238,7 @@ private:
 			return kCmdResponse_Start;
 		}
 		memset(g_fnBuf, 0, len);
-		const int r = ac_fn_sio(mCmd, dir == 1 ? 0x40 : 0, mAux, (int)(intptr_t)g_fnBuf, (int)len);
+		const int r = ac_fn_sio(mCmd, dir == 1 ? 0x40 : 0, mAux, (int)(intptr_t)g_fnBuf, (int)len, mDev);
 		if (r == 0 || r == 'N')
 			return kCmdResponse_Fail_NAK;
 		mpIf->HandleCommand(g_fnBuf, r == 'C' && dir == 1 ? len : 0, r == 'C');
@@ -222,6 +248,7 @@ private:
 	IATDeviceSIOManager *mpMgr = nullptr;
 	vdrefptr<IATDeviceSIOInterface> mpIf;
 	uint8 mCmd = 0;
+	uint8 mDev = 0x70;
 	int mAux = 0;
 };
 
