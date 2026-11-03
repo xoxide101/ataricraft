@@ -16,7 +16,9 @@ Works on both cores.
 
 The relay also carries HTTP, TCP and UDP for the virtual N1:-N8: devices (see docs/FUJINET.md).
 
-    node tools\tnfs-bridge\bridge.cjs [port] [--allow-lan]
+    node tools\tnfs-bridge\bridge.cjs [port] [--allow-lan] [--allow-write] [--sd DIR]
+
+`--sd DIR` serves a folder as `N:SD:/`. `--allow-write` permits writes, rename, delete, mkdir and rmdir on TNFS and SD (off by default).
 
 At start it prints a random token; paste it into the page (Online & networking > TNFS relay > N: relay token). Set AC_TOKEN to keep one token between runs.
 Without --allow-lan, targets on loopback, private or link-local addresses are refused, and TCP/UDP servers bind to 127.0.0.1.
