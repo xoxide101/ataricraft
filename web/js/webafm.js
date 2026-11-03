@@ -1,9 +1,12 @@
 // WebAFM: two-pane file explorer for Atari disk images. All disk logic lives in afmcore.js; this file is only the page.
 (() => {
   const AC = window.AC, C = AC.AfmCore, host = () => AC.WebAfmHost;
-  const W = { el: null, mounts: new Map(), panes: [], active: 0, undo: [], seq: 0, drag: null, conflict: 'error', lnLoad: localStorage.getItem('ac.wafm.lnLoad') !== '0', lnSave: localStorage.getItem('ac.wafm.lnSave') !== '0' };
+  const W = { el: null, mounts: new Map(), panes: [], active: 0, prev: 1, n: localStorage.getItem('ac.wafm.panes') === '4' ? 4 : 2, undo: [], seq: 0, drag: null, conflict: 'error', lnLoad: localStorage.getItem('ac.wafm.lnLoad') !== '0', lnSave: localStorage.getItem('ac.wafm.lnSave') !== '0' };
   const newPane = () => ({ src: null, dir: '', sel: new Set(), cur: '', anchor: '', sort: { k: 'name', asc: true }, filter: '', tree: false, collapsed: new Set() });
-  W.panes = [newPane(), newPane()];
+  W.panes = [newPane(), newPane(), newPane(), newPane()];
+  // Copy/move go to the "target" pane: the pane you were in before this one (initially the neighbour in the same row).
+  const partner = (from) => { from = from == null ? W.active : from; return W.prev !== from && W.prev < W.n ? W.prev : (from ^ 1) < W.n ? from ^ 1 : 0; };
+  const setActive = (i) => { if (i !== W.active) { W.prev = W.active; W.active = i; } };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const kb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B');
   const log = (s) => { setStatus(s); try { host().log(s); } catch (e) { /* none */ } };
@@ -19,8 +22,11 @@
   #wafm .caps{margin-top:4px;display:flex;flex-wrap:wrap;gap:3px 8px;font-size:11px}#wafm .cap.yes{color:#6fcf8a}#wafm .cap.no{color:#7d838f;opacity:.55;text-decoration:line-through}
   #wafm .wtb{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:#1e2128;border-bottom:1px solid #2c313b;align-items:center}
   #wafm .wtb h2{margin:0 10px 0 0;font-size:15px;color:#e8a33d}#wafm .sp{flex:1}#wafm .lnc{font-size:12px;color:#aab;display:flex;align-items:center;gap:3px;white-space:nowrap}
-  #wafm .wpanes{flex:1;display:flex;gap:8px;padding:8px;min-height:0}
-  #wafm .wp{flex:1;min-width:0;display:flex;flex-direction:column;border:2px solid #2c313b;border-radius:8px;background:#1b1e24}
+  #wafm .wpanes{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr);gap:8px;padding:8px;min-height:0}
+  #wafm[data-n="4"] .wpanes{grid-template-rows:minmax(0,1fr) minmax(0,1fr)}
+  #wafm[data-n="2"] .wp:nth-child(n+3){display:none}
+  #wafm .wp.tgt{border-style:dashed;border-color:#6f7f9f}
+  #wafm .wp{min-width:0;min-height:0;display:flex;flex-direction:column;border:2px solid #2c313b;border-radius:8px;background:#1b1e24;overflow:hidden}
   #wafm .wp.act{border-color:#e8a33d}
   #wafm .wph{display:flex;gap:5px;padding:6px;align-items:center;flex-wrap:wrap}
   #wafm .wcrumb{padding:2px 8px;color:#e8a33d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -444,7 +450,18 @@
     refreshDrives();
     if (a && a.drive) setDrive(a.pane || 0, a.drive);
     else if (!W.panes[0].src) { for (let n = 1; n <= 8; n++) if (host().disk(n)) { setDrive(0, n); break; } }
+    if (W.n === 4) autoDrives();
     render(); W.el.focus();
+  }
+  // Panes 3 and 4 start on D3 and D4 when those drives hold a disk.
+  function autoDrives() { for (const [pi, dn] of [[2, 3], [3, 4]]) if (!W.panes[pi].src && host().disk(dn)) setDrive(pi, dn); }
+  function setPanes(n) {
+    W.n = n; localStorage.setItem('ac.wafm.panes', String(n));
+    if (W.el) W.el.dataset.n = n;
+    if (W.active >= n) setActive(0);
+    if (W.prev >= n) W.prev = W.active ^ 1;
+    if (n === 4) autoDrives();
+    render();
   }
   async function close() {
     if (W.lnSave) for (const r of new Set(W.panes.map(rec))) if (r) await makeNames(r, true);
@@ -577,8 +594,9 @@
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
       <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="unarc" title="List and unpack the archive (ZIP, ARC, LZH, ALF, 7z...) selected on this disk into the other pane's disk, or into this folder">Unpack archive</button><button data-a="cart" title="Cartridge images: see the CAR header, strip it to a raw ROM, or add one. Uses the selected file, or asks for one from the PC">Cartridge…</button><button data-a="mkzip" title="Pack the selected files into a ZIP on this disk">Make ZIP</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
-      <span class="sp"></span><button data-a="close">✕ Close</button></div>
-      <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab switches panes · F5 copy · F6 move · F7 folder · F8 delete · drag between panes.</div><div class="wpt" title="Where you are"></div>`;
+      <span class="sp"></span><button data-a="panes" title="Switch between two panes and a 2×2 grid of four (1 2 / 3 4)">⊞ Panes</button><button data-a="close">✕ Close</button></div>
+      <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab / Shift+Tab switches panes · F5 copy · F6 move (to the pane you came from; dashed border) · F7 folder · F8 delete · drag between panes.</div><div class="wpt" title="Where you are"></div>`;
+    el.dataset.n = W.n;
     document.body.append(el);
     const pn = el.querySelector('.wpanes');
     W.panes.forEach((p, i) => {
@@ -594,7 +612,7 @@
   function wirePane(d, i) {
     const p = W.panes[i];
     // Only flag the pane here; a full render would replace the row under the cursor and swallow the click.
-    d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); updateTb(); } }, true);
+    d.addEventListener('mousedown', () => { if (W.active !== i) { setActive(i); W.el.querySelectorAll('.wp').forEach((x) => { x.classList.toggle('act', +x.dataset.i === i); x.classList.toggle('tgt', W.n > 2 && +x.dataset.i === partner() && +x.dataset.i !== i); }); updateTb(); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
       if (v === 'pc') pickFile(i); else if (v === 'folder') pickFolder(i); else if (v === 'rsd') openRelay(i, 'sd'); else if (v === 'rtnfs') openRelay(i, 'tnfs'); else if (v === 'lib') importLib(i); else if (v === 'hclear') histClear(); else if (v.startsWith('H:')) histOpen(i, v.slice(2)); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
@@ -630,8 +648,7 @@
   }
   function render() {
     if (!W.el) return;
-    W.panes.forEach((p, i) => renderPane(i));
-    updateTb();
+    W.panes.slice(0, W.n).forEach((p, i) => renderPane(i));
     pathBar();
   }
   // Full path of the active pane's cursor (or current folder), e.g. D1:\GAMES\ARCADE\PACMAN.COM
@@ -645,7 +662,7 @@
     e.textContent = root + '\\' + path.replace(/\//g, '\\') + (cur && cur.dir ? '\\' : '') + (cur && cur.long ? '   (' + cur.long + ')' : '');
   }
   function updateTb() {
-    const a = W.panes[W.active], r = rec(a), o = rec(W.panes[1 - W.active]);
+    const a = W.panes[W.active], r = rec(a), o = rec(W.panes[partner()]);
     const need = {
       mkdir: r && C.caps(r.m).mkdir, az: r && C.caps(r.m).mkdir, dup: r && C.caps(r.m).write, rename: r && C.caps(r.m).rename, del: r && C.caps(r.m).del, import: r && C.caps(r.m).import, names: r && C.caps(r.m).longnames,
       copy: o ? C.caps(o.m).write : { ok: false, why: 'open a disk in the other pane first' },
@@ -665,6 +682,7 @@
   function renderPane(i) {
     const p = W.panes[i], d = W.el.querySelector(`.wp[data-i="${i}"]`), r = rec(p);
     d.classList.toggle('act', W.active === i);
+    d.classList.toggle('tgt', W.n > 2 && i === partner() && i !== W.active);
     const sel = d.querySelector('.src');
     sel.innerHTML = '<option value="">— choose a disk —</option>';
     for (let n = 1; n <= 8; n++) { const dk = host().disk(n); if (dk) sel.insertAdjacentHTML('beforeend', `<option value="D${n}">D${n}: ${esc(dk.name)}</option>`); }
@@ -731,7 +749,7 @@
     viewFile(i, path);
   }
   function ctxMenu(i, x, y) {
-    W.active = i;
+    setActive(i);
     const items = [['Open / view', 'view'], ['Copy to other pane', 'copy'], ['Make a copy here…', 'dup'], ['Move to other pane', 'move'], ['Rename…', 'rename'], ['New folder…', 'mkdir'], ['A–Z / 0–9 folders…', 'az'], ['Delete…', 'del'], ['Save to PC', 'export'], ['Properties…', 'props']];
     const m = document.createElement('div');
     m.style.cssText = `position:fixed;z-index:9999;left:${Math.min(x, innerWidth - 200)}px;top:${Math.min(y, innerHeight - 260)}px;background:#1b1e24;border:1px solid #4a5160;border-radius:8px;box-shadow:0 6px 24px #000a;min-width:190px;overflow:hidden`;
@@ -745,12 +763,12 @@
   function act(a) {
     const A = W.panes[W.active];
     ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, cart: doCart, mkzip: doMkZip,
-      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: async () => { for (const r of new Set(W.panes.map(rec))) if (r && r.kind === 'folder') await reloadFolder(r); refreshDrives(); render(); }, close }[a] || (() => {}))();
+      all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, panes: () => setPanes(W.n === 4 ? 2 : 4), f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: async () => { for (const r of new Set(W.panes.map(rec))) if (r && r.kind === 'folder') await reloadFolder(r); refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
-  const other = () => 1 - W.active;
+  const other = () => partner();
 
   async function xfer(move, from, items, to, toDir) {
-    from = from == null ? W.active : from; to = to == null ? 1 - from : to;
+    from = from == null ? W.active : from; to = to == null ? partner(from) : to;
     const sp = W.panes[from], dp = W.panes[to], sr = rec(sp), dr = rec(dp);
     if (!sr) return log('choose a disk in the active pane first');
     if (!dr) return log('choose a disk in the other pane first (the target)');
@@ -843,7 +861,7 @@
     const file = new File([r.m.vol.read(e.raw)], e.long || e.name);
     let ex; try { ex = await AC.Archives.expand(file); } catch (err) { return msg('Cannot read archive', esc(file.name + ': ' + err.message)); }
     if (!ex.length) return msg('Empty archive', esc(file.name) + ' has no files.');
-    const tot = ex.reduce((a, x) => a + (x.size || 0), 0), o = rec(W.panes[1 - W.active]);
+    const tot = ex.reduce((a, x) => a + (x.size || 0), 0), o = rec(W.panes[partner()]);
     const body = document.createElement('div');
     body.innerHTML = `<div><b>${esc(file.name)}</b>: ${ex.length} file(s), ${kb(tot)} unpacked</div><div style="max-height:220px;overflow:auto;margin:8px 0;font-family:monospace">${ex.map((x) => esc(x.path || x.name) + '  <span class="dim">' + (x.size || 0) + '</span>').join('<br>')}</div>
       <label><input type="radio" name="wut" value="here" checked> Unpack into this folder of ${esc(r.name)}</label><br><label><input type="radio" name="wut" value="other" ${o ? '' : 'disabled'}> Unpack into the other pane${o ? ' (' + esc(o.name) + ')' : ' (no disk there)'}</label><br><label><input type="radio" name="wut" value="pc"> Save the unpacked files to the PC as a ZIP</label>`;
@@ -851,7 +869,7 @@
     if (!v) return;
     const files = []; for (const x of ex) files.push(await x.get());
     if (v === 'pc') { const z = []; for (const f of files) z.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }); host().save(file.name.replace(/\.[^.]*$/, '') + '.zip', host().zip(z), 'application/zip'); return log('Saved to the PC.'); }
-    const ti = v === 'other' ? 1 - W.active : W.active, tp = W.panes[ti];
+    const ti = v === 'other' ? partner() : W.active, tp = W.panes[ti];
     const keep = AC.Archives.looksLikeArchive; AC.Archives.looksLikeArchive = () => false;
     try { await addFiles(ti, files, tp.dir); } finally { AC.Archives.looksLikeArchive = keep; }
   }
@@ -1255,7 +1273,7 @@
     } catch (e) { log('new disk: ' + e.message); }
   }
   function doCompare() {
-    const a = rec(W.panes[0]), b = rec(W.panes[1]); if (!a || !b) return log('choose a disk in both panes first');
+    const a = rec(W.panes[W.active]), b = rec(W.panes[partner()]); if (!a || !b) return log('choose a disk in the active pane and the target pane first');
     const idx = (r) => new Map(C.entries(r.m).map((e) => [e.path.toUpperCase(), e]));
     const A = idx(a), B = idx(b), onlyA = [], onlyB = [], diff = []; let same = 0;
     for (const [k, e] of A) { const o = B.get(k); if (!o) onlyA.push(e.path); else if (!e.dir && !o.dir) { if (eq(a.m.vol.read(e.raw), b.m.vol.read(o.raw))) same++; else diff.push(e.path); } }
@@ -1273,7 +1291,7 @@
     const p = W.panes[W.active], rows = rowsOf(p), k = e.key;
     const move = (d) => { const idx = rows.findIndex((x) => x.path === p.cur), n = Math.max(0, Math.min(rows.length - 1, (idx < 0 ? (d > 0 ? -1 : rows.length) : idx) + d)); if (!rows[n]) return; p.cur = rows[n].path; if (e.shiftKey) p.sel.add(p.cur); else p.sel = new Set([p.cur]); render(); W.el.querySelector(`.wp[data-i="${W.active}"] tr.cur`)?.scrollIntoView({ block: 'nearest' }); };
     let hit = true;
-    if (k === 'Tab') { W.active = 1 - W.active; render(); }
+    if (k === 'Tab') { setActive((W.active + (e.shiftKey ? W.n - 1 : 1)) % W.n); render(); }
     else if (k === 'ArrowDown') move(1); else if (k === 'ArrowUp') move(-1);
     else if (k === 'Enter' && e.altKey) doProps(); else if (k === 'Enter') { if (p.cur) openRow(W.active, p.cur); else if (p.dir) { /* none */ } }
     else if (k === 'Backspace') { p.dir = parentOf(p.dir); p.sel = new Set(); render(); }
