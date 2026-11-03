@@ -41,7 +41,7 @@ Commands use the firmware IDs and DSTATS directions.
 | `TCP` | client and server |
 | `UDP` | send and receive; one datagram per read buffer fill |
 | `TNFS` | directory listing and whole-file read through the relay. With `--allow-write` on the relay: open for write (mode 8) or append (mode 9), data is sent when the channel closes, so a failed write shows as an error on close. Tested only against a mock UDP TNFS server (`tools/tests/mocktnfs.cjs`), not a real `tnfsd`: `node scripts/tnfs-write-test.cjs` |
-| `SD` | a folder on the PC served by the relay: `node tools/tnfs-bridge/bridge.cjs 8787 --sd DIR [--allow-write]`. Same behaviour as TNFS (listing, read, write/append on close, rename/delete/mkdir/rmdir). Paths are confined to DIR (`..` clamps to the root, links out of it are refused). Without `--sd` opens fail as not found. Tested: `node scripts/sd-test.cjs` |
+| `SD` | a folder on the PC served by the relay: `node tools/tnfs-bridge/bridge.cjs 8787 --sd DIR [--allow-write]`. Same behaviour as TNFS (listing, read, write/append on close, rename/delete/mkdir/rmdir). Paths are confined to DIR (`..` clamps to the root, links out of it are refused). Without `--sd` opens fail as not found. Tested: `node scripts/sd-test.cjs`. WebAFM can mount it as a drive (pane source "Relay SD folder") |
 | `TELNET`, `WS`, `FTP`, `SSH`, `SFTP`, `SMB`, `NFS`, `S3`, cloud services | **not done**; a valid URL gives error 144 and an invalid one 165 |
 
 ## Deviations and limits

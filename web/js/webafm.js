@@ -392,11 +392,32 @@
     finally { if (pg) pg.end(); }
     const m = { vol, bytes: null, name: handle.name, kind: 'folder', dirty: false, from: null };
     const key = 'F' + (++W.seq), nr = { key, kind: 'folder', name: handle.name, m, handle, unsaved: false };
-    W.mounts.set(key, nr); histAdd('folder', handle.name, handle);
+    W.mounts.set(key, nr); if (!handle.relay) histAdd('folder', handle.name, handle);
     Object.assign(W.panes[i], { src: key, dir: '', sel: new Set(), cur: '', filter: '' });
     if (vol.skipped.length) log(`${handle.name}: ${vol.skipped.length} file(s) could not be read and are left alone (${vol.skipped[0]})`);
     if (W.lnLoad && vol.primeNames()) { C.refresh(m); await commit(nr); }
     render();
+  }
+  // The relay's SD folder or a TNFS server, mounted like a PC folder (see relayfs.js). Works in every browser, no folder picker needed.
+  async function openRelay(i, scheme) {
+    if (!AC.RelayFs) return log('relay folders are not available in this build');
+    let handle;
+    if (scheme === 'sd') {
+      const pr = await AC.RelayFs.probe();
+      if (!pr.relay) return msg('Relay not running', 'Start the relay first: <b>start.cmd</b> (Windows) or <b>./start.sh</b>, then open this page at <b>http://127.0.0.1:8765/</b>.');
+      if (!pr.token) return msg('Relay token', 'Open this page through the relay address (http://127.0.0.1:8765/) so the token is filled in, or paste the token into Online &amp; networking.');
+      if (!pr.sd) return msg('No SD folder', 'Start the relay with a folder to share: <b>start.cmd --sd C:\\atari-files</b> (add <b>--allow-write</b> to let WebAFM change files).');
+      handle = AC.RelayFs.sd();
+    } else {
+      const last = localStorage.getItem('ac.wafm.tnfs') || '';
+      const v = await ask('TNFS server', 'Host and folder, e.g. tnfs.fujinet.online/ (prefix tcp:// or udp:// to force one)', last, 'Needs the relay. Changes need it started with --allow-write.');
+      if (!v) return;
+      const m = v.match(/^((?:tcp|udp):\/\/)?([^/]+)(\/.*)?$/i);
+      if (!m) return log('TNFS: enter host/folder');
+      localStorage.setItem('ac.wafm.tnfs', v);
+      handle = AC.RelayFs.tnfs((m[1] || '') + m[2], m[3] || '/');
+    }
+    await openFolder(i, handle);
   }
   async function pickFolder(i) {
     if (!window.showDirectoryPicker) return log('Folder drives need a Chromium browser (Chrome or Edge) with the File System Access API.');
@@ -576,7 +597,7 @@
     d.addEventListener('mousedown', () => { if (W.active !== i) { W.active = i; W.el.querySelectorAll('.wp').forEach((x) => x.classList.toggle('act', +x.dataset.i === i)); updateTb(); } }, true);
     d.querySelector('.src').onchange = (e) => {
       const v = e.target.value; e.target.value = p.src || '';
-      if (v === 'pc') pickFile(i); else if (v === 'folder') pickFolder(i); else if (v === 'lib') importLib(i); else if (v === 'hclear') histClear(); else if (v.startsWith('H:')) histOpen(i, v.slice(2)); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
+      if (v === 'pc') pickFile(i); else if (v === 'folder') pickFolder(i); else if (v === 'rsd') openRelay(i, 'sd'); else if (v === 'rtnfs') openRelay(i, 'tnfs'); else if (v === 'lib') importLib(i); else if (v === 'hclear') histClear(); else if (v.startsWith('H:')) histOpen(i, v.slice(2)); else if (v.startsWith('D')) setDrive(i, +v.slice(1)); else if (v.startsWith('F')) { Object.assign(p, { src: v, dir: '', sel: new Set() }); render(); }
     };
     d.querySelector('.up').onclick = () => { p.dir = parentOf(p.dir); p.sel = new Set(); render(); };
     d.querySelector('.tg').onclick = () => { p.tree = !p.tree; render(); };
@@ -648,8 +669,8 @@
     sel.innerHTML = '<option value="">— choose a disk —</option>';
     for (let n = 1; n <= 8; n++) { const dk = host().disk(n); if (dk) sel.insertAdjacentHTML('beforeend', `<option value="D${n}">D${n}: ${esc(dk.name)}</option>`); }
     for (const [k, x] of W.mounts) if (x.kind === 'file') sel.insertAdjacentHTML('beforeend', `<option value="${k}">PC: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
-    for (const [k, x] of W.mounts) if (x.kind === 'folder' || x.kind === 'archive') sel.insertAdjacentHTML('beforeend', `<option value="${k}">${x.kind === 'archive' ? 'Archive' : 'PC folder'}: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
-    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image or archive…</option><option value="folder">PC folder as a drive…</option><option value="lib">Scanned media library…</option>');
+    for (const [k, x] of W.mounts) if (x.kind === 'folder' || x.kind === 'archive') sel.insertAdjacentHTML('beforeend', `<option value="${k}">${x.kind === 'archive' ? 'Archive' : x.handle && x.handle.relay ? (x.handle.scheme === 'sd' ? 'Relay SD' : 'TNFS') : 'PC folder'}: ${esc(x.name)}${x.unsaved ? ' ●' : ''}</option>`);
+    sel.insertAdjacentHTML('beforeend', '<option value="pc">PC disk image or archive…</option><option value="folder">PC folder as a drive…</option><option value="rsd">Relay SD folder (start.cmd --sd)…</option><option value="rtnfs">TNFS server…</option><option value="lib">Scanned media library…</option>');
     { const live = new Set([...W.mounts.values()].map((x) => (x.kind === 'archive' ? 'file' : x.kind) + ':' + x.name)), hh = (W.hist || []).filter((h) => !live.has(h.kind + ':' + h.name));
       if (hh.length) sel.insertAdjacentHTML('beforeend', '<optgroup label="History (last used)">' + hh.map((h) => `<option value="H:${h.id}">${h.kind === 'folder' ? '📁' : '💾'} ${esc(h.name)} · ${esc(new Date(h.t).toLocaleDateString())}</option>`).join('') + '<option value="hclear">Clear history</option></optgroup>'); }
     sel.value = p.src || '';

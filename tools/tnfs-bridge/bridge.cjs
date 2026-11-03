@@ -297,7 +297,7 @@ function sdPath(p, mustExist) {
 const sdFsErr = (e) => { throw e.code && typeof e.code === 'number' ? e : sdErr(e.code === 'ENOENT' ? 170 : e.code === 'EEXIST' ? 151 : e.code === 'ENOTEMPTY' || e.code === 'EPERM' || e.code === 'EACCES' ? 167 : 144); };
 function sdList(p) {
   const d = sdPath(p, true);
-  try { return fs.readdirSync(d, { withFileTypes: true }).map((e) => { let size = 0; try { size = e.isFile() ? fs.statSync(pathMod.join(d, e.name)).size : 0; } catch (x) {} return { name: e.name, dir: e.isDirectory(), size }; }); } catch (e) { sdFsErr(e); }
+  try { return fs.readdirSync(d, { withFileTypes: true }).map((e) => { let size = 0, mtime = 0; try { const s = fs.statSync(pathMod.join(d, e.name)); mtime = Math.round(s.mtimeMs); size = e.isFile() ? s.size : 0; } catch (x) {} return { name: e.name, dir: e.isDirectory(), size, mtime }; }); } catch (e) { sdFsErr(e); }
 }
 function sdFile(p) { try { return fs.readFileSync(sdPath(p, true)); } catch (e) { sdFsErr(e); } }
 function sdPut(p, data, append) { needWrite(); try { const f = sdPath(p, false); (append ? fs.appendFileSync : fs.writeFileSync)(f, data); } catch (e) { sdFsErr(e); } }
@@ -328,8 +328,8 @@ const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--all
   '/net/sd/op': async (a) => { sdOp(a.op, a.path, a.to || ''); return { meta: {} }; },
   '/net/tnfs/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(await list(a.host, a.path || '/'))) }),
   '/net/tnfs/file': async (a) => ({ meta: {}, body: await file(a.host, a.path) }),
-  '/net/tnfs/put': async (a, body) => { await put(a.host, a.path, body, a.append); return { meta: {} }; },
-  '/net/tnfs/op': async (a) => { await fsop(a.host, a.op, a.path, a.to || ''); return { meta: {} }; },
+  '/net/tnfs/put': async (a, body) => { listCache.clear(); await put(a.host, a.path, body, a.append); listCache.clear(); return { meta: {} }; },
+  '/net/tnfs/op': async (a) => { listCache.clear(); await fsop(a.host, a.op, a.path, a.to || ''); listCache.clear(); return { meta: {} }; },
 } });
 // The relay also serves the emulator (web/) so one command is enough: open http://127.0.0.1:PORT/.
 // HTML is served with the token and relay address pre-filled. Static replies carry no CORS headers,

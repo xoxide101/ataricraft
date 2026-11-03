@@ -28,6 +28,8 @@ The token is saved in `~/.ataricraft-token` (set `AC_TOKEN` to use your own).
 
 Then in the page: turn FujiNet on (Online & networking), boot, and use `N:` from BASIC, or run the sample apps (see [FUJINET.md](FUJINET.md)).
 
+**File manager:** open WebAFM and pick "Relay SD folder" (needs `--sd`) or "TNFS server…" in a pane's source list. Copy between disk images and those folders with F5/F6 like any other pane. Add `--allow-write` to change files.
+
 ## Options
 
 Add these after the script name:
