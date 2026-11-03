@@ -106,7 +106,7 @@ EN      = $EE
 EV      = $F0
 EW      = $F2
 EBUF    = $6D00+SH      ; text editor buffer
-EMAXPG  = $A5           ; editor limit in 256-byte pages (buffer ends below VBUF/other data)
+EMAXPG  = $91           ; editor limit in 256-byte pages (the N: handler sits at $9100-$9A00)
 
 ; 16-bit compare: carry set if a>=b, Z set if equal
         .macro cmw
@@ -163,7 +163,12 @@ ks1:    lda kspec,x
         inx
         cpx #3
         bcc ks1
-        jsr usef1
+        lda #0
+        sta nhown
+        jsr nh_install
+        bcs st_nh
+        inc nhown
+st_nh:  jsr usef1
         ldx #$30
         lda #4
         jsr openF
@@ -223,7 +228,15 @@ main:
         bcs nodrv
         jmp k_drive
 nodrv:
-        cmp #'C'
+        cmp #'9'
+        bne nd0
+        lda #9
+        jmp k_ndrv
+nd0:    cmp #'0'
+        bne nd1
+        lda #10
+        jmp k_ndrv
+nd1:    cmp #'C'
         bne c1
         jmp docopy
 c1:     cmp #'D'
@@ -442,12 +455,64 @@ k_drive:
         sta drv,x
         lda #0
         sta plen,x
+        sta nroot,x
         sta sel,x
         sta top,x
         ldx act
         jsr loaddir
         jsr redraw
         jmp main
+
+; ---- k_ndrv: key '9'/'0' (A = 9/10) selects N1:/N2: (FujiNet) for the active pane.  Asks for a
+; URL (SD:/ = the relay SD folder, TNFS://host/dir/ ...), stored in PATHS with '>' for '/'
+; and kept as the pane's root (nroot) so '..' stops there.
+k_ndrv:
+        ldx act
+        sta drv,x
+        jsr rowprompt
+        jsr putsi
+        .byte 'N: URL (RETURN=SD:/) ',0
+        lda #30
+        sta rlmax
+        jsr rdline
+        bne kn_u
+        ldy #3
+kn_d:   lda kn_sd,y
+        sta INBUF,y
+        dey
+        bpl kn_d
+        lda #4
+        sta ri
+kn_u:   ldx act
+        lda pbase,x
+        tax
+        ldy #0
+kn_c:   lda INBUF,y
+        cmp #'/'
+        bne kn_s
+        lda #'>'
+kn_s:   sta PATHS,x
+        inx
+        iny
+        cpy ri
+        bcc kn_c
+        lda PATHS-1,x
+        cmp #'>'
+        beq kn_e
+        lda #'>'
+        sta PATHS,x
+        iny
+kn_e:   ldx act
+        tya
+        sta plen,x
+        sta nroot,x
+        lda #0
+        sta sel,x
+        sta top,x
+        jsr loaddir
+        jsr redraw
+        jmp main
+kn_sd:  .byte 'SD:/'
 
 ; ---- endir: Return pressed on a directory entry (ZP -> entry; name starts at offset 2).
 ; ".." (name begins with '.') pops the last path component: scan back in PATHS for the
@@ -894,10 +959,9 @@ donew:  jsr rowprompt
 nw_ok:  ldx act
         stx pn
         lda drv,x
-        ora #'0'
+        jsr dlet
         sta FSPEC+1
-        lda #'D'
-        sta FSPEC
+        sty FSPEC
         lda #':'
         sta FSPEC+2
         ldx #3
@@ -2439,7 +2503,10 @@ dohelp: lda #125
 ; ---- doquit: Q key.  Restores the stock display list, shows the cursor, clears the screen and
 ; returns to DOS through the DOS vector (indirect JMP via zero page $0A).
 doquit:
-        jsr dlstock
+        lda nhown
+        beq dq_nh
+        jsr nh_remove
+dq_nh:  jsr dlstock
         lda #0
         sta CRSINH
         lda #125
@@ -2799,10 +2866,9 @@ buildcp:
         ldx cpd
         stx pn
         lda drv,x
-        ora #'0'
+        jsr dlet
         sta FSPEC2+1
-        lda #'D'
-        sta FSPEC2
+        sty FSPEC2
         lda #':'
         sta FSPEC2+2
         ldx #$43
@@ -3181,10 +3247,9 @@ trload: ldx #2
 ; Builds "Dn:path" in FSPEC (trailing '>' replaced by EOL via DEX), tries XIO 43 (rmdir) and
 ; if that fails XIO 33 (delete).  out: carry set on error (est = status).
 rmtree: lda drv+2
-        ora #'0'
+        jsr dlet
         sta FSPEC+1
-        lda #'D'
-        sta FSPEC
+        sty FSPEC
         lda #':'
         sta FSPEC+2
         lda #2
@@ -3210,10 +3275,9 @@ rt_ok:  clc
 
 ; destination folder spec: pane 3's path + the name at ZP
 dspec:  lda drv+3
-        ora #'0'
+        jsr dlet
         sta FSPEC+1
-        lda #'D'
-        sta FSPEC
+        sty FSPEC
         lda #':'
         sta FSPEC+2
         lda #3
@@ -3544,10 +3608,9 @@ mk_e:   lda #1
 mk_ok:  ldx act
         stx pn
         lda drv,x
-        ora #'0'
+        jsr dlet
         sta FSPEC+1
-        lda #'D'
-        sta FSPEC
+        sty FSPEC
         lda #':'
         sta FSPEC+2
         ldx #3
@@ -3699,10 +3762,9 @@ bkone:  jsr msgrow
         ldx act
         stx pn
         lda drv,x
-        ora #'0'
+        jsr dlet
         sta FSPEC+1
-        lda #'D'
-        sta FSPEC
+        sty FSPEC
         lda #':'
         sta FSPEC+2
         ldx #3
@@ -3911,10 +3973,9 @@ rpn:    .byte 0
 mkdrvspec:
         stx pn
         lda drv,x
-        ora #'0'
+        jsr dlet
         sta FSPEC+1
-        lda #'D'
-        sta FSPEC
+        sty FSPEC
         lda #':'
         sta FSPEC+2
         ldx #3
@@ -3932,16 +3993,38 @@ mkdrvspec:
         sta FSPEC,x
         rts
 
+; dlet: in A = drive value.  out: A = unit digit, Y = device letter ('D' or 'N').
+; Drive values 9 and 10 are N1: and N2: (FujiNet); the rest are DOS drives D1:-D8:.
+dlet:   cmp #9
+        bcc dlt_d
+        sec
+        sbc #8
+        ora #'0'
+        ldy #'N'
+        rts
+dlt_d:  ora #'0'
+        ldy #'D'
+        rts
+
 ; apath: append pane pn's path string (PATHS+pbase, plen chars, e.g. "GAMES>") to FSPEC at X.
 ; in: X = index into FSPEC, pn = pane.  out: X advanced.
 apath:  ldy pn
+        lda drv,y
+        cmp #9
+        lda #'>'
+        bcc ap_s
+        lda #'/'
+ap_s:   sta aps
         lda plen,y
         beq ap_z
         sta apn
         lda pbase,y
         tay
 ap_l:   lda PATHS,y
-        sta FSPEC,x
+        cmp #'>'
+        bne ap_t
+        lda aps
+ap_t:   sta FSPEC,x
         inx
         iny
         dec apn
@@ -3975,6 +4058,8 @@ ld_nm:  lda frbase,x
         lda #'-'
         sta frb+4,y
         lda plen,x
+        sec
+        sbc nroot,x
         beq ld_np
         lda #0
         jsr entp
@@ -4021,8 +4106,18 @@ ld_f:   sta LINE,y
         lda #0
         sta ICBLH,x
         jsr CIOV
-        bmi ld_done
-        lda LINE
+        bpl ld_gt
+        jmp ld_done
+ld_gt:  lda LINE
+        cmp #'0'
+        bcc ld_ent
+        cmp #'9'+1
+        bcs ld_ent
+        lda LINE+3
+        cmp #'+'
+        bne ld_fr
+        jmp ld_loop
+ld_fr:  lda LINE
         cmp #'0'
         bcc ld_ent
         cmp #'9'+1
@@ -4053,7 +4148,9 @@ fr_d:   jmp ld_loop
 ld_ent: ldx lp
         lda cnt,x
         cmp #MAXE
-        bcs ld_loop
+        bcc ld_ro
+        jmp ld_loop
+ld_ro:
         jsr entp
         ldy #16
 ld_c:   lda LINE,y
@@ -4061,6 +4158,26 @@ ld_c:   lda LINE,y
         dey
         bpl ld_c
         ldx lp
+        lda drv,x
+        cmp #9
+        bcc ld_inc
+        ldy #0
+        lda (ZP),y
+        cmp #'/'
+        bne ld_inc
+        lda #' '
+        sta (ZP),y
+        ldy #1
+        lda #':'
+        sta (ZP),y
+        ldy #10
+        lda #' '
+        sta (ZP),y
+        iny
+        sta (ZP),y
+        iny
+        sta (ZP),y
+ld_inc: ldx lp
         inc cnt,x
         jmp ld_loop
 ld_done:
@@ -4131,12 +4248,13 @@ panehi: .byte >PANE0,>PANE1,>EBUF,>EBUF
 mkspec: stx pn
         pha
         lda drv,x
-        ora #'0'
+        jsr dlet
         sta tmpd
+        sty tmpl
         pla
         jsr entp
         ldx #0
-        lda #'D'
+        lda tmpl
         sta FSPEC,x
         inx
         lda tmpd
@@ -4274,11 +4392,13 @@ drawpath:
         sta fi
         lda #21
         jsr clrrow
-        lda #'D'
-        jsr dpc
         ldx act
         lda drv,x
-        ora #'0'
+        jsr dlet
+        sta tmpd
+        tya
+        jsr dpc
+        lda tmpd
         jsr dpc
         lda #':'
         jsr dpc
@@ -5061,11 +5181,13 @@ dh1:    lda #1
         beq dh2
         ldx #PC1
 dh2:    jsr setpos
-        jsr putsi
-        .byte 'D',0
         ldx hp
         lda drv,x
-        ora #'0'
+        jsr dlet
+        sta tmpd
+        tya
+        jsr putc
+        lda tmpd
         jsr putc
         lda #':'
         jsr putc
@@ -5258,6 +5380,10 @@ lp:     .byte 0
 eidx:   .byte 0
 tmp:    .word 0
 tmpd:   .byte 0
+tmpl:   .byte 0
+nhown:  .byte 0                 ; 1 = AFM installed the N: handler (removed again on quit)
+nroot:  .byte 0,0,0,0           ; per-pane length of the N: URL root in PATHS
+aps:    .byte '>'               ; character apath writes for a '>' path separator
 pn:     .byte 0
 apn:    .byte 0
 ei2:    .byte 0
@@ -5718,4 +5844,9 @@ gl_no:  clc
 lnm:    .byte 'LONGNAME.TXT',$9B
 pnm:    .ds 12
 pnl:    .byte 0
+
+
+; N: handler (tools/afm/nhandler.inc) in free RAM above the editor buffer
+        org $9100
+        icl 'nhandler.inc'
 

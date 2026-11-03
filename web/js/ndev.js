@@ -97,7 +97,13 @@
     if (locked) r = '*' + r.slice(1);
     return r;
   }
-  const dirText = (l) => enc(l.map((e) => entryLine(e.name, e.size || 0, e.dir, false)).join('\x9b') + (l.length ? '\x9b' : '') + '999+FREE SECTORS\x9b');
+  // A wildcard last path component (N:SD:/dir/*.TXT) filters a directory read; *.* and * match everything.
+  function wildFilter(w) {
+    if (!w || w === '*' || w === '*.*') return null;
+    const re = new RegExp('^' + w.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
+    return (e) => re.test(e.name) || re.test(crunch(e.name));
+  }
+  const dirText = (l, f) => enc((f ? l.filter(f) : l).map((e) => entryLine(e.name, e.size || 0, e.dir, false)).join('\x9b') + ((f ? l.filter(f) : l).length ? '\x9b' : '') + '999+FREE SECTORS\x9b');
   // Like the firmware's resolve(): a file that is not there by its exact name is matched against the crunched names in its folder.
   function resolvePath(list, path) {
     const i = path.lastIndexOf('/'), dir = path.slice(0, i + 1) || '/', want = crunch(path.slice(i + 1));
@@ -214,7 +220,7 @@
     try {
       if (o.aux1 === 6 || o.aux1 === 7) {
         const l = net.tnfsList(host, u.path || '/');
-        st.rx = dirText(l);
+        st.rx = dirText(l, o.filter);
       } else { let p = u.path; try { st.rx = net.tnfsFile(host, p); } catch (e) { const q = resolvePath((d) => net.tnfsList(host, d), p); if (q === p) throw e; st.rx = net.tnfsFile(host, q); } }
     } catch (e) { return { fail: ERR.NOT_FOUND }; }
     st.write = () => ERR.READ_ONLY;
@@ -239,7 +245,7 @@
     try {
       if (o.aux1 === 6 || o.aux1 === 7) {
         const l = net.sdList(u.path || '/');
-        st.rx = dirText(l);
+        st.rx = dirText(l, o.filter);
       } else { try { st.rx = net.sdFile(u.path); } catch (e) { const q = resolvePath((d) => net.sdList(d), u.path); if (q === u.path) throw e; st.rx = net.sdFile(q); } }
     } catch (e) { return { fail: ERR.NOT_FOUND }; }
     st.write = () => ERR.READ_ONLY;
@@ -267,13 +273,14 @@
       this.mode = aux1; this.trans = aux2 & 7;
       const isDir = aux1 === 6 || aux1 === 7;
       const raw = spec.replace(/[\x9b\x00].*$/s, '');
-      const url = fixSpec(raw, this.prefix, isDir);
+      let url = fixSpec(raw, this.prefix, isDir), filter = null;
+      if (isDir) { const w = /\/([^/]*[*?][^/]*)$/.exec(url); if (w) { url = url.slice(0, w.index + 1); filter = wildFilter(w[1]); } }
       const u = parseUrl(url);
       if (!u) { this.err = ERR.BAD_SPEC; return ERR.BAD_SPEC; }
       const key = u.scheme === 'tnfs' ? 'tnfs' : u.scheme;
       const f = protocols[key];
       if (!f) { this.err = ERR.GENERAL; return ERR.GENERAL; }
-      const r = f(u, { aux1, trans: this.trans, url, user: this.user, pass: this.pass }, this.net);
+      const r = f(u, { aux1, trans: this.trans, filter, url, user: this.user, pass: this.pass }, this.net);
       if (r.fail) { this.err = r.fail; return r.fail; }
       this.p = r; this.url = url;
       if (r.lazy) this.deferStart = true;
