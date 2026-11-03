@@ -532,6 +532,7 @@
     } catch (e) { log('core failed: ' + e.message); return false; }
     FujiNet.attach(S.emu);
     RawDisk.attach(S.emu);
+    Printer.attach(S.emu);
     hookDevices();
     applyPad();
     for (const [n, d] of Object.entries(S.disks)) S.emu.mountDisk(+n, d.name, d.bytes);
@@ -3051,9 +3052,15 @@
     } else if (id === 'N') {
       title = 'N: FujiNet';
       L.push(FujiNet.enabled ? 'FujiNet emulation is on' : 'FujiNet emulation is off');
+    } else if (id === 'P') {
+      title = 'P: printer';
+      const n = Printer.lines.length;
+      L.push(S.emu && S.emu.core === 'altirra' ? 'Needs the libatari800 core (the Altirra core cannot claim this device).' : n ? `${n} line(s) on the paper` : 'Nothing printed yet. Printed text appears on a paper window.');
+      acts = [{ label: 'Show paper…', run: () => Printer.show() }];
+      if (n) acts.push({ label: 'Save as PNG', run: async () => Printer.download(await Printer.png(), 'printout.png') }, { label: 'Save as text', run: () => Printer.download(new Blob([Printer.text()], { type: 'text/plain' }), 'printout.txt') }, { label: 'Tear off (clear paper)', run: () => Printer.clear() });
     } else {
       title = id + ':';
-      L.push(id === 'P' ? 'Printer device (output is captured)' : id === 'R' ? 'RS-232 serial (R:) device' : '');
+      L.push(id === 'R' ? 'RS-232 serial (R:) device' : '');
     }
     L.push('', 'Activity: ' + st + ' (green read, red write, yellow other)');
     return { title, lines: [title, ...L], body: L, acts };
@@ -4504,6 +4511,7 @@
     snapshot: () => S.emu.snapshot(), restore: (s) => { S.emu.restore(s); draw(); },
     reset: (cold) => (cold ? coldOrExe() : S.emu.warmStart()),
     typing: () => S.typeQ.length,
+    printer: { text: () => Printer.text(), lines: () => Printer.lines.length, clear: () => Printer.clear(), show: () => Printer.show() },
     // Debug: fn(dev,cmd,dstats,aux,data,len) sees every SIO call; return a status code ('C' = 0x43) to claim it.
     sioTap: (fn) => {
       const m = S.emu.m, inner = m.acSio;
