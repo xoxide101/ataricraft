@@ -19,6 +19,23 @@ ok(pngz.length < png.length, 'deflate smaller than stored');
 const bmp = I.encodeBMP(g);
 ok(I.detect(bmp) === 'bmp' && I.info(bmp).w === 37, 'detect BMP');
 ok(same(I.decodeBMP(bmp), g), 'BMP round trip');
+{
+  const gif = I.encodeGIF(g), back = I.decodeGIF(gif);
+  ok(I.detect(gif) === 'gif' && I.info(gif).w === 37, 'GIF encode detected');
+  const q = (x) => x & 0xe0; // 3-3-2 fallback loses low bits
+  let exactOk = back.w === g.w && back.h === g.h, near = true;
+  for (let i = 0; i < g.data.length; i += 4) { if (back.data[i] !== g.data[i] || back.data[i + 1] !== g.data[i + 1] || back.data[i + 2] !== g.data[i + 2]) exactOk = false; if (Math.abs(back.data[i] - g.data[i]) > 40) near = false; }
+  ok(exactOk || near, 'GIF round trip (exact or 3-3-2)');
+  const w = 300, h = 200, d = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) { const x = i % w, y = (i / w) | 0; d[i * 4] = (x * 7 + y * 13) & 255; d[i * 4 + 1] = (x * y) & 255; d[i * 4 + 2] = (x ^ y) & 255; d[i * 4 + 3] = x < 10 ? 0 : 255; }
+  const big = I.decodeGIF(I.encodeGIF({ w, h, data: d }));
+  let good = big.w === w && big.h === h;
+  for (let i = 0; i < w * h && good; i++) { if ((d[i * 4 + 3] === 0) !== (big.data[i * 4 + 3] === 0)) good = false; else if (d[i * 4 + 3] && Math.abs(big.data[i * 4] - d[i * 4]) > 40) good = false; }
+  ok(good, 'GIF many colours + transparency + table reset');
+  const two = { w: 2, h: 1, data: Uint8Array.of(255, 0, 0, 255, 0, 0, 255, 255) };
+  ok(same(I.decodeGIF(I.encodeGIF(two)), two), 'GIF exact palette 2 colours');
+  try { const fs = require('fs'), cp = require('child_process'); fs.writeFileSync('tools/tests/bin/_t.gif', I.encodeGIF({ w, h, data: d })); const r = cp.spawnSync('ffmpeg', ['-v', 'error', '-y', '-i', 'tools/tests/bin/_t.gif', '-f', 'null', '-']); if (r.error) console.log('skip ffmpeg GIF check'); else ok(r.status === 0 && !String(r.stderr).trim(), 'ffmpeg reads our GIF'); } catch (e) { console.log('skip ffmpeg GIF check'); }
+}
 ok(I.detect(Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0, 0)) === 'jpg', 'detect JPEG');
 ok(I.detect(Buffer.from('GIF89a\x10\x00\x10\x00')) === 'gif' && I.info(Buffer.from('GIF89a\x10\x00\x20\x00\x00\x00\x00')).h === 32, 'detect and info GIF');
 ok(I.detect(Buffer.from('RIFF\0\0\0\0WEBPVP8X'.padEnd(40, '\0'), 'latin1')) === 'webp', 'detect WebP');

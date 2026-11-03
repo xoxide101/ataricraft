@@ -247,6 +247,61 @@
   };
   const range = (s, e, st) => { const a = []; for (let i = s; i < e; i += st) a.push(i); return a; };
 
+  // ---------- GIF encode (one frame). Exact palette up to 256 colours, otherwise a fixed 3-3-2 palette. ----------
+  I.encodeGIF = function (img) {
+    const { w, h, data } = img, n = w * h, idx = new Uint8Array(n), map = new Map(), pal = [];
+    let exact = true, hasT = false;
+    for (let i = 0; i < n && exact; i++) {
+      if (data[i * 4 + 3] < 128) { hasT = true; continue; }
+      const k = (data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2];
+      if (!map.has(k)) { if (map.size >= (hasT ? 255 : 256) && true) { exact = false; break; } map.set(k, map.size); pal.push(k); }
+    }
+    if (exact && hasT === false) for (let i = 0; i < n; i++) if (data[i * 4 + 3] < 128) { hasT = true; break; }
+    if (exact && hasT && map.size > 255) exact = false;
+    let tIdx = -1;
+    if (exact) {
+      tIdx = hasT ? pal.length : -1;
+      for (let i = 0; i < n; i++) idx[i] = data[i * 4 + 3] < 128 ? tIdx : map.get((data[i * 4] << 16) | (data[i * 4 + 1] << 8) | data[i * 4 + 2]);
+      if (hasT) pal.push(0);
+    } else {
+      pal.length = 0;
+      for (let c = 0; c < 256; c++) pal.push((((c >> 5) * 255 / 7 + 0.5 | 0) << 16) | ((((c >> 2) & 7) * 255 / 7 + 0.5 | 0) << 8) | ((c & 3) * 255 / 3 + 0.5 | 0));
+      if (hasT) tIdx = 0;
+      for (let i = 0; i < n; i++) {
+        if (hasT && data[i * 4 + 3] < 128) { idx[i] = 0; continue; }
+        let v = (data[i * 4] >> 5 << 5) | (data[i * 4 + 1] >> 5 << 2) | (data[i * 4 + 2] >> 6);
+        if (hasT && v === 0) v = 1;
+        idx[i] = v;
+      }
+    }
+    let bitsN = 1; while ((1 << bitsN) < pal.length) bitsN++;
+    const out = [];
+    const w16 = (v) => out.push(v & 255, (v >> 8) & 255);
+    'GIF89a'.split('').forEach((c) => out.push(c.charCodeAt(0)));
+    w16(w); w16(h); out.push(0x80 | 0x70 | (bitsN - 1), 0, 0);
+    for (let i = 0; i < (1 << bitsN); i++) { const c = pal[i] || 0; out.push((c >> 16) & 255, (c >> 8) & 255, c & 255); }
+    if (tIdx >= 0) out.push(0x21, 0xf9, 4, 1, 0, 0, tIdx, 0);
+    out.push(0x2c); w16(0); w16(0); w16(w); w16(h); out.push(0);
+    const min = Math.max(2, bitsN); out.push(min);
+    const clear = 1 << min, end = clear + 1, bytes = [];
+    let acc = 0, nb = 0, size = min + 1, next = end + 1, dict = new Map();
+    const put = (code) => { acc |= code << nb; nb += size; while (nb >= 8) { bytes.push(acc & 255); acc >>= 8; nb -= 8; } };
+    put(clear);
+    let cur = idx[0];
+    for (let i = 1; i < n; i++) {
+      const c = idx[i], key = cur * 256 + c, hit = dict.get(key);
+      if (hit !== undefined) { cur = hit; continue; }
+      put(cur);
+      if (next < 4096) { dict.set(key, next++); if (next > (1 << size) && size < 12) size++; }
+      else { put(clear); dict = new Map(); size = min + 1; next = end + 1; }
+      cur = c;
+    }
+    put(cur); put(end); if (nb > 0) bytes.push(acc & 255);
+    for (let i = 0; i < bytes.length; i += 255) { const len = Math.min(255, bytes.length - i); out.push(len); for (let j = 0; j < len; j++) out.push(bytes[i + j]); }
+    out.push(0, 0x3b);
+    return new Uint8Array(out);
+  };
+
   // ---------- Atari ----------
   // Colour registers are Atari colour bytes (hue<<4 | lum). Needs a palette: AC.buildPalette (palette.js) or opts.atariRGB.
   I.atariPalette = function (opts) {
@@ -352,11 +407,12 @@
     if (ctx.external) return ctx.external(bytes, f);
     throw new Error(I.FORMATS[f].label + ' needs the Workbench (browser) or ffmpeg to decode');
   };
-  I.canEncode = (fmt) => ['png', 'bmp', 'gr8', 'gr9', 'gr15'].includes(fmt);
+  I.canEncode = (fmt) => ['png', 'bmp', 'gif', 'gr8', 'gr9', 'gr15'].includes(fmt);
   I.encode = function (img, fmt, ctx) {
     ctx = ctx || {};
     if (fmt === 'png') return I.encodePNG(img, ctx);
     if (fmt === 'bmp') return I.encodeBMP(img);
+    if (fmt === 'gif') return I.encodeGIF(img);
     if (I.FORMATS[fmt] && I.FORMATS[fmt].atari) return I.encodeAtari(img, fmt, ctx);
     if (ctx.externalEncode) return ctx.externalEncode(img, fmt);
     throw new Error('Cannot write ' + fmt + ' here (needs the Workbench or ffmpeg)');
