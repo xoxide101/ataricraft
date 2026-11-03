@@ -51,6 +51,10 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
   ok(e.some((l) => /HELLO {3}TXT/.test(l)), 'N: pane lists hello.txt', e);
   ok(e.some((l) => /^ :GAMES {5}/.test(l)), 'folder shows as a directory entry', e);
   ok(!e.some((l) => /FREE/.test(l)), 'free-sector trailer is not an entry', e);
+  await p.evaluate(() => { Printer.clear(); Printer.cfg.auto = false; });
+  await key('H', 6000);
+  const ptxt = await p.evaluate(() => Printer.text());
+  ok(/ATARICRAFT AFM DIRECTORY/.test(ptxt) && /HELLO\s+TXT/.test(ptxt) && /GAMES/.test(ptxt), 'H prints the N: listing to P:', ptxt);
   await p.screenshot({ path: ROOT + '/out/afm-n-1.png' });
   const gi = e.findIndex((l) => /^ :GAMES/.test(l));
   for (let i = 0; i < gi; i++) await key('S', 400);
