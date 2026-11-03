@@ -67,3 +67,9 @@ The relay is reachable by any web page you open, so `/net/*` is locked down:
 - `node tools/tests/netapi.test.cjs`: relay API, token, address blocking, TCP echo, HTTP POST.
 - `node scripts/ndev-test.cjs`: browser hook plus live relay (HTTP GET from a local server).
 - `node scripts/ndev-sio-test.cjs`: real 6502 `JSR $E459` calls to N1: on both cores.
+
+## Sample app: WGET
+
+	ools/tests/wget.asm (assembles with the Workbench assembler or MADS) is a wget: type a URL, it opens N1: over HTTP, polls status, prints the body and saves it to D1:WGET.TXT when a DOS disk is mounted. Test: 
+ode scripts/wget-test.cjs (both cores, live relay). Typing : into the emulator by keyboard is unreliable in tests, so the test uses taricraft.type().
+
