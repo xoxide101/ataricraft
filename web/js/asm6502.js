@@ -101,7 +101,7 @@
       let pc = 0x2000, seg = null; segs = []; listing.length = 0;
       const org = (a) => { pc = a & 0xFFFF; seg = null; };
       const emit = (b) => { if (!seg) { seg = { addr: pc, bytes: [] }; segs.push(seg); } seg.bytes.push(b & 255); pc = (pc + 1) & 0xFFFF; };
-      const ctx = { get pc() { return pc; }, syms };
+      const ctx = { get pc() { return pc; }, syms }, seen = new Set();
       for (let ln = 0; ln < lines.length; ln++) {
         const raw = stripComment(lines[ln]); if (!raw.trim()) continue;
         const start = pc;
@@ -111,7 +111,7 @@
           if (/^\S/.test(raw)) { m = /^([A-Za-z_][A-Za-z0-9_.]*):?(.*)$/.exec(raw); if (!m) throw new Error('bad label'); label = m[1]; body = m[2]; }
           let t = body.trim();
           if ((m = /^(?:=|equ\b)\s*(.+)$/i.exec(t)) && label) { const r = evalExpr(m[1], ctx); if (last && !r.known) throw new Error('undefined symbol in ' + m[1]); syms.set(label, r.v); continue; }
-          if (label) syms.set(label, pc);
+          if (label) { if (seen.has(label)) throw new Error('duplicate label ' + label); seen.add(label); syms.set(label, pc); }
           if (!t) continue;
           m = /^(\S+)\s*(.*)$/.exec(t); const mn = m[1].toUpperCase().replace(/^\./, ''), rest = m[2];
           const dot = m[1][0] === '.';
