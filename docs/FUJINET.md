@@ -68,6 +68,8 @@ The relay is reachable by any web page you open, so `/net/*` is locked down:
 - `node tools/tests/netapi.test.cjs`: relay API, token, address blocking, TCP echo, HTTP POST.
 - `node scripts/ndev-test.cjs`: browser hook plus live relay (HTTP GET from a local server).
 - `node scripts/ndev-sio-test.cjs`: real 6502 `JSR $E459` calls to N1: on both cores.
+- `node scripts/nhandler-test.cjs`: the CIO-level N: handler (`tools/afm/nhandler.inc`).
+- `node scripts/afm-n-test.cjs`: native AFM on N: (browse, copy both ways, mkdir, rename, delete, refused ops).
 
 ## Sample app: WGET
 

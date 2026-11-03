@@ -8,6 +8,7 @@ Two-pane 6502 file manager for DOS 2.0/2.5, MyDOS and SpartaDOS X. Load `AFM.COM
 | W/S or -/= | move cursor |
 | Tab / Space | switch pane |
 | 1-8 | change drive |
+| 9 0 | N1: / N2: (FujiNet): asks for a URL, RETURN = `SD:/` (the relay's `--sd` folder), or `TNFS://host/dir/`. Copy, move, delete, rename, mkdir work; lock, unlock, format, clear and properties are refused. AFM loads its own N: handler (`nhandler.inc`) unless a real one exists. AFM80 needs BASIC off for N: |
 | Return | run file / open folder (`..` goes up) |
 | C D R | copy, delete, rename (use tags when set) |
 | L U F X | lock, unlock, format, clear disk/folder |
