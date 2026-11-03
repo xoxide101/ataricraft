@@ -314,8 +314,11 @@ c22:    cmp #'G'
         bne c23
         jmp donew
 c23:    cmp #'O'
-        bne c18
+        bne c24
         jmp domove
+c24:    cmp #'H'
+        bne c18
+        jmp doprint
 c18:    jmp main
 
 ; ---- k_tab: switch active pane (act ^= 1).  Redraws both pane headers, then re-draws the
@@ -2511,7 +2514,7 @@ dohelp: lda #125
         .byte '/ FIND NAME  N FIND NEXT',$9B
         .byte 'V VIEW FILE (H = HEX)',$9B
         .byte 'E EDIT (ESC OR CTRL+KEY: S Q H U D T E)',$9B
-        .byte 'I INFO  G NEW FILE  Q QUIT',$9B,$9B
+        .byte 'H PRINT TO P:  I INFO  G NEW  Q QUIT',$9B,$9B
         .byte 'COPY/DELETE/LOCK/UNLOCK USE TAGS',$9B
         .byte 'PRESS ANY KEY',0
         jsr getkey
@@ -5887,7 +5890,81 @@ pnm:    .ds 12
 pnl:    .byte 0
 
 
+
+
+; ---- doprint: H key.  Hardcopy of the active pane's listing to P: (one line per entry, 17
+; chars each, control/inverse bytes mapped to plain ASCII-safe characters).
+doprint:
+        jsr msgrow
+        jsr putsi
+        .byte 'PRINTING TO P:...',0
+        lda #<pspec
+        sta spl
+        lda #>pspec
+        sta sph
+        ldx #$40
+        lda #8
+        jsr openF
+        bpl dp_ok
+        jsr msgrow
+        jsr putsi
+        .byte 'P: NOT AVAILABLE',0
+        jmp main
+dp_ok:  ldy #0
+dp_h:   sty prj
+        lda phdr,y
+        beq dp_h1
+        jsr pput
+        ldy prj
+        iny
+        bne dp_h
+dp_h1:  lda #$9B
+        jsr pput
+        lda #0
+        sta pri
+dp_lp:  ldx act
+        lda pri
+        cmp cnt,x
+        bcs dp_done
+        jsr entp
+        ldy #0
+dp_c:   sty prj
+        lda (ZP),y
+        and #$7F
+        cmp #$20
+        bcs dp_p
+        lda #$20
+dp_p:   jsr pput
+        ldy prj
+        iny
+        cpy #17
+        bcc dp_c
+        lda #$9B
+        jsr pput
+        inc pri
+        jmp dp_lp
+dp_done: ldx #$40
+        jsr closeF
+        jsr msgrow
+        jsr putsi
+        .byte 'PRINTED',0
+        jmp main
+; pput: put one byte (A) to the IOCB 4 channel.
+pput:   pha
+        ldx #$40
+        lda #11
+        sta ICCOM,x
+        lda #0
+        sta ICBLL,x
+        sta ICBLH,x
+        pla
+        jmp CIOV
+
+pspec:  .byte 'P:',$9B
+phdr:   .byte 'ATARICRAFT AFM DIRECTORY',0
+pri:    .byte 0
+prj:    .byte 0
+
 ; N: handler (tools/afm/nhandler.inc) in free RAM above the editor buffer
         org $9100
         icl 'nhandler.inc'
-
