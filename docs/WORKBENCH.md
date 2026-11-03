@@ -9,7 +9,7 @@ A guide for people and AI agents who want to learn Atari 8-bit development, or b
 | Piece | Open | What it is |
 |---|---|---|
 | Emulator | `web/index.html` | Atari 8-bit machine in the browser (libatari800 and AltirraSDL cores, both WASM). You supply your own ROMs; none are included. |
-| Workbench | `web/workbench.html` | Eight tabs for sound, graphics, maps and music. Details in section 2. |
+| Workbench | `web/workbench.html` | Nine tabs for sound, graphics, maps, music and images. Details in section 2. |
 | In-browser tools | tabs inside `index.html` | BASIC, ASM (6502 assembler), FONT editor, AFM file manager, WebAFM. |
 | Tools disk and Audio disk | `web/library/craftapps/Tools/` | Ready-made Atari programs (NANO editor, CALC, 80COL, VIEW, SNDTEST, MIDI/MP3 players and tests). |
 | Circuit Runner | `games/circuit/` | A platformer built with the Workbench tools. A worked example of the whole pipeline. |
@@ -27,6 +27,7 @@ All tabs run in the page. Loaders check their input and refuse bad files without
 - **Tracker**: pattern tracker with MIDI import. Exports through the RMT packer. Voice sharing is not done; poly4 and noise pitch are approximate.
 - **Player-missile**: editor for Atari player/missile graphics. Export is not yet wired into the example game.
 - **Scroll art**: draws large scrolling pictures. Export is not yet wired into the example game.
+- **Images**: add files or a whole folder, see them grouped by format (PNG, GIF, BMP, JPEG, WebP, ICO, TIFF and the Atari GR.8, GR.9 and GR.15 / MicroPainter raw dumps), filter by type or name, convert the selection to PNG, BMP, JPEG, WebP or an Atari format (resize, fit, dither, colour registers, hue), and download one file, a ZIP of conversions, or a ZIP with one folder per type. Nothing is uploaded. The same code runs on the command line as `node tools/imgtool.cjs` (`info`, `scan`, `find`, `organize`, `convert`; run it with no arguments for usage). Library: `web/js/imgconv.js`. Checks: `node tools/tests/imgconv.test.cjs` and `node scripts/img-test.cjs` (browser). Limits: Atari dumps are recognised by file extension plus size (7680 bytes), because the raw formats have no header, so a renamed file can be misread. Atari colours are chosen by nearest match in a fixed palette; MicroPainter files with saved colour bytes are read as 7680 pixel bytes and the colours come from the options. JPEG, WebP, ICO and TIFF need the browser, or ffmpeg on the command line; GIF is read (first frame) but not written. PNG and Atari output were tested in Chrome and Node only, and Atari pictures were not loaded on real hardware.
 
 Workflow for the example game: edit in the tabs, download the file, replace `games/circuit/assets.json` (or `music.json`), then run `node games\circuit\build.cjs` to produce `out\circuit.xex`. The tabs cannot write into the repository themselves; that is a browser limit.
 
