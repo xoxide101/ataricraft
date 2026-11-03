@@ -311,7 +311,17 @@ function sdOp(op, p, to) {
     else throw sdErr(146);
   } catch (e) { sdFsErr(e); }
 }
-const relayNet = netapi.create({ token: process.env.AC_TOKEN, allowLan: flag('--allow-lan'), extra: {
+// One token that survives restarts, so nothing needs pasting: AC_TOKEN wins, else ~/.ataricraft-token.
+const osMod = require('os');
+const tokenFile = pathMod.join(osMod.homedir(), '.ataricraft-token');
+function persistentToken() {
+  if (process.env.AC_TOKEN) return process.env.AC_TOKEN;
+  try { const t = fs.readFileSync(tokenFile, 'utf8').trim(); if (/^[0-9a-f]{16,}$/.test(t)) return t; } catch (e) {}
+  const t = require('crypto').randomBytes(12).toString('hex');
+  try { fs.writeFileSync(tokenFile, t + '\n', { mode: 0o600 }); } catch (e) {}
+  return t;
+}
+const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--allow-lan'), extra: {
   '/net/sd/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(sdList(a.path))) }),
   '/net/sd/file': async (a) => ({ meta: {}, body: sdFile(a.path) }),
   '/net/sd/put': async (a, body) => { sdPut(a.path, body, a.append); return { meta: {} }; },
@@ -321,8 +331,33 @@ const relayNet = netapi.create({ token: process.env.AC_TOKEN, allowLan: flag('--
   '/net/tnfs/put': async (a, body) => { await put(a.host, a.path, body, a.append); return { meta: {} }; },
   '/net/tnfs/op': async (a) => { await fsop(a.host, a.op, a.path, a.to || ''); return { meta: {} }; },
 } });
+// The relay also serves the emulator (web/) so one command is enough: open http://127.0.0.1:PORT/.
+// HTML is served with the token and relay address pre-filled. Static replies carry no CORS headers,
+// so other websites cannot read the token, and a non-local Host header is refused (DNS rebinding).
+const webRoot = pathMod.resolve(__dirname, '..', '..', 'web');
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.bin': 'application/octet-stream' };
+const isApi = (p) => p.startsWith('/net/') || ['/ping', '/status', '/list', '/file'].includes(p);
+function serveStatic(rq, rs, u) {
+  if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(rq.headers.host || '')) { rs.writeHead(403); rs.end('bad host'); return; }
+  let rel;
+  try { rel = decodeURIComponent(u.pathname); } catch (e) { rs.writeHead(400); rs.end(); return; }
+  if (rel === '/') rel = '/index.html';
+  const full = pathMod.resolve(webRoot, '.' + pathMod.posix.normalize(rel));
+  if (!(full === webRoot || full.startsWith(webRoot + pathMod.sep))) { rs.writeHead(403); rs.end(); return; }
+  fs.readFile(full, (err, data) => {
+    if (err) { rs.writeHead(404); rs.end('not found'); return; }
+    const ext = pathMod.extname(full).toLowerCase();
+    if (ext === '.html') {
+      const inj = '<script>try{localStorage.setItem("ac.nettoken",' + JSON.stringify(relayNet.token) + ');localStorage.setItem("ac.tnfsbridge",location.origin)}catch(e){}</script>';
+      data = Buffer.from(String(data).replace(/<head[^>]*>/i, (m) => m + inj));
+    }
+    rs.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    rs.end(data);
+  });
+}
 const server = http.createServer(async (rq, rs) => {
   const u = new URL(rq.url, 'http://x');
+  if (rq.method === 'GET' && !isApi(u.pathname)) { serveStatic(rq, rs, u); return; }
   rs.setHeader('Access-Control-Allow-Origin', '*');
   rs.setHeader('Access-Control-Allow-Private-Network', 'true');
   rs.setHeader('Access-Control-Allow-Headers', 'X-AC-Token, X-AC-Args');
@@ -344,8 +379,22 @@ const server = http.createServer(async (rq, rs) => {
     else { rs.writeHead(404); rs.end(); }
   } catch (e) { rs.writeHead(502); rs.end(String(e.message)); }
 });
-const port = +process.argv[2] || 8765;
-server.listen(port, '127.0.0.1', () => { console.log('TNFS bridge on http://127.0.0.1:' + port); console.log('N: token (paste into Workbench > FujiNet): ' + relayNet.token + (flag('--allow-lan') ? '  [LAN targets ALLOWED]' : '  [LAN/loopback targets blocked]') + (flag('--allow-write') ? '  [TNFS writes ALLOWED]' : '  [TNFS read-only]')); });
+const port = +process.argv[2] || +process.env.AC_PORT || 8765;
+server.listen(port, '127.0.0.1', () => {
+  const url = 'http://127.0.0.1:' + port + '/';
+  console.log('Ataricraft + relay running: ' + url + '   (Ctrl+C to stop)');
+  console.log('Open that address and FujiNet networking is already set up (token and relay address are filled in for you).');
+  console.log((flag('--allow-lan') ? '[LAN targets ALLOWED]' : '[LAN/loopback targets blocked]') + ' ' + (flag('--allow-write') ? '[writes ALLOWED]' : '[read-only]') + (sdRoot ? ' [SD: ' + sdRoot + ']' : ''));
+  console.log('N: token (only needed if you open the page from a file or another host): ' + relayNet.token);
+  if (flag('--open')) {
+    const cp = require('child_process');
+    try {
+      if (process.platform === 'win32') cp.spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref();
+      else cp.spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+    } catch (e) {}
+  }
+});
+server.on('error', (e) => { console.error(e.code === 'EADDRINUSE' ? 'Port ' + port + ' is busy (is the relay already running? try: node tools/tnfs-bridge/bridge.cjs ' + (port + 1) + ')' : String(e.message)); process.exit(1); });
 
 // Unmount cleanly so the servers don't keep our sessions open.
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {

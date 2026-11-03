@@ -1,5 +1,7 @@
 # TNFS relay
 
+**Easiest way:** run `start.cmd` (Windows) or `./start.sh` (macOS/Linux/Pi/Termux) in the project folder. It serves the emulator and the relay together and fills in the token for you. See [docs/GETTING-STARTED.md](../../docs/GETTING-STARTED.md).
+
 Lets the Virtual FujiNet in ataricraft browse and mount images from public TNFS servers (host slots 2-8).
 Browsers cannot send UDP, so this small dependency-free Node program (Node 18+) answers the page over local HTTP.
 
