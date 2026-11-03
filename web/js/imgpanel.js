@@ -33,7 +33,7 @@
   const items = []; // {id, name, bytes, info, thumb, sel}
   let nid = 1;
   const NATIVE = ['png', 'gif', 'jpg', 'webp', 'bmp', 'ico'];
-  const TARGETS = [['png', 'PNG'], ['bmp', 'BMP'], ['jpg', 'JPEG'], ['webp', 'WebP'], ['gr15', 'Atari GR.15 / MIC (160x192, 4 colours)'], ['gr8', 'Atari GR.8 (320x192, 2 shades)'], ['gr9', 'Atari GR.9 (80x192, 16 shades)']];
+  const TARGETS = [['png', 'PNG'], ['bmp', 'BMP'], ['gif', 'GIF (one frame)'], ['jpg', 'JPEG'], ['webp', 'WebP'], ['gr15', 'Atari GR.15 / MIC (160x192, 4 colours)'], ['gr8', 'Atari GR.8 (320x192, 2 shades)'], ['gr9', 'Atari GR.9 (80x192, 16 shades)']];
   $('imto').innerHTML = TARGETS.map((t) => `<option value="${t[0]}">${t[1]}</option>`).join('');
   $('imhue').innerHTML = Array.from({ length: 16 }, (_, i) => `<option value="${i}">${i}</option>`).join('');
 
