@@ -73,6 +73,38 @@
     return prefix + (prefix && !prefix.endsWith('/') ? '/' : '') + arg;
   }
 
+  // Directory listing as the Atari firmware prints it (util_crunch / util_entry): 8.3 names, one 17-byte record
+  // per file ('/' folder, '*' locked, name 2-9, extension 10-12 ("DIR" for folders), sectors 14-16), then "999+FREE SECTORS".
+  function crunch(name) {
+    let f = name.replace(/[^0-9A-Za-z.]/g, '');
+    const dot = f.lastIndexOf('.');
+    const long = dot >= 0 ? f.slice(0, dot) : f;
+    let base = long.slice(0, dot >= 0 ? Math.min(8, dot) : 8).toUpperCase();
+    const ext = dot >= 0 ? '.' + f.slice(dot + 1).toUpperCase() : '';
+    if (long.length > 8) {
+      let c = 0; for (let i = 0; i < long.length; i++) { const v = c + long.charCodeAt(i); c = (v >> 8) + (v & 255); }
+      const h = (c & 255).toString(16).toUpperCase().padStart(2, '0');
+      base = base.slice(0, base.length - 2) + h;
+    }
+    return base + ext;
+  }
+  function entryLine(name, size, dir, locked) {
+    const c = crunch(name), dot = c.indexOf('.');
+    const base = (dot >= 0 ? c.slice(0, dot) : c).slice(0, 8), ext = dot >= 0 ? c.slice(dot + 1, dot + 4) : '';
+    let sec = size > 255744 ? 999 : Math.max(1, size >> 8);
+    let r = ('  ' + base.padEnd(8) + (dir ? 'DIR' : ext.padEnd(3)) + ' ' + String(sec).padStart(3, '0'));
+    if (dir) r = '/' + r.slice(1);
+    if (locked) r = '*' + r.slice(1);
+    return r;
+  }
+  const dirText = (l) => enc(l.map((e) => entryLine(e.name, e.size || 0, e.dir, false)).join('\x9b') + (l.length ? '\x9b' : '') + '999+FREE SECTORS\x9b');
+  // Like the firmware's resolve(): a file that is not there by its exact name is matched against the crunched names in its folder.
+  function resolvePath(list, path) {
+    const i = path.lastIndexOf('/'), dir = path.slice(0, i + 1) || '/', want = crunch(path.slice(i + 1));
+    try { const hit = list(dir).find((e) => crunch(e.name) === want); if (hit) return dir + hit.name; } catch (e) {}
+    return path;
+  }
+
   // ---------- protocols ----------
   // Each returns {err, status(), read(n), write(b), close(), ...}. rx is filled lazily via fill().
   const protocols = {};
@@ -182,8 +214,8 @@
     try {
       if (o.aux1 === 6 || o.aux1 === 7) {
         const l = net.tnfsList(host, u.path || '/');
-        st.rx = enc(l.map((e) => (e.dir ? '*' : ' ') + e.name).join('\x9b') + '\x9b');
-      } else st.rx = net.tnfsFile(host, u.path);
+        st.rx = dirText(l);
+      } else { let p = u.path; try { st.rx = net.tnfsFile(host, p); } catch (e) { const q = resolvePath((d) => net.tnfsList(host, d), p); if (q === p) throw e; st.rx = net.tnfsFile(host, q); } }
     } catch (e) { return { fail: ERR.NOT_FOUND }; }
     st.write = () => ERR.READ_ONLY;
     return st;
@@ -207,8 +239,8 @@
     try {
       if (o.aux1 === 6 || o.aux1 === 7) {
         const l = net.sdList(u.path || '/');
-        st.rx = enc(l.map((e) => (e.dir ? '*' : ' ') + e.name).join('\x9b') + '\x9b');
-      } else st.rx = net.sdFile(u.path);
+        st.rx = dirText(l);
+      } else { try { st.rx = net.sdFile(u.path); } catch (e) { const q = resolvePath((d) => net.sdList(d), u.path); if (q === u.path) throw e; st.rx = net.sdFile(q); } }
     } catch (e) { return { fail: ERR.NOT_FOUND }; }
     st.write = () => ERR.READ_ONLY;
     return st;
@@ -479,7 +511,7 @@
     };
   }
 
-  const api = { NDev, relayNet, ERR, parseUrl, fixSpec, chdirPrefix, httpErr, toAtari, fromAtari };
+  const api = { crunch, entryLine, NDev, relayNet, ERR, parseUrl, fixSpec, chdirPrefix, httpErr, toAtari, fromAtari };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NDev = api;
 })(typeof window !== 'undefined' ? window : globalThis);
