@@ -25,9 +25,12 @@ const BODY = 'hello from wget\nline two\n';
       if (FujiNet.emu.fnDevice) FujiNet.emu.fnDevice(true);
     }, { port: web.address().port });
     await p.waitForTimeout(4000);
-    await p.evaluate((x) => ataricraft.bootFile('WGET.COM', new Uint8Array(x)), Array.from(xex));
+    const hand = !!process.env.HAND; const url = 'http://127.0.0.1:' + web.address().port + '/x';
+    let img = Array.from(xex);
+    if (hand) { const d = [0xA5, ...Buffer.from(url + ' ', 'latin1'), 0x9B]; d.splice(1 + url.length, 1); img = img.concat([0x80, 0x04, 0x80 + d.length - 1 & 255, 0x04], d); }
+    await p.evaluate((x) => ataricraft.bootFile('WGET.COM', new Uint8Array(x)), img);
     await p.waitForTimeout(2500);
-    await p.evaluate((t) => ataricraft.type(t), 'http://127.0.0.1:' + web.address().port + '/x\n');
+    if (!hand) await p.evaluate((t) => ataricraft.type(t), url + '\n');
     await p.waitForTimeout(5000);
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT + core + '.png' });
     if (process.env.DBG) console.log(await p.evaluate(() => { const e = FujiNet.emu; return JSON.stringify({ spec: String.fromCharCode(...Array.from(e.peek(0x3000, 40)).map((c) => (c === 0x9b ? 10 : c))), dcb: Array.from(e.peek(0x300, 12)) }); }));
