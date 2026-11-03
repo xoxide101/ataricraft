@@ -74,7 +74,7 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
       const rows = document.querySelector('#wafm .wp[data-i="0"] .wl').textContent;
       return { has, rows: rows.slice(0, 200), src: document.querySelector('#wafm .wp[data-i="0"] .src').selectedOptions[0].textContent };
     });
-    ok(U.r.has && /README/i.test(U.r.rows) && /Relay SD/.test(U.r.src), 'pane dropdown mounts the relay SD folder', U.r);
+    ok(U.r.has && /README/i.test(U.r.rows) && /N: FujiNet SD/.test(U.r.src), 'pane dropdown mounts the relay SD folder', U.r);
   } finally {
     await b.close(); rw.kill(); ro.kill(); none.kill();
     fs.rmSync(dir, { recursive: true, force: true });
