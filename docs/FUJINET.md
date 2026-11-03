@@ -29,7 +29,8 @@ Commands use the firmware IDs and DSTATS directions.
 | `0x44` | UDP set destination | done |
 | `0x45` `0xFF` | get error, get DSTATS for a command | done |
 | `Z` | set interrupt rate | accepted, ignored (see limits) |
-| `0x72` get remote (UDP), `0x25`/`0x26` seek/tell, rename, delete, lock, unlock, mkdir, rmdir | | **not done**; returns NAK (error 132) |
+| `0x20` rename, `0x21` delete, `0x2A` mkdir, `0x2B` rmdir | filespec (`N:TNFS://host/a.txt,b.txt` for rename; the new name without a `/` stays in the same folder) | done for `TNFS://` only, and only when the relay runs with `--allow-write`. Other schemes return 146 |
+| `0x72` get remote (UDP), `0x25`/`0x26` seek/tell, lock, unlock | | **not done**; returns NAK (error 132) |
 
 ## Protocols
 
@@ -39,7 +40,7 @@ Commands use the firmware IDs and DSTATS directions.
 | `HTTP` / `HTTPS` | GET, POST, PUT, DELETE, request and response headers, basic auth, redirects; status mapped to FujiNet error codes. The request runs on the first status or read (PUT/POST on close). No range requests |
 | `TCP` | client and server |
 | `UDP` | send and receive; one datagram per read buffer fill |
-| `TNFS` | directory listing and whole-file read through the existing relay |
+| `TNFS` | directory listing and whole-file read through the relay. With `--allow-write` on the relay: open for write (mode 8) or append (mode 9), data is sent when the channel closes, so a failed write shows as an error on close. Tested only against a mock UDP TNFS server (`tools/tests/mocktnfs.cjs`), not a real `tnfsd`: `node scripts/tnfs-write-test.cjs` |
 | `SD` | **not done** (needs a local-folder reader in `net`; returns 146) |
 | `TELNET`, `WS`, `FTP`, `SSH`, `SFTP`, `SMB`, `NFS`, `S3`, cloud services | **not done**; a valid URL gives error 144 and an invalid one 165 |
 

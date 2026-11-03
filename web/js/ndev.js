@@ -161,10 +161,23 @@
     return st;
   };
 
-  // TNFS: directory listing and whole-file read through the existing relay
+  // TNFS: directory listing and whole-file read through the existing relay. Writes (modes 8 and 9) and the
+  // file commands need a relay started with --allow-write; the data is sent when the channel is closed.
   protocols.tnfs = (u, o, net) => {
     const st = { raw: false, rx: new Uint8Array(0), eof: true, lazy: false, err: ERR.OK };
     const host = u.host + (u.port ? ':' + u.port : '');
+    if (o.aux1 === 8 || o.aux1 === 9) {
+      if (!net.tnfsPut) return { fail: ERR.NOT_IMPL };
+      const parts = [];
+      st.writeOnly = true;
+      st.write = (b) => { parts.push(Uint8Array.from(b)); return ERR.OK; };
+      st.closeFn = () => {
+        const n = parts.reduce((s, p) => s + p.length, 0), all = new Uint8Array(n);
+        let at = 0; for (const p of parts) { all.set(p, at); at += p.length; }
+        return net.tnfsPut(host, u.path, all, o.aux1 === 9);
+      };
+      return st;
+    }
     try {
       if (o.aux1 === 6 || o.aux1 === 7) {
         const l = net.tnfsList(host, u.path || '/');
@@ -220,8 +233,9 @@
       return ERR.OK;
     }
     close() {
+      this.closeErr = 0;
       if (this.p) {
-        try { if (this.p.closeFn) { this.p.closeFn(); } } catch (e) { /* closing never fails on the Atari side */ }
+        try { if (this.p.closeFn) { const e = this.p.closeFn(); if (typeof e === 'number' && e !== ERR.OK && e !== 0) this.closeErr = e; } } catch (e) { this.closeErr = ERR.GENERAL; }
       }
       this.p = null; this.rx = new Uint8Array(0); this.parsed = null; this.deferStart = false;
     }
@@ -236,7 +250,7 @@
       if (this.p.lazy) err = this.p.err;
       else if (this.p.tcp && !this.p.connected && !a) err = this.p.eof ? ERR.EOF : this.err;
       if (this.parseErr) err = this.parseErr;
-      if (!a && this.p.eof && err === ERR.OK && !this.p.tcp && !this.p.lazy) err = ERR.EOF;
+      if (!a && this.p.eof && err === ERR.OK && !this.p.tcp && !this.p.lazy && !this.p.writeOnly) err = ERR.EOF;
       if (!a && this.p.lazy && this.p.started && this.p.eof && err === ERR.OK) err = ERR.EOF;
       const conn = this.p.tcp ? (this.p.server ? (this.p.connected ? 1 : 0) : (this.p.connected ? 1 : 0)) : (a ? 1 : 0);
       return [a & 255, (a >> 8) & 255, conn, err & 255];
@@ -320,7 +334,7 @@
             const spec = dec(rd());
             return u.open(spec, a1, a2) === ERR.OK ? C : E;
           }
-          case 0x43: u.close(); u.err = ERR.OK; return C;
+          case 0x43: { u.close(); const e = u.closeErr || 0; u.err = e || ERR.OK; return e ? E : C; }
           case 0x53: put(Uint8Array.from(u.status())); return C;
           case 0x52: { // read
             const n = (len || 0);
@@ -367,6 +381,25 @@
             if (!m) return E;
             u.p.dest = { host: m[1], port: +m[2] };
             return C;
+          }
+          case 0x20: case 0x21: case 0x2a: case 0x2b: { // rename, delete, mkdir, rmdir (TNFS only)
+            const raw = dec(rd()).replace(/[\x9b\x00].*$/s, '');
+            const op = { 0x20: 'rename', 0x21: 'unlink', 0x2a: 'mkdir', 0x2b: 'rmdir' }[cmd];
+            const parts = op === 'rename' ? raw.split(',') : [raw];
+            if (op === 'rename' && parts.length !== 2) { u.err = ERR.BAD_SPEC; return E; }
+            const url = parseUrl(fixSpec(parts[0], u.prefix, false));
+            if (!url) { u.err = ERR.BAD_SPEC; return E; }
+            if (url.scheme !== 'tnfs') { u.err = ERR.NOT_IMPL; return E; }
+            if (!dev.net.tnfsOp) { u.err = ERR.NOT_IMPL; return E; }
+            let to = '';
+            if (op === 'rename') {
+              const t = parts[1].replace(/^N\d*:/i, '').trim();
+              const dir = url.path.replace(/[^/]*$/, '');
+              to = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? (parseUrl(t) || {}).path || '' : t.startsWith('/') ? t : dir + t;
+            }
+            const e = dev.net.tnfsOp(url.host + (url.port ? ':' + url.port : ''), op, url.path, to);
+            u.err = e || ERR.OK;
+            return e && e !== ERR.OK ? E : C;
           }
           case 0x45: put(Uint8Array.from([u.err])); return C;
           case 0x2c: { u.prefix = chdirPrefix(u.prefix, dec(rd()).replace(/[\x9b\x00].*$/s, '')); return C; }
@@ -420,6 +453,8 @@
       udpClose(id) { j('/net/udp/close', { id }); },
       tnfsList(host, path) { const r = j('/net/tnfs/list', { host, path }); if (r.err) throw new Error('tnfs'); return JSON.parse(dec(r.body)); },
       tnfsFile(host, path) { const r = j('/net/tnfs/file', { host, path }); if (r.err) throw new Error('tnfs'); return r.body; },
+      tnfsPut(host, path, data, append) { const r = j('/net/tnfs/put', { host, path, append: !!append }, data); return r.err || ERR.OK; },
+      tnfsOp(host, op, path, to) { const r = j('/net/tnfs/op', { host, op, path, to }); return r.err || ERR.OK; },
     };
   }
 

@@ -33,6 +33,7 @@ function frameLen(b) {
       return o;
     }
     case 0x24: return st ? 5 : 27;
+    case 0x22: return st ? 5 : 7;
     case 0x25: return st ? 5 : 9;
     case 0x21: { if (st) return 5; if (b.length < 7) return 0; return 7 + b.readUInt16LE(5); }
     default: return 5;
@@ -246,9 +247,42 @@ async function file(hostSpec, path) {
   return out;
 }
 const flag = (n) => process.argv.includes(n);
+
+// Writes are off unless the relay is started with --allow-write.
+const tnfsErr = (what, status) => { const e = new Error(what + ' failed (status ' + status + ')'); e.code = status === 2 ? 170 : (status === 1 || status === 13) ? 167 : 144; return e; };
+const needWrite = () => { if (!flag('--allow-write')) { const e = new Error('writes need --allow-write'); e.code = 167; throw e; } };
+async function put(hostSpec, path, data, append) {
+  needWrite();
+  const c = await conn(hostSpec);
+  // O_WRONLY | O_CREAT | (O_APPEND or O_TRUNC), mode 0644
+  const fl = 0x0002 | 0x0100 | (append ? 0x0008 : 0x0200);
+  let r = await c.req(0x29, Buffer.concat([Buffer.from([fl & 255, fl >> 8, 0xa4, 0x01]), path0(path)]));
+  if (r[4] !== 0) throw tnfsErr('open', r[4]);
+  const fd = r[5];
+  try {
+    for (let at = 0; at < data.length; at += 512) {
+      const chunk = data.subarray(at, at + 512), h = Buffer.alloc(3);
+      h[0] = fd; h.writeUInt16LE(chunk.length, 1);
+      r = await c.req(0x22, Buffer.concat([h, chunk]));
+      if (r[4] !== 0) throw tnfsErr('write', r[4]);
+    }
+  } finally { await c.req(0x23, Buffer.from([fd])).catch(() => {}); }
+  listCache.clear();
+}
+async function fsop(hostSpec, op, path, to) {
+  needWrite();
+  const c = await conn(hostSpec);
+  const cmd = { mkdir: 0x13, rmdir: 0x14, unlink: 0x26, rename: 0x28 }[op];
+  if (!cmd) { const e = new Error('bad op'); e.code = 146; throw e; }
+  const r = await c.req(cmd, op === 'rename' ? Buffer.concat([path0(path), path0(to)]) : path0(path));
+  if (r[4] !== 0) throw tnfsErr(op, r[4]);
+  listCache.clear();
+}
 const relayNet = netapi.create({ token: process.env.AC_TOKEN, allowLan: flag('--allow-lan'), extra: {
   '/net/tnfs/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(await list(a.host, a.path || '/'))) }),
   '/net/tnfs/file': async (a) => ({ meta: {}, body: await file(a.host, a.path) }),
+  '/net/tnfs/put': async (a, body) => { await put(a.host, a.path, body, a.append); return { meta: {} }; },
+  '/net/tnfs/op': async (a) => { await fsop(a.host, a.op, a.path, a.to || ''); return { meta: {} }; },
 } });
 const server = http.createServer(async (rq, rs) => {
   const u = new URL(rq.url, 'http://x');
@@ -274,7 +308,7 @@ const server = http.createServer(async (rq, rs) => {
   } catch (e) { rs.writeHead(502); rs.end(String(e.message)); }
 });
 const port = +process.argv[2] || 8765;
-server.listen(port, '127.0.0.1', () => { console.log('TNFS bridge on http://127.0.0.1:' + port); console.log('N: token (paste into Workbench > FujiNet): ' + relayNet.token + (flag('--allow-lan') ? '  [LAN targets ALLOWED]' : '  [LAN/loopback targets blocked]')); });
+server.listen(port, '127.0.0.1', () => { console.log('TNFS bridge on http://127.0.0.1:' + port); console.log('N: token (paste into Workbench > FujiNet): ' + relayNet.token + (flag('--allow-lan') ? '  [LAN targets ALLOWED]' : '  [LAN/loopback targets blocked]') + (flag('--allow-write') ? '  [TNFS writes ALLOWED]' : '  [TNFS read-only]')); });
 
 // Unmount cleanly so the servers don't keep our sessions open.
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
