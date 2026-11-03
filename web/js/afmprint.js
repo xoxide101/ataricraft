@@ -56,25 +56,30 @@
     return head.join('\n') + '\n\n' + parts.join('\n\n' + '='.repeat(48) + '\n\n') + '\n' + ix.join('\n');
   }
 
-  // Printable page around monospaced text.
-  function textPage(title, text) {
-    return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>@page{margin:14mm}body{margin:0}pre{font:11px/1.25 Consolas,'Courier New',monospace;white-space:pre}</style><pre>${esc(text)}</pre>`;
-  }
+  // Paper sizes (inches, portrait) for an HP LaserJet: Letter, Legal and Tabloid (11x17 on the A3-class models).
+  const PAPER = { letter: { n: 'Letter 8.5 x 11', w: 8.5, h: 11 }, legal: { n: 'Legal 8.5 x 14', w: 8.5, h: 14 }, tabloid: { n: 'Tabloid 11 x 17', w: 11, h: 17 } };
+  const pageCss = (o) => { const p = PAPER[(o && o.paper) || 'letter'] || PAPER.letter, land = !!(o && o.landscape), w = land ? p.h : p.w; return { w, css: `@page{size:${p.w}in ${p.h}in ${land ? 'landscape' : 'portrait'};margin:0.5in}` }; };
 
+  // Printable page around monospaced text; text flows into as many 4.2-inch columns as the page width allows.
+  function textPage(title, text, o) {
+    const pg = pageCss(o), cols = Math.max(1, Math.floor((pg.w - 1) / 4.2));
+    return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>${pg.css}body{margin:0}pre{margin:0;font:11px/1.25 Consolas,'Courier New',monospace;white-space:pre;column-count:${cols};column-gap:0.3in;column-fill:auto}</style><pre>${esc(text)}</pre>`;
+  }
   // Disk label card: name, kind, free space and the file names in columns (folders shown with a trailing slash).
   function labelPage(C, r, o) {
+    const pg = pageCss(o);
     const rows = walk(C, r.m, '', !!(o && o.recursive), [], 0).filter((e) => !e.sidecar);
     const i = C.info(r.m), names = rows.map((e) => esc('  '.repeat(e.depth) + (e.long || e.name) + (e.dir ? '/' : '')));
     const cols = names.length > 36 ? 3 : names.length > 16 ? 2 : 1;
     const free = r.m.kind === 'folder' ? '' : ` · ${i.usage.free} sectors free`;
     return `<!doctype html><meta charset="utf-8"><title>Label</title><style>
-@page{margin:12mm}body{margin:0;font:12px Arial,sans-serif}
+${pg.css}body{margin:0;font:12px Arial,sans-serif}
 .card{border:2px solid #000;border-radius:4px;width:${cols === 1 ? '90mm' : cols === 2 ? '140mm' : '185mm'};padding:5mm}
 h1{margin:0;font-size:20px}.sub{margin:2px 0 6px;font-size:11px;color:#333}
 .f{column-count:${cols};column-gap:6mm;font:11px/1.3 Consolas,'Courier New',monospace;white-space:pre;border-top:1px solid #000;padding-top:4px}</style>
 <div class="card"><h1>${esc(rootName(r) || 'Disk')}</h1><div class="sub">${esc(i.kind.toUpperCase())} · ${esc(i.density)}${esc(free)} · ${rows.filter((e) => !e.dir).length} files</div><div class="f">${names.join('\n')}</div></div>`;
   }
 
-  const G = typeof window !== 'undefined' ? window : globalThis; (G.AC = G.AC || {}).AfmPrint = { listing, catalog, textPage, labelPage, rootName };
-  if (typeof module !== 'undefined') module.exports = { listing, catalog, textPage, labelPage, rootName };
+  const G = typeof window !== 'undefined' ? window : globalThis; (G.AC = G.AC || {}).AfmPrint = { listing, catalog, textPage, labelPage, rootName, PAPER };
+  if (typeof module !== 'undefined') module.exports = { listing, catalog, textPage, labelPage, rootName, PAPER };
 })();
