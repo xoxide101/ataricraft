@@ -73,3 +73,9 @@ The relay is reachable by any web page you open, so `/net/*` is locked down:
 	ools/tests/wget.asm (assembles with the Workbench assembler or MADS) is a wget: type a URL, it opens N1: over HTTP, polls status, prints the body and saves it to D1:WGET.TXT when a DOS disk is mounted. Test: 
 ode scripts/wget-test.cjs (both cores, live relay). Typing : into the emulator by keyboard is unreliable in tests, so the test uses taricraft.type().
 
+
+## Sample app: LYNX
+
+	ools/tests/lynx.asm is a small text browser: it fetches a page over N1:, strips tags (skips <script>, <style>, <title>), decodes &amp; &lt; &gt; &quot;, breaks lines on block tags, word-wraps to 37 columns and pages with a --more-- prompt (Q quits). Links print as word[n]; at the prompt type 1-9 to follow (absolute, root-relative and relative hrefs), a URL starting with http, or Q. Not handled: forms, images, tables as tables, UTF-8, #fragments. Test: 
+ode scripts/lynx-test.cjs (both cores).
+
