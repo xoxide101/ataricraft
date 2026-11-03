@@ -592,7 +592,7 @@
     const st = document.createElement('style'); st.textContent = CSS; document.head.append(st);
     const el = W.el = document.createElement('div'); el.id = 'wafm'; el.tabIndex = 0;
     el.innerHTML = `<div class="wtb"><h2>WebAFM</h2>
-      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="unarc" title="List and unpack the archive (ZIP, ARC, LZH, ALF, 7z...) selected on this disk into the other pane's disk, or into this folder">Unpack archive</button><button data-a="cart" title="Cartridge images: see the CAR header, strip it to a raw ROM, or add one. Uses the selected file, or asks for one from the PC">Cartridge…</button><button data-a="mkzip" title="Pack the selected files into a ZIP on this disk">Make ZIP</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
+      <button data-a="copy" title="F5">Copy ▶</button><button data-a="move" title="F6">Move ▶</button>      <button data-a="mkdir" title="F7">New folder</button><button data-a="az" title="Make one-letter folders A-Z and/or 0-9 here">A–Z / 0–9 folders</button><button data-a="dup" title="Make a copy of the selected file(s) in this folder">Make copy</button><button data-a="rename" title="F2">Rename</button><button data-a="del" title="F8 / Delete">Delete</button><button data-a="props" title="Alt+Enter">Properties</button><button data-a="view" title="F3">View / edit</button><button data-a="export" title="Download the selected files">Save to PC</button><button data-a="unarc" title="List and unpack the archive (ZIP, ARC, LZH, ALF, 7z...) selected on this disk into the other pane's disk, or into this folder">Unpack archive</button><button data-a="cart" title="Cartridge images: see the CAR header, strip it to a raw ROM, or add one. Uses the selected file, or asks for one from the PC">Cartridge…</button><button data-a="mkzip" title="Pack the selected files into a ZIP on this disk">Make ZIP</button><button data-a="import" title="Add files from the PC or from the scanned media library">Add files ▾</button>      <button data-a="all" title="Ctrl+A">Tag all</button><button data-a="undo" title="Ctrl+Z">Undo</button><button data-a="newdisk">New disk…</button><button data-a="f2d" title="Pack a PC folder onto one disk, or span it over a set of disks of a chosen size">Folder → disk(s)…</button><button data-a="compare">Compare panes</button><button data-a="sectors" title="Raw sector editor for the disk in the active pane">Disk editor</button><button data-a="refresh">Refresh</button><button data-a="print" title="Print or save a directory listing, a disk label or a catalog of all open disks">Print…</button><button data-a="names" title="Write LONGNAME.TXT for every file on this disk, using the scan title database where it knows the name">Make LONGNAME.TXT</button>
       <label class="lnc" title="Update LONGNAME.TXT whenever a disk is opened"><input type="checkbox" data-k="lnLoad"> on load</label><label class="lnc" title="Update LONGNAME.TXT whenever changes are written to a disk"><input type="checkbox" data-k="lnSave"> on save</label>
       <span class="sp"></span><button data-a="panes" title="Switch between two panes and a 2×2 grid of four (1 2 / 3 4)">⊞ Panes</button><button data-a="close">✕ Close</button></div>
       <div class="wpanes"></div><div class="wxf" hidden><div class="r1"><b class="xt"></b><span class="xs"></span><button class="xc">Cancel</button></div><div class="r2 xf"></div><div class="xb"><i></i><span class="xp"></span></div></div><div class="wst">Ready. Tab / Shift+Tab switches panes · F5 copy · F6 move (to the pane you came from; dashed border) · F7 folder · F8 delete · drag between panes.</div><div class="wpt" title="Where you are"></div>`;
@@ -762,7 +762,7 @@
   // ---------- actions ----------
   function act(a) {
     const A = W.panes[W.active];
-    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, cart: doCart, mkzip: doMkZip,
+    ({ copy: () => xfer(false), move: () => xfer(true), mkdir: doMkdir, az: doAZ, dup: doDup, rename: doRename, del: doDelete, props: doProps, print: doPrint, view: () => viewFile(W.active), export: doExport, import: doImport, unarc: doUnarc, cart: doCart, mkzip: doMkZip,
       all: () => { const r = rec(A); if (r) { A.sel = new Set(rowsOf(A).filter((x) => !x.sidecar).map((x) => x.path)); render(); } }, undo, newdisk: doNewDisk, panes: () => setPanes(W.n === 4 ? 2 : 4), f2d: doF2D, compare: doCompare, names: () => makeNames(rec(A)), sectors: diskEdit, refresh: async () => { for (const r of new Set(W.panes.map(rec))) if (r && r.kind === 'folder') await reloadFolder(r); refreshDrives(); render(); }, close }[a] || (() => {}))();
   }
   const other = () => partner();
@@ -988,6 +988,26 @@
     }
     if (got.length) await addFiles(i, got, p.dir);
     if (bad.length) msg('Some files could not be read', bad.map((x) => `<div class="bad">${esc(x)}</div>`).join(''));
+  }
+  // Print…: directory listing, disk label card or a catalog of every open disk.  Print opens the browser's print
+  // dialog (choose a printer or "Save as PDF"); Save text writes the same listing as a .txt file.
+  async function doPrint() {
+    const r = rec(W.panes[W.active]), all = [...W.mounts.values()], PR = AC.AfmPrint;
+    if (!r) return log('choose a disk in the active pane first');
+    const dir = W.panes[W.active].dir || '', w = document.createElement('div');
+    const opt = (v, t, on) => `<label style="display:block;margin:4px 0"><input type="radio" name="pk" value="${v}"${on ? ' checked' : ''}> ${t}</label>`;
+    w.innerHTML = `<div class="dim" style="margin-bottom:6px">${esc(PR.rootName(r))}${dir ? ' \\' + esc(dir.replace(/\//g, '\\')) : ''}</div>
+      ${opt('dir', 'Directory of this folder', 1)}${opt('tree', 'Directory with all folders below')}${opt('label', 'Disk label (name and file list on a card)')}${opt('cat', `Catalog of all ${all.length} open disk${all.length === 1 ? '' : 's'}, with an A-Z file index`)}`;
+    const v = await dlg('Print', w, [{ label: 'Cancel', value: null }, { label: 'Save text', value: 'txt' }, { label: 'Print', value: 'print', pri: true }]);
+    if (!v) return;
+    const k = w.querySelector('input:checked').value;
+    const text = k === 'cat' ? PR.catalog(C, all) : k === 'label' ? PR.listing(C, r, { recursive: true }) : PR.listing(C, r, { dir, recursive: k === 'tree' });
+    const base = (PR.rootName(r).replace(/[^\w.-]+/g, '_') || 'disk') + (k === 'cat' ? '-catalog' : k === 'label' ? '-label' : '-dir');
+    if (v === 'txt') return host().save(base + '.txt', new TextEncoder().encode(text.replace(/\n/g, '\r\n')), 'text/plain');
+    const html = k === 'label' ? PR.labelPage(C, r, { recursive: false }) : PR.textPage(base, text);
+    const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; f.srcdoc = html;
+    f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { log('print failed: ' + e.message); } setTimeout(() => f.remove(), 60000); };
+    document.body.append(f); log('printing ' + base);
   }
   function doExport() {
     const p = W.panes[W.active], r = rec(p), items = selItems(p); if (!r || !items.length) return log('tag or select files first');
