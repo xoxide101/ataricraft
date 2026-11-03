@@ -26,6 +26,7 @@
       <label>Hue <select id="imhue"></select></label>
       <label>Video <select id="imvid"><option value="ntsc">NTSC</option><option value="pal">PAL</option></select></label>
       <label><input type="checkbox" id="imnative"> Keep native size when reading Atari</label>
+      <label><input type="checkbox" id="imtrail" title="GR.15 only: append the 4 MicroPainter colour bytes (7684 bytes)"> MicroPainter colour bytes</label>
     </span></div>
   <div class="row"><button class="b" id="imconv">Convert selected</button><button class="b" id="imorg">Download organized ZIP (folder per type)</button><span id="imstat" style="opacity:.85"></span></div>
   <div style="overflow:auto;max-height:55vh"><table id="imtab" style="border-collapse:collapse;width:100%"></table></div></div>`;
@@ -39,7 +40,7 @@
 
   const status = (t, err) => { $('imstat').textContent = t; $('imstat').style.color = err ? '#ff6b6b' : ''; };
   const hex = (s) => (s || '').split(',').map((x) => x.trim()).filter(Boolean).map((x) => parseInt(x, 16));
-  const atariOpts = () => ({ dither: $('imdith').checked, colors: hex($('imcols').value).length ? hex($('imcols').value) : null, hue: +$('imhue').value, video: $('imvid').value, native: $('imnative').checked, fit: $('imfit').value });
+  const atariOpts = () => ({ dither: $('imdith').checked, colors: hex($('imcols').value).length ? hex($('imcols').value) : null, hue: +$('imhue').value, video: $('imvid').value, native: $('imnative').checked, trailer: $('imtrail').checked, fit: $('imfit').value });
 
   async function decode(it) {
     const f = it.info.format;

@@ -4,10 +4,12 @@
 //   node tools/imgtool.cjs find <dir> <fmt>                    list files of one format (png jpg gif bmp webp ico tiff gr8 gr9 gr15)
 //   node tools/imgtool.cjs organize <dir> [--out DIR] [--move] [--dry]   sort into one folder per format (copy by default)
 //   node tools/imgtool.cjs convert <file|dir...> --to <fmt> [--out DIR] [--w N --h N] [--fit contain|cover|stretch]
-//                          [--dither] [--colors 00,28,CA,94] [--hue 0-15] [--video ntsc|pal] [--from gr8|gr9|gr15] [--native]
-// PNG, BMP, GIF (read only) and the Atari raw formats are handled in pure code. JPEG, WebP, ICO and TIFF (and writing JPEG/WebP/GIF)
+//                          [--dither] [--colors 00,28,CA,94] [--hue 0-15] [--video ntsc|pal] [--from gr8|gr9|gr15] [--native] [--trailer]
+// PNG, BMP, GIF and the Atari raw formats are handled in pure code. JPEG, WebP, ICO and TIFF (and writing JPEG/WebP)
 // use ffmpeg when it is on PATH. Atari colours are Atari colour bytes in hex: GR.15 = BAK,PF0,PF1,PF2; GR.8 = background,foreground;
 // GR.9 = one hue (--hue) with 16 luminances. Atari output is 7680 raw bytes; Atari input is shown 320x192 unless --native.
+// --trailer (GR.15): write the 4 MicroPainter colour bytes after the pixels (7684 bytes). A 7684-byte GR.15 input is read with them
+// unless --colors is given. Byte order (PF0,PF1,PF2,BAK) is from memory of the format and not checked against MicroPainter.
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { spawnSync } = require('child_process');
 global.window = global;
@@ -15,7 +17,7 @@ require('../web/js/palette.js');
 const I = require('../web/js/imgconv.js');
 
 const args = process.argv.slice(2), cmd = args.shift();
-const flags = new Set(['--move', '--dry', '--dither', '--native']);
+const flags = new Set(['--move', '--dry', '--dither', '--native', '--trailer']);
 const opt = {}, pos = [];
 for (let i = 0; i < args.length; i++) { if (args[i].startsWith('--')) { if (flags.has(args[i])) opt[args[i].slice(2)] = true; else opt[args[i].slice(2)] = args[++i]; } else pos.push(args[i]); }
 
@@ -36,7 +38,7 @@ const ctx = {
   deflate: (b) => zlib.deflateSync(Buffer.from(b), { level: 9 }),
   external: (bytes, f) => I.decodePNG(ff(bytes, [], ['-frames:v', '1', '-f', 'image2pipe', '-c:v', 'png']), ctx),
   externalEncode: (img, fmt) => ff(I.encodePNG(img, ctx), [], fmt === 'jpg' ? ['-f', 'mjpeg', '-q:v', '3'] : fmt === 'webp' ? ['-f', 'webp'] : fmt === 'gif' ? ['-f', 'gif'] : ['-f', 'image2pipe']),
-  native: !!opt.native, video: opt.video, dither: !!opt.dither, fit: opt.fit, from: opt.from,
+  native: !!opt.native, trailer: !!opt.trailer, video: opt.video, dither: !!opt.dither, fit: opt.fit, from: opt.from,
   colors: opt.colors ? opt.colors.split(',').map((s) => parseInt(s, 16)) : null, hue: opt.hue !== undefined ? +opt.hue : undefined,
 };
 const fmtOf = (s) => { s = (s || '').toLowerCase(); return I.FORMATS[s] ? s : I.formatFromExt('x.' + s); };

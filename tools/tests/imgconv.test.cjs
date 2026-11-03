@@ -60,6 +60,16 @@ const reg = [0x00, 0x28, 0xCA, 0x94], rgb = I.atariPalette({});
 for (let y = 0; y < 192; y++) for (let x = 0; x < 160; x++) { const c = rgb(reg[x >> 5 & 3]); const o = (y * 160 + x) * 4; strip.data.set([c[0], c[1], c[2], 255], o); }
 const sb = I.encodeAtari(strip, 'gr15', { colors: reg });
 ok(sb[0] === 0x00 && sb[8] === 0x55 && sb[16] === 0xAA && sb[24] === 0xFF, 'GR.15 picks the right colour registers');
+{
+  const opts = { colors: [0x00, 0x28, 0xCA, 0x94], trailer: true };
+  const t = I.encodeAtari(g, 'gr15', opts);
+  ok(t.length === 7684 && t[7680] === 0x28 && t[7681] === 0xCA && t[7682] === 0x94 && t[7683] === 0x00, 'GR.15 trailer holds PF0,PF1,PF2,BAK');
+  const a = I.decodeAtari(t, 'gr15', {}), c = I.decodeAtari(t.subarray(0, 7680), 'gr15', { colors: [0x00, 0x28, 0xCA, 0x94] });
+  ok(same(a, c), 'GR.15 trailer colours are used on read');
+  const d = I.decodeAtari(t, 'gr15', { colors: [0x0e, 0x0e, 0x0e, 0x0e] });
+  ok(!same(a, d), 'explicit colours override the trailer');
+  ok(I.detect(t, 'x.mic') === 'gr15', 'detect 7684-byte MIC');
+}
 const dith = I.encodeAtari(grad(320, 192), 'gr8', { dither: true }), plain = I.encodeAtari(grad(320, 192), 'gr8', {});
 ok(Buffer.compare(Buffer.from(dith), Buffer.from(plain)) !== 0, 'dither changes the output');
 
