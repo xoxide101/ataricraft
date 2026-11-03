@@ -101,9 +101,7 @@ WAV tapes, 5200 / 7800 carts and saved states are not supported. DCM and PRO are
 
 ## Licence
 
-atari800 / libatari800 is GPL-2.0, and ataricraft ships a WASM build of it, so this project is distributed under **GPL-2.0** (see `LICENSE`). Source for the build is in this repository (`build/`, `scripts/`) plus upstream atari800 with `build/atari800-sio-hook.patch`.
-
-**Exception: RMT player.** `web/js/rmtplay.js` and `web/js/rmtsap.js` are a JavaScript port of the Raster Music Tracker player routine (Radek Sterba, GPL-3.0, text in `LICENSE-GPL-3.0-RMT.txt`). Those files are GPL-3.0. Whether the whole distribution can stay GPL-2.0-only alongside them has not been resolved (it depends on the atari800 licence terms), so treat the combined work as needing GPL-3.0 until that is checked.
+atari800 / libatari800 is GPL-2.0-or-later and the RMT player port (Radek Sterba) is GPL-3.0, so ataricraft is distributed as a whole under **GPL-3.0** (see `LICENSE`; the RMT notice text is also in `LICENSE-GPL-3.0-RMT.txt`). Source for the WASM build is in this repository (`build/`, `scripts/`) plus upstream atari800 with `build/atari800-sio-hook.patch`. The bundled 7-Zip WASM build carries an unRAR restriction (see the 7z note below); keep that in mind if you redistribute.
 
 ## Using it (short)
 
