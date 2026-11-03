@@ -4,7 +4,7 @@ const fs = require('fs'), path = require('path');
 const { assemble } = require('../../web/js/asm6502.js');
 function build(name) {
   const d = __dirname, rd = (f) => fs.readFileSync(path.join(d, f), 'utf8');
-  const src = rd(name + '.asm').replace('; @head', rd('nhead.inc')).replace('; @lib', rd('nlib.inc'));
+  const src = rd(name + '.asm').replace('; @head', () => rd('nhead.inc')).replace('; @lib', () => rd('nlib.inc')).replace('; @tok', () => rd('ntok.inc'));
   return { src, ...assemble(src) };
 }
 module.exports = { build };
