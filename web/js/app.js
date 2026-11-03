@@ -3472,9 +3472,11 @@
   $('fnfilter').oninput = renderFn;
   $('tnfsurl').value = FujiNet.bridge;
   $('tnfsurl').onchange = () => { FujiNet.bridge = $('tnfsurl').value.trim().replace(/\/$/, ''); localStorage.setItem('ac.tnfsbridge', FujiNet.bridge); FujiNet.down = 0; };
+  $('nettoken').value = localStorage.getItem('ac.nettoken') || '';
+  $('nettoken').onchange = () => localStorage.setItem('ac.nettoken', $('nettoken').value.trim());
   $('tnfstest').onclick = async () => {
     $('tnfsmsg').textContent = '…';
-    try { const t = await (await fetch(FujiNet.bridge + '/ping')).text(); $('tnfsmsg').textContent = /tnfs-bridge/.test(t) ? 'relay running' : 'not the relay'; FujiNet.down = 0; }
+    try { const t = await (await fetch(FujiNet.bridge + '/ping')).text(); $('tnfsmsg').textContent = /tnfs-bridge/.test(t) ? 'relay running' : 'not the relay'; FujiNet.down = 0; if (/tnfs-bridge/.test(t)) { const r = await fetch(FujiNet.bridge + '/net/udp/close', { method: 'POST', headers: { 'X-AC-Token': localStorage.getItem('ac.nettoken') || '', 'X-AC-Args': '%7B%7D' } }); $('tnfsmsg').textContent += r.ok ? ', N: token ok' : ', N: token missing/wrong'; } }
     catch (e) { $('tnfsmsg').textContent = 'not running'; }
   };
   // ---- netplay lobby (public, CORS-open list of hosted Altirra games) ----

@@ -104,7 +104,7 @@ window.AC = window.AC || {};
     fnAttach(fn) {
       const a = this.aw;
       for (const [c, d, l] of fn.proto) a.fnProto(c, d, l);
-      this.m.fnSio = (cmd, dstats, aux, buf, len) => fn.sio(cmd, dstats, aux, buf, len);
+      this.m.fnSio = (cmd, dstats, aux, buf, len, dev) => (dev > 0x70 ? fn.nsio(dev, cmd, dstats, aux, buf, len) : fn.sio(cmd, dstats, aux, buf, len));
       this.fnDevice(fn.enabled);
     }
     fnDevice(on) { this.aw.fn(on ? 1 : 0); }

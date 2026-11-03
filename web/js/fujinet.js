@@ -47,7 +47,14 @@
     attach(emu) {
       this.emu = emu;
       if (emu.fnAttach) { emu.fnAttach(this); return; }
-      emu.m.acSio = (dev, cmd, dstats, aux, data, len) => (dev !== 0x70 ? 0 : this.sio(cmd, dstats, aux, data, len));
+      emu.m.acSio = (dev, cmd, dstats, aux, data, len) => (dev === 0x70 ? this.sio(cmd, dstats, aux, data, len) : (dev > 0x70 && dev <= 0x78 ? this.nsio(dev, cmd, dstats, aux, data, len) : 0));
+    },
+
+    // N1:-N8: network devices (ndev.js); transport is the local relay, token from Workbench > FujiNet.
+    nsio(dev, cmd, dstats, aux, data, len) {
+      if (!this.enabled || !window.NDev) return 0;
+      if (!this.ndev) this.ndev = NDev.NDev(NDev.relayNet({ base: () => this.bridge, token: () => localStorage.getItem('ac.nettoken') || '' }));
+      return this.ndev.sio(dev, cmd, dstats, aux, data, len, this.mem());
     },
 
     sio(cmd, dstats, aux, data, len) {

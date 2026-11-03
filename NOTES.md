@@ -16,7 +16,7 @@ Owner: Jeff (xoxide101). Offline, no build step for the web shell, opens from `f
 
 ## To do / unverified
 
-- FujiNet: confirm Option-boot of a mounted image works and slot `mounted` flag; test on/off toggle and Reset config end to end; adapter-config offsets and some command names (0xD3/0xD6/0xD9) are best-effort; block-mode directory reads unsupported; N: network devices (fetch/WebSocket) not started.
+- FujiNet: confirm Option-boot of a mounted image works and slot `mounted` flag; test on/off toggle and Reset config end to end; adapter-config offsets and some command names (0xD3/0xD6/0xD9) are best-effort; block-mode directory reads unsupported; N1:-N8: network devices are in web/js/ndev.js (TEST, HTTP(S), TCP, UDP, TNFS, JSON/XML parser) through the relay; gaps (no PROCEED, seek/rename/delete, SD/TELNET/WS/FTP) are listed in docs/FUJINET.md.
 - Keyboard: when Lower is hidden, the remaining glyph should centre on the key (corner placement still seen); recheck phone key crowding after the 38px min height.
 - Desktop 1366x900: page scrolls ~35px (screen-fit reserve not re-measured).
 - 1200XL F-key mapping, cart slot naming and `-1200` flag are guesses.
