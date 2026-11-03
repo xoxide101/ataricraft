@@ -70,16 +70,27 @@ The relay is reachable by any web page you open, so `/net/*` is locked down:
 
 ## Sample app: WGET
 
-	ools/tests/wget.asm (assembles with the Workbench assembler or MADS) is a wget: type a URL, it opens N1: over HTTP, polls status, prints the body and saves it to D1:WGET.TXT when a DOS disk is mounted. Test: 
-ode scripts/wget-test.cjs (both cores, live relay). Typing : into the emulator by keyboard is unreliable in tests, so the test uses taricraft.type().
+`tools/tests/wget.asm` (assembles with the Workbench assembler or MADS) is a wget: type a URL, it opens N1: over HTTP, polls status, prints the body and saves it to D1:WGET.TXT when a DOS disk is mounted. Test: `node scripts/wget-test.cjs` (both cores, live relay). Typing : into the emulator by keyboard is unreliable in tests, so the test uses `ataricraft.type()`.
 
 
 ## Sample app: LYNX
 
-	ools/tests/lynx.asm is a small text browser: it fetches a page over N1:, strips tags (skips <script>, <style>, <title>), decodes &amp; &lt; &gt; &quot;, breaks lines on block tags, word-wraps to 37 columns and pages with a --more-- prompt (Q quits). Links print as word[n]; at the prompt type 1-9 to follow (absolute, root-relative and relative hrefs), a URL starting with http, or Q. Not handled: forms, images, tables as tables, UTF-8, #fragments. Test: 
-ode scripts/lynx-test.cjs (both cores).
+`tools/tests/lynx.asm` is a small text browser: it fetches a page over N1:, strips tags (skips <script>, <style>, <title>), decodes &amp; &lt; &gt; &quot;, breaks lines on block tags, word-wraps to 37 columns and pages with a --more-- prompt (Q quits). Links print as word[n]; at the prompt type 1-9 to follow (absolute, root-relative and relative hrefs), a URL starting with http, or Q. Not handled: forms, images, tables as tables, UTF-8, #fragments. Test: `node scripts/lynx-test.cjs` (both cores).
 
 
 ### Running from CMD
 
 WGET.COM and LYNX.COM read the command line CMD.COM leaves at $0480 ($A5, text, EOL), so WGET http://host/file and LYNX http://host/ run directly from the CMD prompt; with no argument they ask for a URL. Tested for WGET (`HAND=1 node scripts/wget-test.cjs`, both cores); the LYNX path shares the same code but was only assembled, not run.
+
+## Sample apps: MAIL, CURL, JQ, NC
+
+All four read their arguments from the CMD hand-off line (or ask at a prompt) and share `tools/tests/nhead.inc`, `nlib.inc` and `ntok.inc`; `node tools/tests/buildapp.cjs NAME` pastes the includes and writes `tools/tests/bin/NAME.COM`.
+
+| App | Usage | Notes |
+|---|---|---|
+| `MAIL.COM` | `MAIL L\|R\|D host:port user pass [n]` (list, read, delete) and `MAIL S host:port from to text...` (send) | POP3 and SMTP over `N:TCP://`, plain text only (no TLS). Multi-line SMTP replies (`250-`) are cut at the first line. |
+| `CURL.COM` | `CURL url`, `CURL -i url`, `CURL -d word url` | `-i` prints `STATUS n` (the FujiNet error code, 1 = 2xx) and the response headers before the body. `-d` POSTs a single word. |
+| `JQ.COM` | `JQ /path url` | Uses the N: JSON parser (`$FC`, `P`, `Q`). Prints `BAD JSON` or `NOT FOUND`. |
+| `NC.COM` | `NC host port [word]`, `NC -l port` | Client sends a word or interactive lines (empty line quits). `-l` accepts one client, sends a greeting, prints what it sends, says BYE. |
+
+Tests: `node scripts/mail-test.cjs` and `node scripts/net-apps-test.cjs` (CURL, JQ and NC; `CORES=atari800`, `ONLY=<args prefix>` and `SHOW=1` narrow or expand a run). Both pass on atari800 and Altirra against local servers and the relay. Not verified: real hardware, HTTPS, real internet servers, TLS mail.
