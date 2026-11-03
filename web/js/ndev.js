@@ -57,6 +57,7 @@
     let s = raw.replace(/^N\d*:/i, '');
     s = s.replace(/[^\x20-\x7e]/g, '');
     if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s) && prefix) s = prefix + s;
+    s = s.replace(/^sd:(?!\/\/)\/?/i, 'SD:///');
     if (!isDirRead) s = s.replace(/\*.*$/, '');
     s = s.replace(/\.$/, '').replace(/ /g, '');
     return s;
@@ -188,12 +189,28 @@
     return st;
   };
 
+  // SD: a folder on the PC served by the relay (--sd DIR). Same behaviour as TNFS; writes need --allow-write.
   protocols.sd = (u, o, net) => {
     const st = { raw: false, rx: new Uint8Array(0), eof: true, err: ERR.OK };
-    if (!net.sdRead) return { fail: ERR.NOT_IMPL };
-    const d = net.sdRead(u.path);
-    if (!d) return { fail: ERR.NOT_FOUND };
-    st.rx = d; st.write = () => ERR.READ_ONLY;
+    if (!net.sdFile) return { fail: ERR.NOT_IMPL };
+    if (o.aux1 === 8 || o.aux1 === 9) {
+      const parts = [];
+      st.writeOnly = true;
+      st.write = (b) => { parts.push(Uint8Array.from(b)); return ERR.OK; };
+      st.closeFn = () => {
+        const n = parts.reduce((s, p) => s + p.length, 0), all = new Uint8Array(n);
+        let at = 0; for (const p of parts) { all.set(p, at); at += p.length; }
+        return net.sdPut(u.path, all, o.aux1 === 9);
+      };
+      return st;
+    }
+    try {
+      if (o.aux1 === 6 || o.aux1 === 7) {
+        const l = net.sdList(u.path || '/');
+        st.rx = enc(l.map((e) => (e.dir ? '*' : ' ') + e.name).join('\x9b') + '\x9b');
+      } else st.rx = net.sdFile(u.path);
+    } catch (e) { return { fail: ERR.NOT_FOUND }; }
+    st.write = () => ERR.READ_ONLY;
     return st;
   };
 
@@ -389,15 +406,15 @@
             if (op === 'rename' && parts.length !== 2) { u.err = ERR.BAD_SPEC; return E; }
             const url = parseUrl(fixSpec(parts[0], u.prefix, false));
             if (!url) { u.err = ERR.BAD_SPEC; return E; }
-            if (url.scheme !== 'tnfs') { u.err = ERR.NOT_IMPL; return E; }
-            if (!dev.net.tnfsOp) { u.err = ERR.NOT_IMPL; return E; }
+            if (url.scheme !== 'tnfs' && url.scheme !== 'sd') { u.err = ERR.NOT_IMPL; return E; }
+            if (url.scheme === 'tnfs' ? !dev.net.tnfsOp : !dev.net.sdOp) { u.err = ERR.NOT_IMPL; return E; }
             let to = '';
             if (op === 'rename') {
               const t = parts[1].replace(/^N\d*:/i, '').trim();
               const dir = url.path.replace(/[^/]*$/, '');
               to = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? (parseUrl(t) || {}).path || '' : t.startsWith('/') ? t : dir + t;
             }
-            const e = dev.net.tnfsOp(url.host + (url.port ? ':' + url.port : ''), op, url.path, to);
+            const e = url.scheme === 'sd' ? dev.net.sdOp(op, url.path, to) : dev.net.tnfsOp(url.host + (url.port ? ':' + url.port : ''), op, url.path, to);
             u.err = e || ERR.OK;
             return e && e !== ERR.OK ? E : C;
           }
@@ -455,6 +472,10 @@
       tnfsFile(host, path) { const r = j('/net/tnfs/file', { host, path }); if (r.err) throw new Error('tnfs'); return r.body; },
       tnfsPut(host, path, data, append) { const r = j('/net/tnfs/put', { host, path, append: !!append }, data); return r.err || ERR.OK; },
       tnfsOp(host, op, path, to) { const r = j('/net/tnfs/op', { host, op, path, to }); return r.err || ERR.OK; },
+      sdList(path) { const r = j('/net/sd/list', { path }); if (r.err) throw new Error('sd'); return JSON.parse(dec(r.body)); },
+      sdFile(path) { const r = j('/net/sd/file', { path }); if (r.err) throw new Error('sd'); return r.body; },
+      sdPut(path, data, append) { const r = j('/net/sd/put', { path, append: !!append }, data); return r.err || ERR.OK; },
+      sdOp(op, path, to) { const r = j('/net/sd/op', { op, path, to }); return r.err || ERR.OK; },
     };
   }
 

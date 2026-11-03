@@ -278,7 +278,44 @@ async function fsop(hostSpec, op, path, to) {
   if (r[4] !== 0) throw tnfsErr(op, r[4]);
   listCache.clear();
 }
+// SD: one folder on this PC (--sd DIR) shown to the Atari as SD:/. Paths cannot leave it (symlinks are resolved first).
+const fs = require('fs'), pathMod = require('path');
+const sdArg = process.argv.indexOf('--sd');
+const sdRoot = sdArg > 0 && process.argv[sdArg + 1] ? pathMod.resolve(process.argv[sdArg + 1]) : null;
+const sdErr = (code) => { const e = new Error('sd error ' + code); e.code = code; return e; };
+function sdPath(p, mustExist) {
+  if (!sdRoot) throw sdErr(146);
+  const full = pathMod.resolve(sdRoot, '.' + pathMod.posix.normalize('/' + String(p || '/').replace(/\\/g, '/')));
+  const inside = (f) => f === sdRoot || f.startsWith(sdRoot + pathMod.sep);
+  if (!inside(full)) throw sdErr(167);
+  let real = full;
+  try { real = fs.realpathSync(full); } catch (e) { if (mustExist) throw sdErr(170); try { real = pathMod.join(fs.realpathSync(pathMod.dirname(full)), pathMod.basename(full)); } catch (x) { throw sdErr(170); } }
+  const rr = fs.realpathSync(sdRoot);
+  if (!(real === rr || real.startsWith(rr + pathMod.sep))) throw sdErr(167);
+  return full;
+}
+const sdFsErr = (e) => { throw e.code && typeof e.code === 'number' ? e : sdErr(e.code === 'ENOENT' ? 170 : e.code === 'EEXIST' ? 151 : e.code === 'ENOTEMPTY' || e.code === 'EPERM' || e.code === 'EACCES' ? 167 : 144); };
+function sdList(p) {
+  const d = sdPath(p, true);
+  try { return fs.readdirSync(d, { withFileTypes: true }).map((e) => { let size = 0; try { size = e.isFile() ? fs.statSync(pathMod.join(d, e.name)).size : 0; } catch (x) {} return { name: e.name, dir: e.isDirectory(), size }; }); } catch (e) { sdFsErr(e); }
+}
+function sdFile(p) { try { return fs.readFileSync(sdPath(p, true)); } catch (e) { sdFsErr(e); } }
+function sdPut(p, data, append) { needWrite(); try { const f = sdPath(p, false); (append ? fs.appendFileSync : fs.writeFileSync)(f, data); } catch (e) { sdFsErr(e); } }
+function sdOp(op, p, to) {
+  needWrite();
+  try {
+    if (op === 'mkdir') fs.mkdirSync(sdPath(p, false));
+    else if (op === 'rmdir') fs.rmdirSync(sdPath(p, true));
+    else if (op === 'unlink') { const a = sdPath(p, true); if (fs.statSync(a).isDirectory()) throw sdErr(167); fs.unlinkSync(a); }
+    else if (op === 'rename') fs.renameSync(sdPath(p, true), sdPath(to, false));
+    else throw sdErr(146);
+  } catch (e) { sdFsErr(e); }
+}
 const relayNet = netapi.create({ token: process.env.AC_TOKEN, allowLan: flag('--allow-lan'), extra: {
+  '/net/sd/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(sdList(a.path))) }),
+  '/net/sd/file': async (a) => ({ meta: {}, body: sdFile(a.path) }),
+  '/net/sd/put': async (a, body) => { sdPut(a.path, body, a.append); return { meta: {} }; },
+  '/net/sd/op': async (a) => { sdOp(a.op, a.path, a.to || ''); return { meta: {} }; },
   '/net/tnfs/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(await list(a.host, a.path || '/'))) }),
   '/net/tnfs/file': async (a) => ({ meta: {}, body: await file(a.host, a.path) }),
   '/net/tnfs/put': async (a, body) => { await put(a.host, a.path, body, a.append); return { meta: {} }; },
