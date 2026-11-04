@@ -91,6 +91,17 @@ mn   = $BD
 bf   = $BE
 lim  = $BF
 lft  = $C0
+px   = $C1
+cv   = $C3
+tbm  = $C4
+tbi  = $C5
+i1   = $C6
+i2   = $C7
+ug   = $C8
+gw   = $C9
+cx   = $CA
+ck   = $CB
+pold = $CC
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -472,7 +483,15 @@ drawtext
 dtb inc bf
  lda #53
  sta lim
-dt0
+dt0 lda rr
+ cmp #$FE
+ beq dtpx
+ cmp #ROWS+1
+ bne dt1
+ lda mn
+ cmp #2
+ bne dt1
+dtpx jmp pxtext
 dt1 ldy #0
  lda (tp),y
  beq dtend
@@ -760,6 +779,178 @@ d6b inc ry
  beq d6c
  jmp d64
 d6c rts
+
+; Pixel-graphics text for the menu bar and item line.
+; Codes: 1 = selected-name box, 4 = hotkey box (both inverse; they cancel when nested),
+; 3 = underline. Glyphs use proportional widths with a 1px gap.
+pxtext
+ lda #0
+ sta px
+ sta px+1
+ sta i1
+ sta i2
+ sta ug
+pt1 ldy #0
+ lda (tp),y
+ beq ptend
+ cmp #13
+ beq ptend
+ cmp #5
+ bcs ptchr
+ cmp #3
+ beq ptul
+ ldx #0
+ cmp #1
+ beq pttog
+ cmp #4
+ bne ptnext
+ ldx #1
+pttog lda i1,x
+ eor #1
+ sta i1,x
+ lda i1
+ eor i2
+ beq ptp0
+ lda #$FF
+ptp0 jsr putcol
+ jsr pxinc
+ jmp ptnext
+ptul lda ug
+ eor #1
+ sta ug
+ptnext inc16 tp
+ jmp pt1
+ptend rts
+
+ptchr cmp #128
+ bcc pc0
+ lda #32
+pc0 sec
+ sbc #32
+ bcs pc1
+ lda #0
+pc1 sta gp
+ lda #0
+ sta gp+1
+ asl gp
+ rol gp+1
+ asl gp
+ rol gp+1
+ asl gp
+ rol gp+1
+ lda gp+1
+ clc
+ adc #>BFNT
+ sta gp+1
+ ldy #7
+ lda #0
+pcw1 ora (gp),y
+ dey
+ bpl pcw1
+ and #$F8
+ sta cv
+ bne pcwn
+ ldx #3
+ jmp pcw3
+pcwn ldx #5
+pcw2 lda cv
+ and #8
+ bne pcw3
+ lsr cv
+ dex
+ bne pcw2
+pcw3 stx gw
+ ldx #0
+ stx cx
+pcl ldx cx
+ cpx gw
+ bne pcg
+ lda #0
+ jmp pcu
+pcg lda bm8,x
+ sta ck
+ ldy #0
+pcr lda (gp),y
+ and ck
+ cmp #1
+ rol cv
+ iny
+ cpy #8
+ bne pcr
+ lda cv
+pcu sta cv
+ lda ug
+ beq pci
+ lda cv
+ ora #1
+ sta cv
+pci lda i1
+ eor i2
+ beq pcp
+ lda cv
+ eor #$FF
+ sta cv
+pcp lda cv
+ jsr putcol
+ jsr pxinc
+ inc cx
+ ldx cx
+ cpx gw
+ beq pcl
+ bcc pcl
+ jmp ptnext
+
+pxinc
+ inc px
+ bne pxi1
+ inc px+1
+pxi1 rts
+
+; A = 8-pixel column bitmap (bit 7 = top scanline) drawn at pixel px on the row in rs
+putcol
+ sta cv
+ lda px+1
+ lsr
+ lda px
+ ror
+ lsr
+ lsr
+ cmp #40
+ bcs pcrt
+ clc
+ adc rs
+ sta sp
+ lda rs+1
+ adc #0
+ sta sp+1
+ lda px
+ and #7
+ tax
+ lda bm8,x
+ sta tbm
+ eor #$FF
+ sta tbi
+ ldx #8
+ ldy #0
+pcl1 asl cv
+ bcc pcc
+ lda (sp),y
+ ora tbm
+ jmp pcwr
+pcc lda (sp),y
+ and tbi
+pcwr sta (sp),y
+ lda sp
+ clc
+ adc #40
+ sta sp
+ bcc pcn
+ inc sp+1
+pcn dex
+ bne pcl1
+pcrt rts
+
+bm8 dta b($80),b($40),b($20),b($10),b($08),b($04),b($02),b($01)
 
 mksh
  ldx #0
@@ -1110,7 +1301,7 @@ tn4 dta b(4),c'P',b(4),c'aragraph',b(0)
 tn5 dta b(4),c'D',b(4),c'ocument',b(0)
 tabl dta l(tn0),l(tn1),l(tn2),l(tn3),l(tn4),l(tn5)
 tabh dta h(tn0),h(tn1),h(tn2),h(tn3),h(tn4),h(tn5)
-tl0 dta c'Esc',b(0)
+tl0 dta c'  Esc',b(0)
 tooll dta l(tl0),l(tl0),l(tl0),l(tl0),l(tl0),l(tl0)
 toolh dta h(tl0),h(tl0),h(tl0),h(tl0),h(tl0),h(tl0)
 cmdtab dta c'bold',b(0),c'italic',b(0),c'underline',b(0),c'top',b(0),c'end',b(0)

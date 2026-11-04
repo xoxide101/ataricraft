@@ -58,6 +58,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-10.png' });
   await p.keyboard.press('c'); await p.waitForTimeout(500);
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-11.png' });
+  for (let k = 0; k < 8; k++) console.log('cmdrow', k, (await p.evaluate((a) => Array.from(ataricraft.peek(a, 12)), 0xA060 + 7360 + k * 40)).map(x=>x.toString(2).padStart(8,'0')).join(' '));
   await p.keyboard.press('b'); await p.waitForTimeout(500);
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-12.png' });
   console.log('errors:', errs);
