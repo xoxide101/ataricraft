@@ -223,8 +223,10 @@ dtmk cmp #11
 drawchar
  cmp #128
  bcc dc0
+ cmp #160
+ beq dcsp
  cmp #173
- bne dcsp
+ bne dc0
  lda #'-'
  bne dc0
 dcsp lda #32

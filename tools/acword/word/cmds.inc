@@ -1,6 +1,6 @@
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #37
+ cmp #38
  bcc ce0
  lda #17
 ce0 tax
@@ -207,7 +207,7 @@ lgl = $050B
 lgy = $050C
 lgc = $050D
 lgx = $050E
-LGB = $0F00
+LGB = $1300
 hleg lda nl
  sta lgn
  lda #0
@@ -397,9 +397,9 @@ thb dta b($0F),b($94),b($1C),b($C8)
 thi dta b(0),b($0A),b(0),b(0)
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1),l(hwid-1),l(hht-1),l(hnb-1),l(hnh-1),l(hspc-1),l(hsup-1),l(hsub-1),l(hleg-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1),l(hwid-1),l(hht-1),l(hnb-1),l(hnh-1),l(hspc-1),l(hsup-1),l(hsub-1),l(hleg-1),l(hpick-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1),h(hwid-1),h(hht-1),h(hnb-1),h(hnh-1),h(hspc-1),h(hsup-1),h(hsub-1),h(hleg-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1),h(hwid-1),h(hht-1),h(hnb-1),h(hnh-1),h(hspc-1),h(hsup-1),h(hsub-1),h(hleg-1),h(hpick-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -501,7 +501,7 @@ iph dta h(ip0),h(ip1),h(ip2),h(ip3),h(ip4),h(ip5)
 ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
-ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(28),c'L',b(27),c'O',b(26),c'W',b(29),c'T',b(30),c'N',b(31),c'H',b(32),c'P',b(34),c'D',b(35),b(0)
+ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(28),c'L',b(27),c'O',b(26),c'W',b(29),c'T',b(30),c'N',b(31),c'H',b(32),c'Y',b(37),c'P',b(34),c'D',b(35),b(0)
 ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'B',b(25),c'I',b(24),c'G',b(33),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),c'G',b(36),b(0)
 
