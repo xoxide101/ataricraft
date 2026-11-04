@@ -126,7 +126,8 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 - **Bar rendering.** The menu bar and item line are drawn as pixels (`pxtext`), not text cells: proportional 5x7 glyphs (`font6.inc`, from `mkfont6.cjs`), hotkeys as filled boxes with knocked-out letters, and the open menu as a filled box (Document > Hilite toggles it off, leaving an underline). Text rows keep the 64-column 4x7 font. The bar needs about 294 of 320 pixels.
 - **Toggles.** `bars` (ruled or inverse bars), `color` (blue theme, DLI colour zones for text versus bars) and the zoom ruler. The status line shows ZUM, INV and BLU flags only while on, in inverse. Inverse characters get a 1 px left bar to close the margin.
 - **Status line.** Ln/Col, then BLD/ITA/UND for the style at the cursor (`curstyle` scans the line from its start). The timing readouts were dropped from the display to make room.
-- **Not built yet.** Character count, free memory, page width/margins on the status line. Frame counts have not been re-measured since the pixel bar renderer (previously 52 full / 6 scroll / 5 key).
+- **Also on the status line.** Character count (`putn16`) and free KB of the 16K document area.
+- **Not built yet.** Page width/margins on the status line. Frame counts have not been re-measured since the pixel bar renderer (previously 52 full / 6 scroll / 5 key); the item-line screenshot was occasionally cut short by capture timing, not reproducible.
 
 ## Open questions
 
