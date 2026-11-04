@@ -72,6 +72,9 @@ SHL  = $0D00
 mh   = $AD
 ml   = $AE
 cnt  = $AF
+ps   = $B0
+sd   = $B1
+lt   = $B2
 
 .macro inc16 p
  inc :p
@@ -119,6 +122,8 @@ start
  sta clen
  sta cmsg
  sta bd
+ sta ps
+ sta sd
  jsr scan
  lda RTCLOK+2
  sta tm
@@ -142,7 +147,19 @@ loop
  sta ATRACT
  lda CH
  cmp #$FF
+ bne lgot
+ lda sd
  beq loop
+ lda RTCLOK+2
+ sec
+ sbc lt
+ cmp #30
+ bcc loop
+ lda #0
+ sta sd
+ jsr status
+ jmp loop
+lgot
  lda RTCLOK+2
  sta tm
  jsr getkey
@@ -169,8 +186,37 @@ lp1b cmp #1
  jsr redrawcur
 lp2 jsr tend
  sta mkey
+ lda kk
+ cmp #32
+ bcc lsync
+ cmp #127
+ bcs lsync
+ cmp #'.'
+ bne lq1
+ lda #1
+ sta ps
+ bne ldefer
+lq1 cmp #32
+ bne lq2
+ lda ps
+ beq ldefer
+ cmp #1
+ bne lsync
+ lda #2
+ sta ps
+ bne ldefer
+lq2 lda #0
+ sta ps
+ldefer lda #1
+ sta sd
+ lda RTCLOK+2
+ sta lt
+ jmp lq3
+lsync lda #0
+ sta ps
+ sta sd
  jsr status
- lda bd
+lq3 lda bd
  beq lp3
  lda #0
  sta bd
