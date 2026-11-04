@@ -21,6 +21,7 @@
     const ext = (/\.([^.\\/]+)$/.exec(path) || [])[1];
     const e = ext ? ext.toLowerCase() : '';
     if (e === 'fnt' && bytes.length === 1024) return { name: stem(path), kind: 'fnt', pack, bytes };
+    if (e === '64c' && bytes.length >= 1026) return { name: stem(path), kind: 'fnt', pack, bytes: fromC64(bytes) };
     if (e === 'ttf' || e === 'otf') return { name: stem(path), kind: 'ttf', pack, bytes };
     return null;
   }
@@ -70,6 +71,19 @@
     return out;
   }
 
+  // C64 charset (.64c: optional 2-byte load address, then 1024 or 2048 bytes of screen-code glyphs) to an Atari 1024-byte set.
+  // The lower/upper second set is used when present; ATASCII graphics (codes 64-95) and the inverse half are kept from `base`.
+  function fromC64(bytes, base) {
+    const o = bytes.length % 1024 === 2 ? 2 : 0;
+    const src = bytes.subarray(o), lo = src.length >= 2048 ? 1024 : 0, out = new Uint8Array(1024);
+    if (base) out.set(base.subarray(0, 1024));
+    for (let a = 32; a < 128; a++) {
+      const sc = a === 64 ? 0 : (a >= 65 && a <= 90) ? a : (a >= 91 && a <= 95) ? a - 64 : (a >= 97 && a <= 122) ? a - 96 : a < 64 ? a : -1;
+      const dst = a < 96 ? a - 32 : a; if (sc < 0 || (a >= 96 && !(a >= 97 && a <= 122))) continue;
+      for (let r = 0; r < 8; r++) { out[dst * 8 + r] = src[lo + sc * 8 + r] || 0; out[(dst + 128) * 8 + r] = (~out[dst * 8 + r]) & 255; }
+    }
+    return out;
+  }
   window.AC = window.AC || {};
-  AC.FontLib = { list, get, remove, clear, importFiles, face, css, toAtari };
+  AC.FontLib = { list, get, remove, clear, importFiles, face, css, toAtari, fromC64 };
 })();
