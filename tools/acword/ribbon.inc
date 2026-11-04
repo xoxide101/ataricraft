@@ -1,0 +1,244 @@
+; ribbon.inc - shared WOW-series shell: ribbon, command bar, Tab completion.
+; Included by an app (ACWord, later ACSpread/ACDBase). The app provides:
+;   tabl/tabh    low/high bytes of the four mode-name strings
+;   tooll/toolh  low/high bytes of the per-mode tool lines
+;   cmdtab       command names, each 0-terminated, table ends with an extra 0
+;   cmdexec      runs command number A (position in cmdtab); sets fl as the editor expects
+;   appmsg       draws a custom message with putstr/putnum when cmsg = 3
+;   helpmsg      idle text of the command bar
+;   rowsetup, drawtext, putc, putstr, ROWS, BUF, CMDB, and the zero-page variables
+;   kk (key), cmode, cmdon, clen, bd, cmsg, tmp, src, tp, rr, bi
+
+; key handling while the command bar is open
+cmdkey
+ lda kk
+ cmp #$9B
+ beq ckrun
+ cmp #$1B
+ beq ckoff
+ cmp #$7E
+ beq ckbs
+ cmp #$7F
+ beq cktab
+ cmp #32
+ bcc ckx
+ cmp #127
+ bcs ckx
+ cmp #'A'
+ bcc ck1
+ cmp #'['
+ bcs ck1
+ ora #$20
+ck1 ldx clen
+ cpx #60
+ bcs ckx
+ sta CMDB,x
+ inc clen
+ckx lda #1
+ sta bd
+ rts
+ckbs lda clen
+ beq ckx
+ dec clen
+ jmp ckx
+ckoff lda #0
+ sta cmdon
+ sta cmsg
+ jmp ckx
+ckrun lda #0
+ sta cmdon
+ sta cmsg
+ lda #1
+ sta bd
+ lda clen
+ beq ckx
+ jmp runcmd
+
+; Tab completes the typed prefix to the first matching command
+cktab lda #<cmdtab
+ sta src
+ lda #>cmdtab
+ sta src+1
+tc1 ldy #0
+ lda (src),y
+ beq ckx
+tc2 cpy clen
+ beq tcok
+ lda (src),y
+ cmp CMDB,y
+ bne tcn
+ iny
+ bne tc2
+tcn jsr nxtcmd
+ jmp tc1
+tcok ldy #0
+tc3 lda (src),y
+ sta CMDB,y
+ beq tc4
+ iny
+ bne tc3
+tc4 sty clen
+ jmp ckx
+
+nxtcmd
+ ldy #0
+nx1 lda (src),y
+ iny
+ cmp #0
+ bne nx1
+ tya
+ clc
+ adc src
+ sta src
+ bcc nx2
+ inc src+1
+nx2 rts
+
+runcmd
+ ldx clen
+ lda #0
+ sta CMDB,x
+ sta tmp
+ lda #<cmdtab
+ sta src
+ lda #>cmdtab
+ sta src+1
+rc1 ldy #0
+ lda (src),y
+ beq rcbad
+rc2 lda (src),y
+ cmp CMDB,y
+ bne rcn
+ cmp #0
+ beq rcok
+ iny
+ bne rc2
+rcn jsr nxtcmd
+ inc tmp
+ jmp rc1
+rcbad lda #2
+ sta cmsg
+ rts
+rcok lda #1
+ sta cmsg
+ lda tmp
+ jmp cmdexec
+
+; Tab key: next ribbon mode
+ribnext
+ lda cmode
+ clc
+ adc #1
+ and #3
+ sta cmode
+ lda #1
+ sta bd
+ rts
+
+; Ctrl-X: open the command bar
+cmdopen
+ lda #1
+ sta cmdon
+ sta bd
+ lda #0
+ sta clen
+ sta cmsg
+ rts
+
+ribbon
+ lda #0
+ sta bi
+ sta tmp
+rbl ldx tmp
+ lda #' '
+ cpx cmode
+ bne rb1
+ lda #'['
+rb1 jsr putc
+ ldx tmp
+ lda tabl,x
+ pha
+ lda tabh,x
+ tax
+ pla
+ jsr putstr
+ ldx tmp
+ lda #' '
+ cpx cmode
+ bne rb2
+ lda #']'
+rb2 jsr putc
+ inc tmp
+ lda tmp
+ cmp #4
+ bne rbl
+ lda #'|'
+ jsr putc
+ lda #' '
+ jsr putc
+ ldx cmode
+ lda tooll,x
+ pha
+ lda toolh,x
+ tax
+ pla
+ jsr putstr
+ lda #0
+ jsr putc
+ lda #<BUF
+ sta tp
+ lda #>BUF
+ sta tp+1
+ lda #$FF
+ sta rr
+ jsr rowsetup
+ jmp drawtext
+
+bar
+ lda #0
+ sta bi
+ lda cmdon
+ beq br1
+ lda #<rs6
+ ldx #>rs6
+ jsr putstr
+ ldx clen
+ lda #'_'
+ sta CMDB,x
+ lda #0
+ sta CMDB+1,x
+ lda #<CMDB
+ ldx #>CMDB
+ jsr putstr
+ jmp br9
+br1 lda cmsg
+ bne br2
+ lda #<helpmsg
+ ldx #>helpmsg
+ jmp br8
+br2 cmp #1
+ bne br3
+ lda #<rs7
+ ldx #>rs7
+ jmp br8
+br3 cmp #3
+ bne br4
+ jsr appmsg
+ jmp br9
+br4 lda #<rs8
+ ldx #>rs8
+br8 jsr putstr
+br9 lda #0
+ jsr putc
+ lda #<BUF
+ sta tp
+ lda #>BUF
+ sta tp+1
+ lda #ROWS+1
+ sta rr
+ jsr rowsetup
+ jmp drawtext
+
+rs6 dta c'Command: ',b(0)
+rs7 dta c'Done.',b(0)
+rs8 dta c'Unknown command. Press Tab after a few letters to complete.',b(0)
