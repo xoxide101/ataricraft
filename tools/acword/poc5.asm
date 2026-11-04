@@ -104,6 +104,10 @@ ck   = $CB
 pold = $CC
 mhl  = $CD
 cst  = $CE
+rfl  = $CF
+rfk  = $D0
+rfc  = $D1
+rfj  = $D2
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -378,8 +382,10 @@ sc2 ldy #0
  beq sc3
  inc16 tp
  cmp #13
+ beq sc4
+ cmp #14
  bne sc2
- jmp sc1
+sc4 jmp sc1
 sc3 stx nl
  lda tp
  sta dend
@@ -499,6 +505,8 @@ dt1 ldy #0
  lda (tp),y
  beq dtend
  cmp #13
+ beq dtend
+ cmp #14
  beq dtend
  cmp #5
  bcs dtchar
@@ -1540,6 +1548,8 @@ ll1 lda (tp),y
  beq ll2
  cmp #13
  beq ll2
+ cmp #14
+ beq ll2
  iny
  bne ll1
 ll2 tya
@@ -1640,8 +1650,10 @@ in4 ldy #0
  lda tmp
  sta (src),y
  cmp #13
+ beq in4b
+ cmp #14
  bne in5
- inc cl
+in4b inc cl
  lda #0
  sta cc
  lda #2
@@ -1659,7 +1671,7 @@ in7 cpx nl
  inc LPH,x
 in9 inx
  bne in7
-in8 jsr wrapchk
+in8 jsr reflow
  lda fl
  cmp #2
  beq in6
@@ -1670,51 +1682,107 @@ in8 jsr wrapchk
  sta fl
 in6 rts
 
-; word wrap: if the cursor line is wider than the right margin, break it at the last
-; space (turning it into a hard return), or at the cursor when it has no space
-wrapchk
+; reflow: line breaks made by wrap are soft (byte 14). Starting at the cursor line (or the
+; line above when that one ends in a soft break) join each soft break back into a space,
+; then re-break at the last space that fits the right margin. Stops early once a break
+; lands where it already was, since everything below is then unchanged.
+reflow
+ lda #0
+ sta rfc
+ sta rfj
  lda rm
  clc
  adc #1
  sta cst
- ldx cl
- lda LPL,x
- sta tp
- lda LPH,x
- sta tp+1
- ldy #0
+ lda cl
+ sta rfl
+ beq rf1
+ tax
+ dex
+ jsr rfptr
+ jsr rfterm
+ cmp #14
+ bne rf1
+ dec rfl
+rf1 lda #0
+ sta rfj
+ lda #$FF
+ sta rfk
+ ldx rfl
+ jsr rfptr
+ jsr rfterm
+ cmp #14
+ bne rf3
+ sty rfk
+ lda #32
+ sta (tp),y
+ lda cl
+ sec
+ sbc rfl
+ cmp #1
+ bne rf3
+ lda cl
+ sec
+ sbc #1
+ sta cl
+ lda cc
+ clc
+ adc rfk
+ clc
+ adc #1
+ sta cc
+ lda #1
+ sta rfj
+rf3 ldy #0
  sty hi
  lda #$FF
  sta lo
-wk1 lda (tp),y
- beq wk2
+rf4 lda (tp),y
+ beq rf8
  cmp #13
- beq wk2
+ beq rf8
  cmp #5
- bcc wk4
+ bcc rf7
  cmp #32
- bne wk3
+ bne rf6
  lda hi
  cmp cst
- beq wk5
- bcs wk3
-wk5 sty lo
-wk3 inc hi
-wk4 iny
- bne wk1
-wk2 lda hi
+ beq rf5
+ bcs rf6
+rf5 sty lo
+rf6 inc hi
+rf7 iny
+ bne rf4
+rf8 lda hi
  cmp cst
- bcc wkr
- beq wkr
- lda lo
+ beq rf9
+ bcs rf10
+rf9 lda rfk
  cmp #$FF
- beq wns
+ beq rfdone
+ lda #1
+ sta rfc
+ jsr scan
+ jmp rf1
+rf10 lda lo
+ cmp #$FF
+ bne rf11
+ lda rfk
+ cmp #$FF
+ beq rfnos
+ bne rfsame
+rf11 lda lo
+ cmp rfk
+ beq rfsame
  tay
- lda #13
+ lda #14
  sta (tp),y
+ lda cl
+ cmp rfl
+ bne rf12
  lda lo
  cmp cc
- bcs wkk
+ bcs rf12
  lda cc
  sec
  sbc lo
@@ -1722,14 +1790,58 @@ wk2 lda hi
  sbc #1
  sta cc
  inc cl
-wkk lda #2
- sta fl
- jmp scan
-wns dec cc
- lda #13
+rf12 lda #1
+ sta rfc
+ inc rfl
+ jsr scan
+ jmp rf1
+rfsame ldy rfk
+ lda #14
+ sta (tp),y
+ lda rfj
+ beq rfdone
+ inc cl
+ lda cc
+ sec
+ sbc rfk
+ sec
+ sbc #1
+ sta cc
+ jmp rfdone
+rfnos lda cl
+ cmp rfl
+ bne rfdone
+ lda cc
+ beq rfdone
+ dec cc
+ lda #14
  jsr insert
  inc cc
-wkr rts
+ lda #2
+ sta fl
+ rts
+rfdone lda rfc
+ beq rfret
+ lda #2
+ sta fl
+rfret rts
+
+rfptr lda LPL,x
+ sta tp
+ lda LPH,x
+ sta tp+1
+ rts
+
+rfterm ldy #0
+rft1 lda (tp),y
+ beq rft2
+ cmp #13
+ beq rft2
+ cmp #14
+ beq rft2
+ iny
+ bne rft1
+rft2 rts
 
 delete
  lda cc
@@ -1765,7 +1877,8 @@ dl2 ldy #1
  beq dl3
  inc16 src
  jmp dl2
-dl3 jmp scan
+dl3 jsr scan
+ jmp reflow
 dlx rts
 
 ; status line
