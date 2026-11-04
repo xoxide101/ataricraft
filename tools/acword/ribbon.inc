@@ -164,13 +164,14 @@ ribbon
  lda #0
  sta bi
  sta tmp
-rbl ldx tmp
- lda #' '
+rbl lda #' '
+ jsr putc
+ ldx tmp
  cpx cmode
  bne rb1
- lda #'['
-rb1 jsr putc
- ldx tmp
+ lda #1
+ jsr putc
+rb1 ldx tmp
  lda tabl,x
  pha
  lda tabh,x
@@ -180,7 +181,7 @@ rb1 jsr putc
  ldx tmp
  cpx cmode
  bne rb2
- lda #']'
+ lda #1
  jsr putc
 rb2 inc tmp
  lda tmp
