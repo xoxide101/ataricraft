@@ -55,6 +55,21 @@
   // CSS @font-face block for a stored font, for embedding in a printable page.
   async function css(id, family) { const r = await get(id); return r && r.kind === 'ttf' ? `@font-face{font-family:'${family}';src:url(data:font/ttf;base64,${b64(r.bytes)})}` : ''; }
 
+  // Rasterise a registered font family into an Atari 1024-byte set (screen-code order). Codes 64-95 (ATASCII graphics) are kept from `base`.
+  function toAtari(family, o, base) {
+    o = o || {}; const px = o.size || 8, dy = o.dy == null ? 7 : o.dy, th = o.threshold || 128, out = new Uint8Array(1024);
+    if (base) out.set(base.subarray(0, 1024));
+    const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8; const g = cv.getContext('2d', { willReadFrequently: true });
+    for (let sc = 0; sc < 128; sc++) {
+      if (sc >= 64 && sc < 96) continue;
+      const ch = String.fromCharCode(sc < 64 ? sc + 32 : sc);
+      g.clearRect(0, 0, 8, 8); g.fillStyle = '#000'; g.font = `${px}px "${family}"`; g.textBaseline = 'alphabetic'; g.fillText(ch, o.dx || 0, dy);
+      const d = g.getImageData(0, 0, 8, 8).data;
+      for (let r = 0; r < 8; r++) { let v = 0; for (let c = 0; c < 8; c++) if (d[(r * 8 + c) * 4 + 3] >= th) v |= 0x80 >> c; out[sc * 8 + r] = v; }
+    }
+    return out;
+  }
+
   window.AC = window.AC || {};
-  AC.FontLib = { list, get, remove, clear, importFiles, face, css };
+  AC.FontLib = { list, get, remove, clear, importFiles, face, css, toAtari };
 })();

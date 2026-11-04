@@ -89,12 +89,22 @@
     const lfi = el('input'); lfi.type = 'file'; lfi.multiple = true; lfi.accept = '.fnt,.ttf,.otf,.zip'; lfi.style.display = 'none';
     lfi.onchange = async () => {
       if (!lfi.files.length) return; say('Importing...');
-      try { const r = await AC.FontLib.importFiles([...lfi.files]); say(`Imported ${r.added} font(s)${r.skipped ? `, skipped ${r.skipped} (duplicates or unsupported)` : ''}. .FNT sets appear in the library list; .TTF/.OTF are offered when printing from WebAFM.`); await libFill(); }
+      try { const r = await AC.FontLib.importFiles([...lfi.files]); say(`Imported ${r.added} font(s)${r.skipped ? `, skipped ${r.skipped} (duplicates or unsupported)` : ''}. .FNT sets appear in the library list; .TTF/.OTF are offered when printing from WebAFM.`); await libFill(); await convFill(); }
       catch (e) { say('Import failed: ' + e.message); }
       lfi.value = '';
     };
     libFill();
-    bar.append(el('b', '', 'FONT'), btn('From ROM', fromRom, 'Read the character set at $E000 from the running Atari'), lib, btn('Import fonts', () => lfi.click(), 'Add .FNT, .TTF/.OTF or .ZIP packs to the local font library (kept in this browser only)'),
+    const conv = el('select', 'background:#2a2f39;color:#d8dce4;border:1px solid #3a4150;border-radius:5px;padding:3px;max-width:200px');
+    const convFill = async () => { const L = (await AC.FontLib.list()).filter((f) => f.kind === 'ttf'); conv.innerHTML = '<option value="">Convert TTF/OTF...</option>'; L.forEach((f) => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.pack + ': ' + f.name; conv.append(o); }); };
+    conv.onchange = async () => {
+      if (!conv.value) return; const id = +conv.value; conv.value = '';
+      const a = (prompt('Pixel size, baseline row (0-7), threshold (1-255)', localStorage.getItem('ac.font.conv') || '8,7,128') || '').split(',').map((x) => +x.trim());
+      if (!a[0]) return; localStorage.setItem('ac.font.conv', a.join(','));
+      try { const fam = await AC.FontLib.face(id); const r = AC.FontLib.toAtari(fam, { size: a[0], dy: isNaN(a[1]) ? 7 : a[1], threshold: a[2] || 128 }, font); font.set(r); say('Converted to an 8x8 Atari set (graphics characters kept). Tweak size/baseline and convert again if it looks off.'); draw(); }
+      catch (e) { say('Convert failed: ' + e.message); }
+    };
+    convFill();
+    bar.append(el('b', '', 'FONT'), btn('From ROM', fromRom, 'Read the character set at $E000 from the running Atari'), lib, conv, btn('Import fonts', () => lfi.click(), 'Add .FNT, .TTF/.OTF or .ZIP packs to the local font library (kept in this browser only)'),
       btn('Load .FNT', () => fi.click()), btn('Save .FNT', () => dl('FONT.FNT', [font.slice()], 'application/octet-stream')),
       btn('Save .TTF', ttf, 'Windows TrueType font'), btn('Install on Atari', install),
       btn('Clear', () => { font.fill(0); draw(); }), el('span', 'flex:1'), btn('X', () => { win.style.display = 'none'; }));
