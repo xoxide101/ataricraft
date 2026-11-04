@@ -129,6 +129,7 @@ pof  = $E4
 pbu  = $E5
 pwd  = $E6
 lwx  = $E7
+pfn  = $E8
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -511,6 +512,7 @@ rowptr
 
 drawtext
  lda #0
+ sta pfn
  sta col
  sta style
  sta bf
@@ -547,6 +549,13 @@ dtal2 ldx t0
  ldx t0
  jsr lwid
  sta pwd
+ lda #22
+ sta pcs
+ lda #24
+ sta pch1
+ ldx t0
+ jsr pfind
+ sta pfn
  lda #0
  sta jon
  sta jsn
@@ -733,6 +742,7 @@ dc2 ldy ry
  lda (gp),y
  sta v
  lda style
+ jsr bld
  and #1
  beq dc6
  lda v
@@ -763,7 +773,8 @@ dc8 lda style
  lda v
  eor #$1F
  sta v
-dc9 lda v
+dc9 jsr lite
+ lda v
  ora shf
  tax
  lda SHH,x
@@ -793,6 +804,23 @@ dca inc ry
  rts
 
 stab dta b(1),b(2),b(4),b(8)
+
+bld ldx pfn
+ cpx #23
+ bne bl9
+ ora #1
+bl9 rts
+
+lite lda pfn
+ cmp #22
+ bne lt9
+ lda ry
+ and #1
+ beq lt9
+ lda v
+ and #$15
+ sta v
+lt9 rts
 
 ; 5x7 bar font, 6px pitch: A = ascii; draws at col on the row in rs
 drawchar6
@@ -1190,7 +1218,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #26
+ cmp #27
  bcc ce0
  lda #17
 ce0 tax
@@ -1377,6 +1405,23 @@ hb2 lda #20
 hb3 sta pam
  jmp hset
 
+hfont lda #22
+ sta pcs
+ lda #24
+ sta pch1
+ ldx cl
+ jsr pfind
+ beq hf1
+ cmp #22
+ beq hf2
+ lda #0
+ beq hf3
+hf1 lda #22
+ bne hf3
+hf2 lda #23
+hf3 sta pam
+ jmp hset
+
 hcol lda th
  eor #1
  sta th
@@ -1398,9 +1443,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1502,7 +1547,7 @@ iph dta h(ip0),h(ip1),h(ip2),h(ip3),h(ip4),h(ip5)
 ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
-ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(17),b(0)
+ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(26),b(0)
 ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'B',b(25),c'I',b(24),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
