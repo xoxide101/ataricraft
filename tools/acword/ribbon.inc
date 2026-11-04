@@ -43,6 +43,7 @@ ckbs lda clen
  dec clen
  jmp ckx
 ckoff lda #0
+ sta fpr
  sta cmdon
  sta cmsg
  jmp ckx
@@ -52,8 +53,16 @@ ckrun lda #0
  lda #1
  sta bd
  lda clen
- beq ckx
- jmp runcmd
+ beq ckr0
+ lda fpr
+ beq ckr1
+ lda #0
+ sta fpr
+ jmp dofile
+ckr0 lda #0
+ sta fpr
+ jmp ckx
+ckr1 jmp runcmd
 
 ; Tab completes the typed prefix to the first matching command
 cktab lda #<cmdtab
@@ -224,7 +233,11 @@ br0 lda cmdon
  beq br1
  lda #<rs6
  ldx #>rs6
- jsr putstr
+ ldy fpr
+ beq br0a
+ lda #<rs12
+ ldx #>rs12
+br0a jsr putstr
  ldx clen
  lda #'_'
  sta CMDB,x
@@ -258,7 +271,35 @@ br5 cmp #5
  lda #<rs11
  ldx #>rs11
  jmp br8
-br6 lda #<rs8
+br6 cmp #6
+ bne br6b
+ lda #<rs13
+ ldx #>rs13
+ jmp br8
+br6b cmp #7
+ bne br6c
+ lda #<rs14
+ ldx #>rs14
+ jmp br8
+br6c cmp #8
+ bne br6d
+ lda #<rs15
+ ldx #>rs15
+ jsr putstr
+ lda fer
+ jsr putnum
+ jmp br9
+br6d cmp #9
+ bne br6e
+ lda #<rs16
+ ldx #>rs16
+ jmp br8
+br6e cmp #10
+ bne br6f
+ lda #<rs17
+ ldx #>rs17
+ jmp br8
+br6f lda #<rs8
  ldx #>rs8
 br8 jsr putstr
 br9 lda #0
@@ -277,4 +318,10 @@ rs7 dta c'Done.',b(0)
 rs8 dta c'Unknown command. Press Tab after a few letters to complete.',b(0)
 rs9 dta c'Not in the proof of concept yet.',b(0)
 rs11 dta c'Symbols: arrows pick, Enter inserts, Spc page, Esc cancels',b(0)
+rs12 dta c'File name (D1: is the default): ',b(0)
+rs13 dta c'Saved.',b(0)
+rs14 dta c'Loaded.',b(0)
+rs15 dta c'Disk error ',b(0)
+rs16 dta c'Not an ACWord file, or it is damaged.',b(0)
+rs17 dta c'That file is too big for the page.',b(0)
 rs10 dta c'Menu: press the highlighted letter.  Esc cancels.',b(0)

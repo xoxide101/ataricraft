@@ -8,6 +8,7 @@
  icl 'word/scale.inc'
  icl 'word/spacer.inc'
  icl 'word/picker.inc'
+ icl 'word/file.inc'
  icl 'lib/barfont.inc'
  icl 'word/cmds.inc'
  icl 'ribbon.inc'

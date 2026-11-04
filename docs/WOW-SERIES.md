@@ -175,3 +175,8 @@ Inline toggle codes 11 (superscript) and 12 (subscript), like bold/italic but ze
 ### Legend
 Document > G (hidden key) appends one legend paragraph per superscript run (max 15 chars, empty runs skipped) at the end of the document: superscript run, then a space for the reference text. Not deduplicated; re-running adds entries again.
 
+### Save and Open
+File > Save / Save As / Open (hidden letters S, A, O) take a file name on the bottom bar. No device means D1:, no extension means .CWD, and a name such as H:T works as typed. The file is the portable Craft document format, specified in docs/CRAFT-FORMAT.md; tools/craftdoc.cjs reads it on any machine. Test: scripts/acword-file.cjs.
+
+### Symbol picker
+Character > Y (hidden): arrows choose, Enter inserts, Space switches between Latin-1 (160-255) and Atari graphics (128-159), Esc cancels. Glyphs come from tools/acword/mksym.cjs.

@@ -1,0 +1,44 @@
+// ACWord File > Save As / Open round trip through the emulator's H: device.
+// Usage: node scripts/acword-file.cjs poc5.xex
+const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
+const fs = require('fs');
+const ROOT = 'C:/Users/raver/ataricraft';
+(async () => {
+  const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  const p = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+  const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto('file:///' + ROOT + '/web/index.html');
+  await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
+  await p.selectOption('#model', '800xl').catch(() => {});
+  await p.click('#boot'); await p.waitForTimeout(3000);
+  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acword/' + (process.argv[2] || 'poc5.xex')));
+  await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), bytes);
+  await p.waitForTimeout(3000);
+  await p.locator('canvas').first().click();
+  const key = async (k, w = 350) => { await p.keyboard.press(k); await p.waitForTimeout(w); };
+  const type = async (s) => { for (const ch of s) await key(ch === ' ' ? 'Space' : ch === ':' ? 'Shift+Semicolon' : ch, 600); };
+  const shot = (n) => p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-' + n + '.png' });
+  const menu = async (...ks) => { await key('Escape'); for (const k of ks) { await key(k, 700); } await p.waitForTimeout(1000); };
+  console.log('HATABS', await p.evaluate(() => ataricraft.peek(0x31A, 36).map((x) => x.toString(16)).join(' ')));
+  await key('ArrowDown', 900);
+  await menu('f', 'a');
+  await shot('file1');
+  await type('h:tt');
+  await key('Enter', 1500);
+  await shot('file2');
+  console.log('FNB', await p.evaluate(() => ataricraft.peek(0x1420, 14).map((x) => String.fromCharCode(x & 127)).join('|')), 'fer', await p.evaluate(() => ataricraft.peek(0x1412, 1)), 'fnl', await p.evaluate(() => ataricraft.peek(0x1410, 1)));
+  const files = await p.evaluate(() => { const h = FujiNet.emu.hostFiles(); return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, Array.from(v)])); });
+  const names = Object.keys(files);
+  console.log('host files:', names);
+  const f = files[names.find((n) => /TT/i.test(n))] || [];
+  console.log('size', f.length, 'header', Buffer.from(f.slice(0, 16)).toString('hex'));
+  fs.writeFileSync(ROOT + '/out/TT.CWD', Buffer.from(f));
+  await type('zzz');
+  await shot('file3');
+  await menu('f', 'o');
+  await type('h:tt');
+  await key('Enter', 2000);
+  await shot('file4');
+  console.log('errors:', errs);
+  await b.close();
+})();
