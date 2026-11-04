@@ -132,6 +132,25 @@ lwx  = $E7
 pfn  = $E8
 pwi  = $E9
 pwh  = $EA
+pit  = $EB
+avl  = $EC
+avh  = $ED
+gxl  = $EE
+gxh  = $EF
+szh  = $F0
+zw0  = $F1
+zw1  = $F2
+zw2  = $F3
+zm0  = $F4
+zm1  = $F5
+zm2  = $F6
+zzs  = $F7
+zbx  = $F8
+stp  = $F9
+stq  = $FB
+zvi  = $FD
+zti  = $FE
+ztq  = $FF
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -158,6 +177,7 @@ start
  sta PORTB
  jsr mktab
  jsr mkfont
+ jsr mkst
  jsr openk
  lda #<dl
  sta SDLSTL
@@ -584,6 +604,7 @@ dlax inx
 dla2 iny
  bne dla1
 dla9 stx pln
+ jsr szgx
  lda (tp),y
  sta ptm
  lda pwd
@@ -674,8 +695,10 @@ dtsty tax
  eor style
  sta style
  jmp dtnext
-dtchar
- lda col
+dtchar lda pwi
+ beq dtch0
+ jmp szchar
+dtch0 lda col
  cmp dfrom
  bcc dtskip
  ldy #0
@@ -683,12 +706,10 @@ dtchar
  ldx bf
  bne dtc6
  jsr drawchar
- jsr wide2
  jmp dtskip
 dtc6 jsr drawchar6
 dtskip
  inc col
- jsr wadd
  lda jon
  beq dtj2
  ldy #0
@@ -820,27 +841,376 @@ dca inc ry
 
 stab dta b(1),b(2),b(4),b(8)
 
-wide2 lda pwi
- beq w29
- inc col
- lda #1
- sta pwh
+
+PWt dta b(3),b(5),b(8),b(10),b(13),b(15)
+ST = $9C00
+
+; build the horizontal stretch tables: for each size 1..6 and 5-bit cell, a left-aligned 16-bit pixel word
+mkst ldx #1
+mst1 stx szh
+ lda PWt-1,x
+ sta pit
+ txa
+ sec
+ sbc #1
  ldy #0
- lda (tp),y
- jsr drawchar
+ sty stp
+ lsr
+ ror stp
+ lsr
+ ror stp
+ clc
+ adc #>ST
+ sta stp+1
+ lda stp
+ clc
+ adc #32
+ sta stq
+ lda stp+1
+ adc #0
+ sta stq+1
  lda #0
- sta pwh
- dec col
-w29 rts
+ sta zvi
+mst2 lda #0
+ sta zw0
+ sta zw1
+ ldx pit
+ dex
+ stx zti
+mst3 lda zti
+ asl
+ asl
+ clc
+ adc zti
+ ldx #0
+mst4 cmp pit
+ bcc mst5
+ sbc pit
+ inx
+ bne mst4
+mst5 stx ztq
+ lda #4
+ sec
+ sbc ztq
+ tax
+ lda zvi
+mst6 cpx #0
+ beq mst7
+ lsr
+ dex
+ jmp mst6
+mst7 lsr
+ ror zw0
+ ror zw1
+ dec zti
+ bpl mst3
+ ldy zvi
+ lda zw0
+ sta (stp),y
+ lda zw1
+ sta (stq),y
+ inc zvi
+ lda zvi
+ cmp #32
+ bne mst2
+ ldx szh
+ inx
+ cpx #7
+ bne mst1
+ rts
 
-wadd lda pwi
- beq wa9
- inc col
-wa9 rts
+; A = width in cells; sets pit, avl/avh (pixels), returns A = characters that fit
+szcap sta zbx
+ lda #0
+ sta avh
+ lda zbx
+ asl
+ rol avh
+ asl
+ rol avh
+ clc
+ adc zbx
+ bcc szc1
+ inc avh
+szc1 sta avl
+ lda pwi
+ sec
+ sbc #24
+ sta szh
+ tax
+ lda PWt-1,x
+ sta pit
+ lda avl
+ sta zw0
+ lda avh
+ sta zw1
+ ldx #0
+szc2 lda zw0
+ sec
+ sbc pit
+ tay
+ lda zw1
+ sbc #0
+ bcc szc3
+ sta zw1
+ sty zw0
+ inx
+ bne szc2
+szc3 txa
+ rts
 
-WL dta b(0),b(0),b(0),b(0),b(1),b(1),b(1),b(1),b(6),b(6),b(6),b(6),b(7),b(7),b(7),b(7),b(24),b(24),b(24),b(24),b(25),b(25),b(25),b(25),b(30),b(30),b(30),b(30),b(31),b(31),b(31),b(31)
-WR dta b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31),b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31),b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31),b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31)
+; sized paragraphs: gx = pixel x of the first character after margin, indent and alignment
+szgx lda pwi
+ beq zg9
+ lda #0
+ sta zm0
+ sta zm1
+ ldx pln
+ beq zg2
+zg1 lda zm0
+ clc
+ adc pit
+ sta zm0
+ bcc zg1b
+ inc zm1
+zg1b dex
+ bne zg1
+zg2 lda avl
+ sec
+ sbc zm0
+ sta zm0
+ lda avh
+ sbc zm1
+ sta zm1
+ bcs zg3
+ lda #0
+ sta zm0
+ sta zm1
+zg3 lda pam
+ cmp #16
+ beq zg4
+ cmp #15
+ bne zg5
+ lsr zm1
+ ror zm0
+ jmp zg4
+zg5 lda #0
+ sta zm0
+ sta zm1
+zg4 lda lm
+ clc
+ adc pof
+ sta zbx
+ lda #0
+ sta gxh
+ lda zbx
+ asl
+ rol gxh
+ asl
+ rol gxh
+ clc
+ adc zbx
+ bcc zg6
+ inc gxh
+zg6 clc
+ adc zm0
+ sta gxl
+ lda gxh
+ adc zm1
+ sta gxh
+zg9 rts
 
+szchar ldy #0
+ lda (tp),y
+ jsr szdraw
+ lda gxl
+ clc
+ adc pit
+ sta gxl
+ bcc szn1
+ inc gxh
+szn1 lda gxl
+ clc
+ adc pit
+ tay
+ lda gxh
+ adc #0
+ cmp #1
+ bcc szn2
+ bne szn3
+ cpy #$41
+ bcs szn3
+szn2 jmp dtnext
+szn3 jmp dtend
+
+; A = ascii; draws one scaled character at pixel (gx) on the row in rs
+szdraw cmp #128
+ bcc szd0
+ lda #32
+szd0 sec
+ sbc #32
+ bcs szd1
+ lda #0
+szd1 sta gp
+ lda #0
+ sta gp+1
+ asl gp
+ rol gp+1
+ asl gp
+ rol gp+1
+ asl gp
+ rol gp+1
+ lda gp+1
+ clc
+ adc #>FNT
+ sta gp+1
+ lda gxl
+ and #7
+ sta zzs
+ lda gxl
+ lsr
+ lsr
+ lsr
+ sta zbx
+ lda gxh
+ asl
+ asl
+ asl
+ asl
+ asl
+ ora zbx
+ sta zbx
+ lda szh
+ sec
+ sbc #1
+ ldy #0
+ sty stp
+ lsr
+ ror stp
+ lsr
+ ror stp
+ clc
+ adc #>ST
+ sta stp+1
+ lda stp
+ clc
+ adc #32
+ sta stq
+ lda stp+1
+ adc #0
+ sta stq+1
+ lda #0
+ sta zm0
+ sta zm1
+ sta zm2
+ ldx pit
+szm1 sec
+ ror zm0
+ ror zm1
+ dex
+ bne szm1
+ ldx zzs
+ beq szm3
+szm2 lsr zm0
+ ror zm1
+ ror zm2
+ dex
+ bne szm2
+szm3 lda zm0
+ eor #$FF
+ sta zm0
+ lda zm1
+ eor #$FF
+ sta zm1
+ lda zm2
+ eor #$FF
+ sta zm2
+ lda rs
+ clc
+ adc zbx
+ sta sp
+ lda rs+1
+ adc #0
+ sta sp+1
+ lda #0
+ sta ry
+szr1 ldy ry
+ lda (gp),y
+ sta v
+ lda style
+ jsr bld
+ and #1
+ beq szr2
+ lda v
+ lsr
+ ora v
+ sta v
+szr2 lda v
+ asl
+ sta v
+ lda style
+ and #2
+ beq szr3
+ ldy ry
+ cpy #4
+ bcs szr3
+ lsr v
+szr3 lda style
+ and #4
+ beq szr4
+ ldy ry
+ cpy #7
+ bne szr4
+ lda #$1F
+ sta v
+szr4 lda style
+ and #8
+ beq szr5
+ lda v
+ eor #$1F
+ sta v
+szr5 jsr lite
+ ldy v
+ lda (stp),y
+ sta zw0
+ lda (stq),y
+ sta zw1
+ lda #0
+ sta zw2
+ ldx zzs
+ beq szr7
+szr6 lsr zw0
+ ror zw1
+ ror zw2
+ dex
+ bne szr6
+szr7 ldy #0
+ lda (sp),y
+ and zm0
+ ora zw0
+ sta (sp),y
+ iny
+ lda (sp),y
+ and zm1
+ ora zw1
+ sta (sp),y
+ iny
+ lda (sp),y
+ and zm2
+ ora zw2
+ sta (sp),y
+ lda sp
+ clc
+ adc #40
+ sta sp
+ bcc szr8
+ inc sp+1
+szr8 inc ry
+ lda ry
+ cmp #8
+ beq szrx
+ jmp szr1
+szrx rts
 bld ldx pfn
  cpx #23
  bne bl9
@@ -856,16 +1226,7 @@ lite lda pfn
  lda v
  and #$15
  sta v
-lt1 lda pwi
- beq lt9
- ldx v
- lda pwh
- bne lt2
- lda WL,x
- sta v
- rts
-lt2 lda WR,x
- sta v
+lt1
 lt9 rts
 
 ; 5x7 bar font, 6px pitch: A = ascii; draws at col on the row in rs
@@ -1452,14 +1813,39 @@ hb3 sta pam
  jmp hset
 
 hlg lda #25
- bne hsz
-hsm lda #0
-hsz sta pam
- lda #25
  sta pcs
- lda #26
+ lda #31
  sta pch1
+ ldx cl
+ jsr pfind
+ bne hlg1
+ lda #26
+hlg1 cmp #30
+ bcs hlg2
+ clc
+ adc #1
+hlg2 cmp #26
+ bne hsz
+ lda #0
+hsz sta pam
  jmp hset
+
+hsm lda #25
+ sta pcs
+ lda #31
+ sta pch1
+ ldx cl
+ jsr pfind
+ bne hsm1
+ lda #26
+hsm1 cmp #25
+ beq hsz
+ sec
+ sbc #1
+ cmp #26
+ bne hsz
+ lda #0
+ beq hsz
 
 hfont lda #22
  sta pcs
@@ -1926,7 +2312,7 @@ lw1 lda #19
  sta pof
 lw2 lda #25
  sta pcs
- lda #26
+ lda #31
  sta pch1
  ldx lwx
  jsr pfind
@@ -1940,7 +2326,7 @@ lw2 lda #25
  sbc pof
  ldx pwi
  beq lw3
- lsr
+ jmp szcap
 lw3 rts
 ; X = line; A = style bits carried into it from earlier lines of its paragraph
 pstyle stx psl
