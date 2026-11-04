@@ -1,6 +1,6 @@
 // Builds the AtariCraft Tools disk: a MyDOS 360K (1440 x 256 B) data disk.
 // It carries no DOS, so it is not tied to any one OS: boot any DOS, then mount it as D2:.
-// Usage: node tools/make-tools-disk.cjs   (run tools/cmd/build.cjs and tools/tests/build.cjs first)
+// Usage: node tools/make-tools-disk.cjs   (run tools/cmd/build.cjs, tools/tests/build.cjs and tools/net/build.cjs first)
 const fs = require('fs'), path = require('path');
 const root = path.resolve(__dirname, '..');
 global.window = global; global.AC = {};
@@ -15,6 +15,8 @@ const progs = [
   ['VIEW.COM', 'tools/cmd/bin/view.com'], ['NANO.COM', 'tools/cmd/bin/nano.com'], ['CALC.COM', 'tools/cmd/bin/calc.com'], ['80COL.COM', 'tools/cmd/bin/80col.com'],
   ...['arc', 'zip', 'lzh', 'alf', 'zoo', 'arj', 'dcm', 'disc'].map((n) => [n.toUpperCase() + '.COM', 'tools/cmd/bin/' + n + '.com']),
   ...['KEYTEST', 'SNDTEST', 'GFXTEST', 'MEMTEST', 'CPUTEST', 'MIDIPLAY', 'MP3PLAY'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
+  ...['PING', 'NSLOOKUP', 'TRACERT'].map((n) => [n + '.COM', 'tools/net/' + n.toLowerCase() + '.com']),
+  ...['WGET', 'CURL', 'LYNX', 'JQ', 'MAIL', 'NC'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
   ['TEST.PMD', 'tools/tests/TEST.PMD'], ['DEMO.PMD', 'tools/tests/DEMO.PMD'], ['DEMO.MID', 'tools/tests/DEMO.MID'],
   ['MP3DEMO.SMP', 'tools/tests/audio/MP3DEMO.SMP'], ['DUAL.SMP', 'tools/tests/audio/DUAL.SMP'],
   ['MONO.WAV', 'tools/tests/audio/MONO.WAV'], ['STEREO.WAV', 'tools/tests/audio/STEREO.WAV'],
@@ -58,6 +60,20 @@ LZH  .LZH .LHA   ALF  .ALF
 ZOO  .ZOO        ARJ  .ARJ
 DCM  .DCM disk image to or from ATR
 DISC ISO9660, UDF and FAT images on D9:/D10:
+
+NETWORK (needs FujiNet N:, or the Ataricraft relay)
+PING host[:port]  ping. Relay = real ICMP replies,
+  else times TCP connects (port 80).
+NSLOOKUP host     DNS lookup (relay, else DoH).
+TRACERT host      trace route. Relay only.
+WGET url         fetch a URL, show it, save
+  WGET.TXT.
+CURL [-i] [-d data] url  GET or POST.
+LYNX url          text web browser.
+JQ /path url      pick one value out of JSON.
+MAIL L|R|D|S ... POP3 / SMTP mail (plain text).
+NC host port     netcat. NC -l port listens.
+  Tools take their arguments from CMD.COM or a prompt.
 
 HARDWARE TESTS (PASS/FAIL colours)
 KEYTEST  keyboard, console keys, joysticks

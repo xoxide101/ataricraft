@@ -2,7 +2,7 @@
 
 A web-based Atari 8-bit emulator in the Craft family: humans and agents drive the same engine.
 
-Status: **v0.7.0-beta.3 (plus SD: folder support and one-command start since), working browser emulator and Workbench**. Learning and development guide: [docs/WORKBENCH.md](docs/WORKBENCH.md). Previously: v0.5.0, working browser emulator with two cores (libatari800 and AltirraSDL) (see `NOTES.md` for done / to-do). Open `web/index.html` directly from disk; no server needed.
+Status: **v8.0**, working browser emulator, Workbench, FujiNet N:/SD:/P: support and network tools. See [CHANGELOG.md](CHANGELOG.md) for what is new. Learning and development guide: [docs/WORKBENCH.md](docs/WORKBENCH.md). Previously: v0.5.0, working browser emulator with two cores (libatari800 and AltirraSDL) (see `NOTES.md` for done / to-do). Open `web/index.html` directly from disk; no server needed.
 
 ![ataricraft running Atari BASIC](docs/screenshots/01-desktop-basic.png)
 
