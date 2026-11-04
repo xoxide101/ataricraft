@@ -158,3 +158,12 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 **Reflow and alignment (poc5).** Wrap breaks are soft (byte 14) and reflow on insert/delete; hard returns (13) end paragraphs. Paragraph > Left/Center/Right stores an invisible marker (15 centre, 16 right) at the start of the paragraph's first line; continuation lines inherit it. Alignment is computed within the right margin when drawing. Not yet: justify, left margin/indent, style carry-over across soft breaks.
 
 **Justify, margins, style carry-over.** Paragraph > Justify (marker 17) spreads extra space between words on every line of the paragraph except its last. The left margin now offsets text and wrap width is rm-lm+1; changing the margins preset redraws but does not re-wrap existing lines. Bold/italic/underline state carries across soft breaks (pstyle).
+
+## ACWord PoC: paragraph markers and keep-together items
+
+Source is split into tools/acword/word/*.inc (app), lib/*.inc (shared) and ribbon.inc (shell); poc5.asm only lists the includes.
+
+Invisible marker bytes at the start of a paragraph's first line: 15 centre, 16 right, 17 justify, 18 indent, 19/20 bullet, 22 light, 23 heavy, 24 spacer, 25-30 width step (0.5x-3x), 5-10 height step (4-24 px lines). Characters 160 (non-breaking space) and 173 (non-breaking hyphen) are never wrap points; they draw as space and '-'.
+
+A spacer paragraph draws as a hatched frame between the margins and is as tall as its height marker. Hidden keys: Character > N (no-break space), H (no-break hyphen), W/T (width/height step); Paragraph > G (spacer).
+

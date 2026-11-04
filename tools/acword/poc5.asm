@@ -6,6 +6,7 @@
  icl 'word/screen.inc'
  icl 'word/text.inc'
  icl 'word/scale.inc'
+ icl 'word/spacer.inc'
  icl 'lib/barfont.inc'
  icl 'word/cmds.inc'
  icl 'ribbon.inc'
