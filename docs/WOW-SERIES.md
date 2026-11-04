@@ -115,9 +115,9 @@ Pass criterion: typing a character updates the line within a few frames, and a p
 | Build | Full redraw | Scroll 1 line | Type 1 char |
 |---|---|---|---|
 | `poc.asm` 6 px cells, 53 cols, ROM font | 56 | 9 | 10 |
-| `poc80.asm` 4 px cells, 80 cols, AFM80 3x7 font | 41 | 7 | 6 |
+| `poc80.asm` 4 px cells, 80 cols, AFM80 3x7 font | 41 | 7 | 4 |
 
-Findings: typing cost was dominated by rescanning and shifting the whole document on every insert; keeping a document-end pointer and adjusting line pointers cut it from 9 to 6 frames. The rest is the tail memory shift (a gap buffer fixes it) and the status redraw. At 4 px cells bold merges letters into blobs; the 5 px cell (4 px glyph plus 1 px smear) is needed. `poc80.asm` also has the ribbon (Tab cycles Edit/Format/Insert/File) and the command bar (Ctrl-X, Tab completes, Enter runs); only the Edit commands act so far.
+Findings: typing cost was dominated by rescanning and shifting the whole document on every insert; keeping a document-end pointer and adjusting line pointers cut it from 9 to 6 frames, and a page-wise block move for the tail shift brought it to 4. A gap buffer is only needed if documents grow well beyond the PoC's ~1.7K. The remaining cost is the key read through CIO, the one-glyph draw and the status redraw. At 4 px cells bold merges letters into blobs; the 5 px cell (4 px glyph plus 1 px smear) is needed. `poc80.asm` also has the ribbon (Tab cycles Edit/Format/Insert/File) and the command bar (Ctrl-X, Tab completes, Enter runs); only the Edit commands act so far.
 
 ## Open questions
 
