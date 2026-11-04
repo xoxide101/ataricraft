@@ -214,14 +214,16 @@
           const ext = cmd === 0xc4;
           const b = new Uint8Array(ext ? 140 + 64 + 36 : 140);
           const sf = (s, off, n) => b.set(this.str(s, n), off);
-          b.set(this.str('ataricraft', 33), 0);
-          b.set(this.str('fujinet-virtual', 64), 33);
-          b.set([127, 0, 0, 1], 97); b.set([127, 0, 0, 1], 101); b.set([255, 0, 0, 0], 105); b.set([8, 8, 8, 8], 109);
-          b.set([2, 0, 0, 0, 0, 1], 113); b.set([2, 0, 0, 0, 0, 2], 119);
+          const NL = window.AC && AC.NetLog, cf = NL ? NL.cfg : { ssid: 'ataricraft', hostname: 'fujinet-virtual', ip: '127.0.0.1', gw: '127.0.0.1', mask: '255.0.0.0', dns: '8.8.8.8', mac: '02:00:00:00:00:01', bssid: '02:00:00:00:00:02' };
+          const ipb = (s) => (NL ? NL.ipBytes(s) : s.split('.').map(Number)), macb = (s) => (NL ? NL.macBytes(s) : s.split(':').map((x) => parseInt(x, 16)));
+          b.set(this.str(cf.ssid, 33), 0);
+          b.set(this.str(cf.hostname, 64), 33);
+          b.set(ipb(cf.ip), 97); b.set(ipb(cf.gw), 101); b.set(ipb(cf.mask), 105); b.set(ipb(cf.dns), 109);
+          b.set(macb(cf.mac), 113); b.set(macb(cf.bssid), 119);
           b.set(this.str('1.0-virtual', 15), 125);
           if (ext) {
-            sf('127.0.0.1', 140, 16); sf('127.0.0.1', 156, 16); sf('255.0.0.0', 172, 16); sf('8.8.8.8', 188, 16);
-            sf('02:00:00:00:00:01', 204, 18); sf('02:00:00:00:00:02', 222, 18);
+            sf(cf.ip, 140, 16); sf(cf.gw, 156, 16); sf(cf.mask, 172, 16); sf(cf.dns, 188, 16);
+            sf(cf.mac.toUpperCase(), 204, 18); sf(cf.bssid.toUpperCase(), 222, 18);
           }
           this.put(data, b, len);
           return C;

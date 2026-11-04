@@ -468,6 +468,8 @@
     return dev;
   }
 
+  const logged = (t) => (root.AC && root.AC.NetLog ? root.AC.NetLog.wrap(t) : t);
+
   // Default transport: synchronous XHR to the local relay (tools/tnfs-bridge/bridge.cjs) using a token.
   function relayNet(opts) {
     const base = () => (typeof opts.base === 'function' ? opts.base() : opts.base);
@@ -491,7 +493,7 @@
       if (r.status !== 200) return { err: +(r.hdr('X-AC-Err') || ERR.GENERAL) };
       return { body: r.body, meta: JSON.parse(decodeURIComponent(r.hdr('X-AC-Meta') || '%7B%7D')) };
     };
-    return {
+    return logged({
       http(req) {
         const r = j('/net/http', { method: req.method, url: req.url, headers: req.headers }, req.body);
         if (r.err) return { status: 901, body: new Uint8Array(0), headers: [] };
@@ -515,7 +517,7 @@
       sdFile(path) { const r = j('/net/sd/file', { path }); if (r.err) throw new Error('sd'); return r.body; },
       sdPut(path, data, append) { const r = j('/net/sd/put', { path, append: !!append }, data); return r.err || ERR.OK; },
       sdOp(op, path, to) { const r = j('/net/sd/op', { op, path, to }); return r.err || ERR.OK; },
-    };
+    });
   }
 
   const api = { crunch, entryLine, NDev, relayNet, ERR, parseUrl, fixSpec, chdirPrefix, httpErr, toAtari, fromAtari };

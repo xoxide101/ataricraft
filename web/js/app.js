@@ -2170,7 +2170,7 @@
       document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
       localStorage.setItem('ac.sidetab', t);
     };
-    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : show(b.dataset.t)); });
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'insp' ? AC.InspectPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : show(b.dataset.t)); });
     const t0 = localStorage.getItem('ac.sidetab');
     show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
   }
@@ -4456,7 +4456,9 @@
 
   const VERSION = '8.1', BUILD = '2026-11-04';
   { const h = $('appver'); if (h) { h.title = `Ataricraft v${VERSION}, built ${BUILD}`; h.querySelector('small').textContent = `v${VERSION} · ${BUILD}`; } console.log(`Ataricraft v${VERSION} (${BUILD})`); }
+  AC.Inspect.attach(() => S.emu);
   window.ataricraft = {
+    inspect: AC.Inspect, remote: AC.Remote,
     version: `${VERSION} (${BUILD})`,
     diskState: () => Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].filter((n) => S.disks[n]).map((n) => [n, { rev: S.disks[n].rev || 0, orig: !!S.disks[n].orig, pend: !!S.pend[n], idle: Math.round(performance.now() - (S.io[n] || 0)) }])),
     describe: () => ({
@@ -4505,7 +4507,7 @@
     speed: (x) => { S.speed = x; },
     peek: (a, l) => S.emu.peek(a, l), poke: (a, b) => S.emu.poke(a, b),
     readDisk: (n) => fsBytes(n),
-    mountDisk: (n, name, bytes) => S.emu.mountDisk(n, name, bytes), bootFile: (name, bytes) => S.emu.bootFile(name, bytes),
+    mountDisk: (n, name, bytes) => S.emu.mountDisk(n, name, bytes), bootFile: (name, bytes) => AC.Inspect.load(name, bytes),
     insertCart: (slot, name, bytes) => S.emu.insertCart(slot, name, bytes), cartTypes: (kb) => S.emu.cartTypes(kb),
     setCartType: (slot, t) => S.emu.setCartType(slot, t), ejectCart: (slot) => S.emu.ejectCart(slot), ejectDisk: (n) => S.emu.ejectDisk(n),
     snapshot: () => S.emu.snapshot(), restore: (s) => { S.emu.restore(s); draw(); },

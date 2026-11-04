@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Inspector** (sidebar tab, [docs/INSPECT.md](docs/INSPECT.md)): RAM page map and system variables, network activity log with byte counters, editable virtual adapter IP settings (returned by the FujiNet adapter-config command), and injection of memory, programs, typed text and fake N:HTTP replies.
+- **Remote control:** the relay's /ctl/* endpoints and 	ools/ctl.cjs let scripts outside the browser read and drive the emulator (token protected). Tested with scripts/inspect-test.cjs; not tried from another machine.
+
 ## v8.1 (2026-11-04)
 
 - **BASIC compiler:** string variables (DIM A$(n), substrings, CHR$/LEN/ASC/VAL, compare, INPUT), DATA/READ/RESTORE, OPEN/CLOSE/PRINT #/INPUT #/GET/PUT, variable STEP, array and string bounds checks (ERROR 9). Still no floats, STR$, TRAP or string +. Tested on a node 6502 and in the browser; not on real hardware.

@@ -336,7 +336,8 @@ const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--all
 // so other websites cannot read the token, and a non-local Host header is refused (DNS rebinding).
 const webRoot = pathMod.resolve(__dirname, '..', '..', 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.bin': 'application/octet-stream' };
-const isApi = (p) => p.startsWith('/net/') || ['/ping', '/status', '/list', '/file'].includes(p);
+const ctl = require('./ctl.cjs').create(relayNet.token);
+const isApi = (p) => p.startsWith('/net/') || p.startsWith('/ctl/') || ['/ping', '/status', '/list', '/file'].includes(p);
 function serveStatic(rq, rs, u) {
   if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(rq.headers.host || '')) { rs.writeHead(403); rs.end('bad host'); return; }
   let rel;
@@ -365,6 +366,7 @@ const server = http.createServer(async (rq, rs) => {
   rs.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (rq.method === 'OPTIONS') { rs.writeHead(204); rs.end(); return; }
   if (u.pathname.startsWith('/net/')) { relayNet.handle(rq, rs, u.pathname); return; }
+  if (u.pathname.startsWith('/ctl/')) { ctl.handle(rq, rs, u.pathname); return; }
   if (u.pathname === '/ping') { rs.end('ataricraft-tnfs-bridge'); return; }
   if (u.pathname === '/status') {
     try { rs.end(await (await fetch('https://fujinet.online/tnfs-server-status/')).text()); } catch (e) { rs.writeHead(502); rs.end(String(e.message)); }
