@@ -108,6 +108,12 @@ rfl  = $CF
 rfk  = $D0
 rfc  = $D1
 rfj  = $D2
+pal  = $D3
+pam  = $D4
+pln  = $D5
+scl  = $D6
+scc  = $D7
+pao  = $D8
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -222,6 +228,7 @@ lgot
  lda #0
  sta fl
  jsr handle
+ jsr fixcc
  jsr tend
  sta $A4
  jsr visible
@@ -408,6 +415,11 @@ fu1 lda top
  rts
 
 appendcur
+ ldx cl
+ jsr paln
+ beq apc
+ jmp redrawcur
+apc
  lda cl
  sec
  sbc top
@@ -496,11 +508,46 @@ dt0 lda rr
  cmp #$FE
  beq dtpx
  cmp #ROWS+1
- bne dt1
+ bne dtal
  lda mn
  cmp #2
- bne dt1
+ bne dtal
 dtpx jmp pxtext
+dtal lda bf
+ bne dt1
+ ldx t0
+ jsr paln
+ beq dt1
+ sta pam
+ ldy #0
+ ldx #0
+dla1 lda (tp),y
+ beq dla9
+ cmp #13
+ beq dla9
+ cmp #14
+ beq dla9
+ cmp #5
+ bcc dla2
+ cmp #15
+ beq dla2
+ cmp #16
+ beq dla2
+ inx
+dla2 iny
+ bne dla1
+dla9 stx pln
+ lda rm
+ sec
+ sbc pln
+ bcc dt1
+ clc
+ adc #1
+ ldx pam
+ cpx #16
+ beq dla3
+ lsr
+dla3 sta col
 dt1 ldy #0
  lda (tp),y
  beq dtend
@@ -508,6 +555,10 @@ dt1 ldy #0
  beq dtend
  cmp #14
  beq dtend
+ cmp #15
+ beq dtnext
+ cmp #16
+ beq dtnext
  cmp #5
  bcs dtchar
  tax
@@ -1039,7 +1090,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #20
+ cmp #23
  bcc ce0
  lda #17
 ce0 tax
@@ -1134,6 +1185,51 @@ hm2 lda #8
  lda #55
  sta rm
  jmp status
+; paragraph alignment: an invisible marker byte at the start of the paragraph's first line (15 centre, 16 right)
+hal lda #0
+ beq hset
+hac lda #15
+ bne hset
+har lda #16
+hset sta pam
+ lda cl
+ sta scl
+ lda cc
+ sta scc
+ ldx cl
+ jsr paln
+ sta pao
+ lda pal
+ sta cl
+ lda pao
+ beq hs1
+ lda #1
+ sta cc
+ jsr delete
+ lda scl
+ cmp cl
+ bne hs1
+ lda scc
+ beq hs1
+ dec scc
+hs1 lda pam
+ beq hs2
+ lda #0
+ sta cc
+ lda pam
+ jsr insert
+ lda scl
+ cmp cl
+ bne hs2
+ inc scc
+hs2 lda scl
+ sta cl
+ lda scc
+ sta cc
+ lda #2
+ sta fl
+ rts
+
 hcol lda th
  eor #1
  sta th
@@ -1155,9 +1251,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1260,7 +1356,7 @@ ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
 ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(17),b(0)
-ip4 dta c'L',b(17),c'C',b(17),c'R',b(17),c'J',b(17),c'S',b(17),c'I',b(17),b(0)
+ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(17),c'S',b(17),c'I',b(17),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
 itl dta l(it0),l(it1),l(it2),l(it3),l(it4),l(it5)
@@ -1500,6 +1596,55 @@ h9 cmp #32
  bcs hx
  jmp insert
 hx rts
+
+; X = line; A = alignment marker of its paragraph (0 left); pal = the paragraph's first line
+paln stx pal
+ lda LPL,x
+ sta src
+ lda LPH,x
+ sta src+1
+ ldy #0
+ lda (src),y
+ cmp #15
+ beq pa9
+ cmp #16
+ beq pa9
+ ldx pal
+ beq pa8
+ dex
+ lda LPL,x
+ sta src
+ lda LPH,x
+ sta src+1
+ ldy #0
+pa3 lda (src),y
+ beq pa8
+ cmp #13
+ beq pa8
+ cmp #14
+ beq paln
+ iny
+ bne pa3
+pa8 lda #0
+pa9 ora #0
+ rts
+
+; keep the cursor after an alignment marker
+fixcc ldx cl
+ lda LPL,x
+ sta src
+ lda LPH,x
+ sta src+1
+ ldy #0
+ lda (src),y
+ cmp #15
+ beq fx1
+ cmp #16
+ bne fx2
+fx1 lda cc
+ bne fx2
+ inc cc
+fx2 rts
 
 curptr
  ldx cl
@@ -1743,6 +1888,10 @@ rf4 lda (tp),y
  beq rf8
  cmp #5
  bcc rf7
+ cmp #15
+ beq rf7
+ cmp #16
+ beq rf7
  cmp #32
  bne rf6
  lda hi
