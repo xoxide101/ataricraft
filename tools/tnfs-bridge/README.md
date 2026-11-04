@@ -26,7 +26,7 @@ At start it prints a random token; paste it into the page (Online & networking >
 Without --allow-lan, targets on loopback, private or link-local addresses are refused, and TCP/UDP servers bind to 127.0.0.1.
 Test with the page's Test button (it also checks the token).
 
-## Network diagnostics (PING, NSLOOKUP, TRACERT)
+## Network diagnostics (PING, NSLOOKUP, TRACERT, WHOIS, IPCONFIG)
 
-Built from tools/net/netdiag.asm (ping.com, nslookup.com, tracert.com). Usage: `PING host[:port]`. Each tool auto-detects: it first asks the relay (`N:HTTP://diag.ataricraft/ping|dns|trace/<host>`), which runs the real OS ping/tracert/DNS. If the relay doesn't answer (e.g. real FujiNet), PING times TCP connects (port 80 by default), NSLOOKUP uses DNS-over-HTTPS (dns.google), and TRACERT says it needs the relay (no ICMP/TTL on FujiNet). Tested in the emulator only (scripts/netdiag-test.cjs); the real-FujiNet fallbacks are untested on hardware.
+Built from tools/net/netdiag.asm (ping.com, nslookup.com, tracert.com, whois.com, ipconfig.com). WHOIS and IPCONFIG are relay only (/whois/<domain>, /ipconfig/x). Usage: `PING host[:port]`. Each tool auto-detects: it first asks the relay (`N:HTTP://diag.ataricraft/ping|dns|trace/<host>`), which runs the real OS ping/tracert/DNS. If the relay doesn't answer (e.g. real FujiNet), PING times TCP connects (port 80 by default), NSLOOKUP uses DNS-over-HTTPS (dns.google), and TRACERT says it needs the relay (no ICMP/TTL on FujiNet). Tested in the emulator only (scripts/netdiag-test.cjs); the real-FujiNet fallbacks are untested on hardware.
 

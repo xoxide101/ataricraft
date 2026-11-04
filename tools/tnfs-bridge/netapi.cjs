@@ -37,21 +37,41 @@ function create(opts) {
   }
   const fail = (e) => ({ err: e.code && typeof e.code === 'number' ? e.code : (e.code === 'ENOTFOUND' ? ERR.NOT_FOUND : e.code === 'ECONNREFUSED' ? ERR.REFUSED : e.code === 'ETIMEDOUT' ? ERR.TIMEOUT : ERR.UNREACH) });
 
-  // Pseudo-host diag.ataricraft: N:HTTP://diag.ataricraft/ping|trace|dns/<host> returns plain text for the PING,
-  // TRACERT and NSLOOKUP tools. A real FujiNet cannot resolve this name, which is how the tools detect it.
+  // Pseudo-host diag.ataricraft: N:HTTP://diag.ataricraft/ping|trace|dns|whois/<host> and /ipconfig/x return plain text for the PING,
+  // TRACERT, NSLOOKUP, WHOIS and IPCONFIG tools. A real FujiNet cannot resolve this name, which is how the tools detect it.
   const HOSTRE = /^[A-Za-z0-9][A-Za-z0-9.:-]{0,100}$/;
   const clip = (s) => s.replace(/\r/g, '').split('\n').filter((l) => !/^\s*(Pinging .* with|Approximate round|Tracing route|over a maximum|Trace complete|PING |traceroute to)/i.test(l)).map((l) => l.trim().replace(/\s{2,}/g, ' ').replace(/Reply from /, 'Reply ').replace(/bytes=\d+ /, '').replace(/ ms\b/g, 'ms').replace(/packets transmitted, /, 'sent ').replace(/, /g, ' ').slice(0, 39)).filter((l) => l).join('\n') + '\n';
   function run(cmd, args, ms) {
     return new Promise((res) => execFile(cmd, args, { timeout: ms, windowsHide: true }, (e, out, err) => res(String(out || '') + (out ? '' : String(err || (e && e.message) || '')))));
   }
-  async function diag(url) {
-    const m = /^\/(ping|trace|dns)\/([^/]+)$/.exec(url.pathname);
+  function whoisQuery(server, q) {
+    return new Promise((res) => {
+      let out = ''; const s = net.connect({ host: server, port: 43, timeout: 8000 }, () => s.write(q + '\r\n'));
+      s.on('data', (d) => { out += d; if (out.length > 20000) s.destroy(); });
+      s.on('close', () => res(out)); s.on('error', () => res(out)); s.on('timeout', () => s.destroy());
+    });
+  }
+  // WHOIS via IANA referral; keeps the lines that matter on a 40-column screen.
+  async function whois(host) {
+    if (net.isIP(host) && isPrivate(host)) return 'Private address\n';
+    let r = await whoisQuery('whois.iana.org', host), ref = /^(?:refer|whois):\s*(\S+)/im.exec(r);
+    if (ref && ref[1] !== 'whois.iana.org') r = await whoisQuery(ref[1], host);
+    const keep = /^(domain name|domain|organisation|created|registrar|registry expiry date|creation date|updated date|name server|netname|country|orgname|org-name|organization|cidr|inetnum|status|descr)\s*:/i;
+    const seen = new Set(), lines = r.replace(/\r/g, '').split('\n').filter((l) => keep.test(l.trim()) && !seen.has(l.trim().toLowerCase()) && seen.add(l.trim().toLowerCase())).slice(0, 20);
+    return lines.length ? lines.join('\n') : 'No WHOIS data\n';
+  }  async function diag(url) {
+    const m = /^\/(ping|trace|dns|whois|ipconfig)\/([^/]+)$/.exec(url.pathname);
     const host = m && decodeURIComponent(m[2]).replace(/^([^:]+):\d+$/, '$1');
     const text = (s) => ({ meta: { status: 200, headers: [['content-type', 'text/plain']] }, body: Buffer.from(s, 'latin1') });
     if (!m || !HOSTRE.test(host)) return text('BAD REQUEST\n');
     const win = process.platform === 'win32';
     try {
-      if (m[1] === 'dns') {
+      if (m[1] === 'ipconfig') {
+        const L = [];
+        for (const [n, as] of Object.entries(require('os').networkInterfaces())) for (const a of as) if (!a.internal && a.family === 'IPv4') L.push(n.slice(0, 20) + '\nIP: ' + a.address + '\nMask: ' + a.netmask);
+        return text(clip(L.length ? L.join('\n') : 'No network interface'));
+      }
+      if (m[1] === 'whois') return text(clip(await whois(host)));      if (m[1] === 'dns') {
         let out = 'Name: ' + host + '\n';
         if (net.isIP(host)) {
           const names = await dns.reverse(host).catch(() => []);

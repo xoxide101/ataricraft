@@ -98,7 +98,7 @@ All four read their arguments from the CMD hand-off line (or ask at a prompt) an
 
 Tests: `node scripts/mail-test.cjs` and `node scripts/net-apps-test.cjs` (CURL, JQ and NC; `CORES=atari800`, `ONLY=<args prefix>` and `SHOW=1` narrow or expand a run). Both pass on atari800 and Altirra against local servers and the relay. Not verified: real hardware, HTTPS, real internet servers, TLS mail.
 
-## Network diagnostics (PING, NSLOOKUP, TRACERT)
+## Network diagnostics (PING, NSLOOKUP, TRACERT, WHOIS, IPCONFIG)
 
-Built from tools/net/netdiag.asm (ping.com, nslookup.com, tracert.com). Usage: `PING host[:port]`. Each tool auto-detects: it first asks the relay (`N:HTTP://diag.ataricraft/ping|dns|trace/<host>`), which runs the real OS ping/tracert/DNS. If the relay doesn't answer (e.g. real FujiNet), PING times TCP connects (port 80 by default), NSLOOKUP uses DNS-over-HTTPS (dns.google), and TRACERT says it needs the relay (no ICMP/TTL on FujiNet). Tested in the emulator only (scripts/netdiag-test.cjs); the real-FujiNet fallbacks are untested on hardware.
+Built from tools/net/netdiag.asm (ping.com, nslookup.com, tracert.com, whois.com, ipconfig.com). WHOIS (N:HTTP://diag.ataricraft/whois/<domain>, TCP 43 from the relay) and IPCONFIG (.../ipconfig/x, the PC's non-loopback IPv4 addresses) need the relay and say so without it. Usage: `PING host[:port]`. Each tool auto-detects: it first asks the relay (`N:HTTP://diag.ataricraft/ping|dns|trace/<host>`), which runs the real OS ping/tracert/DNS. If the relay doesn't answer (e.g. real FujiNet), PING times TCP connects (port 80 by default), NSLOOKUP uses DNS-over-HTTPS (dns.google), and TRACERT says it needs the relay (no ICMP/TTL on FujiNet). Tested in the emulator only (scripts/netdiag-test.cjs); the real-FujiNet fallbacks are untested on hardware.
 

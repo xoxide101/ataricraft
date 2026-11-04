@@ -37,6 +37,13 @@ start   lda #0
         sta got
         sta qoff
         sta qoff+1
+        .if MODE==5
+        lda #'x'
+        sta HOST
+        lda #$9B
+        sta HOST+1
+        jmp havhost
+        .endif
         lda $0480
         cmp #$A5
         bne ask
@@ -76,7 +83,11 @@ ask     lda #<prompt
         sta ICBLH
         ldx #0
         jsr CIOV
-havhost lda HOST
+havhost
+        .if MODE==5
+        jmp go
+        .endif
+        lda HOST
         cmp #$9B
         bne go
         lda #<usage
@@ -109,7 +120,7 @@ fallbk
         .if MODE==2
         jmp doh
         .endif
-        .if MODE==3
+        .if MODE>=3
         lda #<nomsg
         ldy #>nomsg
         jsr prl
@@ -598,8 +609,28 @@ usage   .byte 'Usage: NSLOOKUP host',$9B
         .if MODE==3
 durl    .byte 'N:HTTP://diag.ataricraft/trace/',$9B
 usage   .byte 'Usage: TRACERT host',$9B
+        .endif
+        .if MODE==4
+durl    .byte 'N:HTTP://diag.ataricraft/whois/',$9B
+usage   .byte 'Usage: WHOIS domain',$9B
+        .endif
+        .if MODE==5
+durl    .byte 'N:HTTP://diag.ataricraft/ipconfig/',$9B
+usage   .byte 'Usage: IPCONFIG',$9B
+        .endif
+        .if MODE>=3
+        .if MODE==3
 nomsg  .byte 'TRACERT needs the Ataricraft relay',$9B
 nomsg2 .byte '(FujiNet has no ICMP / TTL control)',$9B
+        .endif
+        .if MODE==4
+nomsg  .byte 'WHOIS needs the Ataricraft relay',$9B
+nomsg2 .byte '(FujiNet has no port 43 helper)',$9B
+        .endif
+        .if MODE==5
+nomsg  .byte 'IPCONFIG needs the Ataricraft relay',$9B
+nomsg2 .byte '(FujiNet: use its config menu)',$9B
+        .endif
         .endif
 prompt  .byte 'Host? ',$9B
 dmsg    .byte 'Done - press a key',$9B
