@@ -127,7 +127,7 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 - **Toggles.** `bars` (ruled or inverse bars), `color` (blue theme, DLI colour zones for text versus bars) and the zoom ruler. The status line shows ZUM, INV and BLU flags only while on, in inverse. Inverse characters get a 1 px left bar to close the margin.
 - **Status line.** Ln/Col, then BLD/ITA/UND for the style at the cursor (`curstyle` scans the line from its start). The timing readouts were dropped from the display to make room.
 - **Also on the status line.** Character count (`putn16`) and free KB of the 16K document area.
-- **Margins.** Document > Margins cycles presets (0-63, 4-59, 8-55); the ruler marks them and the status line shows `M l-r` when not the default. They are not applied to text layout yet.
+- **Margins.** Document > Margins cycles presets (0-63, 4-59, 8-55); the ruler marks them and the status line shows `M l-r` when not the default. The right margin drives word wrap: typing past it breaks the line at the last space that fits (or at the cursor if there is none), as a hard return. There is no reflow of the following text yet, so inserting mid-line in a long line peels one word per keystroke; the left margin is not applied.
 - **Not built yet.** Page width/margins on the status line. Frame counts have not been re-measured since the pixel bar renderer (previously 52 full / 6 scroll / 5 key); the item-line screenshot was occasionally cut short by capture timing, not reproducible.
 
 ## Open questions

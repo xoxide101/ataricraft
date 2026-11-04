@@ -1659,12 +1659,77 @@ in7 cpx nl
  inc LPH,x
 in9 inx
  bne in7
-in8 jsr linelen
+in8 jsr wrapchk
+ lda fl
+ cmp #2
+ beq in6
+ jsr linelen
  cmp cc
  bne in6
  lda #3
  sta fl
 in6 rts
+
+; word wrap: if the cursor line is wider than the right margin, break it at the last
+; space (turning it into a hard return), or at the cursor when it has no space
+wrapchk
+ lda rm
+ clc
+ adc #1
+ sta cst
+ ldx cl
+ lda LPL,x
+ sta tp
+ lda LPH,x
+ sta tp+1
+ ldy #0
+ sty hi
+ lda #$FF
+ sta lo
+wk1 lda (tp),y
+ beq wk2
+ cmp #13
+ beq wk2
+ cmp #5
+ bcc wk4
+ cmp #32
+ bne wk3
+ lda hi
+ cmp cst
+ beq wk5
+ bcs wk3
+wk5 sty lo
+wk3 inc hi
+wk4 iny
+ bne wk1
+wk2 lda hi
+ cmp cst
+ bcc wkr
+ beq wkr
+ lda lo
+ cmp #$FF
+ beq wns
+ tay
+ lda #13
+ sta (tp),y
+ lda lo
+ cmp cc
+ bcs wkk
+ lda cc
+ sec
+ sbc lo
+ sec
+ sbc #1
+ sta cc
+ inc cl
+wkk lda #2
+ sta fl
+ jmp scan
+wns dec cc
+ lda #13
+ jsr insert
+ inc cc
+wkr rts
 
 delete
  lda cc
