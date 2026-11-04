@@ -122,6 +122,13 @@ ptm  = $DD
 psl  = $DE
 psx  = $DF
 psb  = $E0
+pcs  = $E1
+pch1 = $E2
+pidx = $E3
+pof  = $E4
+pbu  = $E5
+pwd  = $E6
+lwx  = $E7
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -425,8 +432,12 @@ fu1 lda top
 appendcur
  lda lm
  bne apr
+ lda #15
+ sta pcs
+ lda #32
+ sta pch1
  ldx cl
- jsr paln
+ jsr pfind
  beq apc
 apr
  jmp redrawcur
@@ -533,6 +544,9 @@ dtal2 ldx t0
  ldx t0
  jsr paln
  sta pam
+ ldx t0
+ jsr lwid
+ sta pwd
  lda #0
  sta jon
  sta jsn
@@ -547,12 +561,10 @@ dla1 lda (tp),y
  cmp #5
  bcc dla2
  cmp #15
- beq dla2
- cmp #16
- beq dla2
- cmp #17
- beq dla2
+ bcc dlav
  cmp #32
+ bcc dla2
+dlav cmp #32
  bne dlax
  inc jsn
 dlax inx
@@ -561,11 +573,7 @@ dla2 iny
 dla9 stx pln
  lda (tp),y
  sta ptm
- lda rm
- sec
- sbc lm
- clc
- adc #1
+ lda pwd
  sec
  sbc pln
  bcs dla4
@@ -604,6 +612,26 @@ dlq2 sta jr
  lda #0
 dlb clc
  adc lm
+ clc
+ adc pof
+ sta col
+ lda pbu
+ beq dt1
+ lda t0
+ cmp pal
+ bne dt1
+ lda col
+ pha
+ lda lm
+ sta col
+ ldx #'*'
+ lda pbu
+ cmp #19
+ beq dlbb
+ ldx #'-'
+dlbb txa
+ jsr drawchar
+ pla
  sta col
 dt1 ldy #0
  lda (tp),y
@@ -612,15 +640,14 @@ dt1 ldy #0
  beq dtend
  cmp #14
  beq dtend
- cmp #15
- beq dtnext
- cmp #16
- beq dtnext
- cmp #17
- beq dtnext
  cmp #5
+ bcc dtsty
+ cmp #15
+ bcc dtchar
+ cmp #32
  bcs dtchar
- tax
+ jmp dtnext
+dtsty tax
  lda stab-1,x
  eor style
  sta style
@@ -1163,7 +1190,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #24
+ cmp #26
  bcc ce0
  lda #17
 ce0 tax
@@ -1269,31 +1296,38 @@ hm2 lda #8
  rts
 ; paragraph alignment: an invisible marker byte at the start of the paragraph's first line (15 centre, 16 right)
 hal lda #0
- beq hset
+ beq hsa
 hac lda #15
- bne hset
+ bne hsa
 har lda #16
- bne hset
+ bne hsa
 haj lda #17
-hset sta pam
- lda cl
+hsa sta pam
+ lda #15
+ sta pcs
+ lda #18
+ sta pch1
+hset lda cl
  sta scl
  lda cc
  sta scc
  ldx cl
- jsr paln
+ jsr pfind
  sta pao
  lda pal
  sta cl
  lda pao
  beq hs1
- lda #1
- sta cc
+ ldx pidx
+ inx
+ stx cc
  jsr delete
  lda scl
  cmp cl
  bne hs1
  lda scc
+ cmp pidx
+ bcc hs1
  beq hs1
  dec scc
 hs1 lda pam
@@ -1313,6 +1347,35 @@ hs2 lda scl
  lda #2
  sta fl
  rts
+
+hind lda #18
+ sta pcs
+ lda #19
+ sta pch1
+ ldx cl
+ jsr pfind
+ beq hi1
+ lda #0
+ beq hi2
+hi1 lda #18
+hi2 sta pam
+ jmp hset
+hbul lda #19
+ sta pcs
+ lda #21
+ sta pch1
+ ldx cl
+ jsr pfind
+ beq hb1
+ cmp #19
+ beq hb2
+ lda #0
+ beq hb3
+hb1 lda #19
+ bne hb3
+hb2 lda #20
+hb3 sta pam
+ jmp hset
 
 hcol lda th
  eor #1
@@ -1335,9 +1398,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1440,7 +1503,7 @@ ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
 ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(17),b(0)
-ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'S',b(17),c'I',b(17),b(0)
+ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'B',b(25),c'I',b(24),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
 itl dta l(it0),l(it1),l(it2),l(it3),l(it4),l(it5)
@@ -1449,7 +1512,7 @@ it0 dta b(3),c'N',b(3),c'ew  ',b(3),c'O',b(3),c'pen  ',b(3),c'S',b(3),c'ave  Sav
 it1 dta b(3),c'U',b(3),c'ndo  Cu',b(3),c't',b(3),c'  ',b(3),c'C',b(3),c'opy  ',b(3),c'P',b(3),c'aste  T',b(3),c'o',b(3),c'p  ',b(3),c'E',b(3),c'nd',b(0)
 it2 dta b(3),c'F',b(3),c'ind  ',b(3),c'N',b(3),c'ext  ',b(3),c'R',b(3),c'eplace  ',b(3),c'G',b(3),c'oto',b(0)
 it3 dta b(3),c'R',b(3),c'egular ',b(3),c'B',b(3),c'old ',b(3),c'I',b(3),c'talic ',b(3),c'U',b(3),c'nderline ',b(3),c'S',b(3),c'maller ',b(3),c'L',b(3),c'arger F',b(3),c'o',b(3),c'nts',b(0)
-it4 dta b(3),c'L',b(3),c'eft  ',b(3),c'C',b(3),c'enter  ',b(3),c'R',b(3),c'ight  ',b(3),c'J',b(3),c'ustify  ',b(3),c'S',b(3),c'pacing  ',b(3),c'I',b(3),c'ndents',b(0)
+it4 dta b(3),c'L',b(3),c'eft  ',b(3),c'C',b(3),c'enter  ',b(3),c'R',b(3),c'ight  ',b(3),c'J',b(3),c'ustify  ',b(3),c'B',b(3),c'ullet  ',b(3),c'I',b(3),c'ndent',b(0)
 it5 dta b(3),c'R',b(3),c'uler  ',b(3),c'T',b(3),c'abs  ',b(3),c'M',b(3),c'argins  ',b(3),c'B',b(3),c'ars  ',b(3),c'C',b(3),c'olor  Si',b(3),c'z',b(3),c'e  ',b(3),c'L',b(3),c'ine  ',b(3),c'H',b(3),c'ilite',b(0)
 
 dli1
@@ -1681,40 +1744,93 @@ h9 cmp #32
  jmp insert
 hx rts
 
-; X = line; A = alignment marker of its paragraph (0 left); pal = the paragraph's first line
-paln stx pal
- lda LPL,x
- sta src
- lda LPH,x
- sta src+1
- ldy #0
- lda (src),y
- cmp #15
- beq pa9
- cmp #16
- beq pa9
- cmp #17
- beq pa9
- ldx pal
- beq pa8
+; X = line; A = paragraph attribute marker found in the first line's header within pcs..pch1-1
+; (0 = none); pal = the paragraph's first line, pidx = the marker's offset
+pfind stx pal
+pfd0 ldx pal
+ beq pfd2
  dex
  lda LPL,x
  sta src
  lda LPH,x
  sta src+1
  ldy #0
-pa3 lda (src),y
- beq pa8
+pfd1 lda (src),y
+ beq pfd2
  cmp #13
- beq pa8
+ beq pfd2
  cmp #14
- beq paln
+ beq pfd3
  iny
- bne pa3
-pa8 lda #0
-pa9 ora #0
+ bne pfd1
+ beq pfd2
+pfd3 stx pal
+ jmp pfd0
+pfd2 ldx pal
+ lda LPL,x
+ sta src
+ lda LPH,x
+ sta src+1
+ ldy #0
+pfd4 lda (src),y
+ cmp #15
+ bcc pfd8
+ cmp #32
+ bcs pfd8
+ cmp pcs
+ bcc pfd5
+ cmp pch1
+ bcc pfd9
+pfd5 iny
+ bne pfd4
+pfd8 lda #0
+pfd9 sty pidx
+ ora #0
  rts
 
+; alignment marker (15 centre, 16 right, 17 justify) of the paragraph at line X
+paln lda #15
+ sta pcs
+ lda #18
+ sta pch1
+ jmp pfind
+
+; X = line; A = text width after indent and bullet; pof = offset, pbu = bullet marker
+lwid stx lwx
+ lda #0
+ sta pof
+ lda #18
+ sta pcs
+ lda #19
+ sta pch1
+ ldx lwx
+ jsr pfind
+ beq lw1
+ lda lwx
+ cmp pal
+ bne lw1
+ lda #4
+ sta pof
+lw1 lda #19
+ sta pcs
+ lda #21
+ sta pch1
+ ldx lwx
+ jsr pfind
+ sta pbu
+ beq lw2
+ lda pof
+ clc
+ adc #2
+ sta pof
+lw2 lda rm
+ sec
+ sbc lm
+ clc
+ adc #1
+ sec
+ sbc pof
+ rts
 ; X = line; A = style bits carried into it from earlier lines of its paragraph
 pstyle stx psl
  jsr paln
@@ -1750,24 +1866,24 @@ pst3 inc psx
 pst9 lda psb
  rts
 
-; keep the cursor after an alignment marker
+; keep the cursor after the paragraph header markers
 fixcc ldx cl
  lda LPL,x
  sta src
  lda LPH,x
  sta src+1
  ldy #0
- lda (src),y
+fx1 lda (src),y
  cmp #15
- beq fx1
- cmp #16
- beq fx1
- cmp #17
- bne fx2
-fx1 lda cc
- bne fx2
- inc cc
-fx2 rts
+ bcc fx2
+ cmp #32
+ bcs fx2
+ iny
+ bne fx1
+fx2 cpy cc
+ bcc fx3
+ sty cc
+fx3 rts
 
 curptr
  ldx cl
@@ -1980,6 +2096,9 @@ rf1 lda #0
  lda #$FF
  sta rfk
  ldx rfl
+ jsr lwid
+ sta cst
+ ldx rfl
  jsr rfptr
  jsr rfterm
  cmp #14
@@ -2015,12 +2134,10 @@ rf4 lda (tp),y
  cmp #5
  bcc rf7
  cmp #15
- beq rf7
- cmp #16
- beq rf7
- cmp #17
- beq rf7
+ bcc rfv
  cmp #32
+ bcc rf7
+rfv cmp #32
  bne rf6
  lda hi
  cmp cst
