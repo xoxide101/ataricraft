@@ -63,7 +63,7 @@
   // Printable page around monospaced text; text flows into as many 4.2-inch columns as the page width allows.
   function textPage(title, text, o) {
     const pg = pageCss(o), cols = Math.max(1, Math.floor((pg.w - 1) / 4.2));
-    return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>${pg.css}body{margin:0}pre{margin:0;font:11px/1.25 Consolas,'Courier New',monospace;white-space:pre;column-count:${cols};column-gap:0.3in;column-fill:auto}</style><pre>${esc(text)}</pre>`;
+    return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>${(o && o.fontCss) || ''}${pg.css}body{margin:0}pre{margin:0;font:${(o && o.fontSize) || 11}px/1.25 ${o && o.fontFamily ? "'" + o.fontFamily + "'," : ''}Consolas,'Courier New',monospace;white-space:pre;column-count:${cols};column-gap:0.3in;column-fill:auto}</style><pre>${esc(text)}</pre>`;
   }
   // Disk label card: name, kind, free space and the file names in columns (folders shown with a trailing slash).
   function labelPage(C, r, o) {
