@@ -163,7 +163,7 @@ dt1 ldy #0
  cmp #5
  bcc dtsty
  cmp #13
- bcc dtnxj
+ bcc dtmk
  cmp #15
  bcc dtchar
  cmp #32
@@ -211,6 +211,13 @@ dtnext
  inc16 tp
  jmp dt1
 dtend rts
+dtmk cmp #11
+ bcc dtnxj
+ tax
+ lda stb2-11,x
+ eor style
+ sta style
+ jmp dtnext
 
 ; A = ascii; draws at col on the row in rs
 drawchar
@@ -259,8 +266,23 @@ dc1 sta gp
  lda #0
  sta ry
 dc2 ldy ry
+ lda style
+ and #48
+ beq dcn
+ and #16
+ beq dcsb
+ lda spt,y
+ jmp dcm
+dcsb lda sbt,y
+dcm cmp #$FF
+ bne dcm2
+ lda #0
+ beq dcs
+dcm2 tay
  lda (gp),y
- sta v
+ jmp dcs
+dcn lda (gp),y
+dcs sta v
  lda style
  jsr bld
  and #1
@@ -320,9 +342,13 @@ dc9 jsr lite
 dca inc ry
  lda ry
  cmp #8
- bne dc2
- rts
+ beq dcx
+ jmp dc2
+dcx rts
 
 stab dta b(1),b(2),b(4),b(8)
+stb2 dta b(16),b(32)
+spt dta b(0),b(2),b(3),b(5),b(6),b($FF),b($FF),b($FF)
+sbt dta b($FF),b($FF),b($FF),b(0),b(2),b(3),b(5),b(6)
 
 

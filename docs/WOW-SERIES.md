@@ -167,3 +167,7 @@ Invisible marker bytes at the start of a paragraph's first line: 15 centre, 16 r
 
 A spacer paragraph draws as a hatched frame between the margins and is as tall as its height marker. Hidden keys: Character > N (no-break space), H (no-break hyphen), W/T (width/height step); Paragraph > G (spacer).
 
+
+### Superscript and subscript
+Inline toggle codes 11 (superscript) and 12 (subscript), like bold/italic but zero width and carried across wrapped lines. Style bits 16/32. Keys: Character > P (super), D (sub). Rendered by squeezing the 8-row glyph into 5 rows at the top or bottom of the cell (unscaled text only; scaled lines ignore them for now).
+
