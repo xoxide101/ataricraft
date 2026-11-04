@@ -71,6 +71,9 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.keyboard.press('d'); await p.waitForTimeout(400);
   await p.keyboard.press('m'); await p.waitForTimeout(1000);
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-14.png' });
+  for (const ch of 'abc def ghi') { await p.keyboard.press(ch === ' ' ? 'Space' : ch); await p.waitForTimeout(300); }
+  await p.waitForTimeout(1500);
+  if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-15.png' });
   console.log('errors:', errs);
   await b.close();
 })();
