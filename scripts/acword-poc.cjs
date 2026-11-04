@@ -64,7 +64,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.keyboard.press('d'); await p.waitForTimeout(400);
   await p.keyboard.press('h'); await p.waitForTimeout(500);
   await p.keyboard.press('Escape'); await p.waitForTimeout(400);
-  await p.keyboard.press('c'); await p.waitForTimeout(500);
+  await p.keyboard.press('c'); await p.waitForTimeout(2000);
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-13.png' });
   console.log('errors:', errs);
   await b.close();

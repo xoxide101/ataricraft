@@ -1737,6 +1737,43 @@ pn7 lda tmp
  adc #'0'
  jmp putc
 
+putn16
+ lda #0
+ sta t0
+ sta hi
+pq1 ldx t0
+ ldy #'0'
+pq2 lda src
+ sec
+ sbc p1l,x
+ pha
+ lda src+1
+ sbc p1h,x
+ bcc pq3
+ sta src+1
+ pla
+ sta src
+ iny
+ bne pq2
+pq3 pla
+ tya
+ cmp #'0'
+ bne pq4
+ ldx hi
+ beq pq5
+pq4 sta hi
+ jsr putc
+pq5 inc t0
+ lda t0
+ cmp #4
+ bne pq1
+ lda src
+ clc
+ adc #'0'
+ jmp putc
+p1l dta l(10000),l(1000),l(100),l(10)
+p1h dta h(10000),h(1000),h(100),h(10)
+
 tabstops dta b(8,16,24,32,40,48,56,$FF)
 
 mod10
@@ -1905,6 +1942,28 @@ status
  jsr putstr
  lda cc
  jsr putnum
+ lda #' '
+ jsr putc
+ lda dend
+ sec
+ sbc #<DOC
+ sta src
+ lda dend+1
+ sbc #>DOC
+ sta src+1
+ jsr putn16
+ lda #<s3
+ ldx #>s3
+ jsr putstr
+ lda #>LPL
+ sec
+ sbc dend+1
+ lsr
+ lsr
+ jsr putnum
+ lda #<s4
+ ldx #>s4
+ jsr putstr
  jsr curstyle
  lsr
  bcc sg1
@@ -1954,13 +2013,12 @@ sf3 lda #0
 
 s1 dta c'Ln ',b(0)
 s2 dta c' Col ',b(0)
-s3 dta c'  full ',b(0)
-s4 dta c'f  scroll ',b(0)
-s5 dta c'f  key ',b(0)
-fbl dta c'  ',b(4),c'BLD',b(4),b(0)
+s3 dta c' ch ',b(0)
+s4 dta c'K free',b(0)
+fbl dta c' ',b(4),c'BLD',b(4),b(0)
 fit dta c' ',b(4),c'ITA',b(4),b(0)
 fun dta c' ',b(4),c'UND',b(4),b(0)
-fz dta c'  ',b(4),c'ZUM',b(4),b(0)
+fz dta c' ',b(4),c'ZUM',b(4),b(0)
 fi dta c' ',b(4),c'INV',b(4),b(0)
 fb dta c' ',b(4),c'BLU',b(4),b(0)
 kname dta c'K:',b($9B)
