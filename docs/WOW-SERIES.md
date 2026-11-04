@@ -120,6 +120,13 @@ Pass criterion: typing a character updates the line within a few frames, and a p
 
 Findings: typing cost was dominated by rescanning and shifting the whole document on every insert; keeping a document-end pointer and adjusting line pointers cut it from 9 to 6 frames, and a page-wise block move for the tail shift brought it to 4. A gap buffer is only needed if documents grow well beyond the PoC's ~1.7K. The remaining cost is the key read through CIO, the one-glyph draw and the status redraw. At 4 px cells bold merges letters into blobs. The 5 px build uses a 4x7 font (downsampled from the Atari ROM font with hand-fixed glyphs) and a bold that thickens inside the 4 px glyph, so letters stay separate and bold, italic and underline are all legible; it costs about 9 frames on a full redraw. Cells are placed at x = 5*column through shift tables, which is the mechanism for fractional cell positions. `poc80.asm` also has the ribbon (Tab cycles Edit/Format/Insert/File) and the command bar (Ctrl-X, Tab completes, Enter runs); only the Edit commands act so far.
 
+### Shell as built in `poc5.asm` + `ribbon.inc`
+
+- **Rows.** Menu bar, ruler, 20 text rows, status line, command row. Esc opens the Microsoft Write-style menus (File, Edit, Search, Character, Paragraph, Document); a menu letter opens its item line on the command row; an item letter runs the command. Tab and the arrows cycle menus; Ctrl-X still opens the typed command bar. Most items are stubs ("Not in the proof of concept yet.").
+- **Bar rendering.** The menu bar and item line are drawn as pixels (`pxtext`), not text cells: proportional 5x7 glyphs (`font6.inc`, from `mkfont6.cjs`), hotkeys as filled boxes with knocked-out letters, and the selected menu as a filled box. Text rows keep the 64-column 4x7 font. The bar needs about 294 of 320 pixels.
+- **Toggles.** `bars` (ruled or inverse bars), `color` (blue theme, DLI colour zones for text versus bars) and the zoom ruler. The status line shows ZUM, INV and BLU flags only while on, in inverse. Inverse characters get a 1 px left bar to close the margin.
+- **Not built yet.** BLD/ITA/UND flags (need the style at the cursor), character count, free memory, page width/margins on the status line. Frame counts have not been re-measured since the pixel bar renderer (previously 52 full / 6 scroll / 5 key).
+
 ## Open questions
 
 - Screen scale: 1:1 scrolling view of the text column versus a reduced page view, and how zoom switches.
