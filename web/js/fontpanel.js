@@ -62,8 +62,8 @@
 
     const rowop = (name, f) => btn(name, () => { const g = glyph(cur), o = Array.from(g); f(o); g.set(o); draw(); });
     const dl = (name, parts, type) => { const a = el('a'); a.href = URL.createObjectURL(new Blob(parts, { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
-    const fi = el('input'); fi.type = 'file'; fi.accept = '.fnt,.bin,.set'; fi.style.display = 'none';
-    fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const b = new Uint8Array(await f.arrayBuffer()); if (b.length < 1024) say('That file is too short for a character set (need 1024 bytes).'); else { font.set(b.subarray(0, 1024)); say(`Loaded ${f.name} (${b.length} bytes${b.length > 1024 ? ', only the first 1024 used' : ''}).`); draw(); } fi.value = ''; };
+    const fi = el('input'); fi.type = 'file'; fi.accept = '.fnt,.bin,.set,.64c'; fi.style.display = 'none';
+    fi.onchange = async () => { const f = fi.files[0]; if (!f) return; let b = new Uint8Array(await f.arrayBuffer()); if (/\.64c$/i.test(f.name) || (b.length === 2050 || b.length === 4098)) { b = AC.FontLib && AC.FontLib.fromC64 ? AC.FontLib.fromC64(b, font) : b; } if (b.length < 1024) say('That file is too short for a character set (need 1024 bytes).'); else { font.set(b.subarray(0, 1024)); say(`Loaded ${f.name} (${b.length} bytes${b.length > 1024 ? ', only the first 1024 used' : ''}).`); draw(); } fi.value = ''; };
 
     const fromRom = () => {
       const rom = host.romFont && host.romFont();
@@ -86,7 +86,7 @@
       Object.keys(packs).sort().forEach((p) => { const g = document.createElement('optgroup'); g.label = p; packs[p].sort((a, b) => a.name.localeCompare(b.name)).forEach((f) => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.name; g.append(o); }); lib.append(g); });
     };
     lib.onchange = async () => { if (!lib.value) return; const r = await AC.FontLib.get(+lib.value); font.set(r.bytes); say(`Loaded "${r.name}" from the library (${r.pack}).`); draw(); };
-    const lfi = el('input'); lfi.type = 'file'; lfi.multiple = true; lfi.accept = '.fnt,.ttf,.otf,.zip'; lfi.style.display = 'none';
+    const lfi = el('input'); lfi.type = 'file'; lfi.multiple = true; lfi.accept = '.fnt,.64c,.ttf,.otf,.zip'; lfi.style.display = 'none';
     lfi.onchange = async () => {
       if (!lfi.files.length) return; say('Importing...');
       try { const r = await AC.FontLib.importFiles([...lfi.files]); say(`Imported ${r.added} font(s)${r.skipped ? `, skipped ${r.skipped} (duplicates or unsupported)` : ''}. .FNT sets appear in the library list; .TTF/.OTF are offered when printing from WebAFM.`); await libFill(); await convFill(); }
