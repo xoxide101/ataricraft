@@ -61,7 +61,22 @@
     const dl = (name, txt) => { const a = el('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
     const fi = el('input'); fi.type = 'file'; fi.accept = '.bas,.txt,.lst'; fi.style.display = 'none';
     fi.onchange = async () => { if (fi.files[0]) ed.value = (await fi.files[0].text()).replace(/\r\n?/g, '\n').replace(/\x9b/g, '\n'); fi.value = ''; };
+    const comp = () => {
+      const r = AC.BComp.compile(ed.value);
+      if (r.errors.length) { out.textContent = r.errors.map((e) => `Compile error, line ${e.line}: ${e.msg}`).join('\n'); return null; }
+      return r;
+    };
+    const dlb = (name, part) => { const a = el('a'); a.href = URL.createObjectURL(new Blob([part], { type: 'application/octet-stream' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+    const compRun = btn('Compile + run on Atari', () => {
+      localStorage.setItem('ac.basic.src', ed.value); out.textContent = '';
+      const r = comp(); if (!r) return;
+      const emu = host.emu && host.emu();
+      if (!emu) { out.textContent = 'The Atari is not running. Boot it first, then compile and run.'; return; }
+      emu.bootFile('PROGRAM.XEX', r.xex); out.textContent = `Compiled ${r.xex.length} bytes and started on the Atari.`;
+    }, 'Compile to 6502 and boot it in the running emulator (integer subset only)');
     bar.append(el('b', '', 'BASIC'), dial, runBtn, btn('Stop', () => { if (B) B.stop(); killSound(); }), btn('Clear', () => { out.textContent = ''; g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); }),
+      compRun, btn('Save .XEX', () => { out.textContent = ''; const r = comp(); if (r) dlb('PROGRAM.XEX', r.xex); }, 'Compile and download an Atari executable'),
+      btn('Save .ASM', () => { out.textContent = ''; const r = comp(); if (r) dlb('PROGRAM.ASM', r.asm.replace(/\n/g, '\r\n')); }, 'Compile and download MADS-style assembly source'),
       btn('Load .BAS', () => fi.click(), 'Load a text listing'), btn('Save .BAS', () => dl('PROGRAM.BAS', ed.value.replace(/\n/g, '\r\n')), 'Save the listing as text'),
       btn('Sample', () => { ed.value = SAMPLE; }), el('span', 'flex:1'), btn('X', () => { win.style.display = 'none'; killSound(); }));
     const note = el('div', 'padding:3px 8px;background:#14161a;color:#8a93a3;font-size:11px', 'Text-listing BASIC for trying programs out. It is not the ROM: timing and some error cases differ. PEEK and POKE reach the running Atari.');
