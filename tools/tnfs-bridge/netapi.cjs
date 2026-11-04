@@ -6,6 +6,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const dgram = require('dgram');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 const ERR = { OK: 1, TIMEOUT: 138, GENERAL: 144, DENIED: 167, NOT_FOUND: 170, REFUSED: 200, UNREACH: 201, RESET: 204, ADDR_IN_USE: 206, NO_SERVER: 208, NO_WAIT: 209 };
 const MAX_BODY = 8 << 20, MAX_SOCKETS = 32;
@@ -36,8 +37,39 @@ function create(opts) {
   }
   const fail = (e) => ({ err: e.code && typeof e.code === 'number' ? e.code : (e.code === 'ENOTFOUND' ? ERR.NOT_FOUND : e.code === 'ECONNREFUSED' ? ERR.REFUSED : e.code === 'ETIMEDOUT' ? ERR.TIMEOUT : ERR.UNREACH) });
 
+  // Pseudo-host diag.ataricraft: N:HTTP://diag.ataricraft/ping|trace|dns/<host> returns plain text for the PING,
+  // TRACERT and NSLOOKUP tools. A real FujiNet cannot resolve this name, which is how the tools detect it.
+  const HOSTRE = /^[A-Za-z0-9][A-Za-z0-9.:-]{0,100}$/;
+  const clip = (s) => s.replace(/\r/g, '').split('\n').filter((l) => !/^\s*(Pinging .* with|Approximate round|Tracing route|over a maximum|Trace complete|PING |traceroute to)/i.test(l)).map((l) => l.trim().replace(/\s{2,}/g, ' ').replace(/Reply from /, 'Reply ').replace(/bytes=\d+ /, '').replace(/ ms\b/g, 'ms').replace(/packets transmitted, /, 'sent ').replace(/, /g, ' ').slice(0, 39)).filter((l) => l).join('\n') + '\n';
+  function run(cmd, args, ms) {
+    return new Promise((res) => execFile(cmd, args, { timeout: ms, windowsHide: true }, (e, out, err) => res(String(out || '') + (out ? '' : String(err || (e && e.message) || '')))));
+  }
+  async function diag(url) {
+    const m = /^\/(ping|trace|dns)\/([^/]+)$/.exec(url.pathname);
+    const host = m && decodeURIComponent(m[2]).replace(/^([^:]+):\d+$/, '$1');
+    const text = (s) => ({ meta: { status: 200, headers: [['content-type', 'text/plain']] }, body: Buffer.from(s, 'latin1') });
+    if (!m || !HOSTRE.test(host)) return text('BAD REQUEST\n');
+    const win = process.platform === 'win32';
+    try {
+      if (m[1] === 'dns') {
+        let out = 'Name: ' + host + '\n';
+        if (net.isIP(host)) {
+          const names = await dns.reverse(host).catch(() => []);
+          return text(clip(out + (names.length ? names.map((n) => 'Host: ' + n).join('\n') : 'No PTR record')));
+        }
+        const as = (await dns.lookup(host, { all: true })).map((a) => a.address).filter((a) => allowLan || !isPrivate(a));
+        return text(clip(out + (as.length ? as.map((a) => 'Address: ' + a).join('\n') : 'No address')));
+      }
+      const ip = await resolve(host);
+      if (m[1] === 'ping') return text(clip('Pinging ' + host + ' [' + ip + ']\n' + await run('ping', win ? ['-n', '4', '-w', '2000', ip] : ['-c', '4', '-W', '2', ip], 20000)));
+      return text(clip('Tracing ' + host + ' [' + ip + ']\n' + await run(win ? 'tracert' : 'traceroute', win ? ['-d', '-h', '16', '-w', '500', ip] : ['-n', '-m', '16', '-q', '2', '-w', '1', ip], 60000)));
+    } catch (e) {
+      return text(m[1] === 'dns' ? 'Not found\n' : 'Host not found or blocked\n');
+    }
+  }
   async function http(a, body) {
     let url = new URL(a.url), method = a.method || 'GET';
+    if (url.hostname === 'diag.ataricraft') return diag(url);
     if (!/^https?:$/.test(url.protocol)) return { err: ERR.GENERAL };
     const headers = Object.assign({}, a.headers);
     for (let hop = 0; hop < 6; hop++) {
