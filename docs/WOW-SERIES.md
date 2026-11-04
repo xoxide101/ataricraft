@@ -125,7 +125,8 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 - **Rows.** Menu bar, ruler, 20 text rows, status line, command row. Esc opens the Microsoft Write-style menus (File, Edit, Search, Character, Paragraph, Document); a menu letter opens its item line on the command row; an item letter runs the command. Tab and the arrows cycle menus; Ctrl-X still opens the typed command bar. Most items are stubs ("Not in the proof of concept yet.").
 - **Bar rendering.** The menu bar and item line are drawn as pixels (`pxtext`), not text cells: proportional 5x7 glyphs (`font6.inc`, from `mkfont6.cjs`), hotkeys as filled boxes with knocked-out letters, and the open menu as a filled box (Document > Hilite toggles it off, leaving an underline). Text rows keep the 64-column 4x7 font. The bar needs about 294 of 320 pixels.
 - **Toggles.** `bars` (ruled or inverse bars), `color` (blue theme, DLI colour zones for text versus bars) and the zoom ruler. The status line shows ZUM, INV and BLU flags only while on, in inverse. Inverse characters get a 1 px left bar to close the margin.
-- **Not built yet.** BLD/ITA/UND flags (need the style at the cursor), character count, free memory, page width/margins on the status line. Frame counts have not been re-measured since the pixel bar renderer (previously 52 full / 6 scroll / 5 key).
+- **Status line.** Ln/Col, then BLD/ITA/UND for the style at the cursor (`curstyle` scans the line from its start). The timing readouts were dropped from the display to make room.
+- **Not built yet.** Character count, free memory, page width/margins on the status line. Frame counts have not been re-measured since the pixel bar renderer (previously 52 full / 6 scroll / 5 key).
 
 ## Open questions
 
