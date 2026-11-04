@@ -114,6 +114,14 @@ pln  = $D5
 scl  = $D6
 scc  = $D7
 pao  = $D8
+jsn  = $D9
+jq   = $DA
+jr   = $DB
+jon  = $DC
+ptm  = $DD
+psl  = $DE
+psx  = $DF
+psb  = $E0
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -415,9 +423,12 @@ fu1 lda top
  rts
 
 appendcur
+ lda lm
+ bne apr
  ldx cl
  jsr paln
  beq apc
+apr
  jmp redrawcur
 apc
  lda cl
@@ -514,11 +525,17 @@ dt0 lda rr
  bne dtal
 dtpx jmp pxtext
 dtal lda bf
- bne dt1
+ beq dtal2
+ jmp dt1
+dtal2 ldx t0
+ jsr pstyle
+ sta style
  ldx t0
  jsr paln
- beq dt1
  sta pam
+ lda #0
+ sta jon
+ sta jsn
  ldy #0
  ldx #0
 dla1 lda (tp),y
@@ -533,21 +550,61 @@ dla1 lda (tp),y
  beq dla2
  cmp #16
  beq dla2
- inx
+ cmp #17
+ beq dla2
+ cmp #32
+ bne dlax
+ inc jsn
+dlax inx
 dla2 iny
  bne dla1
 dla9 stx pln
+ lda (tp),y
+ sta ptm
  lda rm
  sec
- sbc pln
- bcc dt1
+ sbc lm
  clc
  adc #1
+ sec
+ sbc pln
+ bcs dla4
+ lda #0
+dla4 sta pln
+ lda #0
  ldx pam
  cpx #16
- beq dla3
+ bne dlc
+ lda pln
+ jmp dlb
+dlc cpx #15
+ bne dld
+ lda pln
  lsr
-dla3 sta col
+ jmp dlb
+dld cpx #17
+ bne dlb
+ lda ptm
+ cmp #14
+ bne dlb
+ lda jsn
+ beq dlb
+ lda pln
+ beq dlb
+ ldx #0
+dlq cmp jsn
+ bcc dlq2
+ sbc jsn
+ inx
+ bne dlq
+dlq2 sta jr
+ stx jq
+ lda #1
+ sta jon
+ lda #0
+dlb clc
+ adc lm
+ sta col
 dt1 ldy #0
  lda (tp),y
  beq dtend
@@ -558,6 +615,8 @@ dt1 ldy #0
  cmp #15
  beq dtnext
  cmp #16
+ beq dtnext
+ cmp #17
  beq dtnext
  cmp #5
  bcs dtchar
@@ -579,9 +638,23 @@ dtchar
 dtc6 jsr drawchar6
 dtskip
  inc col
+ lda jon
+ beq dtj2
+ ldy #0
+ lda (tp),y
+ cmp #32
+ bne dtj2
  lda col
+ clc
+ adc jq
+ sta col
+ lda jr
+ beq dtj2
+ dec jr
+ inc col
+dtj2 lda col
  cmp lim
- beq dtend
+ bcs dtend
 dtnext
  inc16 tp
  jmp dt1
@@ -1090,7 +1163,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #23
+ cmp #24
  bcc ce0
  lda #17
 ce0 tax
@@ -1174,23 +1247,34 @@ hmar lda lm
  sta lm
  lda #63
  sta rm
- jmp status
+ jsr status
+ lda #2
+ sta fl
+ rts
 hm1 lda #4
  sta lm
  lda #59
  sta rm
- jmp status
+ jsr status
+ lda #2
+ sta fl
+ rts
 hm2 lda #8
  sta lm
  lda #55
  sta rm
- jmp status
+ jsr status
+ lda #2
+ sta fl
+ rts
 ; paragraph alignment: an invisible marker byte at the start of the paragraph's first line (15 centre, 16 right)
 hal lda #0
  beq hset
 hac lda #15
  bne hset
 har lda #16
+ bne hset
+haj lda #17
 hset sta pam
  lda cl
  sta scl
@@ -1251,9 +1335,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1356,7 +1440,7 @@ ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
 ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(17),b(0)
-ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(17),c'S',b(17),c'I',b(17),b(0)
+ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'S',b(17),c'I',b(17),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
 itl dta l(it0),l(it1),l(it2),l(it3),l(it4),l(it5)
@@ -1609,6 +1693,8 @@ paln stx pal
  beq pa9
  cmp #16
  beq pa9
+ cmp #17
+ beq pa9
  ldx pal
  beq pa8
  dex
@@ -1629,6 +1715,41 @@ pa8 lda #0
 pa9 ora #0
  rts
 
+; X = line; A = style bits carried into it from earlier lines of its paragraph
+pstyle stx psl
+ jsr paln
+ lda #0
+ sta psb
+ lda pal
+ sta psx
+pst1 lda psx
+ cmp psl
+ bcs pst9
+ tax
+ lda LPL,x
+ sta src
+ lda LPH,x
+ sta src+1
+ ldy #0
+pst2 lda (src),y
+ beq pst3
+ cmp #13
+ beq pst3
+ cmp #14
+ beq pst3
+ cmp #5
+ bcs pst4
+ tax
+ lda stab-1,x
+ eor psb
+ sta psb
+pst4 iny
+ bne pst2
+pst3 inc psx
+ jmp pst1
+pst9 lda psb
+ rts
+
 ; keep the cursor after an alignment marker
 fixcc ldx cl
  lda LPL,x
@@ -1640,6 +1761,8 @@ fixcc ldx cl
  cmp #15
  beq fx1
  cmp #16
+ beq fx1
+ cmp #17
  bne fx2
 fx1 lda cc
  bne fx2
@@ -1664,9 +1787,10 @@ curstyle
  sta tp
  lda LPH,x
  sta tp+1
- lda #0
+ ldx cl
+ jsr pstyle
  sta cst
- tay
+ ldy #0
 cs1 cpy cc
  beq cs2
  lda (tp),y
@@ -1836,6 +1960,8 @@ reflow
  sta rfc
  sta rfj
  lda rm
+ sec
+ sbc lm
  clc
  adc #1
  sta cst
@@ -1891,6 +2017,8 @@ rf4 lda (tp),y
  cmp #15
  beq rf7
  cmp #16
+ beq rf7
+ cmp #17
  beq rf7
  cmp #32
  bne rf6

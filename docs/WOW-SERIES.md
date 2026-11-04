@@ -156,3 +156,5 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 	ools/acword/ribbon.inc holds the ribbon, command bar and Tab completion. An app supplies 	abl/tabh, 	ooll/toolh, cmdtab, cmdexec (A = command index), ppmsg and helpmsg. ACSpread and ACDBase reuse it.
 
 **Reflow and alignment (poc5).** Wrap breaks are soft (byte 14) and reflow on insert/delete; hard returns (13) end paragraphs. Paragraph > Left/Center/Right stores an invisible marker (15 centre, 16 right) at the start of the paragraph's first line; continuation lines inherit it. Alignment is computed within the right margin when drawing. Not yet: justify, left margin/indent, style carry-over across soft breaks.
+
+**Justify, margins, style carry-over.** Paragraph > Justify (marker 17) spreads extra space between words on every line of the paragraph except its last. The left margin now offsets text and wrap width is rm-lm+1; changing the margins preset redraws but does not re-wrap existing lines. Bold/italic/underline state carries across soft breaks (pstyle).
