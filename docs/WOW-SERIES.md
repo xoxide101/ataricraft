@@ -154,3 +154,5 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 ### Shared shell (ribbon.inc)
 
 	ools/acword/ribbon.inc holds the ribbon, command bar and Tab completion. An app supplies 	abl/tabh, 	ooll/toolh, cmdtab, cmdexec (A = command index), ppmsg and helpmsg. ACSpread and ACDBase reuse it.
+
+**Reflow and alignment (poc5).** Wrap breaks are soft (byte 14) and reflow on insert/delete; hard returns (13) end paragraphs. Paragraph > Left/Center/Right stores an invisible marker (15 centre, 16 right) at the start of the paragraph's first line; continuation lines inherit it. Alignment is computed within the right margin when drawing. Not yet: justify, left margin/indent, style carry-over across soft breaks.
