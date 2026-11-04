@@ -1031,7 +1031,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #19
+ cmp #20
  bcc ce0
  lda #17
 ce0 tax
@@ -1107,6 +1107,25 @@ hhil lda mhl
  eor #1
  sta mhl
  rts
+hmar lda lm
+ beq hm1
+ cmp #4
+ beq hm2
+ lda #0
+ sta lm
+ lda #63
+ sta rm
+ jmp status
+hm1 lda #4
+ sta lm
+ lda #59
+ sta rm
+ jmp status
+hm2 lda #8
+ sta lm
+ lda #55
+ sta rm
+ jmp status
 hcol lda th
  eor #1
  sta th
@@ -1128,9 +1147,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1234,7 +1253,7 @@ ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
 ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(17),b(0)
 ip4 dta c'L',b(17),c'C',b(17),c'R',b(17),c'J',b(17),c'S',b(17),c'I',b(17),b(0)
-ip5 dta c'R',b(7),c'T',b(17),c'M',b(17),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
+ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
 itl dta l(it0),l(it1),l(it2),l(it3),l(it4),l(it5)
 ith dta h(it0),h(it1),h(it2),h(it3),h(it4),h(it5)
@@ -1964,7 +1983,21 @@ status
  lda #<s4
  ldx #>s4
  jsr putstr
- jsr curstyle
+ lda lm
+ bne sm1
+ lda rm
+ cmp #63
+ beq sm2
+sm1 lda #<fm
+ ldx #>fm
+ jsr putstr
+ lda lm
+ jsr putnum
+ lda #'-'
+ jsr putc
+ lda rm
+ jsr putnum
+sm2 jsr curstyle
  lsr
  bcc sg1
  pha
@@ -2015,6 +2048,7 @@ s1 dta c'Ln ',b(0)
 s2 dta c' Col ',b(0)
 s3 dta c' ch ',b(0)
 s4 dta c'K free',b(0)
+fm dta c' M ',b(0)
 fbl dta c' ',b(4),c'BLD',b(4),b(0)
 fit dta c' ',b(4),c'ITA',b(4),b(0)
 fun dta c' ',b(4),c'UND',b(4),b(0)
