@@ -5,6 +5,13 @@ SDLSTL = $0230
 COLOR1 = $02C5
 COLOR2 = $02C6
 COLOR4 = $02C8
+VDSLST = $0200
+NMIEN  = $D40E
+WSYNC  = $D40A
+COLPF1 = $D017
+COLPF2 = $D018
+tcb    = $BB
+tci    = $BC
 CH     = $02FC
 RTCLOK = $12
 ATRACT = $4D
@@ -78,6 +85,8 @@ rc   = $B5
 rn   = $B6
 lm   = $B7
 rm   = $B8
+iv   = $B9
+th   = $BA
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -117,6 +126,16 @@ start
  sta COLOR1
  lda #$04
  sta COLOR4
+ lda #$0F
+ sta tcb
+ lda #0
+ sta tci
+ lda #<dli1
+ sta VDSLST
+ lda #>dli1
+ sta VDSLST+1
+ lda #$C0
+ sta NMIEN
  lda #0
  sta cl
  sta cc
@@ -131,6 +150,8 @@ start
  sta ps
  sta sd
  sta lm
+ sta iv
+ sta th
  sta rz
  lda #63
  sta rm
@@ -693,10 +714,73 @@ ce6 cmp #11
  lda #3
  sta cmsg
  rts
-ce7 lda rz
+ce7 cmp #12
+ bne ce8
+ lda rz
  eor #1
  sta rz
  jmp ruler
+ce8 cmp #13
+ bne ce9
+ lda iv
+ eor #1
+ sta iv
+ jmp status
+ce9 lda th
+ eor #1
+ sta th
+ beq ct0
+ lda #$94
+ sta tcb
+ lda #$0A
+ sta tci
+ sta COLOR2
+ lda #0
+ sta COLOR1
+ rts
+ct0 lda #$0F
+ sta tcb
+ sta COLOR2
+ lda #0
+ sta tci
+ sta COLOR1
+ rts
+
+dli1
+ pha
+ txa
+ pha
+ lda #<dli2
+ sta VDSLST
+ lda #>dli2
+ sta VDSLST+1
+ lda tci
+ ldx tcb
+ sta WSYNC
+ sta COLPF1
+ stx COLPF2
+ pla
+ tax
+ pla
+ rti
+
+dli2
+ pha
+ txa
+ pha
+ lda #<dli1
+ sta VDSLST
+ lda #>dli1
+ sta VDSLST+1
+ lda COLOR1
+ ldx COLOR2
+ sta WSYNC
+ sta COLPF1
+ stx COLPF2
+ pla
+ tax
+ pla
+ rti
 
 appmsg
  lda #<m1
@@ -726,14 +810,14 @@ tn3 dta c'File',b(0)
 tabl dta l(tn0),l(tn1),l(tn2),l(tn3)
 tabh dta h(tn0),h(tn1),h(tn2),h(tn3)
 tl0 dta c'^B Bold ^I Ital ^U Undl ^X Cmd',b(0)
-tl1 dta c'Ruler (zoom)  (layout: next)',b(0)
+tl1 dta c'Ruler Bars Color',b(0)
 tl2 dta c'Line',b(0)
 tl3 dta c'New Size',b(0)
 tooll dta l(tl0),l(tl1),l(tl2),l(tl3)
 toolh dta h(tl0),h(tl1),h(tl2),h(tl3)
 cmdtab dta c'bold',b(0),c'italic',b(0),c'underline',b(0),c'top',b(0),c'end',b(0)
  dta c'edit',b(0),c'format',b(0),c'insert',b(0),c'file',b(0)
- dta c'line',b(0),c'new',b(0),c'size',b(0),c'ruler',b(0),b(0)
+ dta c'line',b(0),c'new',b(0),c'size',b(0),c'ruler',b(0),c'bars',b(0),c'color',b(0),b(0)
 
  icl 'ribbon.inc'
 
@@ -1228,7 +1312,34 @@ rdraw lda #0
  sta rr
  jsr rowsetup
  jsr drawtext
+ jmp hlr
+
+hlr
+ lda iv
+ beq hlr0
  jmp invrow
+hlr0 jsr rowptr
+ inc sp+1
+ ldy #24
+hl1 lda #$FF
+ sta (sp),y
+ iny
+ cpy #64
+ bne hl1
+ rts
+
+hls
+ lda iv
+ beq hls0
+ jmp invrow
+hls0 jsr rowptr
+ ldy #0
+hl2 lda #$FF
+ sta (sp),y
+ iny
+ cpy #40
+ bne hl2
+ rts
 
 invrow
  jsr rowptr
@@ -1290,7 +1401,7 @@ status
  sta rr
  jsr rowsetup
  jsr drawtext
- jmp invrow
+ jmp hls
 
 s1 dta c'Ln ',b(0)
 s2 dta c' Col ',b(0)
@@ -1333,9 +1444,13 @@ helpmsg dta c'^X command  Tab mode  ^B bold ^I italic ^U underline  Ctrl-arrows 
  org $9200
 dl :3 dta $70
  dta $4F,a(SCR)
- :99 dta $0F
+ :14 dta $0F
+ dta $8F
+ :84 dta $0F
  dta $4F,a(SCR+4000)
- :91 dta $0F
+ :74 dta $0F
+ dta $8F
+ :16 dta $0F
  dta $41,a(dl)
 
  org $9400

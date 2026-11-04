@@ -44,6 +44,16 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.keyboard.press('Tab'); await p.waitForTimeout(300);
   await p.keyboard.press('Enter'); await p.waitForTimeout(800);
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-7.png' });
+  await p.keyboard.press('Control+x'); await p.waitForTimeout(300);
+  for (const ch of 'ba') { await p.keyboard.press(ch); await p.waitForTimeout(250); }
+  await p.keyboard.press('Tab'); await p.waitForTimeout(300);
+  await p.keyboard.press('Enter'); await p.waitForTimeout(800);
+  if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-8.png' });
+  await p.keyboard.press('Control+x'); await p.waitForTimeout(300);
+  for (const ch of 'co') { await p.keyboard.press(ch); await p.waitForTimeout(250); }
+  await p.keyboard.press('Tab'); await p.waitForTimeout(300);
+  await p.keyboard.press('Enter'); await p.waitForTimeout(800);
+  if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-9.png' });
   console.log('errors:', errs);
   await b.close();
 })();
