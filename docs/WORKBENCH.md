@@ -74,3 +74,5 @@ Please keep this separation when contributing: tools that humans click and the A
 - Print Shop border roles and some Print Shop formats are not decoded.
 - Own cycle-exact core, enhanced hardware (U1MB, PokeyMAX, VBXE), NetSIO and WebSerial: not started.
 - Licence: GPL-2.0 overall. The RMT player port is GPL-3.0 and whether the combined work can stay GPL-2.0 is unresolved (see `README.md`).
+
+- Languages and compilers plan: [LANGUAGES.md](LANGUAGES.md)
