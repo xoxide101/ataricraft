@@ -97,3 +97,8 @@ All four read their arguments from the CMD hand-off line (or ask at a prompt) an
 | `NC.COM` | `NC host port [word]`, `NC -l port` | Client sends a word or interactive lines (empty line quits). `-l` accepts one client, sends a greeting, prints what it sends, says BYE. |
 
 Tests: `node scripts/mail-test.cjs` and `node scripts/net-apps-test.cjs` (CURL, JQ and NC; `CORES=atari800`, `ONLY=<args prefix>` and `SHOW=1` narrow or expand a run). Both pass on atari800 and Altirra against local servers and the relay. Not verified: real hardware, HTTPS, real internet servers, TLS mail.
+
+## Network diagnostics (PING, NSLOOKUP, TRACERT)
+
+Built from tools/net/netdiag.asm (ping.com, nslookup.com, tracert.com). Usage: `PING host[:port]`. Each tool auto-detects: it first asks the relay (`N:HTTP://diag.ataricraft/ping|dns|trace/<host>`), which runs the real OS ping/tracert/DNS. If the relay doesn't answer (e.g. real FujiNet), PING times TCP connects (port 80 by default), NSLOOKUP uses DNS-over-HTTPS (dns.google), and TRACERT says it needs the relay (no ICMP/TTL on FujiNet). Tested in the emulator only (scripts/netdiag-test.cjs); the real-FujiNet fallbacks are untested on hardware.
+
