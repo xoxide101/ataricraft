@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="160" alt="ataricraft logo (temporary)"></p>
+
 # ataricraft
 
 A web-based Atari 8-bit emulator in the Craft family: humans and agents drive the same engine.

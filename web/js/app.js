@@ -4454,7 +4454,7 @@
     return c.toDataURL(format || 'image/png');
   }
 
-  const VERSION = '0.5.0', BUILD = '2026-10-30';
+  const VERSION = '8.0', BUILD = '2026-11-04';
   { const h = $('appver'); if (h) { h.title = `Ataricraft v${VERSION}, built ${BUILD}`; h.querySelector('small').textContent = `v${VERSION} · ${BUILD}`; } console.log(`Ataricraft v${VERSION} (${BUILD})`); }
   window.ataricraft = {
     version: `${VERSION} (${BUILD})`,
