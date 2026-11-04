@@ -73,9 +73,9 @@ cmdon= $A9
 clen = $AA
 bd   = $AB
 cmsg = $AC
-CMDB = $0E00
-SHH  = $0C00
-SHL  = $0D00
+CMDB = $1200
+SHH  = $1000
+SHL  = $1100
 mh   = $AD
 ml   = $AE
 cnt  = $AF
@@ -181,3 +181,12 @@ lt   = $B2
 @ dec :p
 .endm
 
+SYM  = $0C00
+pkon = $1310
+pks  = $1311
+pkp  = $1312
+pkb  = $1313
+pkn  = $1314
+pkr  = $1315
+pkc  = $1316
+pki  = $1317

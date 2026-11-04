@@ -7,6 +7,7 @@
  icl 'word/text.inc'
  icl 'word/scale.inc'
  icl 'word/spacer.inc'
+ icl 'word/picker.inc'
  icl 'lib/barfont.inc'
  icl 'word/cmds.inc'
  icl 'ribbon.inc'
@@ -63,6 +64,9 @@ hmr12 dta b(0),b(0),b(1),b(2),b(2),b(3),b(4),b(4),b(5),b(6),b(6),b(7),b(0),b(0),
 hmr16 dta b(0),b(0),b(1),b(1),b(2),b(2),b(3),b(3),b(4),b(4),b(5),b(5),b(6),b(6),b(7),b(7),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0)
 hmr20 dta b(0),b(0),b(0),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(4),b(4),b(4),b(5),b(5),b(6),b(6),b(6),b(7),b(7),b(0),b(0),b(0),b(0)
 hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),b(4),b(5),b(5),b(5),b(6),b(6),b(6),b(7),b(7),b(7)
+ org SYM
+ icl 'sym.inc'
+
  org $9400
  icl 'font4.inc'
 

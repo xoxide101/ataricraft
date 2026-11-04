@@ -1,6 +1,9 @@
 ; key handling
 handle
- lda cmdon
+ lda pkon
+ beq hn00
+ jmp pkkey
+hn00 lda cmdon
  beq hn0
  jmp cmdkey
 hn0 lda mn

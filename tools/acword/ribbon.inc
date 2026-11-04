@@ -253,7 +253,12 @@ br4 cmp #4
  lda #<rs9
  ldx #>rs9
  jmp br8
-br5 lda #<rs8
+br5 cmp #5
+ bne br6
+ lda #<rs11
+ ldx #>rs11
+ jmp br8
+br6 lda #<rs8
  ldx #>rs8
 br8 jsr putstr
 br9 lda #0
@@ -271,4 +276,5 @@ rs6 dta c'Command: ',b(0)
 rs7 dta c'Done.',b(0)
 rs8 dta c'Unknown command. Press Tab after a few letters to complete.',b(0)
 rs9 dta c'Not in the proof of concept yet.',b(0)
+rs11 dta c'Symbols: arrows pick, Enter inserts, Tab page, Esc cancels',b(0)
 rs10 dta c'Menu: press the highlighted letter.  Esc cancels.',b(0)
