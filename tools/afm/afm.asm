@@ -4677,10 +4677,9 @@ p8_d:   ldy pc_y
         rts
 
 ; g80: draw glyph pc_a at (COLCRS,ROWCRS), then advance COLCRS.  Off-screen positions (col>=80
-; or row>=24) are skipped.  Char mapping: bit 7 = inverse (mask gm = $0F), $7C is the
-; vertical bar (glyph 64), $60-$7B are shifted down by $20, then glyph index = code-$20
-; (clamped to 0).  The 8-byte cell gb[0..7] is blank row, 5 font rows (each f80_n[y]<<1,
-; EOR mask), 2 blank rows (see font80.inc).  Each screen byte holds two 4-pixel cells, so
+; or row>=24) are skipped.  Char mapping: bit 7 = inverse (mask gm = $0F), glyph index = (code&$7F)-$20 (ASCII
+; $20-$7F, lowercase included).  The 8-byte cell gb[0..7] is a blank row then 7 font rows (each f80_n[y]<<1,
+; EOR mask) (see font80.inc).  Each screen byte holds two 4-pixel cells, so
 ; an even column replaces the high nibble and an odd column the low nibble (godd), 8
 ; scan lines down in steps of 40 bytes (mode F line width).  rowlo/rowhi = row start addresses.
 g80:    lda COLCRS
@@ -4692,14 +4691,7 @@ g80:    lda COLCRS
 g8_j:   jmp g8_r
 g8_k:   lda pc_a
         and #$7F
-        cmp #$7C
-        bne g8_c
-        lda #$60
-        bne g8_a
-g8_c:   cmp #$60
-        bcc g8_a
-        sbc #$20
-g8_a:   sec
+        sec
         sbc #$20
         bcs g8_b
         lda #0
@@ -4710,8 +4702,6 @@ g8_b:   tay
         lda #$0F
 g8_m:   sta gm
         sta gb
-        sta gb+6
-        sta gb+7
         lda f80_0,y
         asl
         eor gm
@@ -4732,6 +4722,14 @@ g8_m:   sta gm
         asl
         eor gm
         sta gb+5
+        lda f80_5,y
+        asl
+        eor gm
+        sta gb+6
+        lda f80_6,y
+        asl
+        eor gm
+        sta gb+7
         ldx ROWCRS
         lda rowlo,x
         sta SP
@@ -5059,32 +5057,23 @@ bl_q:   inc bk
         rts
 
 ; screen code in A -> 8 glyph nibble rows in gb
-; Mapping: bit 7 = inverse; $7C -> glyph 64 (bar); $60-$7B -> code&$3F; $40-$5F (graphics)
-; -> blank glyph 0; $00-$3F -> glyph = code.
+; Mapping: bit 7 = inverse; $00-$3F -> glyph = code; $40-$5F (graphics) -> blank; $60-$7F -> code-$20.
 mkg:    sta gsc
         and #$7F
-        cmp #$7C
-        beq mg_r
+        cmp #$40
+        bcc mg_g
         cmp #$60
         bcs mg_m
-        cmp #$40
-        bcs mg_z
-        tay
-        jmp mg_g
-mg_m:   and #$3F
-        tay
-        jmp mg_g
-mg_z:   ldy #0
-        jmp mg_g
-mg_r:   ldy #64
-mg_g:   lda #0
+        lda #0
+        beq mg_g
+mg_m:   sbc #$20
+mg_g:   tay
+        lda #0
         bit gsc
         bpl mg_k
         lda #$0F
 mg_k:   sta gm
         sta gb
-        sta gb+6
-        sta gb+7
         lda f80_0,y
         asl
         eor gm
@@ -5105,6 +5094,14 @@ mg_k:   sta gm
         asl
         eor gm
         sta gb+5
+        lda f80_5,y
+        asl
+        eor gm
+        sta gb+6
+        lda f80_6,y
+        asl
+        eor gm
+        sta gb+7
         rts
         icl 'font80.inc'
         .else
