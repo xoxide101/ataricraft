@@ -289,25 +289,26 @@ hf2 lda #23
 hf3 sta pam
  jmp hset
 
-hcol lda th
- eor #1
- sta th
- beq ct0
- lda #$94
- sta tcb
- lda #$0A
- sta tci
+; themes: paper, blue, amber, green (body bg, body ink, bar bg, bar ink)
+hcol ldx th
+ inx
+ cpx #4
+ bcc hc1
+ ldx #0
+hc1 stx th
+ lda thc2,x
  sta COLOR2
- lda #0
+ lda thc1,x
  sta COLOR1
- rts
-ct0 lda #$0F
+ lda thb,x
  sta tcb
- sta COLOR2
- lda #0
+ lda thi,x
  sta tci
- sta COLOR1
  rts
+thc2 dta b($0F),b($0A),b($10),b($C0)
+thc1 dta b(0),b(0),b($0A),b($0A)
+thb dta b($0F),b($94),b($1C),b($C8)
+thi dta b(0),b($0A),b(0),b(0)
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
  dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1),l(hwid-1),l(hht-1),l(hnb-1),l(hnh-1),l(hspc-1)
