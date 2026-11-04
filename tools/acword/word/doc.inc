@@ -198,13 +198,22 @@ pst2 lda (src),y
  cmp #14
  beq pst3
  cmp #5
- bcs pst4
+ bcs pst5
  tax
  lda stab-1,x
  eor psb
  sta psb
 pst4 iny
  bne pst2
+pst5 cmp #11
+ bcc pst4
+ cmp #13
+ bcs pst4
+ tax
+ lda stb2-11,x
+ eor psb
+ sta psb
+ jmp pst4
 pst3 inc psx
  jmp pst1
 pst9 lda psb
