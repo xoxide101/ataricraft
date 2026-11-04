@@ -24,7 +24,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await key('ArrowRight', 500); await key('ArrowRight', 500); await key('ArrowDown', 500);
   await p.waitForTimeout(800); await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-pk1.png' });
   await key('Enter', 1500);
-  await menu('c', 'y'); await key('Tab', 800); await key('ArrowRight', 500);
+  await menu('c', 'y'); await key('Space', 800); await key('ArrowRight', 500);
   await p.waitForTimeout(800); await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-pk2.png' });
   await key('Enter', 1500);
   await p.waitForTimeout(1500);
