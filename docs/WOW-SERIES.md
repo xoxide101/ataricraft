@@ -27,8 +27,9 @@ Build order: shared shell, then ACWord, then ACSpread and ACDBase on the same sh
 
 - ANTIC mode F (BASIC graphics 8): 320x192, 1 bit per pixel, 40 bytes per line, about 7.7K. A custom display list may extend this toward 320x240 with overscan.
 - White page, black text; colour registers are set explicitly so the result does not depend on the monitor.
-- The screen is a window onto the page. A page is wider than 320 pixels at print resolution, so the editor shows a reduced or scrolled view and the printer gets the full-resolution render. The zoom levels (editing at 2x, page overview at 1x) are to be decided with the proof of concept.
-- Redraw is by dirty lines and bands: typing redraws the current line, scrolling draws only the new band.
+- The screen is a window onto the page. The document is laid out in **page units** (inches, 10 or 12 cpi), so line breaks match paper regardless of the view. The working view is **fit-to-margins**: the text area between the margins is scaled to fill the full 320 pixels using the largest whole-pixel character cell that fits, with fractional cell positions so breaks match the paper (1" margins on Letter: about 5 px cells, 64 columns; 0.5" margins: 4 px cells, 80 columns). The **full page is shown only in a read-only preview**.
+- Layout of the 24 character rows: ribbon (top), 21 text lines, status row, command bar (bottom).
+- Redraw is by dirty lines and bands: typing draws only the new glyph. Heavy work (reflow, line table, lines below, pagination, spell check, counts) is deferred to the sentence end (period, space, space), Return, cursor moves and idle pauses.
 
 ## Document model
 
@@ -62,7 +63,8 @@ Two pages of mostly text is about 8K. Art is the pressure: keep it compressed an
 A MADS include linked into each app (like `tools/tui/tui.inc`), so an app pays only for the routines it uses. It provides:
 
 - **Command table.** Each app registers commands (name, key, handler, ribbon label). The ribbon, help screen and key handling all read from it.
-- **Ribbon.** One or two rows at the screen edge. A modifier (Control, or Option/Select) swaps it to the commands behind that key; a sub-ribbon offers choices (Align > Left / Centre / Right / Justify).
+- **Ribbon.** One row at the top showing the mode tabs and the basic tools of the current mode (Tab cycles modes); nano-style, not a GUI or TUI.
+- **Command bar.** A bottom prompt (Ctrl-X) taking typed commands with Tab completion; ribbon tools and typed commands run through the same command table.
 - **Status line.** Position, mode, selection, file name, in the same place in every app.
 - **Pick list and prompt.** One routine to choose from a list and one to type a value, used by font pickers, cell formats and field types alike.
 - **File open/save.** D1: to D8: and N: (FujiNet).
@@ -107,6 +109,15 @@ Before committing the file formats, measure the thing that decides feasibility:
 3. Typing into a line, measuring the redraw latency.
 
 Pass criterion: typing a character updates the line within a few frames, and a page scroll redraws a band without a visible wait. If it does not pass, fixed-width faces become the default and proportional text becomes a mode.
+
+### Measured so far (`tools/acword/`, emulator, 50 Hz frames)
+
+| Build | Full redraw | Scroll 1 line | Type 1 char |
+|---|---|---|---|
+| `poc.asm` 6 px cells, 53 cols, ROM font | 56 | 9 | 10 |
+| `poc80.asm` 4 px cells, 80 cols, AFM80 3x7 font | 41 | 7 | 6 |
+
+Findings: typing cost was dominated by rescanning and shifting the whole document on every insert; keeping a document-end pointer and adjusting line pointers cut it from 9 to 6 frames. The rest is the tail memory shift (a gap buffer fixes it) and the status redraw. At 4 px cells bold merges letters into blobs; the 5 px cell (4 px glyph plus 1 px smear) is needed. `poc80.asm` also has the ribbon (Tab cycles Edit/Format/Insert/File) and the command bar (Ctrl-X, Tab completes, Enter runs); only the Edit commands act so far.
 
 ## Open questions
 
