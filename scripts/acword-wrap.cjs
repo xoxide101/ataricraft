@@ -7,6 +7,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   const p = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.addInitScript(() => localStorage.setItem('ac.profile', 'natural'));
   await p.goto('file:///' + ROOT + '/web/index.html');
   await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
   await p.selectOption('#model', '800xl').catch(() => {});
@@ -23,6 +24,12 @@ const ROOT = 'C:/Users/raver/ataricraft';
   for (const ch of text) { await p.keyboard.press(ch === ' ' ? 'Space' : ch); await p.waitForTimeout(300); }
   await p.waitForTimeout(1500);
   await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-wrap.png' });
+  for (let i = 0; i < 30; i++) { await p.keyboard.press('Delete'); await p.waitForTimeout(300); }
+  await p.waitForTimeout(1000);
+  await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-wrap2.png' });
+  for (const ch of ' and more words follow here') { await p.keyboard.press(ch === ' ' ? 'Space' : ch); await p.waitForTimeout(300); }
+  await p.waitForTimeout(1000);
+  await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-wrap3.png' });
   console.log('errors:', errs);
   await b.close();
 })();
