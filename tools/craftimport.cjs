@@ -1,7 +1,7 @@
 // Imports other document formats into a Craft Word document (docs/CRAFT-FORMAT.md).
-// Usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md] [--cols N]
-// Formats: ATASCII text (AtariWriter, TextPro and other Atari editors saved as text), ASCII/UTF-8 text, RTF, HTML, Markdown.
-// Style codes of the Atari word processors are not decoded yet; their control bytes are dropped. See docs/IMPORT.md.
+// Usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx] [--cols N]
+// Formats: ATASCII text (incl. AtariWriter), ASCII/UTF-8 text, RTF, HTML, Markdown, Word .docx and .doc.
+// AtariWriter inverse video, centre and right codes are decoded. See docs/IMPORT.md.
 const fs = require('fs'), path = require('path');
 const MAXPAYLOAD = 0x3fff;
 
@@ -12,6 +12,8 @@ function detect(buf, name) {
   if (head.startsWith('CRFT')) return 'craft';
   if (head.startsWith('{\\rtf')) return 'rtf';
   if (/^\s*<(!doctype|html|head|body|p|h[1-6]|div)\b/i.test(buf.toString('latin1', 0, 256))) return 'html';
+  if (buf.readUInt32BE(0) === 0xd0cf11e0) return 'doc';
+  if (buf.readUInt16BE(0) === 0x504b && ext === '.docx') return 'docx';
   if (ext === '.md' || ext === '.markdown') return 'md';
   if (ext === '.rtf') return 'rtf';
   if (ext === '.htm' || ext === '.html') return 'html';
@@ -42,20 +44,33 @@ const clean = (s) => [...s].map(toCraft).join('');
 const para = () => ({ align: 'l', bullet: false, runs: [] });
 
 function fromAtascii(buf) {
-  const out = []; let cur = para(); let text = '';
-  const flush = () => { cur.runs.push({ t: text }); out.push(cur); cur = para(); text = ''; };
-  for (let i = 0; i < buf.length; i++) {
-    const b = buf[i];
-    if (b === 0x9b) flush();
-    else if (b === 0x1b) i++;
-    else if (b === 0x7f || b === 0x7e || b === 0xfe || b === 0xff) { /* tab / delete: dropped */ }
-    else if (b === 0x09) text += '    ';
-    else if (b < 32) { /* control byte of the original editor */ }
-    else if (b < 128) text += String.fromCharCode(b);
-    else if (b >= 0xa0 && b < 0xff) text += String.fromCharCode(b & 127 >= 32 ? b & 127 : 63); // inverse video: plain character
-    else text += '?';
+  // Lines end in $9B. AtariWriter(+) conventions (from its manual and sample files):
+  // inverse video = underline, Ctrl-C at line start = centre, two Ctrl-C = flush right,
+  // a line opening with a Ctrl-letter format code and a value (margins, spacing, header...) is layout, not text.
+  const out = []; let start = 0;
+  const CMD = new Set([2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 17, 18, 19, 20, 22, 23, 24, 25]);
+  const lines = []; for (let i = 0; i <= buf.length; i++) if (i === buf.length || buf[i] === 0x9b) { if (i > start || i < buf.length) lines.push(buf.slice(start, i)); start = i + 1; }
+  for (const ln of lines) {
+    const p = para(); let k = 0;
+    if (ln.length && CMD.has(ln[0])) {
+      const rest = [...ln].filter((b) => b >= 32 && b < 128).map((b) => String.fromCharCode(b)).join('');
+      if (/^[\d\s]*$/.test(rest) || [6, 8, 17, 22].includes(ln[0])) continue;
+    }
+    while (k < ln.length && ln[k] === 3) { p.align = p.align === 'c' ? 'r' : 'c'; k++; }
+    let t = '', u = 0;
+    const put = () => { if (t) p.runs.push({ t, u }); t = ''; };
+    for (; k < ln.length; k++) {
+      const b = ln[k];
+      if (b === 0x1b) { k++; continue; }
+      if (b === 0x7f || b === 0x7e || b === 0xfe || b === 0xff) continue;
+      if (b === 0x09) { t += '    '; continue; }
+      if (b < 32) continue;
+      const inv = b >= 128 ? 1 : 0, c = b & 127;
+      if (inv !== u) { put(); u = inv; }
+      t += c >= 32 && c < 127 ? String.fromCharCode(c) : '?';
+    }
+    put(); if (!p.runs.length) p.runs.push({ t: '' }); out.push(p);
   }
-  if (text) flush();
   return out;
 }
 
@@ -68,7 +83,7 @@ function fromText(buf) {
 
 function fromRtf(buf) {
   const s = buf.toString('latin1'); const out = []; let cur = para();
-  const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const stack = []; let skip = 0, depth = 0, ucSkip = 0;
+  const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const stack = []; let skip = 0, depth = 0, ucSkip = 0, bulletTab = 0;
   const SKIPDEST = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'header', 'footer', 'generator']);
   const add = (t) => { if (!skip && t) cur.runs.push({ t: clean(t), ...st }); };
   for (let i = 0; i < s.length; i++) {
@@ -86,8 +101,9 @@ function fromRtf(buf) {
         else if (w === 'b') st.b = n === 0 ? 0 : 1; else if (w === 'i') st.i = n === 0 ? 0 : 1;
         else if (w === 'ul') st.u = n === 0 ? 0 : 1; else if (w === 'ulnone') st.u = 0;
         else if (w === 'super') st.sup = 1; else if (w === 'sub') st.sub = 1; else if (w === 'nosupersub') { st.sup = 0; st.sub = 0; }
-        else if (w === 'tab') add('    '); else if (w === 'emdash' || w === 'endash') add('-');
-        else if (w === 'lquote' || w === 'rquote') add("'"); else if (w === 'ldblquote' || w === 'rdblquote') add('"'); else if (w === 'bullet') add('*');
+        else if (w === 'tab') { if (bulletTab) bulletTab = 0; else add('    '); } else if (w === 'emdash' || w === 'endash') add('-');
+        else if (w === 'lquote' || w === 'rquote') add("'"); else if (w === 'ldblquote' || w === 'rdblquote') add('"');
+        else if (w === 'bullet') { if (!skip && !cur.runs.length) { cur.bullet = true; bulletTab = 1; } else add('*'); }
         else if (w === 'u' && n !== null) { add(String.fromCodePoint(n < 0 ? n + 65536 : n)); ucSkip = 1; }
       } else {
         const n = s[i + 1]; i++;
@@ -109,7 +125,7 @@ const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => e[0] 
 
 function fromHtml(buf) {
   let s = buf.toString('utf8'); if (s.includes('\ufffd')) s = buf.toString('latin1');
-  s = s.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, '');
+  s = s.replace(/<!--[\s\S]*?-->/g, '').replace(/<![^>]*>/g, '').replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, '');
   const out = []; let cur = para(); const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 };
   const brk = () => { if (cur.runs.length) out.push(cur); cur = para(); };
   const re = /<(\/?)([a-z0-9]+)([^>]*)>|([^<]+)/gi; let m;
@@ -191,7 +207,9 @@ function build(bytes, cols, lines) {
 
 function convert(buf, name, opts = {}) {
   const fmt = opts.format || detect(buf, name); const cols = opts.cols || 64;
-  const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd };
+  const O = require('./officeread.cjs');
+  const office = (f) => (b) => f(b).map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; });
+  const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx) };
   if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
   let paras = importers[fmt](buf);
   while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
@@ -204,7 +222,7 @@ function convert(buf, name, opts = {}) {
 if (require.main === module) {
   const args = process.argv.slice(2); const o = {}; const pos = [];
   for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else pos.push(args[i]); }
-  if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md] [--cols N]'); process.exit(2); }
+  if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx] [--cols N]'); process.exit(2); }
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
   fs.writeFileSync(outp, r.file);
