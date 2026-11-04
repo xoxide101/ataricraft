@@ -140,3 +140,7 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 | `web/js/imgconv.js` | Image to Atari bitmap conversion, basis for the art converter |
 | Inspector, `tools/ctl.cjs`, the relay | Moving files into and out of the emulator |
 | `web/js/printer.js`, P: handler | Printing path |
+
+### Shared shell (ribbon.inc)
+
+	ools/acword/ribbon.inc holds the ribbon, command bar and Tab completion. An app supplies 	abl/tabh, 	ooll/toolh, cmdtab, cmdexec (A = command index), ppmsg and helpmsg. ACSpread and ACDBase reuse it.

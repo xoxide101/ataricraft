@@ -71,6 +71,7 @@ SHH  = $0C00
 SHL  = $0D00
 mh   = $AD
 ml   = $AE
+cnt  = $AF
 
 .macro inc16 p
  inc :p
@@ -575,131 +576,22 @@ mf2 inx
  bne mf1
  rts
 
-cmdkey
- lda kk
- cmp #$9B
- beq ckrun
- cmp #$1B
- beq ckoff
- cmp #$7E
- beq ckbs
- cmp #$7F
- beq cktab
- cmp #32
- bcc ckx
- cmp #127
- bcs ckx
- cmp #'A'
- bcc ck1
- cmp #'['
- bcs ck1
- ora #$20
-ck1 ldx clen
- cpx #60
- bcs ckx
- sta CMDB,x
- inc clen
-ckx lda #1
- sta bd
- rts
-ckbs lda clen
- beq ckx
- dec clen
- jmp ckx
-ckoff lda #0
- sta cmdon
- sta cmsg
- jmp ckx
-ckrun lda #0
- sta cmdon
- sta cmsg
- lda #1
- sta bd
- lda clen
- beq ckx
- jmp runcmd
-
-cktab lda #<cmdtab
- sta src
- lda #>cmdtab
- sta src+1
-tc1 ldy #0
- lda (src),y
- beq ckx
-tc2 cpy clen
- beq tcok
- lda (src),y
- cmp CMDB,y
- bne tcn
- iny
- bne tc2
-tcn jsr nxtcmd
- jmp tc1
-tcok ldy #0
-tc3 lda (src),y
- sta CMDB,y
- beq tc4
- iny
- bne tc3
-tc4 sty clen
- jmp ckx
-
-nxtcmd
- ldy #0
-nx1 lda (src),y
- iny
- cmp #0
- bne nx1
- tya
- clc
- adc src
- sta src
- bcc nx2
- inc src+1
-nx2 rts
-
-runcmd
- ldx clen
- lda #0
- sta CMDB,x
- sta tmp
- lda #<cmdtab
- sta src
- lda #>cmdtab
- sta src+1
-rc1 ldy #0
- lda (src),y
- beq rcbad
-rc2 lda (src),y
- cmp CMDB,y
- bne rcn
- cmp #0
- beq rcok
- iny
- bne rc2
-rcn jsr nxtcmd
- inc tmp
- jmp rc1
-rcbad lda #2
- sta cmsg
- rts
-rcok lda #1
- sta cmsg
- lda tmp
+; --- app command layer (shell is in ribbon.inc) ---
+cmdexec
  cmp #3
- bcs rd1
+ bcs ce1
  clc
  adc #1
  jmp insert
-rd1 bne rd2
+ce1 bne ce2
  lda #0
  sta cl
  sta cc
  lda #2
  sta fl
  rts
-rd2 cmp #4
- bne rd3
+ce2 cmp #4
+ bne ce3
  lda nl
  sec
  sbc #1
@@ -709,100 +601,59 @@ rd2 cmp #4
  lda #2
  sta fl
  rts
-rd3 sec
+ce3 cmp #9
+ bcs ce4
+ sec
  sbc #5
  sta cmode
  rts
+ce4 bne ce5
+ lda #64
+ sta cnt
+cnl lda #'-'
+ jsr insert
+ dec cnt
+ bne cnl
+ lda #2
+ sta fl
+ lda #1
+ sta bd
+ rts
+ce5 cmp #10
+ bne ce6
+ lda #0
+ sta DOC
+ sta cl
+ sta cc
+ sta top
+ jsr scan
+ lda #2
+ sta fl
+ rts
+ce6 lda #3
+ sta cmsg
+ rts
 
-ribbon
- lda #0
- sta bi
- sta tmp
-rbl ldx tmp
- lda #' '
- cpx cmode
- bne rb1
- lda #'['
-rb1 jsr putc
- ldx tmp
- lda tabl,x
- pha
- lda tabh,x
- tax
- pla
+appmsg
+ lda #<m1
+ ldx #>m1
  jsr putstr
- ldx tmp
- lda #' '
- cpx cmode
- bne rb2
- lda #']'
-rb2 jsr putc
- inc tmp
- lda tmp
- cmp #4
- bne rbl
- lda #'|'
- jsr putc
- lda #' '
- jsr putc
- ldx cmode
- lda tooll,x
- pha
- lda toolh,x
- tax
- pla
+ lda nl
+ jsr putnum
+ lda #<m2
+ ldx #>m2
  jsr putstr
- lda #0
- jsr putc
- lda #<BUF
- sta tp
- lda #>BUF
- sta tp+1
- lda #$FF
- sta rr
- jsr rowsetup
- jmp drawtext
+ lda dend+1
+ sec
+ sbc #>DOC
+ jsr putnum
+ lda #<m3
+ ldx #>m3
+ jmp putstr
 
-bar
- lda #0
- sta bi
- lda cmdon
- beq br1
- lda #<s6
- ldx #>s6
- jsr putstr
- ldx clen
- lda #'_'
- sta CMDB,x
- lda #0
- sta CMDB+1,x
- lda #<CMDB
- ldx #>CMDB
- jsr putstr
- jmp br9
-br1 lda cmsg
- bne br2
- lda #<helpmsg
- ldx #>helpmsg
- jmp br8
-br2 cmp #1
- bne br3
- lda #<s7
- ldx #>s7
- jmp br8
-br3 lda #<s8
- ldx #>s8
-br8 jsr putstr
-br9 lda #0
- jsr putc
- lda #<BUF
- sta tp
- lda #>BUF
- sta tp+1
- lda #ROWS+1
- sta rr
- jsr rowsetup
- jmp drawtext
+m1 dta c'Document: ',b(0)
+m2 dta c' lines, about ',b(0)
+m3 dta c' x 256 bytes.',b(0)
 
 tn0 dta c'Edit',b(0)
 tn1 dta c'Format',b(0)
@@ -811,16 +662,16 @@ tn3 dta c'File',b(0)
 tabl dta l(tn0),l(tn1),l(tn2),l(tn3)
 tabh dta h(tn0),h(tn1),h(tn2),h(tn3)
 tl0 dta c'^B Bold ^I Ital ^U Undl ^X Cmd',b(0)
-tl1 dta c'Align Size Margins Page',b(0)
-tl2 dta c'Box Line Art Font',b(0)
-tl3 dta c'Open Save Print Preview',b(0)
+tl1 dta c'(page layout: next milestone)',b(0)
+tl2 dta c'Line',b(0)
+tl3 dta c'New Size',b(0)
 tooll dta l(tl0),l(tl1),l(tl2),l(tl3)
 toolh dta h(tl0),h(tl1),h(tl2),h(tl3)
 cmdtab dta c'bold',b(0),c'italic',b(0),c'underline',b(0),c'top',b(0),c'end',b(0)
- dta c'edit',b(0),c'format',b(0),c'insert',b(0),c'file',b(0),b(0)
-s6 dta c'Command: ',b(0)
-s7 dta c'Done.',b(0)
-s8 dta c'Unknown command. Try: bold italic underline top end edit format insert file',b(0)
+ dta c'edit',b(0),c'format',b(0),c'insert',b(0),c'file',b(0)
+ dta c'line',b(0),c'new',b(0),c'size',b(0),b(0)
+
+ icl 'ribbon.inc'
 
 ; scrolling
 scrolldown
@@ -927,23 +778,10 @@ handle
 hn0 lda kk
  cmp #$18
  bne hn1
- lda #1
- sta cmdon
- sta bd
- lda #0
- sta clen
- sta cmsg
- rts
+ jmp cmdopen
 hn1 cmp #$7F
  bne hn2
- lda cmode
- clc
- adc #1
- and #3
- sta cmode
- lda #1
- sta bd
- rts
+ jmp ribnext
 hn2 cmp #$1C
  bne h1
  jmp kup
