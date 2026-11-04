@@ -1155,7 +1155,7 @@ rk4 lda tabstops,x
  beq rk5
  inx
  bne rk4
-rk5 lda #'T'
+rk5 lda #'v'
  rts
 rk6 lda rz
  bne rkdot
@@ -1227,7 +1227,25 @@ rdraw lda #0
  lda #$FF
  sta rr
  jsr rowsetup
- jmp drawtext
+ jsr drawtext
+ jmp invrow
+
+invrow
+ jsr rowptr
+ ldy #0
+iv1 lda (sp),y
+ eor #$FF
+ sta (sp),y
+ iny
+ bne iv1
+ inc sp+1
+iv2 lda (sp),y
+ eor #$FF
+ sta (sp),y
+ iny
+ cpy #64
+ bne iv2
+ rts
 
 status
  jsr ruler
@@ -1271,7 +1289,8 @@ status
  lda #ROWS
  sta rr
  jsr rowsetup
- jmp drawtext
+ jsr drawtext
+ jmp invrow
 
 s1 dta c'Ln ',b(0)
 s2 dta c' Col ',b(0)
