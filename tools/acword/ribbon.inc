@@ -189,7 +189,7 @@ rb2 jsr putc
  sta tp
  lda #>BUF
  sta tp+1
- lda #$FF
+ lda #$FE
  sta rr
  jsr rowsetup
  jmp drawtext
