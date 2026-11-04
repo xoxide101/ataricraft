@@ -82,6 +82,8 @@ pkkey lda kk
  beq pkent
  cmp #9
  beq pktab
+ cmp #32
+ beq pktab
  cmp #$1C
  beq pkup
  cmp #$1D

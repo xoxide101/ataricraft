@@ -3,7 +3,7 @@
 // Usage: node tools/acword/mksym.cjs [dump]
 const fs = require('fs');
 const base = require('./font4.json');
-const atari = fs.readFileSync(__dirname + '/../../web/library/fonts/atari/AtariPixel8.fnt');
+const atari = fs.readFileSync(__dirname + '/../../web/library/fonts/personal/Altered Chrome/Atari8/Altered Chrome.fnt');
 
 const parse = (rows) => {
   const r = rows.map((s) => parseInt(s.replace(/#/g, '1').replace(/\./g, '0'), 2));
@@ -14,9 +14,9 @@ const ch = (c) => base[c.charCodeAt(0) - 32].slice();
 
 const glyphs = new Array(128).fill(null).map(() => [0, 0, 0, 0, 0, 0, 0, 0]);
 
-// Atari graphics: internal codes 0..31, eight columns squeezed to four
+// Atari graphics: internal codes 64..95, eight columns squeezed to four
 for (let a = 0; a < 32; a++) {
-  let r = Array.from(atari.slice(a * 8, a * 8 + 8));
+  let r = Array.from(atari.slice((a + 64) * 8, (a + 64) * 8 + 8));
   r = r[7] !== 0 && r[0] === 0 ? r.slice(1, 8) : r.slice(0, 7);
   r = r.map((b) => {
     const px = [];
