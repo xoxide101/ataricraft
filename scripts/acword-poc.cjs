@@ -39,6 +39,11 @@ const ROOT = 'C:/Users/raver/ataricraft';
     await p.keyboard.press('Tab'); await p.waitForTimeout(300);
     await p.keyboard.press('Enter'); await p.waitForTimeout(9000);
     if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-6.png' }); console.log('zp', (await p.evaluate(() => Array.from(ataricraft.peek(0x90, 64)))).map(x=>x.toString(16)).join(' '));
+  await p.keyboard.press('Control+x'); await p.waitForTimeout(300);
+  for (const ch of 'ru') { await p.keyboard.press(ch); await p.waitForTimeout(250); }
+  await p.keyboard.press('Tab'); await p.waitForTimeout(300);
+  await p.keyboard.press('Enter'); await p.waitForTimeout(800);
+  if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-7.png' });
   console.log('errors:', errs);
   await b.close();
 })();

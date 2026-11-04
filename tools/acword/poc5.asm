@@ -28,7 +28,7 @@ COLS = $0740
 FNT  = $0900
 ROWL = $0700
 ROWH = $0720
-ROWS = 21
+ROWS = 20
 
 src  = $80
 dst  = $82
@@ -72,6 +72,12 @@ SHL  = $0D00
 mh   = $AD
 ml   = $AE
 cnt  = $AF
+rz   = $B3
+zs   = $B4
+rc   = $B5
+rn   = $B6
+lm   = $B7
+rm   = $B8
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -124,6 +130,11 @@ start
  sta bd
  sta ps
  sta sd
+ sta lm
+ sta rz
+ lda #63
+ sta rm
+ lda #0
  jsr scan
  lda RTCLOK+2
  sta tm
@@ -409,6 +420,7 @@ rs2 sta (sp),y
 rowptr
  ldx rr
  inx
+ inx
  lda ROWL,x
  sta rs
  sta sp
@@ -676,9 +688,15 @@ ce5 cmp #10
  lda #2
  sta fl
  rts
-ce6 lda #3
+ce6 cmp #11
+ bne ce7
+ lda #3
  sta cmsg
  rts
+ce7 lda rz
+ eor #1
+ sta rz
+ jmp ruler
 
 appmsg
  lda #<m1
@@ -708,29 +726,29 @@ tn3 dta c'File',b(0)
 tabl dta l(tn0),l(tn1),l(tn2),l(tn3)
 tabh dta h(tn0),h(tn1),h(tn2),h(tn3)
 tl0 dta c'^B Bold ^I Ital ^U Undl ^X Cmd',b(0)
-tl1 dta c'(page layout: next milestone)',b(0)
+tl1 dta c'Ruler (zoom)  (layout: next)',b(0)
 tl2 dta c'Line',b(0)
 tl3 dta c'New Size',b(0)
 tooll dta l(tl0),l(tl1),l(tl2),l(tl3)
 toolh dta h(tl0),h(tl1),h(tl2),h(tl3)
 cmdtab dta c'bold',b(0),c'italic',b(0),c'underline',b(0),c'top',b(0),c'end',b(0)
  dta c'edit',b(0),c'format',b(0),c'insert',b(0),c'file',b(0)
- dta c'line',b(0),c'new',b(0),c'size',b(0),b(0)
+ dta c'line',b(0),c'new',b(0),c'size',b(0),c'ruler',b(0),b(0)
 
  icl 'ribbon.inc'
 
 ; scrolling
 scrolldown
  inc top
- lda #<(SCR+640)
+ lda #<(SCR+960)
  sta src
- lda #>(SCR+640)
+ lda #>(SCR+960)
  sta src+1
- lda #<(SCR+320)
+ lda #<(SCR+640)
  sta dst
- lda #>(SCR+320)
+ lda #>(SCR+640)
  sta dst+1
- ldx #25
+ ldx #24
  ldy #0
 sd1 lda (src),y
  sta (dst),y
@@ -760,7 +778,7 @@ scrollup
  sta dst
  lda #>(SCR+7040)
  sta dst+1
- ldx #25
+ ldx #24
 su2 dec src+1
  dec dst+1
  ldy #0
@@ -1104,7 +1122,115 @@ pn7 lda tmp
  adc #'0'
  jmp putc
 
+tabstops dta b(8,16,24,32,40,48,56,$FF)
+
+mod10
+ ldx #0
+m10a cmp #10
+ bcc m10b
+ sbc #10
+ inx
+ bne m10a
+m10b rts
+
+rulch
+ sta rc
+ cmp cc
+ bne rk1
+ lda #'^'
+ rts
+rk1 cmp lm
+ bne rk2
+ lda #'['
+ rts
+rk2 cmp rm
+ bne rk3
+ lda #']'
+ rts
+rk3 ldx #0
+rk4 lda tabstops,x
+ cmp #$FF
+ beq rk6
+ cmp rc
+ beq rk5
+ inx
+ bne rk4
+rk5 lda #'T'
+ rts
+rk6 lda rz
+ bne rkdot
+ lda rc
+ beq rkdot
+ jsr mod10
+ cmp #0
+ bne rkdot
+ txa
+ clc
+ adc #'0'
+ rts
+rkdot lda #'.'
+ rts
+
+ruler
+ lda #0
+ sta rn
+ lda rz
+ bne rzm
+rn1 lda rn
+ jsr rulch
+ ldx rn
+ sta BUF,x
+ inc rn
+ lda rn
+ cmp #64
+ bne rn1
+ beq rdraw
+rzm lda cc
+ and #$E0
+ cmp #64
+ bcc rzs
+ lda #32
+rzs sta zs
+rz1 lda zs
+ clc
+ adc rn
+ jsr mod10
+ clc
+ adc #'0'
+ pha
+ lda rn
+ asl
+ tax
+ pla
+ sta BUF,x
+ lda zs
+ clc
+ adc rn
+ jsr rulch
+ pha
+ lda rn
+ asl
+ tax
+ inx
+ pla
+ sta BUF,x
+ inc rn
+ lda rn
+ cmp #32
+ bne rz1
+rdraw lda #0
+ sta BUF+64
+ lda #<BUF
+ sta tp
+ lda #>BUF
+ sta tp+1
+ lda #$FF
+ sta rr
+ jsr rowsetup
+ jmp drawtext
+
 status
+ jsr ruler
  lda #0
  sta bi
  lda #<s1
@@ -1156,7 +1282,7 @@ kname dta c'K:',b($9B)
 helpmsg dta c'^X command  Tab mode  ^B bold ^I italic ^U underline  Ctrl-arrows move',b(0)
 
  .macro body
- dta b(1),c'ACWord',b(1),c' hi-res page: 64 columns x 21 lines',b(13)
+ dta b(1),c'ACWord',b(1),c' hi-res page: 64 columns x 20 lines',b(13)
  dta c'Normal, ',b(1),c'bold',b(1),c', ',b(2),c'italic',b(2),c' and ',b(4-1),c'underline',b(3),c' text.',b(13)
  dta c'The quick brown fox jumps over a lazy dog 0123456789',b(13)
  dta b(13)
