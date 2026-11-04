@@ -8,6 +8,15 @@
 - **Inject:** poke, dump and find memory; boot a .COM/.XEX; type text; add **fake replies** that answer N:HTTP requests whose URL contains a given text (shown as `[mock]` in the log).
 - **Remote:** connects this page to the relay for outside control. A page opened from the relay address connects by itself.
 
+## Extended RAM banks
+
+The Banks tab (or `AC.Inspect.banks`: `scan()`, `read(bank, off, len)`, `write`, `fill`, `find`) shows every 16 KB bank behind the $4000 window. RAM sizes are 128, 320 (Rambo/Compy-Shop), 576 and 1088 K (4, 16, 32, 64 banks).
+
+- Neither WASM core exposes extended RAM, so a ~380-byte monitor (`tools/bankmon`, rebuilt with `node tools/bankmon/build.cjs`) is injected into a free page and hooks the VBI vector. Reading holds a bank mapped for about two frames.
+- Needs libatari800. On Altirra the page only gets a read-only copy of the 64 KB view, so it reports an error.
+- Programs that replace the NMI/VBI vector or disable OS interrupts will stop the monitor responding (it times out with an error).
+- Tested: `node scripts/bank-test.cjs` (128K and 1088K; `quick` skips nothing else yet). Not tested: 320 Compy-Shop, real hardware.
+
 ## From outside the browser
 
 Start the relay (`node tools/tnfs-bridge/bridge.cjs`), open its address in a browser, then run `tools/ctl.cjs` with the relay's token:
