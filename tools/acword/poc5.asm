@@ -88,6 +88,8 @@ rm   = $B8
 iv   = $B9
 th   = $BA
 mn   = $BD
+bf   = $BE
+lim  = $BF
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -456,6 +458,20 @@ drawtext
  lda #0
  sta col
  sta style
+ sta bf
+ lda #64
+ sta lim
+ lda rr
+ cmp #$FF
+ beq dt0
+ cmp #$FE
+ beq dtb
+ cmp #ROWS
+ bcc dt0
+dtb inc bf
+ lda #53
+ sta lim
+dt0
 dt1 ldy #0
  lda (tp),y
  beq dtend
@@ -474,11 +490,15 @@ dtchar
  bcc dtskip
  ldy #0
  lda (tp),y
+ ldx bf
+ bne dtc6
  jsr drawchar
+ jmp dtskip
+dtc6 jsr drawchar6
 dtskip
  inc col
  lda col
- cmp #64
+ cmp lim
  beq dtend
 dtnext
  inc16 tp
@@ -591,6 +611,127 @@ dca inc ry
  rts
 
 stab dta b(1),b(2),b(4),b(8)
+
+; 5x7 bar font, 6px pitch: A = ascii; draws at col on the row in rs
+drawchar6
+ cmp #128
+ bcc d60
+ lda #32
+d60 sec
+ sbc #32
+ bcs d61
+ lda #0
+d61 sta gp
+ lda #0
+ sta gp+1
+ asl gp
+ rol gp+1
+ asl gp
+ rol gp+1
+ asl gp
+ rol gp+1
+ lda gp+1
+ clc
+ adc #>BFNT
+ sta gp+1
+ lda col
+ asl
+ clc
+ adc col
+ pha
+ lsr
+ lsr
+ clc
+ adc rs
+ sta sp
+ lda rs+1
+ adc #0
+ sta sp+1
+ pla
+ and #3
+ asl
+ sta shf
+ lda #$FC
+ sta mh
+ lda #0
+ sta ml
+ ldx shf
+ beq d63
+d62 lsr mh
+ ror ml
+ dex
+ bne d62
+d63 lda mh
+ eor #$FF
+ sta mh
+ lda ml
+ eor #$FF
+ sta ml
+ lda #0
+ sta ry
+d64 ldy ry
+ lda (gp),y
+ sta v
+ lda style
+ and #1
+ beq d65
+ lda v
+ lsr
+ ora v
+ and #$FC
+ sta v
+d65 lda style
+ and #2
+ beq d66
+ ldy ry
+ cpy #4
+ bcs d66
+ lsr v
+d66 lda style
+ and #4
+ beq d67
+ ldy ry
+ cpy #7
+ bne d67
+ lda #$FC
+ sta v
+d67 lda style
+ and #8
+ beq d68
+ lda v
+ eor #$FC
+ sta v
+d68 lda v
+ sta hi
+ lda #0
+ sta lo
+ ldx shf
+ beq d6a
+d69 lsr hi
+ ror lo
+ dex
+ bne d69
+d6a ldy #0
+ lda (sp),y
+ and mh
+ ora hi
+ sta (sp),y
+ iny
+ lda (sp),y
+ and ml
+ ora lo
+ sta (sp),y
+ lda sp
+ clc
+ adc #40
+ sta sp
+ bcc d6b
+ inc sp+1
+d6b inc ry
+ lda ry
+ cmp #8
+ bne d64
+ rts
 
 mksh
  ldx #0
@@ -871,7 +1012,7 @@ ith dta h(it0),h(it1),h(it2),h(it3),h(it4),h(it5)
 it0 dta b(3),c'N',b(3),c'ew  ',b(3),c'O',b(3),c'pen  ',b(3),c'S',b(3),c'ave  Save-',b(3),c'A',b(3),c's  E',b(3),c'x',b(3),c'it',b(0)
 it1 dta b(3),c'U',b(3),c'ndo  Cu',b(3),c't',b(3),c'  ',b(3),c'C',b(3),c'opy  ',b(3),c'P',b(3),c'aste  T',b(3),c'o',b(3),c'p  ',b(3),c'E',b(3),c'nd',b(0)
 it2 dta b(3),c'F',b(3),c'ind  ',b(3),c'N',b(3),c'ext  ',b(3),c'R',b(3),c'eplace  ',b(3),c'G',b(3),c'oto',b(0)
-it3 dta b(3),c'R',b(3),c'egular  ',b(3),c'B',b(3),c'old  ',b(3),c'I',b(3),c'talic  ',b(3),c'U',b(3),c'nderline  ',b(3),c'S',b(3),c'maller  ',b(3),c'L',b(3),c'arger  F',b(3),c'o',b(3),c'nts',b(0)
+it3 dta b(3),c'R',b(3),c'egular ',b(3),c'B',b(3),c'old ',b(3),c'I',b(3),c'talic ',b(3),c'U',b(3),c'nderline ',b(3),c'S',b(3),c'maller ',b(3),c'L',b(3),c'arger F',b(3),c'o',b(3),c'nts',b(0)
 it4 dta b(3),c'L',b(3),c'eft  ',b(3),c'C',b(3),c'enter  ',b(3),c'R',b(3),c'ight  ',b(3),c'J',b(3),c'ustify  ',b(3),c'S',b(3),c'pacing  ',b(3),c'I',b(3),c'ndents',b(0)
 it5 dta b(3),c'R',b(3),c'uler  ',b(3),c'T',b(3),c'abs  ',b(3),c'M',b(3),c'argins  ',b(3),c'B',b(3),c'ars  ',b(3),c'C',b(3),c'olor  Si',b(3),c'z',b(3),c'e  ',b(3),c'L',b(3),c'ine',b(0)
 
@@ -941,7 +1082,7 @@ tn4 dta b(4),c'P',b(4),c'aragraph',b(0)
 tn5 dta b(4),c'D',b(4),c'ocument',b(0)
 tabl dta l(tn0),l(tn1),l(tn2),l(tn3),l(tn4),l(tn5)
 tabh dta h(tn0),h(tn1),h(tn2),h(tn3),h(tn4),h(tn5)
-tl0 dta c'Esc=menu',b(0)
+tl0 dta c'Esc',b(0)
 tooll dta l(tl0),l(tl0),l(tl0),l(tl0),l(tl0),l(tl0)
 toolh dta h(tl0),h(tl0),h(tl0),h(tl0),h(tl0),h(tl0)
 cmdtab dta c'bold',b(0),c'italic',b(0),c'underline',b(0),c'top',b(0),c'end',b(0)
@@ -1591,5 +1732,9 @@ dl :3 dta $70
 
  org $9400
  icl 'font4.inc'
+
+BFNT = $9800
+ org BFNT
+ icl 'font6.inc'
 
  run start
