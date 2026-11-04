@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ataricraft (temporary logo: three-prong mark inside a C)</title>
+  <defs>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb000"/>
+      <stop offset="0.35" stop-color="#ff5a1f"/>
+      <stop offset="0.7" stop-color="#d6246e"/>
+      <stop offset="1" stop-color="#5b3fd9"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff6dc"/>
+      <stop offset="1" stop-color="#e8d9ae"/>
+    </linearGradient>
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="1.5" fill="#000" opacity="0.18"/>
+    </pattern>
+    <clipPath id="disc2"><rect x="0" y="0" width="512" height="256"/><ellipse cx="256" cy="256" rx="135" ry="70"/></clipPath>
+    <clipPath id="disc"><circle cx="256" cy="256" r="160"/></clipPath>
+    <clipPath id="sq"><rect x="16" y="16" width="480" height="480" rx="84"/></clipPath>
+    <path id="prong" d="M188 150 L226 150 C226 275 196 355 140 450 L88 450 C150 355 188 275 188 150 Z"/>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="84" fill="#14161c"/>
+  <g clip-path="url(#sq)">
+    <circle cx="256" cy="256" r="166" fill="none" stroke="#2a2f3b" stroke-width="3" stroke-dasharray="3 9"/>
+    <path d="M409 152 A190 190 0 1 0 409 360" fill="none" stroke="url(#ring)" stroke-width="40" stroke-linecap="butt"/>
+    <rect x="394" y="128" width="30" height="30" fill="#ffb000"/>
+    <rect x="394" y="354" width="30" height="30" fill="#5b3fd9"/>
+    <g fill="url(#mark)">
+      <path clip-path="url(#disc)" d="M236 106 L276 106 L276 450 L236 450 Z"/>
+      <g clip-path="url(#disc)"><use href="#prong"/>
+      <use href="#prong" transform="translate(512 0) scale(-1 1)"/></g>
+    </g>
+    <g opacity="0.9">
+      <rect x="92" y="428" width="12" height="12" fill="#ffb000"/>
+      <rect x="112" y="428" width="12" height="12" fill="#ff5a1f"/>
+      <rect x="132" y="428" width="12" height="12" fill="#d6246e"/>
+      <rect x="152" y="428" width="12" height="12" fill="#5b3fd9"/>
+    </g>
+    <rect x="16" y="16" width="480" height="480" fill="url(#scan)"/>
+  </g>
+  <rect x="16" y="16" width="480" height="480" rx="84" fill="none" stroke="#3a4152" stroke-width="4"/>
+</svg>
