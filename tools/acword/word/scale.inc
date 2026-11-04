@@ -202,7 +202,11 @@ szn3 jmp dtend
 ; A = ascii; draws one scaled character at pixel (gx) on the row in rs
 szdraw cmp #128
  bcc szd0
- lda #32
+ cmp #173
+ bne szsp
+ lda #'-'
+ bne szd0
+szsp lda #32
 szd0 sec
  sbc #32
  bcs szd1

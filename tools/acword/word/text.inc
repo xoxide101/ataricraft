@@ -46,6 +46,15 @@ dtal2 ldx t0
  ldx t0
  jsr pfind
  sta pfn
+ lda #24
+ sta pcs
+ lda #25
+ sta pch1
+ ldx t0
+ jsr pfind
+ beq dtns
+ jmp spdraw
+dtns
  lda #0
  sta jon
  sta jsn
@@ -207,7 +216,11 @@ dtend rts
 drawchar
  cmp #128
  bcc dc0
- lda #32
+ cmp #173
+ bne dcsp
+ lda #'-'
+ bne dc0
+dcsp lda #32
 dc0 sec
  sbc #32
  bcs dc1
