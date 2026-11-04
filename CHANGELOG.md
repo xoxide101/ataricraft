@@ -1,5 +1,11 @@
 # Changelog
 
+## v8.1 (2026-11-04)
+
+- **BASIC compiler:** string variables (DIM A$(n), substrings, CHR$/LEN/ASC/VAL, compare, INPUT), DATA/READ/RESTORE, OPEN/CLOSE/PRINT #/INPUT #/GET/PUT, variable STEP, array and string bounds checks (ERROR 9). Still no floats, STR$, TRAP or string +. Tested on a node 6502 and in the browser; not on real hardware.
+- **Fonts:** C64 .64c charsets import in the FONT tab and font library (converted to Atari screen-code order). Not checked against many real files.
+- **Network tools:** WHOIS and IPCONFIG (relay only; real internet check of WHOIS done once against google.com).
+
 ## v8.0 (2026-11-04)
 
 Everything here was tested in the emulator (both cores where noted) and with scripted checks. **Nothing has been run on real Atari or FujiNet hardware, and no audio, print dialog or font look was judged on a real device.**

@@ -1,4 +1,4 @@
-// PING / NSLOOKUP / TRACERT end to end: relay mode (real ICMP/DNS through the relay) and the N:-only fallbacks.
+// PING / NSLOOKUP / TRACERT / WHOIS / IPCONFIG end to end: relay mode (real ICMP/DNS through the relay) and the N:-only fallbacks.
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const { spawn, execFileSync } = require('child_process');
 const http = require('http'), net = require('net'), fs = require('fs');
@@ -47,7 +47,13 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
   ok(/Request failed/.test(r.txt), 'PING fallback reports a closed port');
   r = await run('ping auto-detect w/o relay', mads('ping', ['MODE=1']), '127.0.0.1:' + port, 14000, false);
   ok(/No relay: timing TCP/.test(r.txt), 'PING auto-detects: no relay -> TCP fallback path');
+  r = await run('ipconfig relay', mads('ipconfig', ['MODE=5']), '', 8000, true);
+  ok(/IP: \d+\.\d+\.\d+\.\d+/.test(r.txt), 'IPCONFIG via relay lists an address');
+  r = await run('whois fallback', mads('whois', ['MODE=4']), 'example.com', 8000, false);
+  ok(/needs the Ataricraft relay/.test(r.txt), 'WHOIS without relay says so');
   if (process.env.ONLINE) {
+    r = await run('whois relay', mads('whois', ['MODE=4']), 'google.com', 20000, true);
+    ok(/Domain Name: GOOGLE\.COM/i.test(r.txt), 'WHOIS via relay');
     r = await run('nslookup DoH', mads('nsnd', ['MODE=2', 'NODIAG=1']), 'example.com', 12000, true);
     ok(/Name: example\.com/.test(r.txt) && /\d+\.\d+\.\d+\.\d+/.test(r.txt), 'NSLOOKUP DoH fallback');
   }

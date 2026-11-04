@@ -15,7 +15,7 @@ const progs = [
   ['VIEW.COM', 'tools/cmd/bin/view.com'], ['NANO.COM', 'tools/cmd/bin/nano.com'], ['CALC.COM', 'tools/cmd/bin/calc.com'], ['80COL.COM', 'tools/cmd/bin/80col.com'],
   ...['arc', 'zip', 'lzh', 'alf', 'zoo', 'arj', 'dcm', 'disc'].map((n) => [n.toUpperCase() + '.COM', 'tools/cmd/bin/' + n + '.com']),
   ...['KEYTEST', 'SNDTEST', 'GFXTEST', 'MEMTEST', 'CPUTEST', 'MIDIPLAY', 'MP3PLAY'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
-  ...['PING', 'NSLOOKUP', 'TRACERT'].map((n) => [n + '.COM', 'tools/net/' + n.toLowerCase() + '.com']),
+  ...['PING', 'NSLOOKUP', 'TRACERT', 'WHOIS', 'IPCONFIG'].map((n) => [n + '.COM', 'tools/net/' + n.toLowerCase() + '.com']),
   ...['WGET', 'CURL', 'LYNX', 'JQ', 'MAIL', 'NC'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
   ['TEST.PMD', 'tools/tests/TEST.PMD'], ['DEMO.PMD', 'tools/tests/DEMO.PMD'], ['DEMO.MID', 'tools/tests/DEMO.MID'],
   ['MP3DEMO.SMP', 'tools/tests/audio/MP3DEMO.SMP'], ['DUAL.SMP', 'tools/tests/audio/DUAL.SMP'],
@@ -66,6 +66,8 @@ PING host[:port]  ping. Relay = real ICMP replies,
   else times TCP connects (port 80).
 NSLOOKUP host     DNS lookup (relay, else DoH).
 TRACERT host      trace route. Relay only.
+WHOIS domain      registry lookup (IANA referral). Relay only.
+IPCONFIG          PC network addresses. Relay only.
 WGET url         fetch a URL, show it, save
   WGET.TXT.
 CURL [-i] [-d data] url  GET or POST.
