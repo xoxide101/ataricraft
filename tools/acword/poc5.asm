@@ -90,6 +90,7 @@ th   = $BA
 mn   = $BD
 bf   = $BE
 lim  = $BF
+lft  = $C0
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -634,11 +635,23 @@ d61 sta gp
  clc
  adc #>BFNT
  sta gp+1
+ lda #0
+ sta lft
+ lda style
+ and #8
+ beq d6n
  lda col
+ beq d6n
+ inc lft
+d6n lda col
  asl
  clc
  adc col
- pha
+ ldx lft
+ beq d6o
+ sec
+ sbc #1
+d6o pha
  lsr
  lsr
  clc
@@ -650,9 +663,16 @@ d61 sta gp
  pla
  and #3
  asl
- sta shf
+ ldx lft
+ beq d6p
+ clc
+ adc #1
+d6p sta shf
  lda #$FC
- sta mh
+ ldx lft
+ beq d6q
+ lda #$FE
+d6q sta mh
  lda #0
  sta ml
  ldx shf
@@ -698,7 +718,14 @@ d66 lda style
 d67 lda style
  and #8
  beq d68
+ lda lft
+ beq d67a
+ lsr v
  lda v
+ eor #$FE
+ sta v
+ jmp d68
+d67a lda v
  eor #$FC
  sta v
 d68 lda v
@@ -730,8 +757,9 @@ d6a ldy #0
 d6b inc ry
  lda ry
  cmp #8
- bne d64
- rts
+ beq d6c
+ jmp d64
+d6c rts
 
 mksh
  ldx #0
