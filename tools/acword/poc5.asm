@@ -1668,7 +1668,22 @@ status
  jsr putnum
  lda #'f'
  jsr putc
- lda #0
+ lda rz
+ beq sf1
+ lda #<fz
+ ldx #>fz
+ jsr putstr
+sf1 lda iv
+ beq sf2
+ lda #<fi
+ ldx #>fi
+ jsr putstr
+sf2 lda th
+ beq sf3
+ lda #<fb
+ ldx #>fb
+ jsr putstr
+sf3 lda #0
  jsr putc
  lda #<BUF
  sta tp
@@ -1685,6 +1700,9 @@ s2 dta c' Col ',b(0)
 s3 dta c'  full ',b(0)
 s4 dta c'f  scroll ',b(0)
 s5 dta c'f  key ',b(0)
+fz dta c'  ',b(4),c'ZUM',b(4),b(0)
+fi dta c' ',b(4),c'INV',b(4),b(0)
+fb dta c' ',b(4),c'BLU',b(4),b(0)
 kname dta c'K:',b($9B)
 helpmsg dta c'^X command  Tab mode  ^B bold ^I italic ^U underline  Ctrl-arrows move',b(0)
 
