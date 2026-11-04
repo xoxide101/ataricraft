@@ -78,7 +78,23 @@
     };
     const ttf = () => { const name = (prompt('Font name', 'Atari 8-bit') || '').trim(); if (!name) return; dl(name.replace(/\W+/g, '') + '.ttf', [AC.Ttf.build(font, { family: name })], 'font/ttf'); say('Saved. In Windows: right-click the .ttf and choose Install.'); };
 
-    bar.append(el('b', '', 'FONT'), btn('From ROM', fromRom, 'Read the character set at $E000 from the running Atari'),
+    const lib = el('select', 'background:#2a2f39;color:#d8dce4;border:1px solid #3a4150;border-radius:5px;padding:3px;max-width:260px');
+    const libFill = async () => {
+      const L = (await AC.FontLib.list()).filter((f) => f.kind === 'fnt'), packs = {};
+      L.forEach((f) => (packs[f.pack] = packs[f.pack] || []).push(f));
+      lib.innerHTML = '<option value="">Font library (' + L.length + ')</option>';
+      Object.keys(packs).sort().forEach((p) => { const g = document.createElement('optgroup'); g.label = p; packs[p].sort((a, b) => a.name.localeCompare(b.name)).forEach((f) => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.name; g.append(o); }); lib.append(g); });
+    };
+    lib.onchange = async () => { if (!lib.value) return; const r = await AC.FontLib.get(+lib.value); font.set(r.bytes); say(`Loaded "${r.name}" from the library (${r.pack}).`); draw(); };
+    const lfi = el('input'); lfi.type = 'file'; lfi.multiple = true; lfi.accept = '.fnt,.ttf,.otf,.zip'; lfi.style.display = 'none';
+    lfi.onchange = async () => {
+      if (!lfi.files.length) return; say('Importing...');
+      try { const r = await AC.FontLib.importFiles([...lfi.files]); say(`Imported ${r.added} font(s)${r.skipped ? `, skipped ${r.skipped} (duplicates or unsupported)` : ''}. .FNT sets appear in the library list; .TTF/.OTF are offered when printing from WebAFM.`); await libFill(); }
+      catch (e) { say('Import failed: ' + e.message); }
+      lfi.value = '';
+    };
+    libFill();
+    bar.append(el('b', '', 'FONT'), btn('From ROM', fromRom, 'Read the character set at $E000 from the running Atari'), lib, btn('Import fonts', () => lfi.click(), 'Add .FNT, .TTF/.OTF or .ZIP packs to the local font library (kept in this browser only)'),
       btn('Load .FNT', () => fi.click()), btn('Save .FNT', () => dl('FONT.FNT', [font.slice()], 'application/octet-stream')),
       btn('Save .TTF', ttf, 'Windows TrueType font'), btn('Install on Atari', install),
       btn('Clear', () => { font.fill(0); draw(); }), el('span', 'flex:1'), btn('X', () => { win.style.display = 'none'; }));
@@ -89,7 +105,7 @@
       rowop('Flip H', (o) => { for (let i = 0; i < 8; i++) { let v = 0; for (let b = 0; b < 8; b++) if (o[i] & (1 << b)) v |= 1 << (7 - b); o[i] = v; } }), rowop('Flip V', (o) => o.reverse()),
       btn('Normal/inverse view', () => { inv = !inv; draw(); }));
     const mid = el('div', 'display:flex;gap:10px;padding:8px;flex-wrap:wrap'); mid.append(sheet, big);
-    win.append(bar, tools, mid, info, el('div', 'padding:6px 8px;display:flex;gap:6px;align-items:center'), msg, fi);
+    win.append(bar, tools, mid, info, el('div', 'padding:6px 8px;display:flex;gap:6px;align-items:center'), msg, fi, lfi);
     const row = win.children[4]; row.append(el('span', '', 'Preview:'), text);
     win.insertBefore(prev, msg);
     let dx = 0, dy = 0, drag = false;
