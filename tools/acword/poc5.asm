@@ -102,6 +102,7 @@ gw   = $C9
 cx   = $CA
 ck   = $CB
 pold = $CC
+mhl  = $CD
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -168,6 +169,7 @@ start
  sta iv
  sta mn
  sta th
+ sta mhl
  sta rz
  lda #63
  sta rm
@@ -801,8 +803,11 @@ pt1 ldy #0
  beq ptul
  ldx #0
  cmp #1
- beq pttog
- cmp #4
+ bne pt4
+ lda mhl
+ bne pttog
+ beq ptul
+pt4 cmp #4
  bne ptnext
  ldx #1
 pttog lda i1,x
@@ -1025,7 +1030,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #17
+ cmp #19
  bcc ce0
  lda #17
 ce0 tax
@@ -1097,6 +1102,10 @@ hbar lda iv
 hstub lda #4
  sta cmsg
  rts
+hhil lda mhl
+ eor #1
+ sta mhl
+ rts
 hcol lda th
  eor #1
  sta th
@@ -1118,9 +1127,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1224,7 +1233,7 @@ ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
 ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(17),b(0)
 ip4 dta c'L',b(17),c'C',b(17),c'R',b(17),c'J',b(17),c'S',b(17),c'I',b(17),b(0)
-ip5 dta c'R',b(7),c'T',b(17),c'M',b(17),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),b(0)
+ip5 dta c'R',b(7),c'T',b(17),c'M',b(17),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
 itl dta l(it0),l(it1),l(it2),l(it3),l(it4),l(it5)
 ith dta h(it0),h(it1),h(it2),h(it3),h(it4),h(it5)
@@ -1233,7 +1242,7 @@ it1 dta b(3),c'U',b(3),c'ndo  Cu',b(3),c't',b(3),c'  ',b(3),c'C',b(3),c'opy  ',b
 it2 dta b(3),c'F',b(3),c'ind  ',b(3),c'N',b(3),c'ext  ',b(3),c'R',b(3),c'eplace  ',b(3),c'G',b(3),c'oto',b(0)
 it3 dta b(3),c'R',b(3),c'egular ',b(3),c'B',b(3),c'old ',b(3),c'I',b(3),c'talic ',b(3),c'U',b(3),c'nderline ',b(3),c'S',b(3),c'maller ',b(3),c'L',b(3),c'arger F',b(3),c'o',b(3),c'nts',b(0)
 it4 dta b(3),c'L',b(3),c'eft  ',b(3),c'C',b(3),c'enter  ',b(3),c'R',b(3),c'ight  ',b(3),c'J',b(3),c'ustify  ',b(3),c'S',b(3),c'pacing  ',b(3),c'I',b(3),c'ndents',b(0)
-it5 dta b(3),c'R',b(3),c'uler  ',b(3),c'T',b(3),c'abs  ',b(3),c'M',b(3),c'argins  ',b(3),c'B',b(3),c'ars  ',b(3),c'C',b(3),c'olor  Si',b(3),c'z',b(3),c'e  ',b(3),c'L',b(3),c'ine',b(0)
+it5 dta b(3),c'R',b(3),c'uler  ',b(3),c'T',b(3),c'abs  ',b(3),c'M',b(3),c'argins  ',b(3),c'B',b(3),c'ars  ',b(3),c'C',b(3),c'olor  Si',b(3),c'z',b(3),c'e  ',b(3),c'L',b(3),c'ine  ',b(3),c'H',b(3),c'ilite',b(0)
 
 dli1
  pha
