@@ -178,17 +178,14 @@ rb1 jsr putc
  pla
  jsr putstr
  ldx tmp
- lda #' '
  cpx cmode
  bne rb2
  lda #']'
-rb2 jsr putc
- inc tmp
+ jsr putc
+rb2 inc tmp
  lda tmp
  cmp #NMENU
  bne rbl
- lda #'|'
- jsr putc
  lda #' '
  jsr putc
  ldx cmode
