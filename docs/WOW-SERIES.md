@@ -171,3 +171,7 @@ A spacer paragraph draws as a hatched frame between the margins and is as tall a
 ### Superscript and subscript
 Inline toggle codes 11 (superscript) and 12 (subscript), like bold/italic but zero width and carried across wrapped lines. Style bits 16/32. Keys: Character > P (super), D (sub). Rendered by squeezing the 8-row glyph into 5 rows at the top or bottom of the cell (unscaled text only; scaled lines ignore them for now).
 
+
+### Legend
+Document > G (hidden key) appends one legend paragraph per superscript run (max 15 chars, empty runs skipped) at the end of the document: superscript run, then a space for the reference text. Not deduplicated; re-running adds entries again.
+
