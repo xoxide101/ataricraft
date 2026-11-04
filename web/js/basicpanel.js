@@ -73,7 +73,7 @@
       const emu = host.emu && host.emu();
       if (!emu) { out.textContent = 'The Atari is not running. Boot it first, then compile and run.'; return; }
       emu.bootFile('PROGRAM.XEX', r.xex); out.textContent = `Compiled ${r.xex.length} bytes and started on the Atari.`;
-    }, 'Compile to 6502 and boot it in the running emulator (integer subset only)');
+    }, 'Compile to 6502 and boot it in the running emulator (integers and strings, no floats)');
     bar.append(el('b', '', 'BASIC'), dial, runBtn, btn('Stop', () => { if (B) B.stop(); killSound(); }), btn('Clear', () => { out.textContent = ''; g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); }),
       compRun, btn('Save .XEX', () => { out.textContent = ''; const r = comp(); if (r) dlb('PROGRAM.XEX', r.xex); }, 'Compile and download an Atari executable'),
       btn('Save .ASM', () => { out.textContent = ''; const r = comp(); if (r) dlb('PROGRAM.ASM', r.asm.replace(/\n/g, '\r\n')); }, 'Compile and download MADS-style assembly source'),

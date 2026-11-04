@@ -1,30 +1,34 @@
 // AtariCraft BASIC compiler: a subset of Atari BASIC to MADS-style 6502 source, then to an XEX through asm6502.js.
 // AC.BComp.compile(src) -> { asm, xex, errors:[{line,msg}] }   (xex is null when there are errors)
 //
-// The subset: 16-bit signed integers only (no floats, no string variables), numeric DIM arrays, PRINT of numbers and
-// string literals, LET, IF/THEN, GOTO, GOSUB/RETURN/POP, FOR/NEXT (constant STEP, paired at compile time), ON..GOTO/GOSUB,
-// INPUT (integers), POKE, GRAPHICS/COLOR/SETCOLOR/PLOT/DRAWTO/POSITION/SOUND, END/STOP, REM.
+// The subset: 16-bit signed integers only (no floats), numeric DIM arrays with bounds checks, string variables
+// (DIM A$(n), up to 255 chars, A$=..., A$(i)=..., A$(i,j), CHR$, LEN, ASC, VAL, = and <>), PRINT, LET, IF/THEN, GOTO,
+// GOSUB/RETURN/POP, FOR/NEXT (any STEP, paired at compile time), ON..GOTO/GOSUB, INPUT (integers and strings),
+// DATA/READ/RESTORE, OPEN/CLOSE/PRINT #/INPUT #/GET/PUT, POKE, GRAPHICS/COLOR/SETCOLOR/PLOT/DRAWTO/POSITION/SOUND,
+// END/STOP, REM.
 // Functions: PEEK DPEEK ABS INT STICK STRIG PADDLE PTRIG and INT(RND(0)*N) (the only RND form, gives 0..N-1).
 // Division truncates toward zero.  Numbers above 32767 wrap (POKE/PEEK addresses up to 65535 work as addresses).
+// Runtime errors (subscript, string too long, out of data) print "ERROR n" and stop; there is no TRAP.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) module.exports = factory(require('./asm6502.js'));
   else { root.AC = root.AC || {}; root.AC.BComp = factory(root.AC.Asm); }
 })(typeof self !== 'undefined' ? self : this, function (Asm) {
   const KW = new Set(['REM', 'LET', 'PRINT', 'IF', 'THEN', 'GOTO', 'GOSUB', 'RETURN', 'POP', 'FOR', 'TO', 'STEP', 'NEXT', 'POKE', 'GRAPHICS', 'COLOR', 'SETCOLOR',
-    'PLOT', 'DRAWTO', 'POSITION', 'SOUND', 'DIM', 'ON', 'INPUT', 'END', 'STOP', 'AND', 'OR', 'NOT']);
+    'PLOT', 'DRAWTO', 'POSITION', 'SOUND', 'DIM', 'ON', 'INPUT', 'END', 'STOP', 'AND', 'OR', 'NOT',
+    'DATA', 'READ', 'RESTORE', 'OPEN', 'CLOSE', 'GET', 'PUT']);
   const FN = { PEEK: 1, DPEEK: 1, ABS: 1, INT: 1, STICK: 1, STRIG: 1, PADDLE: 1, PTRIG: 1, RND: 1 };
   const PORT = { STICK: 0x278, STRIG: 0x284, PADDLE: 0x270, PTRIG: 0x27C };
 
   // Runtime routines, included only when used.  Zero page: $80/$81 result, $82/$83 second operand, $84/$85 remainder/product.
   const RT = {
     putc: { code: `r_putc  pha
+        ldx r_ioc
         lda #11
-        sta $0342
+        sta $0342,x
         lda #0
-        sta $0348
-        sta $0349
+        sta $0348,x
+        sta $0349,x
         pla
-        ldx #0
         jmp $E456
 `, deps: [] },
     pstr: { code: `r_pstr  ldy #0
@@ -199,17 +203,17 @@ tb2     cmp #0
         jsr r_putc
         lda #32
         jsr r_putc
+r_inr   ldx r_ioc
         lda #5
-        sta $0342
+        sta $0342,x
         lda #$80
-        sta $0344
+        sta $0344,x
         lda #5
-        sta $0345
+        sta $0345,x
         lda #40
-        sta $0348
+        sta $0348,x
         lda #0
-        sta $0349
-        ldx #0
+        sta $0349,x
         jsr $E456
         lda #0
         sta $8E
@@ -322,6 +326,270 @@ r_sname .byte 'S:',155
         sta $03AB
         ldx #$60
         jmp $E456
+`, deps: [] },
+    bad: { code: `r_bad   pha
+        lda #0
+        sta r_ioc
+        lda #<r_emsg
+        sta $8A
+        lda #>r_emsg
+        sta $8B
+        jsr r_pstr
+        pla
+        sta $80
+        lda #0
+        sta $81
+        jsr r_pint
+        jsr r_eol
+        jmp ($000A)
+r_emsg  .byte 'ERROR ',0
+r_sbad  lda #9
+        jmp r_bad
+`, deps: ['pstr', 'pint', 'eol'] },
+    getc: { code: `r_getc  ldx r_ioc
+        lda #7
+        sta $0342,x
+        lda #0
+        sta $0348,x
+        sta $0349,x
+        jmp $E456
+`, deps: ['putc'] },
+    pnum: { code: `r_pnum  lda #0
+        sta $80
+        sta $81
+        sta $8C
+        ldy #0
+pn0     cpy $9C
+        bcs pn3
+        lda ($9A),y
+        cmp #32
+        bne pn00
+        iny
+        bne pn0
+pn00    cmp #45
+        bne pn1
+        inc $8C
+        iny
+pn1     cpy $9C
+        bcs pn3
+        lda ($9A),y
+        sec
+        sbc #48
+        cmp #10
+        bcs pn3
+        sta $8D
+        lda $80
+        sta $82
+        lda $81
+        sta $83
+        asl $80
+        rol $81
+        asl $80
+        rol $81
+        clc
+        lda $80
+        adc $82
+        sta $80
+        lda $81
+        adc $83
+        sta $81
+        asl $80
+        rol $81
+        clc
+        lda $80
+        adc $8D
+        sta $80
+        bcc pn2
+        inc $81
+pn2     iny
+        bne pn1
+pn3     lda $8C
+        beq pn4
+        jsr r_neg80
+pn4     rts
+`, deps: ['neg80'] },
+    dskip: { code: `r_dskip lda ($9A),y
+        cmp #44
+        beq ds1
+        cmp #155
+        beq ds1
+        iny
+        bne r_dskip
+ds1     iny
+        clc
+        tya
+        adc $9A
+        sta r_dp
+        lda $9B
+        adc #0
+        sta r_dp+1
+        rts
+`, deps: [] },
+    rdn: { code: `r_rdn   lda r_dp
+        sta $9A
+        lda r_dp+1
+        sta $9B
+        ldy #0
+        lda ($9A),y
+        bne rn0
+        lda #6
+        jmp r_bad
+rn0     lda #255
+        sta $9C
+        jsr r_pnum
+        jmp r_dskip
+`, deps: ['pnum', 'dskip', 'bad'] },
+    rds: { code: `r_rds   lda r_dp
+        sta $9A
+        lda r_dp+1
+        sta $9B
+        ldy #0
+        lda ($9A),y
+        bne rs0
+        lda #6
+        jmp r_bad
+rs0     ldy #0
+rs1     lda ($9A),y
+        cmp #44
+        beq rs2
+        cmp #155
+        beq rs2
+        cpy $9D
+        bcs rsE
+        sta ($8A),y
+        iny
+        bne rs1
+rs2     sty $9C
+        jsr r_dskip
+        lda $9C
+        rts
+rsE     lda #9
+        jmp r_bad
+`, deps: ['dskip', 'bad'] },
+    pstn: { code: `r_pstn  lda #0
+        sta $8D
+pt1     lda $8D
+        cmp $9C
+        beq pt2
+        tay
+        lda ($9A),y
+        jsr r_putc
+        inc $8D
+        jmp pt1
+pt2     rts
+`, deps: ['putc'] },
+    sub: { code: `r_sub   lda $91
+        ora $93
+        bne sbE
+        lda $90
+        beq sbE
+        cmp $92
+        beq sb0
+        bcs sbE
+sb0     lda $92
+        cmp $9E
+        beq sb1
+        bcs sbE
+sb1     lda $92
+        sec
+        sbc $90
+        clc
+        adc #1
+        sta $9C
+        lda $90
+        sec
+        sbc #1
+        clc
+        adc $8A
+        sta $9A
+        lda $8B
+        adc #0
+        sta $9B
+        rts
+sbE     lda #9
+        jmp r_bad
+`, deps: ['bad'] },
+    scpy: { code: `r_scpy  lda $9C
+        cmp $9D
+        beq sc0
+        bcs scE
+sc0     ldy #0
+        cpy $9C
+        beq sc2
+sc1     lda ($9A),y
+        sta ($8A),y
+        iny
+        cpy $9C
+        bne sc1
+sc2     lda $9C
+        rts
+scE     lda #9
+        jmp r_bad
+`, deps: ['bad'] },
+    sapp: { code: `r_sapp  lda $91
+        bne saE
+        lda $90
+        beq saE
+        sec
+        sbc #1
+        sta $9F
+        cmp $9E
+        beq sa0
+        bcs saE
+sa0     clc
+        adc $9C
+        bcs saE
+        sta $A0
+        cmp $9D
+        beq sa1
+        bcs saE
+sa1     clc
+        lda $8A
+        adc $9F
+        sta $8A
+        bcc sa2
+        inc $8B
+sa2     ldy #0
+        cpy $9C
+        beq sa4
+sa3     lda ($9A),y
+        sta ($8A),y
+        iny
+        cpy $9C
+        bne sa3
+sa4     lda $A0
+        rts
+saE     lda #9
+        jmp r_bad
+`, deps: ['bad'] },
+    seq: { code: `r_seq   lda $9C
+        cmp $A0
+        beq se0
+        jmp r_f
+se0     ldy #0
+        cpy $9C
+        bne se1
+        jmp r_t
+se1     lda ($9A),y
+        cmp ($9E),y
+        beq se2
+        jmp r_f
+se2     iny
+        cpy $9C
+        bne se1
+        jmp r_t
+`, deps: ['cmp'] },
+    inps: { code: `r_inps  ldy #0
+is1     lda $0580,y
+        cmp #155
+        beq is2
+        cpy $9D
+        bcs is2
+        sta ($8A),y
+        iny
+        bne is1
+is2     tya
+        rts
 `, deps: [] }
   };
 
@@ -331,6 +599,8 @@ r_sname .byte 'S:',155
     const used = new Set();
     const scalars = new Set();
     const arrays = new Map();
+    const svars = new Map(), names = [], dataLines = [], stepVars = new Set();
+    let usesChb = false;
     const strs = [];
     let uid = 0, forId = 0, usesCol = false, usesSound = false;
     const em = (s) => out.push('        ' + s);
@@ -359,10 +629,36 @@ r_sname .byte 'S:',155
     const expect = (c) => { if (!eat(c)) fail(`'${c}' expected`); };
     const kw = (w) => { if (peekIdent() === w) { p += w.length; return true; } return false; };
     const varName = (id) => {
-      if (id.endsWith('$')) fail('string variables are not supported');
+      if (id.endsWith('$')) fail('a string variable cannot be used here');
       if (KW.has(id)) fail(`'${id}' is a reserved word`);
       return id;
     };
+    const sn = (id) => id.slice(0, -1) + '_S';
+    const isStrStart = () => { ws(); return s[p] === '"' || /^[A-Za-z][A-Za-z0-9]*\$/.test(s.slice(p)); };
+    const lit = () => {
+      p++; let t = '';
+      for (;;) {
+        if (p >= s.length) fail('unterminated string');
+        if (s[p] === '"') { p++; break; }
+        t += s[p++];
+      }
+      return t;
+    };
+    function sx() {
+      ws();
+      if (s[p] === '"') return { t: 'slit', v: lit() };
+      const id = ident();
+      if (id === 'CHR$') { expect('('); const e = orE(); expect(')'); return { t: 'schr', e }; }
+      if (!id.endsWith('$')) fail('string expected');
+      if (!svars.has(id)) fail(`string ${id} is not DIMed`);
+      ws();
+      if (s[p] === '(') {
+        p++; const i = orE(); let j = null;
+        if (eat(',')) j = orE();
+        expect(')'); return { t: 'ssub', name: id, i, j };
+      }
+      return { t: 'svar', name: id };
+    }
 
     const num = () => {
       ws(); const m = /^\d+(\.\d*)?([eE][+-]?\d+)?/.exec(s.slice(p));
@@ -383,6 +679,7 @@ r_sname .byte 'S:',155
       if (s[p] === '(') { p++; const e = orE(); expect(')'); return e; }
       const id = peekIdent(); if (!id) fail('expression expected');
       p += id.length;
+      if (id === 'LEN' || id === 'ASC' || id === 'VAL') { expect('('); const sv = sx(); expect(')'); return { t: 'sfn', name: id, s: sv }; }
       if (FN[id]) {
         expect('('); const a = orE(); expect(')');
         if (id === 'INT') return fromInt(a);
@@ -425,6 +722,12 @@ r_sname .byte 'S:',155
     const mulE = bin(unary, ['*', '/']);
     const addE = bin(mulE, ['+', '-']);
     function cmpE() {
+      if (isStrStart()) {
+        const l = sx(); ws();
+        const op = s.startsWith('<>', p) ? '<>' : s.startsWith('=', p) ? '=' : null;
+        if (!op) fail('strings can only be compared with = or <>');
+        p += op.length; return { t: 'scmp', op, l, r: sx() };
+      }
       let l = addE();
       for (;;) {
         ws(); let op = null;
@@ -445,10 +748,56 @@ r_sname .byte 'S:',155
     };
     function addr(e) {
       gen(e.i);
+      const cnt = arrays.get(e.name), q = ++uid;
+      need('bad');
+      em('sec'); em('lda $80'); em(`sbc #${lo(cnt)}`); em('lda $81'); em(`sbc #${hi(cnt)}`); em(`bcc Qa${q}`); em('lda #9'); em('jmp r_bad'); lab(`Qa${q}`);
       em('asl $80'); em('rol $81'); em('clc'); em('lda $80'); em(`adc #<A_${e.name}`); em('sta $8A'); em('lda $81'); em(`adc #>A_${e.name}`); em('sta $8B');
+    }
+    const litK = (t) => { if (t.length > 255) fail('string literal longer than 255'); strs.push(t); return strs.length - 1; };
+    // leaves the string's address in $9A/$9B and its length in $9C
+    function genS(e) {
+      switch (e.t) {
+        case 'slit': {
+          const k = litK(e.v);
+          em(`lda #<S${k}`); em('sta $9A'); em(`lda #>S${k}`); em('sta $9B'); em(`lda #${e.v.length}`); em('sta $9C'); return;
+        }
+        case 'svar': {
+          const n = sn(e.name);
+          em(`lda #<SB_${n}`); em('sta $9A'); em(`lda #>SB_${n}`); em('sta $9B'); em(`lda SL_${n}`); em('sta $9C'); return;
+        }
+        case 'schr':
+          gen(e.e); usesChb = true; em('lda $80'); em('sta r_chb');
+          em('lda #<r_chb'); em('sta $9A'); em('lda #>r_chb'); em('sta $9B'); em('lda #1'); em('sta $9C'); return;
+        case 'ssub': {
+          const n = sn(e.name);
+          gen(e.i); em('lda $80'); em('pha'); em('lda $81'); em('pha');
+          if (e.j) gen(e.j); else { em(`lda SL_${n}`); em('sta $80'); em('lda #0'); em('sta $81'); }
+          em('lda $80'); em('sta $92'); em('lda $81'); em('sta $93'); em('pla'); em('sta $91'); em('pla'); em('sta $90');
+          em(`lda #<SB_${n}`); em('sta $8A'); em(`lda #>SB_${n}`); em('sta $8B'); em(`lda SL_${n}`); em('sta $9E');
+          need('sub'); em('jsr r_sub'); return;
+        }
+      }
+      fail('internal: bad string expression');
     }
     function gen(e) {
       switch (e.t) {
+        case 'sfn': {
+          genS(e.s);
+          if (e.name === 'LEN') { em('lda $9C'); em('sta $80'); em('lda #0'); em('sta $81'); }
+          else if (e.name === 'ASC') {
+            const q = ++uid; need('bad');
+            em('lda $9C'); em(`bne Qs${q}`); em('lda #9'); em('jmp r_bad'); lab(`Qs${q}`);
+            em('ldy #0'); em('lda ($9A),y'); em('sta $80'); em('lda #0'); em('sta $81');
+          } else { need('pnum'); em('jsr r_pnum'); }
+          return;
+        }
+        case 'scmp':
+          genS(e.l); em('lda $9A'); em('pha'); em('lda $9B'); em('pha'); em('lda $9C'); em('pha');
+          genS(e.r); em('lda $9A'); em('sta $9E'); em('lda $9B'); em('sta $9F'); em('lda $9C'); em('sta $A0');
+          em('pla'); em('sta $9C'); em('pla'); em('sta $9B'); em('pla'); em('sta $9A');
+          need('seq'); em('jsr r_seq');
+          if (e.op === '<>') { em('lda $80'); em('eor #1'); em('sta $80'); }
+          return;
         case 'n': loadTo(e, '$80', '$81'); return;
         case 'v': loadTo(e, '$80', '$81'); return;
         case 'a': addr(e); em('ldy #0'); em('lda ($8A),y'); em('sta $80'); em('iny'); em('lda ($8A),y'); em('sta $81'); return;
@@ -537,10 +886,14 @@ r_sname .byte 'S:',155
           gen(orE()); store(v);
           if (!kw('TO')) fail('TO expected');
           const k = ++forId; gen(orE()); em('lda $80'); em(`sta F${k}L`); em('lda $81'); em(`sta F${k}L+1`);
-          let step = 1;
-          if (kw('STEP')) { const neg = eat('-'); ws(); step = num(); if (neg) step = (-step) & 0xFFFF; if (!neg && step > 32767) fail('STEP too large'); }
+          let step = 1, dyn = false;
+          if (kw('STEP')) {
+            const se = orE();
+            if (se.t === 'n') { step = se.v; if (step < 32768 && step === 0) fail('STEP 0'); }
+            else { dyn = true; gen(se); stepVars.add(k); em('lda $80'); em(`sta F${k}S`); em('lda $81'); em(`sta F${k}S+1`); }
+          }
           lab(`F${k}T`);
-          fors.push({ v, k, step, line: curLine.src });
+          fors.push({ v, k, step, dyn, line: curLine.src });
           return;
         }
         case 'NEXT': {
@@ -548,9 +901,16 @@ r_sname .byte 'S:',155
           let f; while (fors.length) { f = fors.pop(); if (f.v === v) break; f = null; }
           if (!f) fail(`NEXT ${v} without FOR`);
           const k = f.k, neg = f.step > 32767;
-          em('clc'); em(`lda V_${v}`); em(`adc #${lo(f.step)}`); em(`sta V_${v}`); em(`lda V_${v}+1`); em(`adc #${hi(f.step)}`); em(`sta V_${v}+1`);
-          loadTo({ t: 'v', name: v }, '$80', '$81'); em(`lda F${k}L`); em('sta $82'); em(`lda F${k}L+1`); em('sta $83');
-          need('cmp'); em(neg ? 'jsr r_lt' : 'jsr r_gt');
+          need('cmp');
+          if (f.dyn) {
+            em('clc'); em(`lda V_${v}`); em(`adc F${k}S`); em(`sta V_${v}`); em(`lda V_${v}+1`); em(`adc F${k}S+1`); em(`sta V_${v}+1`);
+            loadTo({ t: 'v', name: v }, '$80', '$81'); em(`lda F${k}L`); em('sta $82'); em(`lda F${k}L+1`); em('sta $83');
+            em(`lda F${k}S+1`); em(`bmi F${k}N`); em('jsr r_gt'); em('jmp F' + k + 'C'); lab(`F${k}N`); em('jsr r_lt'); lab(`F${k}C`);
+          } else {
+            em('clc'); em(`lda V_${v}`); em(`adc #${lo(f.step)}`); em(`sta V_${v}`); em(`lda V_${v}+1`); em(`adc #${hi(f.step)}`); em(`sta V_${v}+1`);
+            loadTo({ t: 'v', name: v }, '$80', '$81'); em(`lda F${k}L`); em('sta $82'); em(`lda F${k}L+1`); em('sta $83');
+            em(neg ? 'jsr r_lt' : 'jsr r_gt');
+          }
           em('lda $80'); em('ora $81'); em(`bne F${k}X`); em(`jmp F${k}T`); lab(`F${k}X`);
           return;
         }
@@ -581,8 +941,14 @@ r_sname .byte 'S:',155
         }
         case 'DIM': {
           do {
-            const id = ident(); if (id.endsWith('$')) fail('string arrays/variables are not supported');
-            varName(id); expect('('); const n = num(); expect(')');
+            const id = ident(); expect('(');
+            if (id.endsWith('$')) {
+              const n = num(); expect(')');
+              if (n < 1 || n > 255) fail('string length must be 1 to 255');
+              if (svars.has(id)) fail(`${id} is already used`);
+              svars.set(id, n); continue;
+            }
+            varName(id); const n = num(); expect(')');
             if (scalars.has(id) || arrays.has(id)) fail(`${id} is already used`);
             arrays.set(id, n + 1);
           } while (eat(','));
@@ -602,11 +968,72 @@ r_sname .byte 'S:',155
           return;
         }
         case 'INPUT': {
-          let first = true;
+          let first = true, ch = false;
+          ws();
+          if (s[p] === '#') { p++; chan(); ch = true; expect(','); }
           do {
+            ws();
+            if (/^[A-Za-z][A-Za-z0-9]*\$/.test(s.slice(p))) {
+              const id = ident(); if (!svars.has(id)) fail(`string ${id} is not DIMed`);
+              const n = sn(id);
+              need('input'); need('inps'); if (first) em(ch ? 'jsr r_inr' : 'jsr r_inp'); first = false;
+              em(`lda #<SB_${n}`); em('sta $8A'); em(`lda #>SB_${n}`); em('sta $8B'); em(`lda #${svars.get(id)}`); em('sta $9D');
+              em('jsr r_inps'); em(`sta SL_${n}`);
+              continue;
+            }
             const lv = lvalue(); if (lv.arr) saveAddr(lv);
-            need('input'); if (first) em('jsr r_inp'); first = false; em('jsr r_inn'); storeLv(lv);
+            need('input'); if (first) em(ch ? 'jsr r_inr' : 'jsr r_inp'); first = false; em('jsr r_inn'); storeLv(lv);
           } while (eat(','));
+          if (ch) { em('lda #0'); em('sta r_ioc'); }
+          return;
+        }
+        case 'DATA': dataLines.push({ n: curLine.n, text: s.slice(p).replace(/^ +/, '') }); p = s.length; return;
+        case 'RESTORE': {
+          ws(); let m = 0;
+          if (/\d/.test(s[p] || '')) m = num();
+          em(`lda #<@RS${m}@`); em('sta r_dp'); em(`lda #>@RS${m}@`); em('sta r_dp+1'); need('dskip');
+          return;
+        }
+        case 'READ': {
+          do {
+            ws();
+            if (/^[A-Za-z][A-Za-z0-9]*\$/.test(s.slice(p))) {
+              const id = ident(); if (!svars.has(id)) fail(`string ${id} is not DIMed`);
+              const n = sn(id);
+              em(`lda #<SB_${n}`); em('sta $8A'); em(`lda #>SB_${n}`); em('sta $8B'); em(`lda #${svars.get(id)}`); em('sta $9D');
+              need('rds'); em('jsr r_rds'); em(`sta SL_${n}`);
+              continue;
+            }
+            const lv = lvalue(); if (lv.arr) saveAddr(lv);
+            need('rdn'); em('jsr r_rdn'); storeLv(lv);
+          } while (eat(','));
+          return;
+        }
+        case 'OPEN': {
+          expect('#'); args(3); expect(',');
+          ws(); if (s[p] !== '"') fail('OPEN needs a device name in quotes, such as "D:FILE.TXT"');
+          const t = lit(); names.push(t); const k = names.length - 1;
+          em('lda $90'); em('asl'); em('asl'); em('asl'); em('asl'); em('tax'); em('lda #3'); em('sta $0342,x');
+          em(`lda #<N${k}`); em('sta $0344,x'); em(`lda #>N${k}`); em('sta $0345,x');
+          em('lda $92'); em('sta $034A,x'); em('lda $94'); em('sta $034B,x'); em('jsr $E456');
+          return;
+        }
+        case 'CLOSE': {
+          expect('#'); gen(orE());
+          em('lda $80'); em('asl'); em('asl'); em('asl'); em('asl'); em('tax'); em('lda #12'); em('sta $0342,x'); em('jsr $E456');
+          return;
+        }
+        case 'PUT': {
+          expect('#'); chan(); expect(','); gen(orE());
+          need('putc'); em('lda $80'); em('jsr r_putc'); em('lda #0'); em('sta r_ioc');
+          return;
+        }
+        case 'GET': {
+          expect('#');
+          gen(orE()); em('lda $80'); em('pha'); expect(',');
+          const lv = lvalue(); if (lv.arr) saveAddr(lv);
+          need('getc'); em('pla'); em('asl'); em('asl'); em('asl'); em('asl'); em('sta r_ioc');
+          em('jsr r_getc'); em('sta $80'); em('lda #0'); em('sta $81'); storeLv(lv); em('lda #0'); em('sta r_ioc');
           return;
         }
         case 'TO': case 'THEN': case 'STEP': case 'AND': case 'OR': case 'NOT': fail(`unexpected ${w}`);
@@ -616,27 +1043,46 @@ r_sname .byte 'S:',155
       fail('statement expected');
     }
     function assign() {
+      ws();
+      if (/^[A-Za-z][A-Za-z0-9]*\$/.test(s.slice(p))) return strAssign();
       const lv = lvalue(); expect('=');
       if (lv.arr) { saveAddr(lv); }
       gen(orE()); storeLv(lv);
     }
-    function strLit() {
-      p++; let t = '';
-      for (;;) {
-        if (p >= s.length) fail('unterminated string');
-        if (s[p] === '"') { p++; break; }
-        t += s[p++];
+    function strAssign() {
+      const id = ident(); if (!svars.has(id)) fail(`string ${id} is not DIMed`);
+      const n = sn(id), cap = svars.get(id); let ie = null;
+      ws();
+      if (s[p] === '(') {
+        p++; ie = orE();
+        if (s[p] === ',' || /^\s*,/.test(s.slice(p))) fail('A$(i,j)= is not supported; use A$(i)= to overwrite from position i');
+        expect(')');
       }
-      strs.push(t); const k = strs.length - 1;
+      expect('=');
+      if (ie) { gen(ie); em('lda $80'); em('pha'); em('lda $81'); em('pha'); }
+      genS(sx());
+      if (ie) { em('pla'); em('sta $91'); em('pla'); em('sta $90'); }
+      em(`lda #<SB_${n}`); em('sta $8A'); em(`lda #>SB_${n}`); em('sta $8B'); em(`lda #${cap}`); em('sta $9D');
+      if (ie) { em(`lda SL_${n}`); em('sta $9E'); need('sapp'); em('jsr r_sapp'); }
+      else { need('scpy'); em('jsr r_scpy'); }
+      em(`sta SL_${n}`);
+    }
+    const chan = () => {
+      gen(orE()); need('putc'); em('lda $80'); em('asl'); em('asl'); em('asl'); em('asl'); em('sta r_ioc');
+    };
+    function strLit() {
+      const k = litK(lit());
       em(`lda #<S${k}`); em('sta $8A'); em(`lda #>S${k}`); em('sta $8B'); need('pstr'); em('jsr r_pstr');
     }
     function print() {
-      let nl = true;
+      let nl = true, ch = false;
+      ws();
+      if (s[p] === '#') { p++; chan(); ch = true; ws(); if (s[p] === ',' || s[p] === ';') p++; }
       for (;;) {
         ws();
         if (p >= s.length || s[p] === ':') break;
         if (s[p] === '"') strLit();
-        else if (s[p] === '#') fail('PRINT # is not supported');
+        else if (isStrStart()) { genS(sx()); need('pstn'); em('jsr r_pstn'); }
         else { gen(orE()); need('pint'); em('jsr r_pint'); }
         ws();
         if (s[p] === ';') { p++; nl = false; }
@@ -644,6 +1090,7 @@ r_sname .byte 'S:',155
         else { nl = true; break; }
       }
       if (nl) { need('eol'); em('jsr r_eol'); }
+      if (ch) { em('lda #0'); em('sta r_ioc'); }
     }
     function stmts() {
       for (;;) {
@@ -673,14 +1120,25 @@ r_sname .byte 'S:',155
     const addRt = (n) => { if (added.has(n)) return; added.add(n); for (const d of RT[n].deps) addRt(d); out.push(RT[n].code.replace(/\n$/, '')); };
     for (const n of used) addRt(n);
     if (usesCol) lab('r_col   .byte 0');
-    if (usesSound) { /* registers are set inline */ }
+    if (added.has('putc')) lab('r_ioc   .byte 0');
+    if (usesChb) lab('r_chb   .byte 0');
+    if (added.has('dskip')) lab('r_dp    .word @RS0@');
     for (const v of scalars) lab(`V_${v}   .word 0`);
     for (const [v, n] of arrays) lab(`A_${v}   .ds ${n * 2}`);
+    for (const [v, n] of svars) lab(`SL_${sn(v)}  .byte 0\nSB_${sn(v)}  .ds ${n}`);
     for (let k = 0; k < forId; k++) lab(`F${k + 1}L  .word 0`);
+    for (const k of stepVars) lab(`F${k}S  .word 0`);
     strs.forEach((t, k) => lab(`S${k}      .byte ${[...t].map((c) => c.charCodeAt(0) & 255).concat(0).join(',')}`));
+    names.forEach((t, k) => lab(`N${k}      .byte ${[...t].map((c) => c.charCodeAt(0) & 255).concat(155).join(',')}`));
+    for (const d of dataLines) {
+      const bytes = [...d.text].map((c) => c.charCodeAt(0) & 255).concat(155);
+      lab(`D${d.n}`); for (let i = 0; i < bytes.length; i += 16) out.push(`        .byte ${bytes.slice(i, i + 16).join(',')}`);
+    }
+    lab('DEND    .byte 0');
     lab('        org $02E0');
     lab('        .word start');
-    const asm = out.join('\n') + '\n';
+    const restoreTarget = (m) => { const d = dataLines.find((x) => x.n >= m); return d ? `D${d.n}` : 'DEND'; };
+    const asm = out.join('\n').replace(/@RS(\d+)@/g, (_, m) => restoreTarget(+m)) + '\n';
     errors.sort((a, b) => a.line - b.line);
     let xex = null;
     if (!errors.length) {
