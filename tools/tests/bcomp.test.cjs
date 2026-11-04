@@ -18,22 +18,30 @@ function load(mem, x) {
   }
   return mem[0x2E0] | mem[0x2E1] << 8;
 }
-function run(xex, inputs = []) {
+function run(xex, inputs = [], files = {}) {
   const mem = new Uint8Array(65536);
   const start = load(mem, xex);
   mem[0x0A] = 0xF0; mem[0x0B] = 0xFF;
   const c = Cpu(mem); c.pc = start; c.sp = 0xFF;
-  let out = '', steps = 0, seed = 12345; const gfx = [];
+  let out = '', steps = 0, seed = 12345; const gfx = [], opened = {}, rpos = {};
   while (c.pc !== 0xFFF0 && steps++ < 20000000) {
     if (c.pc === 0xE456) {
       const x = c.x, cmd = mem[0x342 + x];
       if (cmd === 11 && x === 0) {
         const ch = c.a; if (ch === 155) { out += '\n'; mem[0x55] = 0; } else { out += String.fromCharCode(ch); mem[0x55] = (mem[0x55] + 1) & 255; }
-      } else if (cmd === 11) gfx.push(['plot', mem[0x55] | mem[0x56] << 8, mem[0x54], c.a]);
+      } else if (cmd === 11 && opened[x] && opened[x] !== 'S:') files[opened[x]] = (files[opened[x]] || '') + String.fromCharCode(c.a);
+      else if (cmd === 11) gfx.push(['plot', mem[0x55] | mem[0x56] << 8, mem[0x54], c.a]);
+      else if (cmd === 7 && opened[x]) { const f = files[opened[x]] || '', i = rpos[x] || 0; rpos[x] = i + 1; c.a = i < f.length ? f.charCodeAt(i) : 0; }
       else if (cmd === 0x11) gfx.push(['draw', mem[0x55] | mem[0x56] << 8, mem[0x54], mem[0x2FB]]);
-      else if (cmd === 3) gfx.push(['open', mem[0x3AA], mem[0x3AB]]);
+      else if (cmd === 3) {
+        let a = mem[0x344 + x] | mem[0x345 + x] << 8, nm = ''; while (mem[a] !== 155 && nm.length < 40) nm += String.fromCharCode(mem[a++]);
+        opened[x] = nm; rpos[x] = 0; if (nm === 'S:') gfx.push(['open', mem[0x34A + x], mem[0x34B + x]]);
+      } else if (cmd === 12) delete opened[x];
       else if (cmd === 5) {
-        const line = (inputs.shift() || '') + '\x9b', a = mem[0x344] | mem[0x345] << 8;
+        let line;
+        if (x === 0) line = (inputs.shift() || '') + '\x9b';
+        else { const f = files[opened[x]] || '', i = rpos[x] || 0, e = f.indexOf('\n', i); const ln = e < 0 ? f.slice(i) : f.slice(i, e); rpos[x] = e < 0 ? f.length : e + 1; line = ln + '\x9b'; }
+        const a = mem[0x344 + x] | mem[0x345 + x] << 8;
         for (let i = 0; i < line.length; i++) mem[a + i] = line.charCodeAt(i);
       }
       c.y = 1;
@@ -44,7 +52,7 @@ function run(xex, inputs = []) {
     seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF; mem[0xD20A] = (seed >> 16) & 255;
     c.step();
   }
-  return { out, gfx, mem, done: c.pc === 0xFFF0 };
+  return { out, gfx, mem, files, done: c.pc === 0xFFF0 };
 }
 async function interp(src, inputs = []) {
   let out = ''; const b = new Basic({ print: (s) => { out += s; }, input: async () => inputs.shift() || '' });
@@ -61,9 +69,9 @@ async function same(name, src, inputs = []) {
   const want = await interp(src, inputs.slice());
   ok(got.done && got.out === want, `${name} (matches interpreter)`, JSON.stringify([got.out, want, got.done]));
 }
-function expectOut(name, src, want, inputs = []) {
+function expectOut(name, src, want, inputs = [], files = {}) {
   const r = build(src); if (!r) { ok(false, name); return; }
-  const got = run(r.xex, inputs.slice());
+  const got = run(r.xex, inputs.slice(), files);
   ok(got.done && got.out === want, name, JSON.stringify([got.out, want, got.done]));
 }
 function expectErr(name, src, re) {
@@ -103,7 +111,7 @@ function expectErr(name, src, re) {
       'graphics/sound statements', j + ' ' + (g && [g.mem[0x2C4], g.mem[0xD202], g.mem[0xD203]]));
   }
   expectErr('float rejected', '10 A=1.5', /floating/);
-  expectErr('string var rejected', '10 A$="X"', /string/);
+  expectErr('string not DIMed', '10 A$="X"', /not DIMed/);
   expectErr('missing line', '10 GOTO 99', /does not exist/);
   expectErr('NEXT without FOR', '10 NEXT I', /without FOR/);
   expectErr('FOR without NEXT', '10 FOR I=1 TO 3', /no NEXT/);
@@ -111,9 +119,41 @@ function expectErr(name, src, re) {
   expectOut('division truncates toward zero', '10 A=-7:PRINT A/2;" ";7/-2;" ";-7/-2', '-3 -3 3\n');
   expectErr('undeclared array', '10 A(1)=2', /DIM/);
 
+  // ---- strings ----
+  expectOut('string assign/len', '10 DIM A$(20),B$(20):A$="HELLO":B$=A$:PRINT B$;" ";LEN(B$)', 'HELLO 5\n');
+  expectOut('substrings', '10 DIM A$(20):A$="HELLO":PRINT A$(2,4);" ";A$(3);" ";A$(1,1);" ";LEN(A$(2,3))', 'ELL LLO H 2\n');
+  expectOut('append with A$(LEN+1)=', '10 DIM A$(10):A$="AB":A$(LEN(A$)+1)="CD":PRINT A$;" ";LEN(A$):A$(2)="X":PRINT A$;" ";LEN(A$)', 'ABCD 4\nAX 2\n');
+  expectOut('chr$/asc', '10 DIM A$(5):A$=CHR$(72):PRINT A$;CHR$(73);" ";ASC("B");" ";ASC(A$)', 'HI 66 72\n');
+  expectOut('val', '10 DIM A$(8):A$="123":PRINT VAL(A$)+1;" ";VAL("-45");" ";VAL("12AB")', '124 -45 12\n');
+  expectOut('string compare', '10 DIM A$(9):A$="HELLO"\n20 IF A$="HELLO" THEN PRINT "EQ"\n30 IF A$<>"HELLO" THEN PRINT "NE"\n40 IF A$="HELL" THEN PRINT "SHORT"\n50 IF A$(1,2)="HE" AND LEN(A$)=5 THEN PRINT "OK"', 'EQ\nOK\n');
+  expectOut('input string', '10 DIM A$(12):INPUT A$:PRINT "HI ";A$;" ";LEN(A$)', '? HI WORLD 5\n', ['WORLD']);
+  expectOut('string overflow is error 9', '10 DIM A$(3):A$="HELLO":PRINT "NO"', 'ERROR 9\n');
+  expectOut('bad substring is error 9', '10 DIM A$(5):A$="HI":PRINT A$(1,3)', 'ERROR 9\n');
+  expectErr('A$(i,j)= rejected', '10 DIM A$(5):A$(1,2)="X"', /not supported/);
+  // ---- DATA / READ / RESTORE ----
+  expectOut('data/read/restore', '10 DATA 1,2,3,-4\n20 DATA HELLO,WORLD\n30 DIM N$(10):FOR I=1 TO 4:READ X:PRINT X;" ";:NEXT I:READ N$:PRINT N$;" ";:READ N$:PRINT N$\n40 RESTORE:READ X:PRINT X\n50 RESTORE 20:READ N$:PRINT N$\n60 DIM T(2):RESTORE 10:READ T(1),T(2):PRINT T(1)+T(2)',
+    '1 2 3 -4 HELLO WORLD\n1\nHELLO\n3\n');
+  expectOut('read past end is error 6', '10 DATA 1\n20 READ A,B:PRINT "NO"', 'ERROR 6\n');
+  // ---- bounds, STEP ----
+  expectOut('array subscript too big is error 9', '10 DIM A(3):A(3)=7:PRINT A(3):A(4)=1:PRINT "NO"', '7\nERROR 9\n');
+  expectOut('negative subscript is error 9', '10 DIM A(3):I=-1:PRINT A(I)', 'ERROR 9\n');
+  await same('variable step up', '10 S=2:FOR I=0 TO 10 STEP S:PRINT I;" ";:NEXT I:PRINT');
+  await same('variable step down', '10 S=-3:FOR I=10 TO 1 STEP S:PRINT I;" ";:NEXT I:PRINT');
+  await same('expression step', '10 A=1:FOR I=1 TO 9 STEP A+A:PRINT I;" ";:NEXT I:PRINT');
+  // ---- channels ----
+  {
+    const r = build('10 OPEN #2,8,0,"D:OUT.TXT":PRINT #2;"HI";1+2:PUT #2,65:CLOSE #2:PRINT "OK"');
+    const g = r && run(r.xex);
+    ok(g && g.done && g.out === 'OK\n' && g.files['D:OUT.TXT'] === 'HI3\x9bA', 'OPEN/PRINT #/PUT/CLOSE', g && JSON.stringify([g.out, g.files]));
+  }
+  {
+    const r = build('10 DIM S$(10):OPEN #2,4,0,"D:IN.TXT":INPUT #2,A,B:INPUT #2,S$:GET #2,C:CLOSE #2:PRINT A+B;" ";S$;" ";C');
+    const g = r && run(r.xex, [], { 'D:IN.TXT': '12,34\nHEL\nZ' });
+    ok(g && g.done && g.out === '46 HEL 90\n', 'OPEN/INPUT #/GET', g && JSON.stringify([g.out, g.done]));
+  }
   // MADS must produce the same bytes as asm6502.js for a program that uses most of the runtime
   const sample = '10 DIM A(5):GRAPHICS 3:COLOR 1:PLOT 1,1:DRAWTO 5,5:SOUND 0,50,10,5\n20 INPUT B:FOR I=0 TO 5:A(I)=I*B/3:PRINT A(I),:NEXT I\n30 ON B GOSUB 100:IF B>2 AND B<9 THEN PRINT INT(RND(0)*5):END\n100 RETURN';
-  const r = build(sample);
+  const r = build(sample + '\n200 DIM S$(9),T(3):S$="AB":S$(3)=CHR$(67):IF S$="ABC" THEN PRINT LEN(S$);VAL(S$)\n210 DATA 5,X\n220 READ T(1):READ S$:OPEN #2,8,0,"D:X":PRINT #2;S$:CLOSE #2:S=3:FOR I=1 TO 9 STEP S:NEXT I:T(1)=1:POKE 1536,ASC(S$)');
   if (r && fs.existsSync(mads)) {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-'));
     fs.writeFileSync(path.join(d, 'a.asm'), r.asm); 

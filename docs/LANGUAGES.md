@@ -25,7 +25,7 @@ toolchain has to be WebAssembly or plain JS. Status marks what exists today, not
 - **C++**: only practical on IBM PC / Windows; not planned for 8-bit targets.
 
 ## Our own pieces
-- `bcomp.js`: Atari BASIC to MADS asm / XEX. Design: 16-bit signed integers only, no strings or floats (compile errors),
+- `bcomp.js`: Atari BASIC to MADS asm / XEX. Design: 16-bit signed integers and fixed-capacity strings, no floats (compile error),
   runtime routines included only when used, output through CIO. Cross-checked against MADS and run on the node 6502.
 - GFA-style language: structured BASIC with procedures and a back end per CPU. Needs the assemblers first.
 - `tools/tui/tui.inc`: text-mode UI (windows, menus, mouse) for Atari tools; a browser-side `tui.js` skin is planned.
@@ -40,6 +40,9 @@ Nothing here beyond the existing interpreter and assembler has been built; WASM 
 
 Compiles an integer subset of Atari BASIC to MADS-style 6502 source and a runnable XEX. In the BASIC tab: Compile + run on Atari, Save .XEX, Save .ASM. Tests: `node tools/tests/bcomp.test.cjs` (runs the XEX on a node 6502, compares with the interpreter, cross-checks MADS) and `node scripts/bcomp-test.cjs` (boots a compiled program in the real emulator).
 
-- **Supported:** LET, PRINT/?, IF/THEN, GOTO, GOSUB/RETURN/POP, FOR/NEXT (constant STEP), ON GOTO/GOSUB, POKE, INPUT (numbers), DIM (numeric arrays), GRAPHICS, COLOR, SETCOLOR, PLOT, DRAWTO, POSITION, SOUND, END/STOP, REM. PEEK, DPEEK, ABS, INT, STICK, STRIG, PADDLE, PTRIG, and `INT(RND(0)*N)`.
-- **Not supported (compile error or missing):** floats (16-bit signed integers only; division truncates), string variables, DATA/READ/RESTORE, computed line numbers, `PRINT #`, non-constant STEP, array bounds checks, bare `RND`.
-- Not yet run on real hardware.
+- **Supported:** LET, PRINT/?, IF/THEN, GOTO, GOSUB/RETURN/POP, FOR/NEXT (constant or variable STEP), ON GOTO/GOSUB, POKE, INPUT (numbers and strings), DIM (numeric arrays, string variables up to 255 chars), GRAPHICS, COLOR, SETCOLOR, PLOT, DRAWTO, POSITION, SOUND, END/STOP, REM. PEEK, DPEEK, ABS, INT, STICK, STRIG, PADDLE, PTRIG, and `INT(RND(0)*N)`.
+- **Strings:** `DIM A$(n)`, `A$="text"`, `A$=B$`, `A$=CHR$(n)`, substrings `A$(i,j)` and `A$(i)`, append/overwrite with `A$(i)=...` (use `A$(LEN(A$)+1)=B$` to append), `LEN`, `ASC`, `VAL`, and `=` / `<>` comparison. Too-long assignments and bad substrings stop with `ERROR 9`. Not supported: `A$(i,j)=`, `STR$`, `<`/`>` on strings, string arrays. Overwriting a string with a later part of itself at a lower address is not handled.
+- **DATA / READ / RESTORE:** numbers and unquoted text items; `RESTORE n` goes to the first DATA line at or after `n`. Reading past the end stops with `ERROR 6`.
+- **Channels:** `OPEN #n,a,b,"D:FILE"` (device name must be a literal), `CLOSE #n`, `PRINT #n`, `INPUT #n`, `GET #n,v`, `PUT #n,v`. There is no end-of-file or error status handling.
+- **Errors:** array subscript out of range gives `ERROR 9`. There is no `TRAP`; a runtime error prints `ERROR n` and ends the program.
+- **Not supported (compile error or missing):** floats (16-bit signed integers only; division truncates), computed line numbers, `XIO`, `LOCATE`, `STATUS`, `TRAP`, bare `RND`.- Not yet run on real hardware.

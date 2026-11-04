@@ -4,7 +4,7 @@ const fs = require('fs');
 const ROOT = 'C:/Users/raver/ataricraft';
 const BComp = require(ROOT + '/web/js/bcomp.js');
 (async () => {
-  const src = '10 FOR I=1 TO 5\n20 PRINT "SQUARE ";I;" = ";I*I\n30 NEXT I\n40 PRINT "DONE"\n50 GOTO 50';
+  const src = '10 FOR I=1 TO 5\n20 PRINT "SQUARE ";I;" = ";I*I\n30 NEXT I\n40 DIM N$(12),A$(20):A$="HELLO":A$(LEN(A$)+1)=" ATARI":PRINT A$\n45 READ N$:READ X:PRINT N$;X*2\n46 DATA CRAFT,21\n47 S=3:FOR J=1 TO 10 STEP S:PRINT J;" ";:NEXT J:PRINT\n48 PRINT "DONE"\n50 GOTO 50';
   const r = BComp.compile(src);
   if (r.errors.length) { console.log('compile errors', r.errors); process.exit(1); }
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
@@ -19,7 +19,7 @@ const BComp = require(ROOT + '/web/js/bcomp.js');
   await p.click('#boot'); await p.waitForTimeout(9000);
   const t = await p.evaluate(() => ataricraft.screenText());
   console.log(t.split('\n').slice(0, 10).join('\n'));
-  const pass = /SQUARE 5 = 25/.test(t) && /DONE/.test(t) && !errs.length;
+  const pass = /SQUARE 5 = 25/.test(t) && /HELLO ATARI/.test(t) && /CRAFT42/.test(t) && /1 4 7 10/.test(t) && /DONE/.test(t) && !errs.length;
   await b.close();
   console.log(pass ? 'BCOMP E2E PASS' : 'BCOMP E2E FAIL ' + errs);
   process.exit(pass ? 0 : 1);
