@@ -103,6 +103,7 @@ cx   = $CA
 ck   = $CB
 pold = $CC
 mhl  = $CD
+cst  = $CE
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -1484,6 +1485,31 @@ curptr
  sta src+1
  rts
 
+; A = style bits in effect at the cursor (1 bold, 2 italic, 4 underline)
+curstyle
+ ldx cl
+ lda LPL,x
+ sta tp
+ lda LPH,x
+ sta tp+1
+ lda #0
+ sta cst
+ tay
+cs1 cpy cc
+ beq cs2
+ lda (tp),y
+ cmp #5
+ bcs cs3
+ tax
+ lda stab-1,x
+ eor cst
+ sta cst
+cs3 iny
+ bne cs1
+cs2 lda cst
+ and #7
+ rts
+
 linelen
  ldx cl
  lda LPL,x
@@ -1879,24 +1905,27 @@ status
  jsr putstr
  lda cc
  jsr putnum
- lda #<s3
- ldx #>s3
+ jsr curstyle
+ lsr
+ bcc sg1
+ pha
+ lda #<fbl
+ ldx #>fbl
  jsr putstr
- lda mfull
- jsr putnum
- lda #<s4
- ldx #>s4
+ pla
+sg1 lsr
+ bcc sg2
+ pha
+ lda #<fit
+ ldx #>fit
  jsr putstr
- lda mscr
- jsr putnum
- lda #<s5
- ldx #>s5
+ pla
+sg2 lsr
+ bcc sg3
+ lda #<fun
+ ldx #>fun
  jsr putstr
- lda mkey
- jsr putnum
- lda #'f'
- jsr putc
- lda rz
+sg3 lda rz
  beq sf1
  lda #<fz
  ldx #>fz
@@ -1928,6 +1957,9 @@ s2 dta c' Col ',b(0)
 s3 dta c'  full ',b(0)
 s4 dta c'f  scroll ',b(0)
 s5 dta c'f  key ',b(0)
+fbl dta c'  ',b(4),c'BLD',b(4),b(0)
+fit dta c' ',b(4),c'ITA',b(4),b(0)
+fun dta c' ',b(4),c'UND',b(4),b(0)
 fz dta c'  ',b(4),c'ZUM',b(4),b(0)
 fi dta c' ',b(4),c'INV',b(4),b(0)
 fb dta c' ',b(4),c'BLU',b(4),b(0)
