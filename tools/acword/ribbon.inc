@@ -1,7 +1,8 @@
-; ribbon.inc - shared WOW-series shell: ribbon, command bar, Tab completion.
+; ribbon.inc - shared WOW-series shell: menu bar, command bar, Tab completion.
 ; Included by an app (ACWord, later ACSpread/ACDBase). The app provides:
-;   tabl/tabh    low/high bytes of the four mode-name strings
-;   tooll/toolh  low/high bytes of the per-mode tool lines
+;   NMENU        number of menus; tabl/tabh name strings, tooll/toolh hint strings per menu
+;   items        draws the item line of menu cmode (shown while mn = 2)
+;   mn           menu state: 0 off, 1 waiting for a menu letter, 2 waiting for an item letter
 ;   cmdtab       command names, each 0-terminated, table ends with an extra 0
 ;   cmdexec      runs command number A (position in cmdtab); sets fl as the editor expects
 ;   appmsg       draws a custom message with putstr/putnum when cmsg = 3
@@ -124,12 +125,25 @@ rcok lda #1
  lda tmp
  jmp cmdexec
 
-; Tab key: next ribbon mode
+; Tab key: next / previous menu
 ribnext
  lda cmode
  clc
  adc #1
- and #3
+ cmp #NMENU
+ bcc rbn1
+ lda #0
+rbn1 sta cmode
+ lda #1
+ sta bd
+ rts
+
+ribprev
+ lda cmode
+ bne rbp1
+ lda #NMENU
+rbp1 sec
+ sbc #1
  sta cmode
  lda #1
  sta bd
@@ -143,6 +157,7 @@ cmdopen
  lda #0
  sta clen
  sta cmsg
+ sta mn
  rts
 
 ribbon
@@ -170,7 +185,7 @@ rb1 jsr putc
 rb2 jsr putc
  inc tmp
  lda tmp
- cmp #4
+ cmp #NMENU
  bne rbl
  lda #'|'
  jsr putc
@@ -197,7 +212,17 @@ rb2 jsr putc
 bar
  lda #0
  sta bi
- lda cmdon
+ lda mn
+ beq br0
+ cmp #1
+ bne brm
+ lda #<rs10
+ ldx #>rs10
+ jsr putstr
+ jmp br9
+brm jsr items
+ jmp br9
+br0 lda cmdon
  beq br1
  lda #<rs6
  ldx #>rs6
@@ -225,7 +250,12 @@ br3 cmp #3
  bne br4
  jsr appmsg
  jmp br9
-br4 lda #<rs8
+br4 cmp #4
+ bne br5
+ lda #<rs9
+ ldx #>rs9
+ jmp br8
+br5 lda #<rs8
  ldx #>rs8
 br8 jsr putstr
 br9 lda #0
@@ -242,3 +272,5 @@ br9 lda #0
 rs6 dta c'Command: ',b(0)
 rs7 dta c'Done.',b(0)
 rs8 dta c'Unknown command. Press Tab after a few letters to complete.',b(0)
+rs9 dta c'Not in the proof of concept yet.',b(0)
+rs10 dta c'Menu: press the highlighted letter.  Esc cancels.',b(0)
