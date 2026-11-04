@@ -132,6 +132,18 @@ lwx  = $E7
 pfn  = $E8
 pwi  = $E9
 pwh  = $EA
+lht  = $0500
+vis  = $0501
+anyv = $0502
+zy   = $0503
+zx   = $0504
+zl   = $0505
+zh   = $0506
+dlt   = $0507
+wrpf = $0508
+zyc  = $0509
+YT   = $0510
+HM   = $9E00
 pit  = $EB
 avl  = $EC
 avh  = $ED
@@ -220,6 +232,7 @@ start
  sta th
  sta mhl
  sta rz
+ sta anyv
  lda #63
  sta rm
  lda #0
@@ -438,7 +451,7 @@ sc3 stx nl
  sta dend+1
  rts
 
-full
+full jsr mkyt
  lda #0
  sta rr
 fu1 lda top
@@ -448,9 +461,33 @@ fu1 lda top
  jsr drawdoc
  inc rr
  lda rr
- cmp #ROWS
+ cmp vis
  bne fu1
- rts
+ ldx vis
+ lda YT,x
+ sta zl
+ lda #160
+ sec
+ sbc zl
+ beq fu3
+ sta zh
+ lda zl
+ jsr ypos
+fu2 lda #0
+ ldy #39
+fu2a sta (sp),y
+ dey
+ bpl fu2a
+ lda sp
+ clc
+ adc #40
+ sta sp
+ bcc fu2b
+ inc sp+1
+fu2b dec zh
+ bne fu2
+fu3 rts
+
 
 appendcur
  lda lm
@@ -508,21 +545,133 @@ dd0 rts
 
 rowsetup
  jsr rowptr
- ldy #0
- tya
-rs1 sta (sp),y
- iny
- bne rs1
- inc sp+1
+ lda #8
+ sta zh
+ lda anyv
+ beq rs0
+ lda t0
+ cmp nl
+ bcs rs0
+ tax
+ jsr lineh
+ sta zh
+rs0
+rs1 lda #0
+ ldy #39
 rs2 sta (sp),y
- iny
- cpy #64
- bne rs2
+ dey
+ bpl rs2
+ lda sp
+ clc
+ adc #40
+ sta sp
+ bcc rs3
+ inc sp+1
+rs3 dec zh
+ bne rs1
  rts
+
+; A = pixel y within the text area; sets rs and sp to that scanline
+ypos sta zw0
+ lda #0
+ sta zw1
+ asl zw0
+ rol zw1
+ asl zw0
+ rol zw1
+ asl zw0
+ rol zw1
+ lda zw0
+ sta zm0
+ lda zw1
+ sta zm1
+ asl zm0
+ rol zm1
+ asl zm0
+ rol zm1
+ lda zw0
+ clc
+ adc zm0
+ sta zm0
+ lda zw1
+ adc zm1
+ sta zm1
+ lda zm0
+ clc
+ adc #<(SCR+640)
+ sta rs
+ sta sp
+ lda zm1
+ adc #>(SCR+640)
+ sta rs+1
+ sta sp+1
+ rts
+
+; X = line; A = its height in scanlines (8 unless a height marker says otherwise)
+lineh lda #5
+ sta pcs
+ lda #11
+ sta pch1
+ jsr pfind
+ beq lh1
+ sec
+ sbc #4
+ asl
+ asl
+ rts
+lh1 lda #8
+ rts
+
+; compute the pixel y of each visible line (YT) and how many fit (vis)
+mkyt lda #0
+ sta zy
+ sta zx
+mky1 lda top
+ clc
+ adc zx
+ sta zl
+ lda #8
+ sta zh
+ lda anyv
+ beq mky2
+ lda zl
+ cmp nl
+ bcs mky2
+ tax
+ jsr lineh
+ sta zh
+mky2 lda zx
+ beq mky3
+ lda zy
+ clc
+ adc zh
+ cmp #161
+ bcs mky4
+mky3 ldx zx
+ lda zy
+ sta YT,x
+ clc
+ adc zh
+ sta zy
+ inc zx
+ lda zx
+ cmp #ROWS
+ bne mky1
+mky4 lda zx
+ sta vis
+ tax
+ lda zy
+ sta YT,x
+ rts
+
 
 rowptr
  ldx rr
- inx
+ cpx #ROWS
+ bcs rpo
+ lda YT,x
+ jmp ypos
+rpo inx
  inx
  lda ROWL,x
  sta rs
@@ -592,6 +741,8 @@ dla1 lda (tp),y
  cmp #14
  beq dla9
  cmp #5
+ bcc dla2
+ cmp #13
  bcc dla2
  cmp #15
  bcc dlav
@@ -685,6 +836,8 @@ dt1 ldy #0
  beq dtend
  cmp #5
  bcc dtsty
+ cmp #13
+ bcc dtnxj
  cmp #15
  bcc dtchar
  cmp #32
@@ -727,6 +880,7 @@ dtskip
 dtj2 lda col
  cmp lim
  bcs dtend
+dtnxj jmp dtnext
 dtnext
  inc16 tp
  jmp dt1
@@ -1132,9 +1286,27 @@ szm3 lda zm0
  lda rs+1
  adc #0
  sta sp+1
+ lda lht
+ lsr
+ lsr
+ sec
+ sbc #1
+ sta zx
+ asl
+ clc
+ adc zx
+ asl
+ asl
+ asl
+ sta src
+ lda #>HM
+ sta src+1
  lda #0
+ sta zyc
+szr1 ldy zyc
+ lda (src),y
  sta ry
-szr1 ldy ry
+ tay
  lda (gp),y
  sta v
  lda style
@@ -1205,9 +1377,9 @@ szr7 ldy #0
  sta sp
  bcc szr8
  inc sp+1
-szr8 inc ry
- lda ry
- cmp #8
+szr8 inc zyc
+ lda zyc
+ cmp lht
  beq szrx
  jmp szr1
 szrx rts
@@ -1625,7 +1797,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #29
+ cmp #31
  bcc ce0
  lda #17
 ce0 tax
@@ -1679,6 +1851,7 @@ hnew lda #0
  sta cl
  sta cc
  sta top
+ sta anyv
  jsr scan
  lda #2
  sta fl
@@ -1812,41 +1985,72 @@ hb2 lda #20
 hb3 sta pam
  jmp hset
 
-hlg lda #25
+hlg lda #1
+ sta dlt
+ lda #0
+ sta wrpf
+ jsr stw
+ jmp sth
+hsm lda #$FF
+ sta dlt
+ lda #0
+ sta wrpf
+ jsr stw
+ jmp sth
+hwid lda #1
+ sta dlt
+ sta wrpf
+ jmp stw
+hht lda #1
+ sta dlt
+ sta wrpf
+ jmp sth
+stw lda #25
  sta pcs
  lda #31
  sta pch1
- ldx cl
+ jmp stepm
+sth lda #5
+ sta pcs
+ lda #11
+ sta pch1
+ lda #1
+ sta anyv
+stepm ldx cl
  jsr pfind
- bne hlg1
- lda #26
-hlg1 cmp #30
- bcs hlg2
+ bne zs1
+ lda pcs
  clc
  adc #1
-hlg2 cmp #26
- bne hsz
- lda #0
-hsz sta pam
- jmp hset
-
-hsm lda #25
- sta pcs
- lda #31
- sta pch1
- ldx cl
- jsr pfind
- bne hsm1
- lda #26
-hsm1 cmp #25
- beq hsz
+zs1 clc
+ adc dlt
+ cmp pcs
+ bcs zs2
+ lda pcs
+ jmp zs3
+zs2 cmp pch1
+ bcc zs3
+ lda wrpf
+ beq zs4
+ lda pcs
+ jmp zs3
+zs4 lda pch1
  sec
  sbc #1
- cmp #26
- bne hsz
+zs3 sta zl
+ lda pcs
+ clc
+ adc #1
+ cmp zl
+ bne zs5
  lda #0
- beq hsz
-
+ sta zl
+zs5 lda zl
+ sta pam
+ jsr hset
+ lda #2
+ sta fl
+ rts
 hfont lda #22
  sta pcs
  lda #24
@@ -1885,9 +2089,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1),l(hwid-1),l(hht-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1),h(hwid-1),h(hht-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1989,7 +2193,7 @@ iph dta h(ip0),h(ip1),h(ip2),h(ip3),h(ip4),h(ip5)
 ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
-ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(28),c'L',b(27),c'O',b(26),b(0)
+ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(28),c'L',b(27),c'O',b(26),c'W',b(29),c'T',b(30),b(0)
 ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'B',b(25),c'I',b(24),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
@@ -2136,7 +2340,43 @@ su3 dey
  sta fl
  jmp drawdoc
 
-visible
+visible lda anyv
+ bne visv
+ jmp visible0
+visv jsr mkyt
+ lda cl
+ cmp top
+ bcs vv2
+ sta top
+ lda #2
+ sta fl
+ jmp mkyt
+vv2 sec
+ sbc top
+ cmp vis
+ bcc vv9
+ lda cl
+ sec
+ sbc #ROWS-1
+ bcs vv3
+ lda #0
+vv3 cmp top
+ bcs vv4
+ lda top
+vv4 sta top
+vv5 jsr mkyt
+ lda cl
+ sec
+ sbc top
+ cmp vis
+ bcc vv6
+ inc top
+ jmp vv5
+vv6 lda #2
+ sta fl
+vv9 rts
+
+visible0
  lda cl
  cmp top
  bcs vb
@@ -2260,11 +2500,15 @@ pfd2 ldx pal
  sta src+1
  ldy #0
 pfd4 lda (src),y
+ cmp #5
+ bcc pfd8
+ cmp #13
+ bcc pfd6
  cmp #15
  bcc pfd8
  cmp #32
  bcs pfd8
- cmp pcs
+pfd6 cmp pcs
  bcc pfd5
  cmp pch1
  bcc pfd9
@@ -2317,7 +2561,26 @@ lw2 lda #25
  ldx lwx
  jsr pfind
  sta pwi
- lda rm
+ lda #5
+ sta pcs
+ lda #11
+ sta pch1
+ ldx lwx
+ jsr pfind
+ beq lwh1
+ sec
+ sbc #4
+ asl
+ asl
+ sta lht
+ lda pwi
+ bne lwh2
+ lda #26
+ sta pwi
+ bne lwh2
+lwh1 lda #8
+ sta lht
+lwh2 lda rm
  sec
  sbc lm
  clc
@@ -2371,11 +2634,15 @@ fixcc ldx cl
  sta src+1
  ldy #0
 fx1 lda (src),y
+ cmp #5
+ bcc fx2
+ cmp #13
+ bcc fx1b
  cmp #15
  bcc fx2
  cmp #32
  bcs fx2
- iny
+fx1b iny
  bne fx1
 fx2 cpy cc
  bcc fx3
@@ -2629,6 +2896,8 @@ rf4 lda (tp),y
  cmp #13
  beq rf8
  cmp #5
+ bcc rf7
+ cmp #13
  bcc rf7
  cmp #15
  bcc rfv
@@ -3169,6 +3438,13 @@ dl :3 dta $70
  :16 dta $0F
  dta $41,a(dl)
 
+ org HM
+hmr4 dta b(0),b(2),b(4),b(6),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0)
+hmr8 dta b(0),b(1),b(2),b(3),b(4),b(5),b(6),b(7),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0)
+hmr12 dta b(0),b(0),b(1),b(2),b(2),b(3),b(4),b(4),b(5),b(6),b(6),b(7),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0)
+hmr16 dta b(0),b(0),b(1),b(1),b(2),b(2),b(3),b(3),b(4),b(4),b(5),b(5),b(6),b(6),b(7),b(7),b(0),b(0),b(0),b(0),b(0),b(0),b(0),b(0)
+hmr20 dta b(0),b(0),b(0),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(4),b(4),b(4),b(5),b(5),b(6),b(6),b(6),b(7),b(7),b(0),b(0),b(0),b(0)
+hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),b(4),b(5),b(5),b(5),b(6),b(6),b(6),b(7),b(7),b(7)
  org $9400
  icl 'font4.inc'
 
