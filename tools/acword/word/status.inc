@@ -221,10 +221,13 @@ sf1 lda iv
  lda #<fi
  ldx #>fi
  jsr putstr
-sf2 lda th
+sf2 ldx th
  beq sf3
- lda #<fb
- ldx #>fb
+ lda tfl,x
+ pha
+ lda tfh,x
+ tax
+ pla
  jsr putstr
 sf3 lda #0
  jsr putc
@@ -249,6 +252,10 @@ fun dta c' ',b(4),c'UND',b(4),b(0)
 fz dta c' ',b(4),c'ZUM',b(4),b(0)
 fi dta c' ',b(4),c'INV',b(4),b(0)
 fb dta c' ',b(4),c'BLU',b(4),b(0)
+fam dta c' ',b(4),c'AMB',b(4),b(0)
+fgr dta c' ',b(4),c'GRN',b(4),b(0)
+tfl dta l(fb),l(fb),l(fam),l(fgr)
+tfh dta h(fb),h(fb),h(fam),h(fgr)
 kname dta c'K:',b($9B)
 helpmsg dta c'^X command  Tab mode  ^B bold ^I italic ^U underline  Ctrl-arrows move',b(0)
 
