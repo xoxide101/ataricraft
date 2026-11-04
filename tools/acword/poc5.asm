@@ -130,6 +130,8 @@ pbu  = $E5
 pwd  = $E6
 lwx  = $E7
 pfn  = $E8
+pwi  = $E9
+pwh  = $EA
 ps   = $B0
 sd   = $B1
 lt   = $B2
@@ -513,6 +515,8 @@ rowptr
 drawtext
  lda #0
  sta pfn
+ sta pwi
+ sta pwh
  sta col
  sta style
  sta bf
@@ -593,15 +597,24 @@ dla4 sta pln
  cpx #16
  bne dlc
  lda pln
- jmp dlb
+ ldx pwi
+ beq dlr
+ asl
+dlr jmp dlb
 dlc cpx #15
  bne dld
  lda pln
+ ldx pwi
+ bne dlb
  lsr
  jmp dlb
 dld cpx #17
  bne dlb
- lda ptm
+ lda pwi
+ beq dld2
+ lda #0
+ beq dlb
+dld2 lda ptm
  cmp #14
  bne dlb
  lda jsn
@@ -670,10 +683,12 @@ dtchar
  ldx bf
  bne dtc6
  jsr drawchar
+ jsr wide2
  jmp dtskip
 dtc6 jsr drawchar6
 dtskip
  inc col
+ jsr wadd
  lda jon
  beq dtj2
  ldy #0
@@ -805,6 +820,27 @@ dca inc ry
 
 stab dta b(1),b(2),b(4),b(8)
 
+wide2 lda pwi
+ beq w29
+ inc col
+ lda #1
+ sta pwh
+ ldy #0
+ lda (tp),y
+ jsr drawchar
+ lda #0
+ sta pwh
+ dec col
+w29 rts
+
+wadd lda pwi
+ beq wa9
+ inc col
+wa9 rts
+
+WL dta b(0),b(0),b(0),b(0),b(1),b(1),b(1),b(1),b(6),b(6),b(6),b(6),b(7),b(7),b(7),b(7),b(24),b(24),b(24),b(24),b(25),b(25),b(25),b(25),b(30),b(30),b(30),b(30),b(31),b(31),b(31),b(31)
+WR dta b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31),b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31),b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31),b(0),b(3),b(12),b(15),b(16),b(19),b(28),b(31)
+
 bld ldx pfn
  cpx #23
  bne bl9
@@ -813,12 +849,22 @@ bl9 rts
 
 lite lda pfn
  cmp #22
- bne lt9
+ bne lt1
  lda ry
  and #1
- beq lt9
+ beq lt1
  lda v
  and #$15
+ sta v
+lt1 lda pwi
+ beq lt9
+ ldx v
+ lda pwh
+ bne lt2
+ lda WL,x
+ sta v
+ rts
+lt2 lda WR,x
  sta v
 lt9 rts
 
@@ -1218,7 +1264,7 @@ mf2 inx
 
 ; --- app command layer (shell is in ribbon.inc) ---
 cmdexec
- cmp #27
+ cmp #29
  bcc ce0
  lda #17
 ce0 tax
@@ -1405,6 +1451,16 @@ hb2 lda #20
 hb3 sta pam
  jmp hset
 
+hlg lda #25
+ bne hsz
+hsm lda #0
+hsz sta pam
+ lda #25
+ sta pcs
+ lda #26
+ sta pch1
+ jmp hset
+
 hfont lda #22
  sta pcs
  lda #24
@@ -1443,9 +1499,9 @@ ct0 lda #$0F
  rts
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1)
 
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
@@ -1547,7 +1603,7 @@ iph dta h(ip0),h(ip1),h(ip2),h(ip3),h(ip4),h(ip5)
 ip0 dta c'N',b(5),c'O',b(17),c'S',b(17),c'A',b(17),c'X',b(17),b(0)
 ip1 dta c'U',b(17),c'T',b(17),c'C',b(17),c'P',b(17),c'O',b(3),c'E',b(4),b(0)
 ip2 dta c'F',b(17),c'N',b(17),c'R',b(17),c'G',b(17),b(0)
-ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(17),c'L',b(17),c'O',b(26),b(0)
+ip3 dta c'R',b(17),c'B',b(0),c'I',b(1),c'U',b(2),c'S',b(28),c'L',b(27),c'O',b(26),b(0)
 ip4 dta c'L',b(20),c'C',b(21),c'R',b(22),c'J',b(23),c'B',b(25),c'I',b(24),b(0)
 ip5 dta c'R',b(7),c'T',b(17),c'M',b(19),c'B',b(8),c'C',b(9),c'Z',b(6),c'L',b(10),c'H',b(18),b(0)
 
@@ -1868,14 +1924,24 @@ lw1 lda #19
  clc
  adc #2
  sta pof
-lw2 lda rm
+lw2 lda #25
+ sta pcs
+ lda #26
+ sta pch1
+ ldx lwx
+ jsr pfind
+ sta pwi
+ lda rm
  sec
  sbc lm
  clc
  adc #1
  sec
  sbc pof
- rts
+ ldx pwi
+ beq lw3
+ lsr
+lw3 rts
 ; X = line; A = style bits carried into it from earlier lines of its paragraph
 pstyle stx psl
  jsr paln
