@@ -72,6 +72,11 @@ The on-screen keyboard shows the Atari glyphs on the keys. **Show: Lower / Caps 
 ![AFM80 on 80 columns](docs/screenshots/06-afm80.png)
 ![AFM Properties on SpartaDOS X](docs/screenshots/08-afm-properties.png)
 
+**Inspect** (side tab, [docs/INSPECT.md](docs/INSPECT.md)) opens a panel to look inside the running machine and drive it: RAM page map, FujiNet network log, editable IP settings, extended-RAM bank viewer (128K to 1088K), a picker that runs the bundled tools (PING, NSLOOKUP, TRACERT, WHOIS, IPCONFIG, self tests) straight from the page, memory poke/find, typed text and fake HTTP replies. `tools/ctl.cjs` does the same from outside the browser.
+
+![Inspector, Banks tab](docs/screenshots/13-inspect-banks-full.png)
+![Inspector, Inject tab](docs/screenshots/11-inspect-inject.png)
+
 **WebAFM** (side tab) is a two-pane disk explorer in the page itself for DOS 2, MyDOS and SpartaDOS/BW-DOS images: copy/move between disks, folders, rename, A-Z folder maker, text/hex editor with a 6502 disassembler, folder-to-disk(s), `LONGNAME.TXT` long names, and per-disk feature chips.
 
 ![WebAFM](docs/screenshots/07-webafm.png)
