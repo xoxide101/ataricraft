@@ -977,26 +977,60 @@ kright
  inc cc
 kr1 rts
 
+memup
+ lda dend
+ sec
+ sbc src
+ sta lo
+ lda dend+1
+ sbc src+1
+ sta hi
+ lda dend
+ clc
+ adc #1
+ sta gp
+ lda dend+1
+ adc #0
+ sta gp+1
+ lda dend
+ clc
+ adc #2
+ sta sp
+ lda dend+1
+ adc #0
+ sta sp+1
+ lda src
+ clc
+ adc #1
+ sta dst
+ lda src+1
+ adc #0
+ sta dst+1
+ ldx hi
+ beq mu2
+mu1 dec gp+1
+ dec sp+1
+ ldy #0
+mu1b dey
+ lda (gp),y
+ sta (sp),y
+ cpy #0
+ bne mu1b
+ dex
+ bne mu1
+mu2 ldy lo
+mu3 lda (src),y
+ sta (dst),y
+ dey
+ cpy #$FF
+ bne mu3
+ rts
+
 insert
  sta tmp
  jsr curptr
- lda dend
- sta dst
- lda dend+1
- sta dst+1
+ jsr memup
  inc16 dend
-in2 ldy #0
- lda (dst),y
- iny
- sta (dst),y
- lda dst
- cmp src
- bne in3
- lda dst+1
- cmp src+1
- beq in4
-in3 dec16 dst
- jmp in2
 in4 ldy #0
  lda tmp
  sta (src),y
