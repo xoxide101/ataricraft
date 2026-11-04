@@ -66,7 +66,7 @@ cmdon= $A9
 clen = $AA
 bd   = $AB
 cmsg = $AC
-CMDB = $0780
+CMDB = $0E00
 
 .macro inc16 p
  inc :p
