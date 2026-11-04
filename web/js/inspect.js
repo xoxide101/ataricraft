@@ -119,6 +119,70 @@
     poke(addr, data) { getEmu().poke(addr, bytesOf(data)); return bytesOf(data).length; },
     state() { const emu = getEmu(); return { booted: !!emu, ram: emu ? ramText(ram()) : '', net: NetLog.summary(), ip: NetLog.cfg }; },
   };
+  // ---------------------------------------------------------------- extended RAM banks (130XE / Rambo / Compy-Shop / 576K / 1088K)
+  // Neither WASM core exports its extended RAM, but the CPU view ($4000-$7FFF) always shows the bank PORTB selects. So the
+  // Inspector injects a tiny resident monitor (tools/bankmon/bankmon.asm) into a free page and hooks the deferred VBI.
+  // To read a bank the monitor maps it in, holds it there across a frame so the host can read or write the window, then restores PORTB.
+  const Banks = (() => {
+    const SMALL = { '16': 1, '48': 1, '52': 1, '64': 1 };
+    let mon = null; // { page, banks:[{n, portb}] }
+    const E = () => { const emu = getEmu(); if (!emu) throw new Error('boot first'); if (emu.core === 'altirra') throw new Error('Extended-RAM banks need the libatari800 core: the Altirra WASM build only gives the page a read-only copy of the 64 KB CPU view, so the monitor cannot be injected. Switch Core to libatari800 and Boot.'); return emu; };
+    const step = (emu, n) => { for (let i = 0; i < n; i++) emu.frame(); };
+    const combos = () => { const bits = [0x02, 0x04, 0x08, 0x20, 0x40, 0x80], t = []; for (let i = 0; i < 64; i++) { let b = 0x01; bits.forEach((m, k) => { if (i & (1 << k)) b |= m; }); t.push(b); } return t; };
+    const until = (emu, cond, what) => { for (let i = 0; i < 12; i++) { step(emu, 1); if (cond(emu.mem())) return; } throw new Error('bank monitor did not respond (' + what + '). The program may have replaced the vertical-blank vector ($0224), turned off NMIs or the OS ROM; run install() again or choose another page.'); };
+    function findPage(emu) {
+      const r = ram(), free = (p) => r.pages[p].nonzero === 0 && !r.pages[p].label;
+      if (free(6) && free(7)) return 6;
+      for (let p = Math.max(8, (r.sys.MEMLO + 255) >> 8); p < (r.sys.MEMTOP >> 8) - 2; p++) if (free(p) && free(p + 1)) return p;
+      throw new Error('no two free zero-filled pages for the monitor');
+    }
+    function install(page) {
+      const emu = E(), M = AC.BankMon; if (!M) throw new Error('bankmon.js missing');
+      const m = emu.mem(), code = unb64(M.code), cur = W(m, 0x224);
+      if (mon && W(m, 0x224) === (mon.page << 8) + M.entry && m[mon.page << 8 | 7] === 0xB7) return mon;
+      const pg = page == null ? findPage(emu) : page | 0;
+      for (const i of M.fix) code[i] += pg - 6;
+      const base = pg << 8; emu.poke(base, code);
+      emu.poke(base + 0x10, Uint8Array.from(combos()));
+      emu.poke(base + 5, [cur & 255, cur >> 8]);
+      const e = base + M.entry; emu.poke(0x224, [e & 255, e >> 8]);
+      mon = { page: pg, banks: null };
+      return mon;
+    }
+    function probe() {
+      const emu = E(); if (SMALL[String(emu.opt && emu.opt.ram)]) { mon = { page: 0, banks: [] }; return []; }
+      install(); const base = mon.page << 8, c = combos();
+      emu.poke(base, [2]); until(emu, (x) => x[base + 2] === 2, 'probe');
+      const res = emu.mem().slice(base + 0x90, base + 0xD0); emu.poke(base + 2, [0]);
+      mon.banks = []; res.forEach((v, i) => { if (v === 1) mon.banks.push({ n: mon.banks.length, portb: c[i] }); });
+      return mon.banks;
+    }
+    const need = () => { if (!mon || !mon.banks) probe(); install(); return mon.banks; };
+    function hold(n, fn) {
+      const emu = E(), banks = need(), b = banks[n]; if (!b) throw new Error(`bank ${n} does not exist (this machine has ${banks.length})`);
+      const base = mon.page << 8;
+      emu.poke(base + 1, [b.portb]); emu.poke(base, [1]);
+      until(emu, (x) => x[base + 2] === 1, 'select bank ' + n);
+      try { return fn(emu.mem()); } finally { emu.poke(base + 3, [1]); until(emu, (x) => x[base + 2] === 0, 'release bank ' + n); }
+    }
+    const win = (off, len) => { off |= 0; len = len == null ? 16384 - off : len | 0; if (off < 0 || len < 0 || off + len > 16384) throw new Error('offset/length must stay inside the 16 KB bank'); return [0x4000 + off, len]; };
+    return {
+      install, probe, list: () => need().map((b) => Object.assign({}, b)), page: () => mon && mon.page,
+      read: (n, off, len) => { const [a, l] = win(off, len); return hold(n, (m) => m.slice(a, a + l)); },
+      write: (n, off, data) => { const d = bytesOf(data), [a] = win(off, d.length); return hold(n, (m) => { E().poke(a, d); return d.length; }); },
+      fill: (n, off, len, v) => { const [a, l] = win(off, len); return hold(n, () => { E().poke(a, new Uint8Array(l).fill(v & 255)); return l; }); },
+      // Per-bank map: for each of the 64 pages of each bank, how many bytes are non-zero.
+      scan() { const banks = need(); return banks.map((b) => hold(b.n, (m) => { const pg = []; for (let p = 0; p < 64; p++) { let nz = 0; for (let i = 0x4000 + p * 256, e = i + 256; i < e; i++) if (m[i]) nz++; pg.push(nz); } return { n: b.n, portb: b.portb, pages: pg, used: pg.reduce((s, x) => s + (x ? 1 : 0), 0) }; })); },
+      find(pattern, max) {
+        const pat = /^[0-9a-f\s]+$/i.test(pattern) && /\s|^[0-9a-f]{2}$/i.test(pattern.trim()) ? pattern.trim().split(/\s+/).map((x) => parseInt(x, 16)) : Array.from(pattern, (c) => c.charCodeAt(0));
+        const out = [];
+        for (const b of need()) { if (out.length >= (max || 64)) break; hold(b.n, (m) => { for (let a = 0x4000; a <= 0x8000 - pat.length && out.length < (max || 64); a++) { let k = 0; while (k < pat.length && m[a + k] === pat[k]) k++; if (k === pat.length) out.push({ bank: b.n, offset: a - 0x4000 }); } }); }
+        return out;
+      },
+    };
+  })();
+
+  Inspect.banks = Banks;
   AC.NetLog = NetLog; AC.Inspect = Inspect;
 
   // ---------------------------------------------------------------- panel
@@ -133,7 +197,7 @@
     const show = (k) => { for (const n in tabs) { tabs[n].box.style.display = n === k ? '' : 'none'; tabs[n].btn.style.opacity = n === k ? 1 : .6; } localStorage.setItem('ac.inspect.tab', k); refresh(); };
     const mk = (k, label) => { const box = el('div', 'display:flex;flex-direction:column;gap:6px'), b = btn(label, () => show(k)); tabs[k] = { box, btn: b }; bar.append(b); body.append(box); return box; };
     bar.append(el('b', '', 'INSPECT'));
-    const ramBox = mk('ram', 'RAM'), netBox = mk('net', 'Network'), ipBox = mk('ip', 'IP'), injBox = mk('inj', 'Inject'), remBox = mk('rem', 'Remote');
+    const ramBox = mk('ram', 'RAM'), netBox = mk('net', 'Network'), ipBox = mk('ip', 'IP'), bnkBox = mk('bnk', 'Banks'), injBox = mk('inj', 'Inject'), remBox = mk('rem', 'Remote');
     bar.append(el('span', 'flex:1'), btn('X', () => { win.style.display = 'none'; }));
 
     // RAM
@@ -153,8 +217,19 @@
     const apply = () => { try { const o = {}; for (const k in fields) o[k] = k === 'dhcp' ? fields[k].checked : fields[k].value; NetLog.setIp(o); ipMsg.textContent = 'Applied. The Atari sees this the next time it reads the adapter config (FujiNet command $E8, or IPCONFIG).'; } catch (e) { ipMsg.textContent = 'Error: ' + e.message; } };
     const fromPc = async () => { try { const base = localStorage.getItem('ac.tnfsbridge') || 'http://127.0.0.1:8765', r = await (await fetch(base + '/ctl/info', { method: 'POST', headers: { 'X-AC-Token': localStorage.getItem('ac.nettoken') || '' } })).json(); const a = r.interfaces && r.interfaces[0]; if (!a) throw new Error('no interface'); fields.ip.value = a.address; fields.mask.value = a.netmask; fields.gw.value = a.gateway || fields.gw.value; fields.mac.value = a.mac || fields.mac.value; fields.dhcp.checked = true; apply(); } catch (e) { ipMsg.textContent = 'Needs the relay: ' + e.message; } };
     ipBox.append(grid, el('div', 'display:flex;gap:6px', ''), ipMsg); ipBox.children[1].append(btn('Apply', apply), btn('Use this PC\'s address (relay)', fromPc, 'Copies the PC\'s first non-loopback IPv4 settings from the relay'), btn('Reset', () => { NetLog.setIp({ ip: '127.0.0.1', gw: '127.0.0.1', mask: '255.0.0.0', dns: '8.8.8.8', dhcp: false }); fillIp(); }));
+    // Banks (extended RAM)
+    function inp0(ph, w) { const i = el('input', `background:#0c0e12;color:#dfe3ea;border:1px solid #2a2f39;border-radius:4px;padding:3px 6px;${w ? 'width:' + w : ''}`); i.placeholder = ph; return i; }
+    const bInfo = el('pre', 'margin:0;font:12px Consolas,monospace;white-space:pre-wrap'), bCv = el('canvas'), bHex = el('pre', 'margin:0;font:11px Consolas,monospace;background:#0c0e12;padding:6px;border-radius:4px;overflow:auto'), bFind = inp0('find (hex bytes or text)', '200px'), bOff = inp0('offset (hex)', '90px');
+    bCv.width = 512; bCv.height = 256; bCv.style.cssText = 'width:512px;height:256px;image-rendering:pixelated;background:#000;align-self:center;cursor:pointer';
+    let bScan = null, bSel = 0, bBase = 0;
+    const bShow = () => { try { const d = AC.Inspect.banks.read(bSel, bBase, 256); let s = `Bank ${bSel}  (PORTB $${hex(bScan ? bScan[bSel].portb : 0, 2)})  offset $${hex(bBase, 4)}  = CPU $${hex(0x4000 + bBase, 4)}\n`; for (let i = 0; i < 256; i += 16) s += `${hex(bBase + i, 4)}  ${[...d.subarray(i, i + 16)].map((x) => hex(x, 2)).join(' ')}  ${[...d.subarray(i, i + 16)].map((x) => (x >= 32 && x < 127 ? String.fromCharCode(x) : '.')).join('')}\n`; bHex.textContent = s; } catch (e) { bHex.textContent = 'Error: ' + e.message; } };
+    const bDraw = () => { const g = bCv.getContext('2d'), h = Math.max(1, Math.min(8, (256 / bScan.length) | 0)); g.fillStyle = '#000'; g.fillRect(0, 0, 512, 256); bScan.forEach((b, i) => b.pages.forEach((nz, p) => { g.fillStyle = nz ? `rgb(${nz / 3 | 0},${Math.min(255, 70 + nz) | 0},${nz / 2 | 0})` : '#12161c'; g.fillRect(p * 8, i * h, 7, h - 1); })); if (bSel < bScan.length) { g.strokeStyle = '#fc0'; g.strokeRect(0.5, bSel * h + 0.5, 511, h - 1); } bCv.dataset.h = h; };
+    const bRun = () => { try { bScan = AC.Inspect.banks.scan(); bInfo.textContent = bScan.length ? `${bScan.length} extended banks (${bScan.length * 16} KB). Monitor at $${hex(AC.Inspect.banks.page() << 8, 4)}. Each row is one 16 KB bank, each cell a 256-byte page ($4000-$7FFF window); brightness = non-zero bytes.` : 'No extended RAM on this machine (pick a 130XE / Rambo / 576K / 1088K RAM size).'; if (bScan.length) { bDraw(); bShow(); } } catch (e) { bInfo.textContent = 'Error: ' + e.message; } };
+    bCv.onclick = (e) => { if (!bScan) return; const r = bCv.getBoundingClientRect(), h = +bCv.dataset.h || 4, i = Math.floor((e.clientY - r.top) / r.height * 256 / h); if (i >= 0 && i < bScan.length) { bSel = i; bBase = 0; bDraw(); bShow(); } };
+    const bRow = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center'); bRow.append(btn('Scan banks', bRun, 'Installs the resident bank monitor (VBI hook) and maps every bank in turn'), btn('< 256', () => { bBase = Math.max(0, bBase - 256); bShow(); }), bOff, btn('Go', () => { bBase = Math.min(16384 - 256, parseInt(bOff.value || '0', 16) || 0); bShow(); }), btn('256 >', () => { bBase = Math.min(16384 - 256, bBase + 256); bShow(); }), bFind, btn('Find', () => { try { const r = AC.Inspect.banks.find(bFind.value, 32); bInfo.textContent = r.length ? 'Found: ' + r.map((x) => `bank ${x.bank} +$${hex(x.offset, 4)}`).join('  ') : 'Not found in any bank.'; } catch (e) { bInfo.textContent = 'Error: ' + e.message; } }));
+    bnkBox.append(el('div', 'color:#8a93a3', 'Extended RAM. Needs the libatari800 core. The monitor sits in a free page and hooks the vertical-blank vector, so the running program must keep the OS interrupts on. Reading holds a bank for about two frames.'), bRow, bInfo, bCv, bHex);
     // Inject
-    const inp = (ph, w) => { const i = el('input', `background:#0c0e12;color:#dfe3ea;border:1px solid #2a2f39;border-radius:4px;padding:3px 6px;${w ? 'width:' + w : ''}`); i.placeholder = ph; return i; }, say = el('div', 'color:#8a93a3;white-space:pre-wrap');
+    const inp = inp0, say = el('div', 'color:#8a93a3;white-space:pre-wrap');
     const guard = (f) => async () => { try { say.textContent = String(await f()); } catch (e) { say.textContent = 'Error: ' + e.message; } };
     const pAddr = inp('address (hex)', '90px'), pBytes = inp('bytes (hex, spaces)', '260px'), pLen = inp('length', '60px');
     const rowA = el('div', 'display:flex;gap:6px;flex-wrap:wrap;align-items:center'); rowA.append(pAddr, pBytes, btn('Poke', guard(() => { const a = parseInt(pAddr.value, 16), d = pBytes.value.trim().split(/\s+/).map((x) => parseInt(x, 16)); if (isNaN(a) || d.some(isNaN)) throw new Error('bad hex'); return `Wrote ${Inspect.poke(a, d)} byte(s) at $${hex(a, 4)}`; })), pLen,
@@ -200,6 +275,7 @@
     const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'X-AC-Token': tok() }, body: body == null ? null : JSON.stringify(body), signal: ctl && ctl.signal });
     const ALLOW = { state: () => window.ataricraft.state(), describe: () => window.ataricraft.describe(), peek: (a, l) => window.ataricraft.peek(a, l), poke: (a, d) => Inspect.poke(a, d), dump: (a, l) => Inspect.dump(a, l), find: (p, f, t) => Inspect.find(p, f, t), fill: (a, l, v) => Inspect.fill(a, l, v),
       ram: () => { const r = ram(); return Object.assign({}, r, { text: ramText(r) }); }, net: () => Inspect.net(), ip: () => Inspect.ip(), setIp: (o) => Inspect.setIp(o), mock: (p, s, b) => Inspect.mock(p, s, b), unmock: (i) => Inspect.unmock(i), resetNet: () => Inspect.resetNet(),
+      banks: () => Banks.list(), bankScan: () => Banks.scan(), bankRead: (n, o, l) => Banks.read(n, o, l), bankWrite: (n, o, d) => Banks.write(n, o, d), bankFill: (n, o, l, v) => Banks.fill(n, o, l, v), bankFind: (p, m) => Banks.find(p, m),
       load: (name, d) => Inspect.load(name, d), mountDisk: (d, name, data) => window.ataricraft.mountDisk(d, name, bytesOf(data)), type: (t) => window.ataricraft.type(t), press: (f, fr) => window.ataricraft.press(f, fr), screenText: () => window.ataricraft.screenText(),
       screenshot: async (o) => window.ataricraft.screenshot(o), reset: (c) => window.ataricraft.reset(c), pause: () => window.ataricraft.pause(), run: () => window.ataricraft.run(), step: (nf) => window.ataricraft.step(nf), speed: (x) => window.ataricraft.speed(x) };
     async function loop() {

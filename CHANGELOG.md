@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Extended-RAM bank viewer** (Inspector > Banks, `AC.Inspect.banks`): read, write, scan and search every 16 KB bank of 128K/320K/576K/1088K machines. Neither core exports extended RAM, so a small resident monitor (`tools/bankmon`) hooks the vertical-blank vector and maps banks into the $4000-$7FFF window. libatari800 only (tested 128K and 1088K, every byte); Altirra gives a clear error. Needs the running program to leave OS interrupts on. There is no 256K or 512K option.
 - **Inspector** (sidebar tab, [docs/INSPECT.md](docs/INSPECT.md)): RAM page map and system variables, network activity log with byte counters, editable virtual adapter IP settings (returned by the FujiNet adapter-config command), and injection of memory, programs, typed text and fake N:HTTP replies.
 - **Remote control:** the relay's /ctl/* endpoints and 	ools/ctl.cjs let scripts outside the browser read and drive the emulator (token protected). Tested with scripts/inspect-test.cjs; not tried from another machine.
 
