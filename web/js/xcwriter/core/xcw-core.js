@@ -282,7 +282,7 @@ function toHtml(ps, title) {
 }
 
 function toMd(ps) {
-  return ps.map((p) => (p.bullet ? '- ' : '') + p.runs.map((r) => { let t = r.t.replace(/([*_`])/g, '\\$1'); if (r.b && r.i) t = '***' + t + '***'; else if (r.b) t = '**' + t + '**'; else if (r.i) t = '*' + t + '*'; return t; }).join('')).join('\n\n');
+  return ps.map((p) => (p.bullet ? '- ' : '') + p.runs.map((r) => { let t = r.t.replace(/([\\\\*_`])/g, '\\$1'); if (r.b && r.i) t = '***' + t + '***'; else if (r.b) t = '**' + t + '**'; else if (r.i) t = '*' + t + '*'; return t; }).join('')).join('\n\n');
 }
 
 // Craft text to ATASCII text: printable ASCII is kept, everything else becomes '?'. Lines end in $9B.
@@ -322,7 +322,8 @@ __def("craftimport.cjs", function (module, exports, require) {
 // and Atari Letter Perfect, PaperClip, First XLEnt, Text Wizard and Bank Street Writer (explicit --format; see docs/formats).
 // AtariWriter inverse video, centre and right codes are decoded. See docs/IMPORT.md.
 const fs = require('fs'), path = require('path');
-const MAXPAYLOAD = 0x3fff;
+const MAXPAYLOAD = 0x3fff; // format limit; ACWriter's own document area (-$8FFF) holds ATARI_DOC bytes
+const ATARI_DOC = 11264;
 
 // ---- detection -----------------------------------------------------------
 function detect(buf, name) {
@@ -404,38 +405,74 @@ function fromText(buf) {
   return s.split('\n').map((l) => { const p = para(); p.runs.push({ t: clean(l) }); return p; });
 }
 
+// Windows-1252 0x80-0x9f to Unicode (RTF \'xx escapes are code page bytes)
+const CP1252 = [0x20ac, 0x81, 0x201a, 0x192, 0x201e, 0x2026, 0x2020, 0x2021, 0x2c6, 0x2030, 0x160, 0x2039, 0x152, 0x8d, 0x17d, 0x8f, 0x90, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x2dc, 0x2122, 0x161, 0x203a, 0x153, 0x9d, 0x17e, 0x178];
+const cp1252 = (b) => String.fromCharCode(b >= 0x80 && b < 0xa0 ? CP1252[b - 0x80] : b);
+
+// RTF reader: groups with inherited character state, \uN with \ucN fallback skipping, \'xx (cp1252), hidden destinations
+// (fonttbl, stylesheet, info, pict, fields' instructions...), \pntext/\listtext bullets, tables as "a | b | c" lines.
 function fromRtf(buf) {
-  const s = buf.toString('latin1'); const out = []; let cur = para();
-  const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const stack = []; let skip = 0, depth = 0, ucSkip = 0, bulletTab = 0;
-  const SKIPDEST = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'header', 'footer', 'generator']);
-  const add = (t) => { if (!skip && t) cur.runs.push({ t: clean(t), ...st }); };
+  const s = buf.toString('latin1'); const out = []; let cur = para(); let palign = 'l';
+  const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const stack = [];
+  let skip = 0, depth = 0, uc = 1, skipUnits = 0, intbl = 0, bulletTab = 0, cap = null;
+  const SKIPDEST = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'header', 'headerl', 'headerr', 'headerf', 'footer', 'footerl', 'footerr', 'footerf', 'generator',
+    'listtable', 'listoverridetable', 'rsidtbl', 'themedata', 'colorschememapping', 'datastore', 'latentstyles', 'xmlnstbl', 'fldinst', 'objdata', 'ftnsep', 'ftnsepc', 'aftnsep', 'aftnsepc',
+    'revtbl', 'pgptbl', 'mmathPr', 'wgrffmtfilter', 'template', 'private', 'bkmkstart', 'bkmkend']);
+  const newPara = () => { cur.align = cur.align || 'l'; out.push(cur); cur = para(); cur.align = palign; };
+  const add = (t) => {
+    if (skip || !t) return;
+    if (cap) { cap.buf += t; return; }
+    const r = { t: clean(t), ...st }; const last = cur.runs[cur.runs.length - 1];
+    if (last && KEYS.every((k) => !!last[k] === !!r[k])) last.t += r.t; else cur.runs.push(r);
+  };
+  const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
+  const endRow = () => { const l = cur.runs[cur.runs.length - 1]; if (l && / \| $/.test(l.t)) l.t = l.t.slice(0, -3); if (cur.runs.length) newPara(); };
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
-    if (c === '{') { stack.push({ ...st, skip }); depth++; if (s[i + 1] === '\\' && s[i + 2] === '*') skip = skip || depth; }
-    else if (c === '}') { const p = stack.pop(); if (p) { Object.assign(st, p); if (skip && depth < skip) skip = 0; else skip = p.skip; } depth--; }
-    else if (c === '\\') {
-      const m = /^\\([a-zA-Z]+)(-?\d+)? ?/.exec(s.slice(i));
+    if (c === '{') {
+      stack.push({ ...st, skip, uc, cap }); depth++;
+      const nx = /^\{(\\\*)?\\([a-zA-Z]+)/.exec(s.slice(i, i + 24));
+      if (!skip && nx && (nx[2] === 'listtext' || nx[2] === 'pntext')) cap = { depth, buf: '' };
+      else if (nx && nx[1]) skip = skip || depth;
+    } else if (c === '}') {
+      if (cap && cap.depth === depth) {
+        const t = cap.buf.trim();
+        if (/^[\u00b7\u2022\u00a7\uf0b7\uf0a7\u25cf\u25cb\u25aao*-]$/.test(t)) cur.bullet = true; else if (t) { cap = null; add(t + ' '); }
+      }
+      const p = stack.pop();
+      if (p) { for (const k of KEYS) st[k] = p[k]; skip = p.skip; uc = p.uc; cap = p.cap; }
+      depth--;
+    } else if (c === '\\') {
+      const m = /^\\([a-zA-Z]+)(-?\d+)? ?/.exec(s.slice(i, i + 40));
       if (m) {
         const w = m[1], n = m[2] === undefined ? null : +m[2]; i += m[0].length - 1;
         if (SKIPDEST.has(w) && !skip) skip = depth;
-        else if (w === 'par' || w === 'line') { if (!skip) { out.push(cur); cur = para(); } }
-        else if (w === 'pard') cur.align = 'l';
-        else if (w === 'qc') cur.align = 'c'; else if (w === 'qr') cur.align = 'r'; else if (w === 'qj') cur.align = 'j'; else if (w === 'ql') cur.align = 'l';
+        else if (w === 'par') { if (!skip && !cap) { if (intbl) { if (cur.runs.length) add(' '); } else newPara(); } }
+        else if (w === 'line') { if (!skip && !cap) newPara(); }
+        else if (w === 'pard') { palign = 'l'; cur.align = 'l'; intbl = 0; }
+        else if (w === 'intbl') intbl = 1;
+        else if (w === 'cell' || w === 'nestcell') { if (!skip && !cap) { const l = cur.runs[cur.runs.length - 1]; if (l && / $/.test(l.t)) l.t = l.t.trimEnd(); add(' | '); } }
+        else if (w === 'row' || w === 'nestrow') { if (!skip) { endRow(); intbl = 0; } }
+        else if (w === 'qc') cur.align = palign = 'c'; else if (w === 'qr') cur.align = palign = 'r'; else if (w === 'qj') cur.align = palign = 'j'; else if (w === 'ql') cur.align = palign = 'l';
+        else if (w === 'plain') { for (const k of KEYS) st[k] = 0; }
         else if (w === 'b') st.b = n === 0 ? 0 : 1; else if (w === 'i') st.i = n === 0 ? 0 : 1;
-        else if (w === 'ul') st.u = n === 0 ? 0 : 1; else if (w === 'ulnone') st.u = 0;
-        else if (w === 'super') st.sup = 1; else if (w === 'sub') st.sub = 1; else if (w === 'nosupersub') { st.sup = 0; st.sub = 0; }
-        else if (w === 'tab') { if (bulletTab) bulletTab = 0; else add('    '); } else if (w === 'emdash' || w === 'endash') add('-');
-        else if (w === 'lquote' || w === 'rquote') add("'"); else if (w === 'ldblquote' || w === 'rdblquote') add('"');
-        else if (w === 'bullet') { if (!skip && !cur.runs.length) { cur.bullet = true; bulletTab = 1; } else add('*'); }
-        else if (w === 'u' && n !== null) { add(String.fromCodePoint(n < 0 ? n + 65536 : n)); ucSkip = 1; }
+        else if (/^ul(d|db|w|th|wave|dash|dashd|dashdd|hwave|ldash)?$/.test(w)) st.u = n === 0 ? 0 : 1; else if (w === 'ulnone') st.u = 0;
+        else if (w === 'super') st.sup = n === 0 ? 0 : 1; else if (w === 'sub') st.sub = n === 0 ? 0 : 1; else if (w === 'nosupersub') { st.sup = 0; st.sub = 0; }
+        else if (w === 'uc' && n !== null) uc = n;
+        else if (w === 'bin' && n) i += n;
+        else if (w === 'tab') { if (bulletTab) bulletTab = 0; else if (!cap) add('    '); } else if (w === 'emdash') add('\u2014'); else if (w === 'endash') add('\u2013');
+        else if (w === 'lquote') add('\u2018'); else if (w === 'rquote') add('\u2019'); else if (w === 'ldblquote') add('\u201c'); else if (w === 'rdblquote') add('\u201d');
+        else if (w === 'bullet') { if (!skip && !cur.runs.length && !cap) { cur.bullet = true; bulletTab = 1; } else add('\u2022'); }
+        else if (w === 'u' && n !== null) { add(String.fromCharCode(n < 0 ? n + 65536 : n)); skipUnits = uc; }
       } else {
         const n = s[i + 1]; i++;
-        if (n === "'") { add(String.fromCharCode(parseInt(s.substr(i + 1, 2), 16))); i += 2; }
+        if (n === "'") { const b = parseInt(s.substr(i + 1, 2), 16); i += 2; if (skipUnits) skipUnits--; else add(cp1252(b)); }
         else if (n === '\\' || n === '{' || n === '}') add(n);
-        else if (n === '\n' || n === '\r') { if (!skip) { out.push(cur); cur = para(); } }
+        else if (n === '~') add('\u00a0'); else if (n === '_') add('-');
+        else if (n === '\n' || n === '\r') { if (!skip && !cap) newPara(); }
       }
     } else if (c !== '\n' && c !== '\r') {
-      if (ucSkip) { ucSkip = 0; continue; }
+      if (skipUnits) { skipUnits--; continue; }
       add(c);
     }
   }
@@ -453,12 +490,14 @@ function fromHtml(buf) {
   const brk = () => { if (cur.runs.length) out.push(cur); cur = para(); };
   const re = /<(\/?)([a-z0-9]+)([^>]*)>|([^<]+)/gi; let m;
   while ((m = re.exec(s))) {
-    if (m[4] !== undefined) { const t = decode(m[4].replace(/\s+/g, ' ')); if (t.trim() || cur.runs.length) cur.runs.push({ t: clean(t), ...st }); continue; }
+    if (m[4] !== undefined) { if (!cur.runs.length && /&nbsp;|&#160;/.test(m[4]) && !m[4].replace(/&nbsp;|&#160;|\s/g, '')) { cur.runs.push({ t: '', ...st }); continue; } const t = decode(m[4].replace(/\s+/g, ' ')); if (t.trim() || cur.runs.length) cur.runs.push({ t: clean(t), ...st }); continue; }
     const close = m[1] === '/', tag = m[2].toLowerCase(), attrs = m[3], v = close ? 0 : 1;
     if (tag === 'b' || tag === 'strong') st.b = v; else if (tag === 'i' || tag === 'em') st.i = v; else if (tag === 'u') st.u = v;
     else if (tag === 'sup') st.sup = v; else if (tag === 'sub') st.sub = v;
     else if (tag === 'br') brk();
+    else if ((tag === 'td' || tag === 'th') && close) cur.runs.push({ t: ' | ', ...st });
     else if (/^(p|div|h[1-6]|li|tr|blockquote|center|ul|ol|table)$/.test(tag)) {
+      if (close && tag === 'tr') { const l = cur.runs[cur.runs.length - 1]; if (l && l.t === ' | ') cur.runs.pop(); }
       brk();
       if (!close) {
         if (/^h[1-6]$/.test(tag)) { st.b = 1; }
@@ -473,22 +512,39 @@ function fromHtml(buf) {
 }
 
 function fromMd(buf) {
-  const out = [];
+  const out = []; let blanks = 0;
+  const flush = () => { if (out.length) for (let k = 0; k < Math.floor((blanks - 1) / 2); k++) { const e = para(); e.runs.push({ t: '' }); out.push(e); } blanks = 0; };
   for (const line of buf.toString('utf8').replace(/\r\n?/g, '\n').split('\n')) {
-    const p = para(); let l = line, b = 0;
-    const h = /^#{1,6}\s+(.*)$/.exec(l); if (h) { l = h[1]; b = 1; }
+    if (!line.trim()) { blanks++; continue; }
+    flush();
+    const p = para(); let l = line, bold = 0;
+    const h = /^#{1,6}\s+(.*)$/.exec(l); if (h) { l = h[1]; bold = 1; }
     const li = /^\s*[-*+]\s+(.*)$/.exec(l); if (li) { l = li[1]; p.bullet = true; }
-    const re = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|`([^`]+)`|([^*_`]+|[*_`])/g; let m;
-    while ((m = re.exec(l))) {
-      if (m[2] !== undefined) p.runs.push({ t: clean(m[2]), b: 1 }); else if (m[4] !== undefined) p.runs.push({ t: clean(m[4]), i: 1 });
-      else if (m[5] !== undefined) p.runs.push({ t: clean(m[5]) }); else p.runs.push({ t: clean(m[6]), b });
+    // inline: \x escapes, ***bold italic***, **bold**/__bold__, *italic*/_italic_, `code`; an unclosed marker is literal text
+    let b = bold, it = 0, t = '';
+    const put = () => { if (t) p.runs.push({ t: clean(t), b, i: it }); t = ''; };
+    for (let k = 0; k < l.length; k++) {
+      const ch = l[k];
+      if (ch === '\\' && k + 1 < l.length && /[\\`*_{}[\]()#+\-.!>|]/.test(l[k + 1])) { t += l[++k]; continue; }
+      if (ch === '`' && l.indexOf('`', k + 1) > 0) { const e = l.indexOf('`', k + 1); t += l.slice(k + 1, e); k = e; continue; }
+      if (ch === '*' || ch === '_') {
+        const run = /^(\*{1,3}|_{1,3})/.exec(l.slice(k))[0], n = run.length;
+        const intra = ch === '_' && /\w/.test(l[k - 1] || ' ') && /\w/.test(l[k + n] || ' ');
+        const closes = (n === 1 && it) || (n === 2 && b && !bold) || (n === 3 && it && b);
+        if (!intra && (closes || l.indexOf(run, k + n) > 0)) {
+          put();
+          if (n === 3) { it = it ? 0 : 1; b = bold || (b ? 0 : 1); } else if (n === 2) b = bold || (b ? 0 : 1); else it = it ? 0 : 1;
+          k += n - 1; continue;
+        }
+      }
+      t += ch;
     }
-    if (b) p.runs.forEach((r) => { r.b = 1; });
+    put();
+    if (!p.runs.length) p.runs.push({ t: '' });
     out.push(p);
   }
   return out;
 }
-
 // ---- layout to the Craft stream --------------------------------------------
 // Wraps at `cols`, writes style toggles, alignment and bullet markers, 13 at a paragraph end and 14 at a soft wrap.
 function layout(paras, cols) {
@@ -549,13 +605,24 @@ function toModel(buf, name, opts = {}) {
   } finally { cfg.unicode = prev; }
 }
 
+// Cuts a Craft stream at the last line end that fits max bytes, closing any style left on so the page set stays well formed.
+function cutAtLine(bytes, max) {
+  let end = max; while (end > 0 && bytes[end - 1] !== 13 && bytes[end - 1] !== 14) end--;
+  const out = bytes.slice(0, end); if (!out.length) return out;
+  const on = new Set(); for (const b of out) if ([1, 2, 3, 11, 12].includes(b)) { if (on.has(b)) on.delete(b); else on.add(b); }
+  out.pop();
+  if (on.size && out.length + on.size + 1 > max) return cutAtLine(bytes, end - 1);
+  return [...out, ...on, 13];
+}
+
 function convert(buf, name, opts = {}) {
   const cols = opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
-  let bytes = layout(paras, cols), truncated = false;
-  if (bytes.length > MAXPAYLOAD) { bytes = bytes.slice(0, MAXPAYLOAD); truncated = true; }
+  let bytes = layout(paras, cols), truncated = false, dropped = 0;
+  const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
+  if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }
   const lines = bytes.filter((b) => b === 13 || b === 14).length;
-  return { format, file: build(bytes, cols, lines), truncated, paragraphs: paras.length, bytes: bytes.length };
+  return { format, file: build(bytes, cols, lines), truncated, dropped, paragraphs: paras.length, bytes: bytes.length };
 }
 
 if (require.main === module) {
@@ -565,10 +632,10 @@ if (require.main === module) {
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
   fs.writeFileSync(outp, r.file);
-  console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to fit one page set)' : ''} -> ${outp}`);
+  console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to the 11264 byte ACWriter document area, ' + r.dropped + ' bytes dropped)' : ''} -> ${outp}`);
 }
 
-module.exports = { convert, detect, toModel, layout, build, toCraft, clean, MAXPAYLOAD, fromText, fromAtascii, fromRtf, fromHtml, fromMd };
+module.exports = { convert, detect, toModel, layout, build, toCraft, clean, MAXPAYLOAD, ATARI_DOC, cutAtLine, fromText, fromAtascii, fromRtf, fromHtml, fromMd };
 
 });
 __def("officeread.cjs", function (module, exports, require) {
@@ -597,8 +664,8 @@ function readDocx(buf) {
   const x = unzip(buf, 'word/document.xml'); if (!x) throw new Error('word/document.xml not found');
   const xml = x.toString('utf8'); const out = [];
   const flag = (rpr, tag) => { const m = new RegExp('<w:' + tag + '(?:\\s[^>]*)?/?>').exec(rpr); return m ? (/w:val="(0|false|none)"/.test(m[0]) ? 0 : 1) : 0; };
-  for (const pm of xml.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)) {
-    const ps = pm[0], p = { align: 'l', bullet: false, runs: [] };
+  const parsePara = (ps) => {
+    const p = { align: 'l', bullet: false, runs: [] };
     const ppr = (/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(ps) || [''])[0];
     const jc = /<w:jc w:val="(\w+)"/.exec(ppr); if (jc) p.align = { center: 'c', right: 'r', both: 'j' }[jc[1]] || 'l';
     if (/<w:numPr>/.test(ppr)) p.bullet = true;
@@ -610,7 +677,19 @@ function readDocx(buf) {
       for (const tm of r.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>|<w:noBreakHyphen\/>/g)) t += tm[1] !== undefined ? xmlDecode(tm[1]) : tm[0] === '<w:tab/>' ? '    ' : tm[0] === '<w:br/>' ? ' ' : '-';
       if (t) p.runs.push({ t, ...st });
     }
-    out.push(p);
+    return p;
+  };
+  const sp = { t: ' | ', b: 0, i: 0, u: 0, sup: 0, sub: 0 };
+  // a table row becomes one line, cells separated by ' | '
+  for (const m of xml.matchAll(/<w:tr[ >][\s\S]*?<\/w:tr>|<w:p[ >][\s\S]*?<\/w:p>/g)) {
+    if (!m[0].startsWith('<w:tr')) { out.push(parsePara(m[0])); continue; }
+    const row = { align: 'l', bullet: false, runs: [] };
+    for (const cm of m[0].matchAll(/<w:tc[ >][\s\S]*?<\/w:tc>/g)) {
+      const cell = [...cm[0].matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((pp) => parsePara(pp[0]).runs).filter((r) => r.length);
+      if (row.runs.length) row.runs.push({ ...sp });
+      cell.forEach((rs, k) => { if (k) row.runs.push({ ...sp, t: ' ' }); row.runs.push(...rs); });
+    }
+    out.push(row);
   }
   return out;
 }
@@ -655,7 +734,7 @@ function readDoc(buf) {
     if (comp) { for (let k = 0; k < b - a; k++) { const c = wd[fc / 2 + k]; text += CP1252[c] || String.fromCharCode(c); } }
     else text += wd.toString('utf16le', fc, fc + (b - a) * 2);
   }
-  text = text.replace(/\x13[^\x14\x15]*\x14?/g, '').replace(/\x15/g, '').replace(/\x0b/g, ' ').replace(/[\x07\x01\x08\x0c]/g, ' ').replace(/\t/g, '    ');
+  text = text.replace(/\x13[^\x14\x15]*\x14?/g, '').replace(/\x15/g, '').replace(/\x0b/g, ' ').replace(/\x07\x07/g, '\x1e').replace(/\x07/g, ' | ').replace(/\x1e/g, '\r').replace(/[\x01\x08\x0c]/g, ' ').replace(/\t/g, '    ');
   return text.split('\r').map((l) => ({ align: 'l', bullet: false, runs: [{ t: l }] }));
 }
 

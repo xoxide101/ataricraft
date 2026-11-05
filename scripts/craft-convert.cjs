@@ -12,7 +12,7 @@ assert.strictEqual(show(r.file), '<15>Title<13><16>Rt<13>a<3>bc<3>d<13>');
 
 const md = Buffer.from('# Head\n\nHi **bold** and *it*\n- item\n');
 const m = convert(md, 'a.md').file; const base = show(m);
-assert.strictEqual(base, '<1>Head<1><13><13>Hi <1>bold<1> and <2>it<2><13><19>item<13>');
+assert.strictEqual(base, '<1>Head<1><13>Hi <1>bold<1> and <2>it<2><13><19>item<13>');
 for (const f of ['rtf', 'html', 'md']) {
   const back = show(convert(exportDoc(m, f), 'x.' + f).file).replace(/<13>(<13>)+/g, '<13>');
   assert.strictEqual(back.replace(/<13>/g, ''), base.replace(/<13>/g, ''), f);

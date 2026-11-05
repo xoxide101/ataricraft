@@ -62,7 +62,7 @@ function toHtml(ps, title) {
 }
 
 function toMd(ps) {
-  return ps.map((p) => (p.bullet ? '- ' : '') + p.runs.map((r) => { let t = r.t.replace(/([*_`])/g, '\\$1'); if (r.b && r.i) t = '***' + t + '***'; else if (r.b) t = '**' + t + '**'; else if (r.i) t = '*' + t + '*'; return t; }).join('')).join('\n\n');
+  return ps.map((p) => (p.bullet ? '- ' : '') + p.runs.map((r) => { let t = r.t.replace(/([\\\\*_`])/g, '\\$1'); if (r.b && r.i) t = '***' + t + '***'; else if (r.b) t = '**' + t + '**'; else if (r.i) t = '*' + t + '*'; return t; }).join('')).join('\n\n');
 }
 
 // Craft text to ATASCII text: printable ASCII is kept, everything else becomes '?'. Lines end in $9B.

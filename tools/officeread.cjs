@@ -23,8 +23,8 @@ function readDocx(buf) {
   const x = unzip(buf, 'word/document.xml'); if (!x) throw new Error('word/document.xml not found');
   const xml = x.toString('utf8'); const out = [];
   const flag = (rpr, tag) => { const m = new RegExp('<w:' + tag + '(?:\\s[^>]*)?/?>').exec(rpr); return m ? (/w:val="(0|false|none)"/.test(m[0]) ? 0 : 1) : 0; };
-  for (const pm of xml.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)) {
-    const ps = pm[0], p = { align: 'l', bullet: false, runs: [] };
+  const parsePara = (ps) => {
+    const p = { align: 'l', bullet: false, runs: [] };
     const ppr = (/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(ps) || [''])[0];
     const jc = /<w:jc w:val="(\w+)"/.exec(ppr); if (jc) p.align = { center: 'c', right: 'r', both: 'j' }[jc[1]] || 'l';
     if (/<w:numPr>/.test(ppr)) p.bullet = true;
@@ -36,7 +36,19 @@ function readDocx(buf) {
       for (const tm of r.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>|<w:noBreakHyphen\/>/g)) t += tm[1] !== undefined ? xmlDecode(tm[1]) : tm[0] === '<w:tab/>' ? '    ' : tm[0] === '<w:br/>' ? ' ' : '-';
       if (t) p.runs.push({ t, ...st });
     }
-    out.push(p);
+    return p;
+  };
+  const sp = { t: ' | ', b: 0, i: 0, u: 0, sup: 0, sub: 0 };
+  // a table row becomes one line, cells separated by ' | '
+  for (const m of xml.matchAll(/<w:tr[ >][\s\S]*?<\/w:tr>|<w:p[ >][\s\S]*?<\/w:p>/g)) {
+    if (!m[0].startsWith('<w:tr')) { out.push(parsePara(m[0])); continue; }
+    const row = { align: 'l', bullet: false, runs: [] };
+    for (const cm of m[0].matchAll(/<w:tc[ >][\s\S]*?<\/w:tc>/g)) {
+      const cell = [...cm[0].matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((pp) => parsePara(pp[0]).runs).filter((r) => r.length);
+      if (row.runs.length) row.runs.push({ ...sp });
+      cell.forEach((rs, k) => { if (k) row.runs.push({ ...sp, t: ' ' }); row.runs.push(...rs); });
+    }
+    out.push(row);
   }
   return out;
 }
@@ -81,7 +93,7 @@ function readDoc(buf) {
     if (comp) { for (let k = 0; k < b - a; k++) { const c = wd[fc / 2 + k]; text += CP1252[c] || String.fromCharCode(c); } }
     else text += wd.toString('utf16le', fc, fc + (b - a) * 2);
   }
-  text = text.replace(/\x13[^\x14\x15]*\x14?/g, '').replace(/\x15/g, '').replace(/\x0b/g, ' ').replace(/[\x07\x01\x08\x0c]/g, ' ').replace(/\t/g, '    ');
+  text = text.replace(/\x13[^\x14\x15]*\x14?/g, '').replace(/\x15/g, '').replace(/\x0b/g, ' ').replace(/\x07\x07/g, '\x1e').replace(/\x07/g, ' | ').replace(/\x1e/g, '\r').replace(/[\x01\x08\x0c]/g, ' ').replace(/\t/g, '    ');
   return text.split('\r').map((l) => ({ align: 'l', bullet: false, runs: [{ t: l }] }));
 }
 
