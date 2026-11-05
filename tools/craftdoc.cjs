@@ -16,6 +16,7 @@ function parse(buf) {
   let sum = 0;
   for (const b of payload) sum = (sum + b) & 0xffff;
   h.checksumOk = sum === h.checksum;
+  h.page = (h.flags & 2) ? require('./craftpage.cjs').fromTrailer(buf.subarray(16 + h.length)) : null;
   return { h, payload };
 }
 

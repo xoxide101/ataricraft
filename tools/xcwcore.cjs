@@ -7,6 +7,7 @@ const I = require('./craftimport.cjs');
 const E = require('./craftexport.cjs');
 const D = require('./craftdoc.cjs');
 const cd = require('./cdict.cjs');
+const P = require('./craftpage.cjs');
 
 const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
@@ -120,30 +121,32 @@ function cleanParas(paras) {
 }
 const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173); };
 
-function craftPayload(paras, profile = PROFILES.atari) {
-  return I.layout(cleanParas(normalize(paras)), profile.cols);
+// page (tools/craftpage.cjs setup) switches wrapping from the profile's screen columns to the page's usable columns.
+function craftPayload(paras, profile = PROFILES.atari, page = null) {
+  const ps = normalize(paras);
+  return page ? I.layout(cleanParas(P.expandTabs(ps, page)), P.normalize(page)) : I.layout(cleanParas(ps), profile.cols);
 }
-function fit(paras, profile = PROFILES.atari) {
-  const bytes = craftPayload(paras, profile).length;
+function fit(paras, profile = PROFILES.atari, page = null) {
+  const bytes = craftPayload(paras, profile, page).length;
   return { bytes, limit: profile.docLimit, pct: Math.round((bytes * 1000) / profile.docLimit) / 10, over: Math.max(0, bytes - profile.docLimit) };
 }
 
 // Craft document file from the model. Cuts at the last line end that fits `limit` (ACWriter's document area).
 function toCwd(paras, opt = {}) {
   const prof = opt.profile || PROFILES.atari, limit = opt.limit || prof.docLimit;
-  let bytes = craftPayload(paras, prof), truncated = false, dropped = 0;
+  let bytes = craftPayload(paras, prof, opt.page), truncated = false, dropped = 0;
   if (bytes.length > limit) {
     let cut = limit; while (cut > 0 && bytes[cut - 1] !== 13 && bytes[cut - 1] !== 14) cut--;
     dropped = bytes.length - cut; bytes = bytes.slice(0, cut); truncated = true;
   }
   const lines = bytes.filter((b) => b === 13 || b === 14).length;
-  return { file: I.build(bytes, prof.cols, lines), truncated, dropped, bytes: bytes.length, lines };
+  return { file: I.build(bytes, prof.cols, lines, opt.page), truncated, dropped, bytes: bytes.length, lines };
 }
 
 // Screen lines exactly as ACWriter wraps them: parse the payload that craftimport's layout() writes.
 // cells carry the paragraph index p and character offset o, so an editor can map caret <-> screen.
-function atariLines(paras, profile = PROFILES.atari) {
-  const bytes = craftPayload(paras, profile), lines = [];
+function atariLines(paras, profile = PROFILES.atari, page = null) {
+  const bytes = craftPayload(paras, profile, page), lines = [];
   const on = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }, CODE = { 1: 'b', 2: 'i', 3: 'u', 4: 'u', 11: 'sup', 12: 'sub' };
   let p = 0, o = 0, align = 'l', bullet = false, first = true, cells = [], start = 0;
   for (const b of bytes) {
@@ -203,7 +206,8 @@ function openDoc(buf, name, opt = {}) {
   const notes = [];
   if (fmt === 'doc') notes.push('Legacy .doc: text only, formatting is not read');
   if (r.format === 'bankstreet' && buf[0] === 0x96) notes.push('Took the first document on the disk image');
-  return { format: r.format, paras: normalize(r.paras), notes };
+  const page = r.format === 'craft' ? D.parse(buf).h.page : null;
+  return { format: r.format, paras: normalize(r.paras), notes, page };
 }
 
 function styleCounts(paras) {
@@ -344,7 +348,7 @@ function suggest(dict, word, max = 6) {
 }
 
 module.exports = {
-  PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
+  Page: P, PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
   emptyPara, newDoc, clone, ptext, plain, toCells, fromCells, normalize, cmp, order, docEnd,
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,
   cleanParas, charOk, craftPayload, fit, toCwd, atariLines, atariWarnings,

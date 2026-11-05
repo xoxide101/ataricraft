@@ -164,6 +164,125 @@ function inflateRaw(src) {
 module.exports = { inflateRaw, inflateRawSync: inflateRaw };
 
 });
+__def("craftpage.cjs", function (module, exports, require) {
+// Craft page model (docs/PAGE.md): paper, pitch, margins, tab stops, font name, and the CRFT trailer that stores them.
+// DOM-free, shared by craftdoc/craftimport/xcwcore and the browser bundle.
+'use strict';
+
+const PAPERS = {
+  letter: { id: 'letter', name: 'Letter 8.5 x 11 in', w: 8.5, h: 11 },
+  a4: { id: 'a4', name: 'A4 210 x 297 mm', w: 210 / 25.4, h: 297 / 25.4 },
+  legal: { id: 'legal', name: 'Legal 8.5 x 14 in', w: 8.5, h: 14 },
+};
+const PAPER_CODE = ['letter', 'a4', 'legal'];
+const PITCHES = [10, 12, 17];
+const LPI = 6;
+const KIND_CODE = { l: 0, c: 1, r: 2 };
+const KIND_NAME = ['l', 'c', 'r'];
+const TRAILER_MAGIC = 'CPG1';
+const FLAG_TRAILER = 0x02;
+
+// Whole columns that fit across the paper (a small epsilon keeps 8.5 x 12 = 102 exact).
+const paperCols = (paper, pitch) => Math.floor(PAPERS[paper].w * pitch + 1e-6);
+const paperLines = (paper) => Math.floor(PAPERS[paper].h * LPI + 1e-6);
+
+function defaults(paper = 'letter', pitch = 10) {
+  return { paper, pitch, left: Math.round(0.3 * pitch), right: Math.round(0.2 * pitch), top: 6, bottom: 6, tabs: [], font: '' };
+}
+
+// Clamps and completes a page setup; margins always leave at least 8 usable columns.
+function normalize(p) {
+  const d = defaults(p && PAPERS[p.paper] ? p.paper : 'letter', p && PITCHES.includes(p.pitch) ? p.pitch : 10);
+  const o = { ...d, ...(p || {}) };
+  if (!PAPERS[o.paper]) o.paper = d.paper;
+  if (!PITCHES.includes(o.pitch)) o.pitch = d.pitch;
+  const pc = paperCols(o.paper, o.pitch), pl = paperLines(o.paper);
+  const num = (v, dv, max) => Math.max(0, Math.min(max, Number.isFinite(+v) ? Math.round(+v) : dv));
+  o.left = num(o.left, d.left, pc - 9);
+  o.right = num(o.right, d.right, pc - 9 - o.left);
+  o.top = num(o.top, d.top, pl >> 2); o.bottom = num(o.bottom, d.bottom, pl >> 2);
+  const seen = new Set();
+  o.tabs = (o.tabs || []).map((t) => ({ pos: Math.round(+t.pos), kind: KIND_CODE[t.kind] !== undefined ? t.kind : 'l' }))
+    .filter((t) => t.pos >= 0 && t.pos < pc && !seen.has(t.pos) && seen.add(t.pos)).sort((a, b) => a.pos - b.pos).slice(0, 24);
+  o.font = String(o.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32);
+  return o;
+}
+
+function info(page) {
+  const p = normalize(page), pc = paperCols(p.paper, p.pitch), pl = paperLines(p.paper);
+  return {
+    ...p, paperCols: pc, paperLines: pl, usable: pc - p.left - p.right, textLines: pl - p.top - p.bottom,
+    centre: pc / 2, usableCentre: p.left + (pc - p.left - p.right) / 2, inchesWide: PAPERS[p.paper].w, inchesHigh: PAPERS[p.paper].h,
+    usableInches: (pc - p.left - p.right) / p.pitch,
+  };
+}
+const usableCols = (page) => info(page).usable;
+
+// Page center mark and tab stops in the order a ruler draws them; positions are absolute columns from the paper's left edge.
+function stops(page) {
+  const i = info(page);
+  return [{ pos: i.centre, kind: 'page' }, ...i.tabs];
+}
+
+// Expands \t in paragraph runs into spaces so the stored Craft stream (which has no tab code) lines up on the stops.
+// Left stop: text starts at pos. Centre stop: the segment up to the next tab is centred on pos. Right stop: it ends at pos.
+// Applies to the first line of a paragraph (column counted from the left margin); past the last stop, tabs go to the next 8.
+function expandTabs(paras, page) {
+  const i = info(page);
+  return paras.map((p) => {
+    const cells = []; for (const r of p.runs) for (const ch of r.t) cells.push({ ch, r });
+    if (!cells.some((c) => c.ch === '\t')) return p;
+    const out = []; let col = i.left + (p.bullet ? 2 : 0);
+    for (let k = 0; k < cells.length; k++) {
+      const c = cells[k];
+      if (c.ch !== '\t') { out.push(c); col++; continue; }
+      let seg = 0; for (let m = k + 1; m < cells.length && cells[m].ch !== '\t'; m++) seg++;
+      const st = i.tabs.find((t) => t.pos > col);
+      let target;
+      if (!st) target = col + 8 - ((col - i.left) % 8);
+      else target = st.kind === 'c' ? st.pos - (seg >> 1) : st.kind === 'r' ? st.pos - seg : st.pos;
+      if (target <= col) target = col + 1;
+      for (; col < target; col++) out.push({ ch: ' ', r: c.r });
+    }
+    const runs = []; let last = null;
+    for (const c of out) {
+      if (last && last.r === c.r) last.t += c.ch; else { last = { r: c.r, t: c.ch }; runs.push(last); }
+    }
+    return { ...p, runs: runs.map((x) => ({ ...x.r, t: x.t })) };
+  });
+}
+
+// ---- CRFT trailer ----------------------------------------------------------------
+// After the payload: 'CPG1', then records [tag u8][len u8][data]. Tag 1 page setup, tag 2 font name (ASCII).
+// Page record: paper u8 (0 letter, 1 a4, 2 legal), pitch u8 (cpi), left, right, top, bottom u8, ntabs u8, ntabs x (pos u8, kind u8: 0 L, 1 C, 2 R).
+function toTrailer(page) {
+  const p = normalize(page), rec = [];
+  const d = [PAPER_CODE.indexOf(p.paper), p.pitch, p.left, p.right, p.top, p.bottom, p.tabs.length];
+  for (const t of p.tabs) d.push(t.pos, KIND_CODE[t.kind]);
+  rec.push(1, d.length, ...d);
+  if (p.font) { const f = Buffer.from(p.font, 'latin1'); rec.push(2, f.length, ...f); }
+  return Buffer.concat([Buffer.from(TRAILER_MAGIC, 'latin1'), Buffer.from(rec)]);
+}
+
+// Returns a normalized page setup, or null when the buffer is not a trailer. Unknown records are skipped; damaged ones end the parse.
+function fromTrailer(buf) {
+  if (!buf || buf.length < 4 || buf.toString('latin1', 0, 4) !== TRAILER_MAGIC) return null;
+  const raw = {}; let at = 4;
+  while (at + 2 <= buf.length) {
+    const tag = buf[at], len = buf[at + 1], d = buf.subarray(at + 2, at + 2 + len);
+    if (d.length < len) break;
+    if (tag === 1 && len >= 7) {
+      raw.paper = PAPER_CODE[d[0]]; raw.pitch = d[1]; raw.left = d[2]; raw.right = d[3]; raw.top = d[4]; raw.bottom = d[5];
+      raw.tabs = []; for (let k = 0; k < d[6] && 7 + k * 2 + 1 < d.length; k++) raw.tabs.push({ pos: d[7 + k * 2], kind: KIND_NAME[d[8 + k * 2]] || 'l' });
+    } else if (tag === 2) raw.font = d.toString('latin1');
+    at += 2 + len;
+  }
+  return normalize(raw);
+}
+
+module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer };
+
+});
 __def("craftdoc.cjs", function (module, exports, require) {
 // Reference reader for Craft documents (docs/CRAFT-FORMAT.md).
 // Usage: node tools/craftdoc.cjs FILE.CWD [--text | --json]
@@ -183,6 +302,7 @@ function parse(buf) {
   let sum = 0;
   for (const b of payload) sum = (sum + b) & 0xffff;
   h.checksumOk = sum === h.checksum;
+  h.page = (h.flags & 2) ? require('./craftpage.cjs').fromTrailer(buf.subarray(16 + h.length)) : null;
   return { h, payload };
 }
 
@@ -548,6 +668,7 @@ function fromMd(buf) {
 // ---- layout to the Craft stream --------------------------------------------
 // Wraps at `cols`, writes style toggles, alignment and bullet markers, 13 at a paragraph end and 14 at a soft wrap.
 function layout(paras, cols) {
+  if (cols && typeof cols === 'object') { const P = require('./craftpage.cjs'); paras = P.expandTabs(paras, cols); cols = P.usableCols(cols); }
   const bytes = []; const A = { c: 15, r: 16, j: 17 };
   const on = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const CODE = { b: 1, i: 2, u: 3, sup: 11, sub: 12 };
   for (const p of paras) {
@@ -577,12 +698,14 @@ function layout(paras, cols) {
   return bytes;
 }
 
-function build(bytes, cols, lines) {
+function build(bytes, cols, lines, page) {
   const pay = Buffer.from(bytes); let sum = 0;
   for (const b of pay) sum = (sum + b) & 0xffff;
   const h = Buffer.alloc(16);
   h.write('CRFT', 0, 'latin1'); h[4] = 1; h[5] = 0x57; h.writeUInt16LE(pay.length, 8); h.writeUInt16LE(Math.min(lines, 255), 10); h[12] = cols; h[13] = 20; h.writeUInt16LE(sum, 14);
-  return Buffer.concat([h, pay]);
+  if (!page) return Buffer.concat([h, pay]);
+  const P = require('./craftpage.cjs'); h[6] |= P.FLAG_TRAILER; h[12] = P.usableCols(page);
+  return Buffer.concat([h, pay, P.toTrailer(page)]);
 }
 
 // Any supported input to the intermediate model (opts.unicode keeps text un-transliterated; opts.allowCraft also reads .CWD).
@@ -616,18 +739,18 @@ function cutAtLine(bytes, max) {
 }
 
 function convert(buf, name, opts = {}) {
-  const cols = opts.cols || 64;
+  const cols = opts.page ? require('./craftpage.cjs').usableCols(opts.page) : opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
-  let bytes = layout(paras, cols), truncated = false, dropped = 0;
+  let bytes = layout(paras, opts.page || cols), truncated = false, dropped = 0;
   const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
   if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }
   const lines = bytes.filter((b) => b === 13 || b === 14).length;
-  return { format, file: build(bytes, cols, lines), truncated, dropped, paragraphs: paras.length, bytes: bytes.length };
+  return { format, file: build(bytes, cols, lines, opts.page), truncated, dropped, paragraphs: paras.length, bytes: bytes.length };
 }
 
 if (require.main === module) {
   const args = process.argv.slice(2); const o = {}; const pos = [];
-  for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else pos.push(args[i]); }
+  for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else if (args[i] === '--paper') (o.page = o.page || {}).paper = args[++i]; else if (args[i] === '--pitch') (o.page = o.page || {}).pitch = +args[++i]; else pos.push(args[i]); }
   if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]'); process.exit(2); }
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
@@ -1215,6 +1338,7 @@ const I = require('./craftimport.cjs');
 const E = require('./craftexport.cjs');
 const D = require('./craftdoc.cjs');
 const cd = require('./cdict.cjs');
+const P = require('./craftpage.cjs');
 
 const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
@@ -1328,30 +1452,32 @@ function cleanParas(paras) {
 }
 const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173); };
 
-function craftPayload(paras, profile = PROFILES.atari) {
-  return I.layout(cleanParas(normalize(paras)), profile.cols);
+// page (tools/craftpage.cjs setup) switches wrapping from the profile's screen columns to the page's usable columns.
+function craftPayload(paras, profile = PROFILES.atari, page = null) {
+  const ps = normalize(paras);
+  return page ? I.layout(cleanParas(P.expandTabs(ps, page)), P.normalize(page)) : I.layout(cleanParas(ps), profile.cols);
 }
-function fit(paras, profile = PROFILES.atari) {
-  const bytes = craftPayload(paras, profile).length;
+function fit(paras, profile = PROFILES.atari, page = null) {
+  const bytes = craftPayload(paras, profile, page).length;
   return { bytes, limit: profile.docLimit, pct: Math.round((bytes * 1000) / profile.docLimit) / 10, over: Math.max(0, bytes - profile.docLimit) };
 }
 
 // Craft document file from the model. Cuts at the last line end that fits `limit` (ACWriter's document area).
 function toCwd(paras, opt = {}) {
   const prof = opt.profile || PROFILES.atari, limit = opt.limit || prof.docLimit;
-  let bytes = craftPayload(paras, prof), truncated = false, dropped = 0;
+  let bytes = craftPayload(paras, prof, opt.page), truncated = false, dropped = 0;
   if (bytes.length > limit) {
     let cut = limit; while (cut > 0 && bytes[cut - 1] !== 13 && bytes[cut - 1] !== 14) cut--;
     dropped = bytes.length - cut; bytes = bytes.slice(0, cut); truncated = true;
   }
   const lines = bytes.filter((b) => b === 13 || b === 14).length;
-  return { file: I.build(bytes, prof.cols, lines), truncated, dropped, bytes: bytes.length, lines };
+  return { file: I.build(bytes, prof.cols, lines, opt.page), truncated, dropped, bytes: bytes.length, lines };
 }
 
 // Screen lines exactly as ACWriter wraps them: parse the payload that craftimport's layout() writes.
 // cells carry the paragraph index p and character offset o, so an editor can map caret <-> screen.
-function atariLines(paras, profile = PROFILES.atari) {
-  const bytes = craftPayload(paras, profile), lines = [];
+function atariLines(paras, profile = PROFILES.atari, page = null) {
+  const bytes = craftPayload(paras, profile, page), lines = [];
   const on = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }, CODE = { 1: 'b', 2: 'i', 3: 'u', 4: 'u', 11: 'sup', 12: 'sub' };
   let p = 0, o = 0, align = 'l', bullet = false, first = true, cells = [], start = 0;
   for (const b of bytes) {
@@ -1411,7 +1537,8 @@ function openDoc(buf, name, opt = {}) {
   const notes = [];
   if (fmt === 'doc') notes.push('Legacy .doc: text only, formatting is not read');
   if (r.format === 'bankstreet' && buf[0] === 0x96) notes.push('Took the first document on the disk image');
-  return { format: r.format, paras: normalize(r.paras), notes };
+  const page = r.format === 'craft' ? D.parse(buf).h.page : null;
+  return { format: r.format, paras: normalize(r.paras), notes, page };
 }
 
 function styleCounts(paras) {
@@ -1552,7 +1679,7 @@ function suggest(dict, word, max = 6) {
 }
 
 module.exports = {
-  PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
+  Page: P, PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
   emptyPara, newDoc, clone, ptext, plain, toCells, fromCells, normalize, cmp, order, docEnd,
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,
   cleanParas, charOk, craftPayload, fit, toCwd, atariLines, atariWarnings,

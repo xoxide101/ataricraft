@@ -29,11 +29,11 @@ The extension is a convention only. The type byte in the header decides. 8.3 nam
 | 0 | 4 | magic | ASCII `CRFT` |
 | 4 | 1 | version | `1` |
 | 5 | 1 | type | `W`, `S` or `D` |
-| 6 | 1 | flags | `0`. Reserved: bit 0 will mean compressed payload |
+| 6 | 1 | flags | `0`. Bit 1 (`0x02`): a page-setup trailer follows the payload (see [PAGE.md](PAGE.md)). Reserved: bit 0 will mean compressed payload |
 | 7 | 1 | charset | `0` = Craft text |
 | 8 | 2 | length | payload bytes that follow the header |
 | 10 | 2 | aux | Word: number of lines (paragraph lines, soft and hard). Others: app-defined |
-| 12 | 1 | cols | Word: page width in text columns (64) |
+| 12 | 1 | cols | Word: page width in text columns (64; the usable page columns, e.g. 80, when the page trailer is present) |
 | 13 | 1 | rows | Word: text lines per page (20) |
 | 14 | 2 | checksum | sum of all payload bytes, modulo 65536 |
 
@@ -127,7 +127,7 @@ JavaScript reference: `node tools/craftdoc.cjs FILE.CWD` prints the plain text, 
 ## Known limits of version 1
 
 - No object list yet (only text paragraphs). Art, lines and boxes will arrive as a new section after the text stream, flagged in `flags`.
-- No page setup, margins or font id in the header. The editor uses its defaults on load.
+- Page setup (paper, pitch, margins, tab stops, font name) is an optional trailer after the payload, flagged by `flags` bit 1; see [PAGE.md](PAGE.md). Without it the editor uses its defaults.
 - The Atari build keeps its low-memory tables at 0x0500-0x14FF, so a disk DOS that lives there will clash. The emulator's `H:` device and bare-metal CIO work; relocating the tables for stock DOS is planned.
 - The checksum is a plain sum. Version 2 may move to CRC-16.
 
