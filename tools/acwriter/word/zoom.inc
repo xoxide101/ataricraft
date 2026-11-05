@@ -1,4 +1,4 @@
-; PAGE mode 2x zoom (image Z, id 3). A sub-view of PAGE mode: the page is drawn with the OS ROM 8x8 glyphs doubled
+; PAGE mode 2x zoom (image Z, id 3). A sub-view of PAGE mode: the page is drawn with the Craft 8x8 face (zfont.inc) doubled
 ; to 16x16 cells, 20 columns by 9 lines, scrolled sideways (pwx) to follow the cursor. The editing engine is the
 ; normal one; pzmain replaces pwmain while pzoom = 1. Style codes are not drawn (plain glyphs). docs/ACWRITER-PAGE.md.
 
@@ -227,8 +227,16 @@ pzblit sta src
  sta src+1
  jmp pzbg
 pzbr lda src+1
+ cmp #3
+ bcc pzbq
+ sbc #1
+pzbq sta src+1
+ lda src
  clc
- adc #$E0
+ adc #<zfont
+ sta src
+ lda src+1
+ adc #>zfont
  sta src+1
 pzbg lda pwsc
  asl
@@ -308,5 +316,6 @@ pzx2 dex
  bne pzx1
 pzx9 rts
 
+ icl 'zfont.inc'
 pzdbl dta b($00),b($03),b($0C),b($0F),b($30),b($33),b($3C),b($3F)
  dta b($C0),b($C3),b($CC),b($CF),b($F0),b($F3),b($FC),b($FF)

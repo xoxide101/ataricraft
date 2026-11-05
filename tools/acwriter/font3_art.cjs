@@ -157,7 +157,7 @@ function face() {
     f.glyphs[a] = put(rows12);
     if (spec.length > 1) {
       f.sup[a] = put(smallRows(rows12, 0));
-      f.sub[a] = put(smallRows(rows12, 6));
+      f.sub[a] = put(smallRows(rows12, 5));
     }
   }
   f.glyphs[127] = new Array(12).fill(0);

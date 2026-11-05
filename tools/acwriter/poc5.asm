@@ -105,6 +105,10 @@ e_end = *
  icl 'craftpg.inc'
 e_end = *
  .endl
+ org $977B
+ icl 'craftpg_a.inc'
+ org $9E90
+ icl 'craftpg_b.inc'
  org $8000
  org r:SLA
  .local Z

@@ -571,7 +571,11 @@ pwblit sec
  lda sp+1
  adc #0
  sta gp+1
- lda pwsc
+ lda lo
+ cmp #80
+ beq pwn
+ jmp pwsq
+pwn lda pwsc
  lsr
  tay
  bcc pwj3
@@ -663,6 +667,52 @@ pwbo2 lda pwtl+1,x
  ora (gp),y
  sta (gp),y
  rts
+
+; sup / sub glyphs: 5 rows (lo = 0 superscript, 200 subscript). Glyphs with ink in plane row 2 or 3 draw source rows
+; 2,3,5,6,8, all others rows 4..8 (docs/FONT.md). The plane address is patched into sqa4; no descender tails.
+pwsq lda pwsc
+ lsr
+ sta pwdl
+ lda #0
+ rol
+ sta pwdh
+ lda pwp2,x
+ ora pwp3,x
+ beq sqa1
+ lda #0
+ beq sqa2
+sqa1 lda #5
+sqa2 sta pwvw
+sqa3 ldy pwvw
+ lda pwal,y
+ sta sqa4+1
+ lda pwah,y
+ sta sqa4+2
+sqa4 lda $FFFF,x
+ ldy pwdh
+ beq sqa5
+ lsr
+ lsr
+ lsr
+ lsr
+sqa5 ldy pwdl
+ ora (gp),y
+ sta (gp),y
+ lda gp
+ clc
+ adc #40
+ sta gp
+ bcc sqa6
+ inc gp+1
+sqa6 inc pwvw
+ lda pwvw
+ cmp #5
+ beq sqa7
+ cmp #10
+ bne sqa3
+sqa7 rts
+pwal dta l(pwp2),l(pwp3),l(pwp5),l(pwp6),l(pwp8),l(pwp4),l(pwp5),l(pwp6),l(pwp7),l(pwp8)
+pwah dta h(pwp2),h(pwp3),h(pwp5),h(pwp6),h(pwp8),h(pwp4),h(pwp5),h(pwp6),h(pwp7),h(pwp8)
 
 ; --------------------------------------------------------------- ruler strip
 pwruler lda #<(SCR+320)

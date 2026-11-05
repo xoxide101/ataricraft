@@ -3,7 +3,8 @@
 'use strict';
 const CF = require('./craftfont.cjs');
 
-const G = {
+// The earlier 6-7 column design is kept below for reference only; the face uses tools/acwriter/font8z_art.cjs (lighter 1 px stems).
+const G_OLD = {
   ' ': [0],
   '!': [0, '..##..', '..##..', '..##..', '..##..', '..##..', '......', '..##..'],
   '"': [0, '.#..#.', '.#..#.', '.#..#.'],
@@ -100,6 +101,8 @@ const G = {
   '}': [0, '.##...', '...#..', '...#..', '....#.', '...#..', '...#..', '.##...'],
   '~': [2, '.##..#', '#..##.'],
 };
+
+const G = require('./acwriter/font8z_art.cjs').T;
 
 function face() {
   const f = CF.createSize(8, { name: 'Craft 8x8' });
