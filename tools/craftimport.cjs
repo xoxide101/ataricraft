@@ -33,13 +33,16 @@ const TRANSLIT = { '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"', '
 function toCraft(ch) {
   if (TRANSLIT[ch] !== undefined) return TRANSLIT[ch] === '\xad' ? String.fromCharCode(173) : TRANSLIT[ch];
   const c = ch.codePointAt(0);
+  if (c >= 0xe080 && c <= 0xe09f) return String.fromCharCode(c - 0xe000); // Atari graphics block (craftexport model {graphics})
   if (c === 9) return '    ';
   if (c >= 32 && c < 127) return ch;
   if (c === 0xa0) return String.fromCharCode(160);
   if (c >= 161 && c <= 255 && c !== 173) return ch;
   return c === 173 ? '-' : '?';
 }
-const clean = (s) => [...s].map(toCraft).join('');
+// cfg.unicode keeps the text as typed (xCWriter high quality mode); the default maps it to Craft text
+const cfg = { unicode: false };
+const clean = (s) => (cfg.unicode ? s.replace(/\t/g, '    ') : [...s].map(toCraft).join(''));
 
 // ---- intermediate model: paragraphs of runs --------------------------------
 // paragraph = { align: 'l'|'c'|'r'|'j', bullet: bool, runs: [{ t, b, i, u, sup, sub }] }
@@ -142,8 +145,9 @@ function fromHtml(buf) {
       if (!close) {
         if (/^h[1-6]$/.test(tag)) { st.b = 1; }
         if (tag === 'li') cur.bullet = true;
-        if (tag === 'center' || /align\s*=\s*["']?center/i.test(attrs)) cur.align = 'c';
-        else if (/align\s*=\s*["']?right/i.test(attrs)) cur.align = 'r';
+        if (tag === 'center' || /(align\s*=\s*["']?|text-align\s*:\s*)center/i.test(attrs)) cur.align = 'c';
+        else if (/(align\s*=\s*["']?|text-align\s*:\s*)right/i.test(attrs)) cur.align = 'r';
+        else if (/(align\s*=\s*["']?|text-align\s*:\s*)(justify|both)/i.test(attrs)) cur.align = 'j';
       } else if (/^h[1-6]$/.test(tag)) st.b = 0;
     }
   }
@@ -207,20 +211,33 @@ function build(bytes, cols, lines) {
   return Buffer.concat([h, pay]);
 }
 
-function convert(buf, name, opts = {}) {
-  const fmt = opts.format || detect(buf, name); const cols = opts.cols || 64;
+// Any supported input to the intermediate model (opts.unicode keeps text un-transliterated; opts.allowCraft also reads .CWD).
+function toModel(buf, name, opts = {}) {
+  buf = Buffer.from(buf);
+  const fmt = opts.format || detect(buf, name);
   const O = require('./officeread.cjs');
   const req = (n) => require('./import-' + n + '.cjs').read;
   const office = (f) => (b) => f(b).map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; });
   const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx),
     letterperfect: office(req('letterperfect')), paperclip: office(req('paperclip')), firstxlent: office(req('firstxlent')), textwizard: office(req('textwizard')), bankstreet: office(req('bankstreet')) };
-  if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
-  let paras = importers[fmt](buf);
-  while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
+  const prev = cfg.unicode; cfg.unicode = !!opts.unicode;
+  try {
+    let paras;
+    if (fmt === 'craft' && opts.allowCraft) paras = require('./craftexport.cjs').model(require('./craftdoc.cjs').parse(buf).payload, { graphics: true });
+    else if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
+    else paras = importers[fmt](buf);
+    while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
+    return { format: fmt, paras };
+  } finally { cfg.unicode = prev; }
+}
+
+function convert(buf, name, opts = {}) {
+  const cols = opts.cols || 64;
+  const { format, paras } = toModel(buf, name, opts);
   let bytes = layout(paras, cols), truncated = false;
   if (bytes.length > MAXPAYLOAD) { bytes = bytes.slice(0, MAXPAYLOAD); truncated = true; }
   const lines = bytes.filter((b) => b === 13 || b === 14).length;
-  return { format: fmt, file: build(bytes, cols, lines), truncated, paragraphs: paras.length, bytes: bytes.length };
+  return { format, file: build(bytes, cols, lines), truncated, paragraphs: paras.length, bytes: bytes.length };
 }
 
 if (require.main === module) {
@@ -233,4 +250,4 @@ if (require.main === module) {
   console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to fit one page set)' : ''} -> ${outp}`);
 }
 
-module.exports = { convert, detect };
+module.exports = { convert, detect, toModel, layout, build, toCraft, clean, MAXPAYLOAD, fromText, fromAtascii, fromRtf, fromHtml, fromMd };

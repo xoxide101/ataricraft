@@ -6,7 +6,7 @@ const { parse } = require('./craftdoc.cjs');
 
 const STYLE = { 1: 'b', 2: 'i', 3: 'u', 4: 'inv', 11: 'sup', 12: 'sub' };
 // Paragraphs of { align, bullet, runs: [{ t, b, i, u, sup, sub }] }; soft line breaks (14) are joined, hard (13) end the paragraph.
-function model(payload) {
+function model(payload, opt = {}) {
   const out = []; const on = { b: 0, i: 0, u: 0, inv: 0, sup: 0, sub: 0 };
   let p = { align: 'l', bullet: false, runs: [] };
   for (const b of payload) {
@@ -17,7 +17,7 @@ function model(payload) {
       else if (b === 15) p.align = 'c'; else if (b === 16) p.align = 'r'; else if (b === 17) p.align = 'j';
       else if (b === 19 || b === 20) p.bullet = true;
     } else {
-      const ch = b === 160 ? '\u00a0' : b === 173 ? '\u2011' : b >= 128 && b < 160 ? '\u25a1' : String.fromCharCode(b);
+      const ch = b === 160 ? '\u00a0' : b === 173 ? '\u2011' : b >= 128 && b < 160 ? (opt.graphics ? String.fromCharCode(0xe000 + b) : '\u25a1') : String.fromCharCode(b);
       const l = p.runs[p.runs.length - 1];
       if (l && l.b === on.b && l.i === on.i && l.u === (on.u | on.inv) && l.sup === on.sup && l.sub === on.sub) l.t += ch;
       else p.runs.push({ t: ch, b: on.b, i: on.i, u: on.u | on.inv, sup: on.sup, sub: on.sub });
@@ -92,4 +92,4 @@ if (require.main === module) {
   fs.writeFileSync(pos[1], out); console.log(format + ' -> ' + pos[1] + ' (' + out.length + ' bytes)');
 }
 
-module.exports = { exportDoc, model };
+module.exports = { exportDoc, model, toText, toRtf, toHtml, toMd, toAtascii };
