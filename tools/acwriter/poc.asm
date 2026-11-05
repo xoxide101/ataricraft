@@ -1,4 +1,4 @@
-; ACWord proof of concept: 320x192 1-bit page, 6px glyphs, bold/italic/underline,
+; ACWriter proof of concept: 320x192 1-bit page, 6px glyphs, bold/italic/underline,
 ; typing, scrolling, and frame timing. Stock 64K XL/XE. Build: mads poc.asm -o:poc.xex
 SDMCTL = $022F
 SDLSTL = $0230
@@ -811,7 +811,7 @@ kname dta c'K:',b($9B)
 helpmsg dta c'^B bold ^I italic ^U underline  Ctrl-arrows move',b(0)
 
  .macro body
- dta b(1),c'ACWord',b(1),c' hi-res page: 320 x 176 pixels',b(13)
+ dta b(1),c'ACWriter',b(1),c' hi-res page: 320 x 176 pixels',b(13)
  dta c'Normal, ',b(1),c'bold',b(1),c', ',b(2),c'italic',b(2),c' and ',b(4-1),c'underline',b(3),c' text.',b(13)
  dta c'The quick brown fox jumps over a lazy dog 0123456789',b(13)
  dta b(13)

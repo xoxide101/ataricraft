@@ -1,5 +1,5 @@
 ; ribbon.inc - shared WOW-series shell: menu bar, command bar, Tab completion.
-; Included by an app (ACWord, later ACSpread/ACDBase). The app provides:
+; Included by an app (ACWriter, later ACSpread/ACDBase). The app provides:
 ;   NMENU        number of menus; tabl/tabh name strings, tooll/toolh hint strings per menu
 ;   items        draws the item line of menu cmode (shown while mn = 2)
 ;   mn           menu state: 0 off, 1 waiting for a menu letter, 2 waiting for an item letter
@@ -322,6 +322,6 @@ rs12 dta c'File name (D1: is the default): ',b(0)
 rs13 dta c'Saved.',b(0)
 rs14 dta c'Loaded.',b(0)
 rs15 dta c'Disk error ',b(0)
-rs16 dta c'Not an ACWord file, or it is damaged.',b(0)
+rs16 dta c'Not an ACWriter file, or it is damaged.',b(0)
 rs17 dta c'That file is too big for the page.',b(0)
 rs10 dta c'Menu: press the highlighted letter.  Esc cancels.',b(0)

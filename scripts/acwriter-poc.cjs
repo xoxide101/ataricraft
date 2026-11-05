@@ -1,5 +1,5 @@
-// ACWord proof of concept: boots tools/acword/' + (process.argv[3]||'poc80.xex') + ' on a stock 800XL and reports frame timings.
-// Usage: node scripts/acword-poc.cjs [shots]
+// ACWriter proof of concept: boots tools/acwriter/' + (process.argv[3]||'poc80.xex') + ' on a stock 800XL and reports frame timings.
+// Usage: node scripts/acwriter-poc.cjs [shots]
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs');
 const ROOT = 'C:/Users/raver/ataricraft';
@@ -11,7 +11,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
   await p.selectOption('#model', '800xl').catch(() => {});
   await p.click('#boot'); await p.waitForTimeout(3000);
-  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acword/' + (process.argv[3]||'poc80.xex') + ''));
+  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acwriter/' + (process.argv[3]||'poc80.xex') + ''));
   await p.evaluate((a) => ataricraft.inspect ? FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)) : 0, bytes);
   await p.waitForTimeout(3000);
   const zp = () => p.evaluate(() => Array.from(ataricraft.peek(0xA0, 6)));

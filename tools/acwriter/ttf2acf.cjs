@@ -1,5 +1,5 @@
-// TTF -> ACWord bitmap font converter (.acf), made for the ACWord width/height steps.
-// Usage: node tools/acword/ttf2acf.cjs <font.ttf> <out.acf> [preview.png]
+// TTF -> ACWriter bitmap font converter (.acf), made for the ACWriter width/height steps.
+// Usage: node tools/acwriter/ttf2acf.cjs <font.ttf> <out.acf> [preview.png]
 // Renders ASCII 32..127 for every (pitch, height) step with Chrome's canvas, thresholds
 // to 1 bit, and packs MSB-left rows.
 // File: "ACF1", u8 nsizes, then per size: u8 pitch, u8 height, u8 bytesPerRow,

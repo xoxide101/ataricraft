@@ -1,4 +1,4 @@
-; ACWord proof of concept: sections in word/, shared pieces in lib/ and ribbon.inc
+; ACWriter proof of concept: sections in word/, shared pieces in lib/ and ribbon.inc
  icl 'word/defs.inc'
 
  org $2000
@@ -17,7 +17,7 @@
  icl 'lib/util.inc'
  icl 'word/status.inc'
  .macro body
- dta b(1),c'ACWord',b(1),c' hi-res page: 64 columns x 20 lines',b(13)
+ dta b(1),c'ACWriter',b(1),c' hi-res page: 64 columns x 20 lines',b(13)
  dta c'Normal, ',b(1),c'bold',b(1),c', ',b(2),c'italic',b(2),c' and ',b(4-1),c'underline',b(3),c' text.',b(13)
  dta c'The quick brown fox jumps over a lazy dog 0123456789',b(13)
  dta b(13)

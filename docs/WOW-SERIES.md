@@ -1,6 +1,6 @@
-# The WOW series: ACWord, ACSpread, ACDBase
+# The WOW series: ACWriter, ACSpread, ACDBase
 
-Status: **draft spec**. Nothing in this document is built yet. It records the decisions so far so the first piece (ACWord) and the shared shell can be built against them.
+Status: **draft spec**. Nothing in this document is built yet. It records the decisions so far so the first piece (ACWriter) and the shared shell can be built against them.
 
 ## Goal
 
@@ -8,11 +8,11 @@ Show what an Atari 8-bit can do if you go outside the box: real WYSIWYG document
 
 | App | What it is |
 |---|---|
-| **ACWord** | WYSIWYG page editor: text, fonts, styles, borders, art. Features of Atari Writer, The Last Word, MS Write and Word. |
+| **ACWriter** | WYSIWYG page editor: text, fonts, styles, borders, art. Features of Atari Writer, The Last Word, MS Write and Word. |
 | **ACSpread** | Cell grid, formulas, formats. |
 | **ACDBase** | Records, fields, sort, find, reports. |
 
-Build order: shared shell, then ACWord, then ACSpread and ACDBase on the same shell.
+Build order: shared shell, then ACWriter, then ACSpread and ACDBase on the same shell.
 
 ## Hard rules
 
@@ -78,7 +78,7 @@ The same command names and keys are used by the web ribbon.
 One small header shared by all three apps, then app-specific data:
 
 - Magic and app id, format version, flags.
-- Page size and margins (ACWord), grid size (ACSpread), field table (ACDBase).
+- Page size and margins (ACWriter), grid size (ACSpread), field table (ACDBase).
 - Object list / cell data / records.
 - Fonts and art are referenced by id and stored in shared, compact 1-bit formats.
 
@@ -110,7 +110,7 @@ Before committing the file formats, measure the thing that decides feasibility:
 
 Pass criterion: typing a character updates the line within a few frames, and a page scroll redraws a band without a visible wait. If it does not pass, fixed-width faces become the default and proportional text becomes a mode.
 
-### Measured so far (`tools/acword/`, emulator, 50 Hz frames)
+### Measured so far (`tools/acwriter/`, emulator, 50 Hz frames)
 
 | Build | Full redraw | Scroll 1 line | Type 1 char |
 |---|---|---|---|
@@ -153,15 +153,15 @@ Findings: typing cost was dominated by rescanning and shifting the whole documen
 
 ### Shared shell (ribbon.inc)
 
-	ools/acword/ribbon.inc holds the ribbon, command bar and Tab completion. An app supplies 	abl/tabh, 	ooll/toolh, cmdtab, cmdexec (A = command index), ppmsg and helpmsg. ACSpread and ACDBase reuse it.
+	ools/acwriter/ribbon.inc holds the ribbon, command bar and Tab completion. An app supplies 	abl/tabh, 	ooll/toolh, cmdtab, cmdexec (A = command index), ppmsg and helpmsg. ACSpread and ACDBase reuse it.
 
 **Reflow and alignment (poc5).** Wrap breaks are soft (byte 14) and reflow on insert/delete; hard returns (13) end paragraphs. Paragraph > Left/Center/Right stores an invisible marker (15 centre, 16 right) at the start of the paragraph's first line; continuation lines inherit it. Alignment is computed within the right margin when drawing. Not yet: justify, left margin/indent, style carry-over across soft breaks.
 
 **Justify, margins, style carry-over.** Paragraph > Justify (marker 17) spreads extra space between words on every line of the paragraph except its last. The left margin now offsets text and wrap width is rm-lm+1; changing the margins preset redraws but does not re-wrap existing lines. Bold/italic/underline state carries across soft breaks (pstyle).
 
-## ACWord PoC: paragraph markers and keep-together items
+## ACWriter PoC: paragraph markers and keep-together items
 
-Source is split into tools/acword/word/*.inc (app), lib/*.inc (shared) and ribbon.inc (shell); poc5.asm only lists the includes.
+Source is split into tools/acwriter/word/*.inc (app), lib/*.inc (shared) and ribbon.inc (shell); poc5.asm only lists the includes.
 
 Invisible marker bytes at the start of a paragraph's first line: 15 centre, 16 right, 17 justify, 18 indent, 19/20 bullet, 22 light, 23 heavy, 24 spacer, 25-30 width step (0.5x-3x), 5-10 height step (4-24 px lines). Characters 160 (non-breaking space) and 173 (non-breaking hyphen) are never wrap points; they draw as space and '-'.
 
@@ -176,7 +176,7 @@ Inline toggle codes 11 (superscript) and 12 (subscript), like bold/italic but ze
 Document > G (hidden key) appends one legend paragraph per superscript run (max 15 chars, empty runs skipped) at the end of the document: superscript run, then a space for the reference text. Not deduplicated; re-running adds entries again.
 
 ### Save and Open
-File > Save / Save As / Open (hidden letters S, A, O) take a file name on the bottom bar. No device means D1:, no extension means .CWD, and a name such as H:T works as typed. The file is the portable Craft document format, specified in docs/CRAFT-FORMAT.md; tools/craftdoc.cjs reads it on any machine. Test: scripts/acword-file.cjs.
+File > Save / Save As / Open (hidden letters S, A, O) take a file name on the bottom bar. No device means D1:, no extension means .CWD, and a name such as H:T works as typed. The file is the portable Craft document format, specified in docs/CRAFT-FORMAT.md; tools/craftdoc.cjs reads it on any machine. Test: scripts/acwriter-file.cjs.
 
 ### Symbol picker
-Character > Y (hidden): arrows choose, Enter inserts, Space switches between Latin-1 (160-255) and Atari graphics (128-159), Esc cancels. Glyphs come from tools/acword/mksym.cjs.
+Character > Y (hidden): arrows choose, Enter inserts, Space switches between Latin-1 (160-255) and Atari graphics (128-159), Esc cancels. Glyphs come from tools/acwriter/mksym.cjs.

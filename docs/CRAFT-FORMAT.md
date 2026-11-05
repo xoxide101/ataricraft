@@ -1,8 +1,8 @@
 # Craft document format (CRFT), version 1
 
-One container for every Craft office app, so a file written on an Atari 8-bit can be read on a PC, a C64 or the web editions, and the other way round. ACWord (word processor) is defined here. ACSpread and ACDBase reserve their type codes and use the same header.
+One container for every Craft office app, so a file written on an Atari 8-bit can be read on a PC, a C64 or the web editions, and the other way round. ACWriter (word processor) is defined here. ACSpread and ACDBase reserve their type codes and use the same header.
 
-Reference implementations: `tools/acword/word/file.inc` (6502 writer and reader, via CIO) and `tools/craftdoc.cjs` (JavaScript reader and validator). A real sample is `docs/samples/ACWORD-DEMO.CWD`.
+Reference implementations: `tools/acwriter/word/file.inc` (6502 writer and reader, via CIO) and `tools/craftdoc.cjs` (JavaScript reader and validator). A real sample is `docs/samples/ACWRITER-DEMO.CWD`.
 
 ## Rules for every machine
 
@@ -16,7 +16,7 @@ Reference implementations: `tools/acword/word/file.inc` (6502 writer and reader,
 
 | App | Type byte | Extension | Meaning |
 |---|---|---|---|
-| ACWord | `W` (0x57) | `.CWD` | Craft Word Document |
+| ACWriter | `W` (0x57) | `.CWD` | Craft Word Document |
 | ACSpread | `S` (0x53) | `.CSP` | reserved, not yet defined |
 | ACDBase | `D` (0x44) | `.CDB` | reserved, not yet defined |
 
@@ -41,7 +41,7 @@ The payload starts at offset 16 and runs for `length` bytes. A file shorter than
 
 The checksum is deliberately weak and cheap so a 1 MHz 6502 can compute it while saving. It catches truncation and sector damage, not malice. A mismatch means "damaged"; a reader may still offer to open the text.
 
-Example (the start of `ACWORD-DEMO.CWD`):
+Example (the start of `ACWRITER-DEMO.CWD`):
 
 ```
 43 52 46 54  01  57  00  00   D2 05  2D 00  40  14  32 F2
@@ -63,9 +63,9 @@ One byte per character.
 | 161-255 | Latin-1 (ISO 8859-1), except 173 |
 | 173 | no-break hyphen (Latin-1 has a soft hyphen here, Craft text does not) |
 
-To convert to Unicode: 32-126 and 161-255 are the same code points (173 becomes U+2011), 160 becomes U+00A0, 128-159 follow the Atari table in `tools/acword/mksym.cjs`. To convert from Unicode, anything outside Latin-1 has no code in version 1.
+To convert to Unicode: 32-126 and 161-255 are the same code points (173 becomes U+2011), 160 becomes U+00A0, 128-159 follow the Atari table in `tools/acwriter/mksym.cjs`. To convert from Unicode, anything outside Latin-1 has no code in version 1.
 
-## ACWord payload
+## ACWriter payload
 
 The payload is a stream of **lines** in document order. There is no table of lines; the end of each line is a byte in the stream.
 
@@ -107,7 +107,7 @@ Invisible bytes at the start of a paragraph's first line. They apply to the whol
 
 Codes 21 and 31 are free. Unknown codes below 32 must be skipped, not shown, so newer files open in older readers.
 
-Meaning of the pixel sizes is ACWord's screen model (5 px wide characters, a 320x192 page). Other machines should treat a width step as "this paragraph is larger" and map it to their nearest size.
+Meaning of the pixel sizes is ACWriter's screen model (5 px wide characters, a 320x192 page). Other machines should treat a width step as "this paragraph is larger" and map it to their nearest size.
 
 ## Reading and writing checklist
 
