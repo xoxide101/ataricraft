@@ -36,9 +36,10 @@
 <header>
   <span class="logo">Craft <i>Font Editor</i></span>
   <select id="builtin" title="Built-in fonts"><option value="craft6">Built-in: Craft 6 px (10 cpi)</option><option value="craft5">Built-in: Craft 5 px (12 cpi)</option><option value="craft4">Built-in: Craft 4 px (17 cpi)</option></select>
+  <select id="flist" title="Font library: shipped (font/), Atari ROM and Personal (font_personal/, never committed). Run node scripts/fontlist.cjs to refresh."><option value="">Font library...</option></select>
   <button id="bopen">Open font / TTF...</button>
-  <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2" hidden>
-  <select id="ttfadv" title="Pixel advance used when a TTF is converted"><option value="6">TTF -> 6 px</option><option value="5">TTF -> 5 px</option><option value="4">TTF -> 4 px</option></select>
+  <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt" hidden>
+  <select id="ttfadv" title="Pixel advance used when a TTF is converted"><option value="6">TTF -> 6 px</option><option value="8">TTF -> 8 px</option><option value="5">TTF -> 5 px</option><option value="4">TTF -> 4 px</option></select>
   <label style="color:var(--dim)">Name <input type="text" id="name" maxlength="40"></label>
   <button id="bsave">Save .acf</button><button id="bjson">Save .json</button><button id="binc">Save .inc</button>
   <span id="info"></span>

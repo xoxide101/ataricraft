@@ -535,7 +535,22 @@ async function rasterTtf(b64, opt) {
   return f;
 }
 
-module.exports = { create, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, rasterTtf, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp };
+// Atari charset binary (.fnt, 1024 bytes = 128 glyphs in screen-code order; a 2 KB file uses its first half) -> 8 px Craft font.
+// Rows go straight into the cell from the headroom down: capitals land on the cap line, the baseline falls on row 8 and the
+// 7th/8th rows of g j p q y use the descender rows. ATASCII 0-31 (graphics glyphs) are kept in slots 0-31.
+function fromFnt(buf, opt = {}) {
+  buf = Buffer.from(buf);
+  if (buf.length !== 1024 && buf.length !== 2048) throw new Error('not an Atari charset (' + buf.length + ' bytes, expected 1024 or 2048)');
+  const f = create({ adv: 8, gw: 8, name: (opt.name || 'Atari charset').slice(0, 40), first: 0, count: 128 });
+  for (let a = 0; a < 128; a++) {
+    const r = atariRows(buf, a), g = zeros(ROWS);
+    r.forEach((b, i) => { g[HEAD + i] = b; });
+    f.glyphs[a] = g;
+  }
+  return f;
+}
+
+module.exports = { create, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp };
 
 });
 __def("craftdoc.cjs", function (module, exports, require) {
