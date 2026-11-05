@@ -86,6 +86,8 @@ pzd1 lda pwii
  asl
  jsr ypos
  jsr pzclr
+ lda #0
+ sta pwsp
  lda top
  clc
  adc pwii
@@ -114,8 +116,19 @@ pzd2 ldy v
  beq pzd8
  inc v
  cmp #32
- bcc pzd2
- jsr pzmap
+ bcs pzd3
+ cmp #11
+ bne pzda
+ lda pwsp
+ eor #1
+ jmp pzdb
+pzda cmp #12
+ bne pzd2
+ lda pwsp
+ eor #2
+pzdb sta pwsp
+ jmp pzd2
+pzd3 jsr pzmap
  sta pwch
  lda hi
  clc
@@ -246,7 +259,10 @@ pzbg lda pwsc
  lda sp+1
  adc #0
  sta gp+1
- lda #0
+ lda pwsp
+ beq pzbn
+ jmp pzss
+pzbn lda #0
  sta pwvy
 pzb1 ldy pwvy
  lda (src),y
@@ -280,6 +296,69 @@ pzb2 inc pwvy
  cmp #8
  bne pzb1
  rts
+
+; sup / sub: 5 (capital-set) or 4 (x-height set) source rows doubled; superscript at the top of the cell, subscript 6 scanlines lower
+pzss ldy #0
+ lda (src),y
+ ldy #1
+ ora (src),y
+ beq pzs0
+ lda #0
+ ldx #0
+ beq pzs1
+pzs0 lda #80
+ ldx #6
+pzs1 stx pwvy
+ ldy pwsp
+ cpy #2
+ bne pzs2
+ pha
+ lda gp
+ clc
+ adc #240
+ sta gp
+ bcc pzs8
+ inc gp+1
+pzs8 pla
+pzs2 clc
+ adc gp
+ sta gp
+ bcc pzs3
+ inc gp+1
+pzs3 ldy pwvy
+ lda pzrl,y
+ bmi pzs9
+ tay
+ lda (src),y
+ sta pwvx
+ lsr
+ lsr
+ lsr
+ lsr
+ tax
+ lda pzdbl,x
+ ldy #0
+ sta (gp),y
+ ldy #40
+ sta (gp),y
+ lda pwvx
+ and #15
+ tax
+ lda pzdbl,x
+ ldy #1
+ sta (gp),y
+ ldy #41
+ sta (gp),y
+ lda gp
+ clc
+ adc #80
+ sta gp
+ bcc pzs4
+ inc gp+1
+pzs4 inc pwvy
+ jmp pzs3
+pzs9 rts
+pzrl dta 0,1,3,4,5,$FF,2,3,4,5,$FF
 
 ; invert the 16x16 cell at the cursor column
 pzcur lda pwcv

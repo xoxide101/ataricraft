@@ -64,13 +64,13 @@
   const normPos = (pos) => { const d = XW.doc, p = Math.max(0, Math.min(d.length - 1, pos.p)); return { p, o: Math.max(0, Math.min(XCW.ptext(d[p]).length, pos.o)) }; };
   const xsCol = (cl) => { const l = lines[cl.li]; return l ? cols(l)[cl.k] : 0; };
 
-  // ACWriter's default 2x face is the OS ROM charset; paragraphs with a font use their own 8x8 face
+  // ACWriter's default 2x face is the Craft 8x8 (word/zoom.inc zfont, font\craft8.fnt); paragraphs with a font use their own 8x8 face
   function glyph8(face, ch) {
     const c = ch.charCodeAt(0);
     if (c < 32 || c > 127) return null;
-    const f = XFACE.use(face || 'ATARIROM') || XFACE.use('ATARIROM');
-    const bm = f && (face ? XFACE.b8(face, c) : XFACE.b8('ATARIROM', c));
-    return bm || null;
+    const id = face || 'CRAFT8';
+    const f = XFACE.use(id) || XFACE.use('ATARIROM');
+    return (f && XFACE.b8(f.id, c)) || null;
   }
   function render2() {
     relayout();
@@ -94,7 +94,15 @@
         if (on) px(x, y, 16, 16, th.ink);
         const g = c.ch === ' ' ? null : glyph8(face, c.ch);
         if (!g) return;
-        for (let gy = 0; gy < 8; gy++) for (let gx = 0; gx < 8; gx++) if (g.px[gy * 8 + gx]) px(x + gx * 2, y + gy * 2, 2, 2, on ? th.bg : th.ink);
+        const ink = on ? th.bg : th.ink;
+        if (c.sup || c.sub) {
+          // same reduced forms as word/zoom.inc: capital set rows 0,1,3,4,5 / x-height set rows 2..5, doubled; sup at the top, sub 6 px lower
+          const capSet = [0, 1].some((gy) => [0, 1, 2, 3, 4, 5, 6, 7].some((gx) => g.px[gy * 8 + gx])), rowsL = capSet ? [0, 1, 3, 4, 5] : [2, 3, 4, 5];
+          const top = (capSet ? 0 : 2) + (c.sub && !c.sup ? 6 : 0);
+          rowsL.forEach((gy, n) => { for (let gx = 0; gx < 8; gx++) if (g.px[gy * 8 + gx]) px(x + gx * 2, y + top + n * 2, 2, 2, ink); });
+          return;
+        }
+        for (let gy = 0; gy < 8; gy++) for (let gx = 0; gx < 8; gx++) if (g.px[gy * 8 + gx]) px(x + gx * 2, y + gy * 2, 2, 2, ink);
       });
       if (!has && li === cl.li && cl.k >= (l.cells.length)) { const col = lx + xs[cl.k] - pwx; if (blink && col >= 0 && col < 20) px(col * 16, y, 16, 16, th.ink); }
     }
