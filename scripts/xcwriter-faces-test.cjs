@@ -52,6 +52,11 @@ const para = (t, font) => Object.assign({ align: 'l', bullet: false, runs: [{ t,
   await p.evaluate(([t, ids]) => { XW.doc = XCW.normalize(ids.map((f) => ({ align: 'l', bullet: false, runs: [{ t: (f || 'Standard') + ': ' + t, b: 0, i: 0, u: 0, sup: 0, sub: 0 }], ...(f ? { font: f } : {}) }))); PG.load(XW.doc, { a: { p: 0, o: 0 }, f: { p: 0, o: 0 } }); }, [SAMPLE, faces]);
   await p.selectOption('#pgzoom', '100'); await p.waitForTimeout(300);
   await shot('2-page-view-same-text-in-7-fonts');
+  const dims = await p.evaluate(() => PG.lines().map((l) => ({ f: (XW.doc[l.p].font || 'std'), cw: l.cw, h: l.h })));
+  const by = (f) => dims.find((d) => d.f === f);
+  assert(by('CRAFT12').cw > by('CRAFT10').cw && by('CRAFT10').cw > by('CRAFT8').cw && by('CRAFT8').cw > by('std').cw, 'cell widths grow 4x7 < 8 < 10 < 12: ' + JSON.stringify(dims.map((d) => d.f + ':' + d.cw)));
+  assert(by('CRAFT12').h === 12 && by('CRAFT10').h === 12 && by('CRAFT8').h === 8 && by('std').h === 8, 'line heights follow cell heights');
+  ok('page view cell sizes proportional: ' + [...new Set(dims.map((d) => d.f + ' ' + d.cw + 'x' + d.h))].join(', '));
 
   // (c) per-paragraph fonts, saved and reloaded through .CWD (CPG1 tags 2/3)
   await p.evaluate(([mk]) => { XW.doc = XCW.normalize([['CRAFT12', 'Heading in Craft 12x12'], ['', 'Standard body text keeps the 64 column ACWriter look.'], ['CRAFT8', 'Atari 8x8 native paragraph, one font for the whole line.'], ['ATARI8BI', 'Atari8bit.ttf converted to the 12x12 master.'], ['ATARIROM', 'ROM charset paragraph.']].map(([f, t]) => ({ align: 'l', bullet: false, runs: [{ t, b: 0, i: 0, u: 0, sup: 0, sub: 0 }], ...(f ? { font: f } : {}) }))); PG.load(XW.doc, { a: { p: 0, o: 0 }, f: { p: 0, o: 0 } }); }, [0]);

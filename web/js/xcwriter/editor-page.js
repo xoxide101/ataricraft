@@ -35,12 +35,20 @@
   XFACE.onChange(() => { fillFaceSelect(); FCACHE = {}; render(); });
   XFACE.init();
   const page = () => P.info(XW.page || {});
+  // Every face keeps its real cell: advance w dots across, h dots down, same dot size for all faces (1 logical px per dot vertically,
+  // CELL/5 horizontally so 12/17 cpi compress the dots). The standard 4x7 face is a 5 x 8 cell, 4/5/6 px faces share the 8 dot line.
+  let npages = 1;
+  function faceDims(face) {
+    const f = face && XFACE.use(face), k = CELL[page().pitch] / 5;
+    if (!f) return { cw: CELL[page().pitch], h: LH };
+    return { cw: f.w * k, h: f.w < 8 ? LH : f.h };
+  }
   function geom() {
-    const i = page(), cw = CELL[i.pitch], pw = i.paperCols * cw, ph = i.paperLines * LH, n = Math.max(1, Math.ceil(lines.length / i.textLines));
+    const i = page(), cw = CELL[i.pitch], pw = i.paperCols * cw, ph = i.paperLines * LH, n = npages;
     return { i, cw, pw, ph, n, dw: pw + 2 * PAD, dh: n * ph + (n - 1) * GAP + 2 * PAD };
   }
   const pageTop = (g, k) => PAD + k * (g.ph + GAP);
-  const lineY = (g, li) => pageTop(g, Math.floor(li / g.i.textLines)) + (g.i.top + (li % g.i.textLines)) * LH;
+  const lineY = (g, li) => pageTop(g, lines[li].pg) + g.i.top * LH + lines[li].ty;
 
   // device-pixel rectangles from logical coordinates; edges are rounded so neighbouring pixels never overlap or leave gaps
   let ox = 0, oy = 0, S = 2;
@@ -50,8 +58,8 @@
     c.fillStyle = col; c.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
   }
   // a face bitmap scaled into the cw x LH cell: runs of ink in a row are one rectangle, edges are rounded to device pixels by px()
-  function drawBitmap(x, y, cell, ink, cw, bm) {
-    const sx = cw / bm.w, sy = LH / bm.h, bold = Math.max(sx, 0.5);
+  function drawBitmap(x, y, cell, ink, cw, bm, lh) {
+    const sx = cw / bm.w, sy = lh / bm.h, bold = Math.max(sx, 0.5);
     for (let r = 0; r < bm.h; r++) {
       const sh = cell.i && r < bm.h * 0.4 ? Math.max(sx, 0.5) : 0;
       for (let c = 0; c < bm.w;) {
@@ -60,11 +68,11 @@
         px(ctx, x + c * sx + sh, y + r * sy, (e - c) * sx + (cell.b ? bold : 0), sy, ink); c = e;
       }
     }
-    if (cell.u) px(ctx, x, y + 7, cw, 1, ink);
+    if (cell.u) px(ctx, x, y + lh - 1, cw, 1, ink);
   }
-  function drawCell(x, y, cell, ink, cw, face) {
+  function drawCell(x, y, cell, ink, cw, face, lh) {
     const code = cell.ch.charCodeAt(0), f = face && code >= 32 && code <= 127 ? XFACE.use(face) : null, bm = f && f.get(code, cell.sup ? 1 : cell.sub ? 2 : 0);
-    if (bm) { drawBitmap(x, y, cell, ink, cw, bm); return; }
+    if (bm) { drawBitmap(x, y, cell, ink, cw, bm, lh || LH); return; }
     const rows = glyph(code), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(4, cw);
     for (let r = 0; r < rows.length && r < 8; r++) {
       const sh = cell.i && r < 3 ? 1 : 0, bits = rows[r];
@@ -89,8 +97,26 @@
     }
     return xs;
   }
-  const xsOf = (l) => cols(l, page().usable);
-  function relayout() { lines = XCW.atariLines(XW.doc, undefined, XW.page || P.normalize({})); }
+  const xsOf = (l) => cols(l, l.uc);
+  const xpx = (l) => xsOf(l).map((c) => c * l.cw);
+  // standard paragraphs wrap on the page columns; a paragraph in another face is re-wrapped to as many of its own cells as fit the
+  // usable width, then every line gets its height and page (variable-height pagination).
+  function relayout() {
+    const pg = XW.page || P.normalize({}), i = P.info(pg), base = XCW.atariLines(XW.doc, undefined, pg), out = [];
+    for (let a = 0; a < base.length;) {
+      let b = a; while (b < base.length && base[b].p === base[a].p) b++;
+      const p = base[a].p, d = faceDims((XW.doc[p] && XW.doc[p].font) || '');
+      if (Math.abs(d.cw - CELL[i.pitch]) < 1e-6) for (let q = a; q < b; q++) out.push(Object.assign(base[q], { cw: d.cw, h: d.h, uc: i.usable }));
+      else {
+        const uc = Math.max(1, Math.floor((i.usable * CELL[i.pitch]) / d.cw));
+        for (const l of XCW.atariLines([XW.doc[p]], { ...XCW.PROFILES.atari, cols: uc }, null)) out.push(Object.assign(l, { p, cw: d.cw, h: d.h, uc, cells: l.cells.map((c) => Object.assign(c, { p })) }));
+      }
+      a = b;
+    }
+    let y = 0, k = 0; const room = i.textLines * LH;
+    for (const l of out) { if (y > 0 && y + l.h > room) { k++; y = 0; } l.pg = k; l.ty = y; y += l.h; }
+    npages = k + 1; lines = out;
+  }
   function posToLC(pos) {
     let best = null;
     for (let li = 0; li < lines.length; li++) {
@@ -135,10 +161,10 @@
   }
   function ensureVisible(cl) {
     const g = geom(), l = lines[cl.li]; if (!l) return;
-    const lx = PAD + (g.i.left + xsOf(l)[cl.k]) * g.cw, ly = lineY(g, cl.li);
+    const lx = PAD + g.i.left * g.cw + xpx(l)[cl.k], ly = lineY(g, cl.li);
     const vw = scr.clientWidth, vh = scr.clientHeight, m = 40;
-    const x0 = lx * z, y0 = ly * z, y1 = (ly + LH) * z;
-    if (x0 - m < scr.scrollLeft) scr.scrollLeft = Math.max(0, x0 - m); else if (x0 + g.cw * z + m > scr.scrollLeft + vw) scr.scrollLeft = x0 + g.cw * z + m - vw;
+    const x0 = lx * z, y0 = ly * z, y1 = (ly + l.h) * z;
+    if (x0 - m < scr.scrollLeft) scr.scrollLeft = Math.max(0, x0 - m); else if (x0 + l.cw * z + m > scr.scrollLeft + vw) scr.scrollLeft = x0 + l.cw * z + m - vw;
     if (y0 - m < scr.scrollTop) scr.scrollTop = Math.max(0, y0 - m); else if (y1 + m > scr.scrollTop + vh) scr.scrollTop = y1 + m - vh;
   }
 
@@ -162,21 +188,20 @@
       for (let d = 0; d < gh; d += 4) { px(ctx, gx - 1, gy + d, 1, 2, gc); px(ctx, gx + gw, gy + d, 1, 2, gc); }
     }
     const [s, e] = cmp(anchor, caret) <= 0 ? [anchor, caret] : [caret, anchor], has = cmp(s, e) !== 0, cl = posToLC(caret);
-    const first = Math.max(0, Math.floor((oy / S - PAD) / (g.ph + GAP)) * i.textLines - 1);
-    for (let li = first; li < lines.length; li++) {
-      const y = lineY(g, li);
+    for (let li = 0; li < lines.length; li++) {
+      const l = lines[li], y = lineY(g, li);
       if (y * S - oy > cv.height) break;
-      if ((y + LH) * S - oy < 0) continue;
-      const l = lines[li], xs = xsOf(l), face = (XW.doc[l.p] && XW.doc[l.p].font) || '';
-      if (l.bullet && l.first) drawCell(PAD + i.left * g.cw, y, { ch: '*', b: 1, i: 0, u: 0, sup: 0, sub: 0 }, th.ink, g.cw);
+      if ((y + l.h) * S - oy < 0) continue;
+      const xs = xpx(l), face = (XW.doc[l.p] && XW.doc[l.p].font) || '', x0 = PAD + i.left * g.cw;
+      if (l.bullet && l.first) drawCell(x0, y, { ch: '*', b: 1, i: 0, u: 0, sup: 0, sub: 0 }, th.ink, l.cw, face, l.h);
       l.cells.forEach((c, k) => {
-        const x = PAD + (i.left + xs[k]) * g.cw, here = { p: l.p, o: l.o0 + k };
+        const x = x0 + xs[k], here = { p: l.p, o: l.o0 + k };
         const on = has && cmp(here, s) >= 0 && cmp(here, e) < 0;
-        if (on) px(ctx, x, y, g.cw, LH, th.ink);
-        if (c.ch !== ' ' || c.u) drawCell(x, y, c, on ? th.bg : th.ink, g.cw, face);
-        if (XW.missAt(l.p, l.o0 + k)) for (let q = 0; q < g.cw; q += 2) px(ctx, x + q, y + 7, 1, 1, '#e0382c');
+        if (on) px(ctx, x, y, l.cw, l.h, th.ink);
+        if (c.ch !== ' ' || c.u) drawCell(x, y, c, on ? th.bg : th.ink, l.cw, face, l.h);
+        if (XW.missAt(l.p, l.o0 + k)) for (let q = 0; q < l.cw; q += 2) px(ctx, x + q, y + l.h - 1, 1, 1, '#e0382c');
       });
-      if (blink && !has && li === cl.li) px(ctx, PAD + (i.left + xs[cl.k]) * g.cw, y, 1, LH, th.ink);
+      if (blink && !has && li === cl.li) px(ctx, x0 + xs[cl.k], y, 1, l.h, th.ink);
     }
     drawRuler(g); drawNav(g); info(g);
     const pf = (XW.doc[caret.p] && XW.doc[caret.p].font) || '', fs = $('pgfont');
@@ -220,7 +245,7 @@
     }
   }
   function info(g) {
-    const i = g.i, longest = lines.reduce((m, l) => Math.max(m, l.cells.length + (l.bullet ? 2 : 0)), 0);
+    const i = g.i, longest = Math.ceil(lines.reduce((m, l) => Math.max(m, ((l.cells.length + (l.bullet ? 2 : 0)) * l.cw) / g.cw), 0));
     const el = $('pgfit');
     el.innerHTML = '<b>' + P.PAPERS[i.paper].name + '</b> &middot; ' + i.pitch + ' cpi &middot; usable <b>' + i.usable + ' of ' + i.paperCols + ' columns</b> (' + i.usableInches.toFixed(1) + ' in), ' + i.textLines + ' lines/page &middot; ' + g.n + ' page' + (g.n > 1 ? 's' : '') + ' &middot; longest line ' + longest + ' col &middot; ' + Math.round(z * 50) + '%';
     el.classList.toggle('warn', longest > i.usable);
@@ -238,8 +263,8 @@
     nctx.fillStyle = theme.ink + '99';
     for (let li = 0; li < lines.length; li++) {
       const l = lines[li], n = l.cells.length; if (!n) continue;
-      const xs = xsOf(l);
-      nctx.fillRect(Math.round((PAD + (i.left + xs[0]) * g.cw) * sc), Math.round(lineY(g, li) * sc + 1), Math.max(1, Math.round(n * g.cw * sc)), 1);
+      const xs = xpx(l);
+      nctx.fillRect(Math.round((PAD + i.left * g.cw + xs[0]) * sc), Math.round((lineY(g, li) + l.h - 2) * sc), Math.max(1, Math.round(n * l.cw * sc)), 1);
     }
     const vx = scr.scrollLeft / z * sc, vy = scr.scrollTop / z * sc, vw = Math.min(W, scr.clientWidth / z * sc), vh = Math.min(H, scr.clientHeight / z * sc);
     nctx.strokeStyle = '#ff9d3a'; nctx.lineWidth = 2; nctx.strokeRect(vx + 1, vy + 1, Math.max(4, vw - 2), Math.max(4, vh - 2));
@@ -287,9 +312,9 @@
     blink = 1; relayout(); computeZ(); ensureVisible(posToLC(caret)); render(); XW.selChanged();
   }
   function moveLine(d, keep) {
-    const cl = posToLC(caret), xs = xsOf(lines[cl.li]);
+    const cl = posToLC(caret), xs = xpx(lines[cl.li]);
     if (goalX === null) goalX = xs[cl.k];
-    const li = Math.max(0, Math.min(lines.length - 1, cl.li + d)), nx = xsOf(lines[li]);
+    const li = Math.max(0, Math.min(lines.length - 1, cl.li + d)), nx = xpx(lines[li]);
     let k = 0, bd = 1e9;
     for (let j = 0; j <= lines[li].cells.length; j++) { const dd = Math.abs(nx[j] - goalX); if (dd < bd) { bd = dd; k = j; } }
     const gx = goalX; setCaret(lcToPos(li, k), keep); goalX = gx;
@@ -297,11 +322,13 @@
   function pointPos(e) {
     const r = cv.getBoundingClientRect(), g = geom(), i = g.i;
     const lx = (e.clientX - r.left + scr.scrollLeft) / z, ly = (e.clientY - r.top + scr.scrollTop) / z;
-    const pg = Math.max(0, Math.min(g.n - 1, Math.floor((ly - PAD + GAP / 2) / (g.ph + GAP))));
-    const row = Math.max(0, Math.min(i.textLines - 1, Math.floor((ly - pageTop(g, pg) - i.top * LH) / LH)));
-    const li = Math.max(0, Math.min(lines.length - 1, pg * i.textLines + row)), xs = xsOf(lines[li]), x = (lx - PAD) / g.cw - i.left;
+    const pg = Math.max(0, Math.min(g.n - 1, Math.floor((ly - PAD + GAP / 2) / (g.ph + GAP)))), rel = ly - pageTop(g, pg) - i.top * LH;
+    let li = -1;
+    for (let q = 0; q < lines.length; q++) if (lines[q].pg === pg && (li < 0 || lines[q].ty <= rel)) li = q;
+    if (li < 0) li = Math.max(0, lines.findIndex((l) => l.pg >= pg));
+    const xs = xpx(lines[li]), x = lx - PAD - i.left * g.cw, hw = lines[li].cw / 2;
     let k = lines[li].cells.length;
-    for (let j = 0; j < lines[li].cells.length; j++) if (x < xs[j] + 0.5) { k = j; break; }
+    for (let j = 0; j < lines[li].cells.length; j++) if (x < xs[j] + hw) { k = j; break; }
     if (!lines[li].last && k === lines[li].cells.length && k > 0 && lines[li].cells[k - 1].ch === ' ') k--;
     return lcToPos(li, k);
   }
@@ -331,7 +358,7 @@
   }
   // Tab: spaces up to the next tab stop (absolute column). Craft text has no tab code; centre and right stops act as left stops while typing.
   function tabSpaces() {
-    const cl = posToLC(caret), i = page(), col = i.left + xsOf(lines[cl.li])[cl.k];
+    const cl = posToLC(caret), i = page(), l = lines[cl.li], col = i.left + Math.round(xpx(l)[cl.k] / CELL[i.pitch]);
     const st = i.tabs.find((t) => t.pos > col), target = st ? st.pos : col + 8 - ((col - i.left) % 8);
     return ' '.repeat(Math.max(1, target - col));
   }
