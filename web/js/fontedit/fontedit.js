@@ -201,9 +201,30 @@
       const f = CF.fromAcf1(buf, idx); f.name = name; return setFont(f);
     }
     if (buf[0] === 0x7b) return setFont(CF.fromJson(buf.toString('utf8')));
+    const isSfnt = buf.length > 4 && (buf.readUInt32BE(0) === 0x00010000 || ['OTTO', 'true', 'wOFF', 'wOF2'].includes(magic));
+    if (!isSfnt && (buf.length === 1024 || buf.length === 2048 || /\.fnt$/i.test(name))) {
+      const f = CF.fromFnt(buf, { name: name.replace(/\.[^.]+$/, '') }); setFont(f); return toast('Atari charset imported as 8 px; 8x8 glyphs, descender rows used by g j p q y');
+    }
     const f = await CF.rasterTtf(buf.toString('base64'), { adv: +$('ttfadv').value, name: name.replace(/\.[^.]+$/, '').slice(0, 40) });
     setFont(f); toast('TTF converted to ' + f.adv + ' px; tune the glyphs, then save');
   }
+
+  // Font library (manifest from scripts/fontlist.cjs); personal fonts only exist on this machine.
+  async function loadLibrary() {
+    const sel = $('flist');
+    let man;
+    try { man = await (await fetch('library/fonts/local/manifest.json', { cache: 'no-store' })).json(); } catch (e) { sel.options[0].textContent = 'Font library (run node scripts/fontlist.cjs)'; return; }
+    for (const g of man.groups) {
+      const og = document.createElement('optgroup'); og.label = g.label + (g.fonts.length ? '' : ' (none)'); sel.appendChild(og);
+      for (const f of g.fonts) { const o = document.createElement('option'); o.value = f.url; o.textContent = f.name; og.appendChild(o); }
+    }
+  }
+  $('flist').onchange = async () => {
+    const url = $('flist').value; if (!url) return;
+    try { const r = await fetch(url); await openBytes(new Uint8Array(await r.arrayBuffer()), url.split('/').pop()); } catch (e) { toast('Cannot open: ' + e.message); }
+    $('flist').value = '';
+  };
+  loadLibrary();
   $('file').onchange = async () => {
     const f = $('file').files[0]; if (!f) return;
     try { await openBytes(new Uint8Array(await f.arrayBuffer()), f.name); } catch (e) { toast('Cannot open: ' + e.message); }

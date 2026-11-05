@@ -28,3 +28,6 @@ web/js/diskdb.js
 !web/library/craftapps/Tools/*.atr
 
 web/library/fonts/personal/
+# generated font lists / extracted ROM charset, and the user's own downloaded fonts: never committed
+web/library/fonts/local/
+font_personal/
