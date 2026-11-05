@@ -65,3 +65,7 @@ Typing in the old view is unchanged: `scripts\acwriter-latency.cjs` prints `mful
 * Centre/right tab stops only affect the ruler.
 * Expanded memory is detected but unused (see tiers).
 * Changing paper/pitch/margins changes soft wrap breaks stored in the document (the text is unchanged).
+
+## Menu/status chrome face
+The zoom-view header and status lines (and the menu bar) still use the Atari OS text-mode charset. Switching them to the Standard face needs a second text blitter in the resident area (about 0.3 KB for the blitter plus a 768-byte charset in a bank); the resident area and overlay slot are full, so this is not done. Status: not implemented.
+
