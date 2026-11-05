@@ -2,7 +2,9 @@
 // Usage: node tools/acwriter/ttf2acf.cjs <font.ttf> <out.acf> [preview.png]
 // Renders ASCII 32..127 for every (pitch, height) step with Chrome's canvas, thresholds
 // to 1 bit, and packs MSB-left rows.
-// File: "ACF1", u8 nsizes, then per size: u8 pitch, u8 height, u8 bytesPerRow,
+// With --cell <4|5|6> it instead writes ONE metric font ("ACF2", docs/FONT.md: 12-row cell, 2 headroom rows, caps rows 2..8,
+// x-height row 4, baseline row 8, 3 descender rows) with that advance: node ttf2acf.cjs font.ttf out.acf --cell 5 [--name N]
+// Legacy file: "ACF1", u8 nsizes, then per size: u8 pitch, u8 height, u8 bytesPerRow,
 //       then 96 glyphs x height x bytesPerRow bytes.
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs');
@@ -12,12 +14,24 @@ const PITCH = [3, 5, 8, 10, 13, 15];
 const HEIGHT = [4, 8, 12, 16, 20, 24];
 
 (async () => {
-  const [src, out, prev] = process.argv.slice(2);
+  const argv = process.argv.slice(2), ci = argv.indexOf('--cell'), ni = argv.indexOf('--name');
+  const cell = ci >= 0 ? +argv[ci + 1] : 0, fname = ni >= 0 ? argv[ni + 1] : '';
+  const [src, out, prev] = argv.filter((a, i) => !a.startsWith('--') && ![ci + 1, ni + 1].includes(i));
   if (!src || !out) { console.log('usage: ttf2acf.cjs font.ttf out.acf [preview.png]'); process.exit(1); }
   const b64 = fs.readFileSync(src).toString('base64');
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   const p = await (await b.newContext()).newPage();
   await p.setContent('<canvas id=c></canvas>');
+  if (cell) {
+    await p.addScriptTag({ path: path.join(__dirname, '../../web/js/xcwriter/core/xcw-core.js') });
+    const b64o = await p.evaluate(async ({ b64, cell, name }) => {
+      const f = await XCW.Font.rasterTtf(b64, { adv: cell, name });
+      return XCW.Font.serialize(f).toString('base64');
+    }, { b64, cell, name: fname || path.basename(src, path.extname(src)) });
+    fs.writeFileSync(out, Buffer.from(b64o, 'base64'));
+    console.log(path.basename(out), 'ACF2', cell + ' px advance');
+    await b.close(); return;
+  }
   const res = await p.evaluate(async ({ b64, PITCH, HEIGHT }) => {
     const ff = new FontFace('F', 'url(data:font/ttf;base64,' + b64 + ')');
     await ff.load(); document.fonts.add(ff);
