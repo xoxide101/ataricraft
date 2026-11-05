@@ -228,30 +228,64 @@
   XW.missAt = (p, o) => XW.missSet.has(p * 100000 + o);
 
   const ctxEl = $('ctx');
+  ctxEl.addEventListener('mousedown', (e) => e.preventDefault());
   function hideCtx() { ctxEl.style.display = 'none'; }
   document.addEventListener('mousedown', (e) => { if (!ctxEl.contains(e.target)) hideCtx(); });
-  XW.contextMenu = (e, pos) => {
-    if (!pos) return;
-    const m = XW.misses.find((x) => x.p === pos.p && pos.o >= x.start && pos.o <= x.end);
-    if (!m) return;
-    e.preventDefault();
-    const sug = XCW.suggest(dict, m.word);
+  // Custom menu only where it is relevant: the editor surfaces and the recent-documents list. Everything else keeps the browser menu.
+  function showCtx(e, items) {
     ctxEl.innerHTML = '';
-    const add = (label, fn, cls) => { const d = document.createElement('div'); d.textContent = label; if (cls) d.className = cls; else d.onclick = () => { hideCtx(); fn(); }; ctxEl.append(d); };
-    add('"' + m.word + '" is not in the dictionary', null, 'dis');
-    if (sug.length) sug.forEach((s) => add(s, () => {
-      snapshot(true);
-      XCW.deleteRange(XW.doc, { p: m.p, o: m.start }, { p: m.p, o: m.end });
-      const np = XCW.insertText(XW.doc, { p: m.p, o: m.start }, isAt() ? atariSanitize([{ align: 'l', bullet: false, runs: [{ t: s, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t : s);
-      refresh({ a: np, f: np });
-    })); else add('(no suggestions)', null, 'dis');
-    ctxEl.append(document.createElement('hr'));
-    add('Ignore all', () => { XW.ignore.add(m.word.toLowerCase()); runSpell(); });
-    add('Add to my dictionary', () => { XW.ignore.add(m.word.toLowerCase()); LS.set('xcw.ignore', [...XW.ignore]); runSpell(); toast('Added "' + m.word + '"'); });
+    for (const it of items) {
+      if (it === '-') { ctxEl.append(document.createElement('hr')); continue; }
+      const d = document.createElement('div'); d.textContent = it.label;
+      if (it.dis) d.className = 'dis'; else d.onclick = () => { hideCtx(); it.fn(); };
+      ctxEl.append(d);
+    }
     ctxEl.style.display = 'block';
-    ctxEl.style.left = Math.min(e.clientX, innerWidth - 220) + 'px'; ctxEl.style.top = Math.min(e.clientY, innerHeight - ctxEl.offsetHeight - 10) + 'px';
+    ctxEl.style.left = Math.max(0, Math.min(e.clientX, innerWidth - ctxEl.offsetWidth - 6)) + 'px'; ctxEl.style.top = Math.max(0, Math.min(e.clientY, innerHeight - ctxEl.offsetHeight - 10)) + 'px';
+  }
+  // History only: recent documents, last-used save format, find box, undo/redo. Documents, saved fonts and the user dictionary stay.
+  function clearHistory() {
+    LS.set('xcw.recent', []); try { localStorage.removeItem('xcw.fmt'); } catch (x) { /* storage unavailable */ }
+    XW.undo = []; XW.redo = []; XW.pend = {}; XW.cleared = XW.id;
+    for (const i of document.querySelectorAll('#findbar input[type=text],#findbar input:not([type])')) i.value = '';
+    if (XW.find) XW.find.matches = [];
+    if ($('fq')) findAll();
+    renderRecent(); toast('History cleared');
+  }
+  XW.clearHistory = clearHistory;
+  const clipDt = () => ({ d: {}, setData(k, v) { this.d[k] = v; }, getData(k) { return this.d[k] || ''; } });
+  const copyCut = async (cut) => {
+    const dt = clipDt(); XW.copyData(dt, cut);
+    try { if (dt.d['text/plain']) await navigator.clipboard.writeText(dt.d['text/plain']); } catch (x) { /* internal clipboard still works */ }
   };
-
+  const pasteIn = async () => {
+    let text = null; try { text = await navigator.clipboard.readText(); } catch (x) { text = XW.clip ? XW.clip.text : null; }
+    if (text) XW.pasteData({ getData: (k) => (k === 'text/plain' ? text : '') });
+  };
+  XW.contextMenu = (e, pos) => {
+    e.preventDefault();
+    const s = sel(), has = !!cmp(...XCW.order(s.a, s.f));
+    const m = pos && XW.misses.find((x) => x.p === pos.p && pos.o >= x.start && pos.o <= x.end);
+    const items = [];
+    if (m) {
+      const sug = XCW.suggest(dict, m.word);
+      items.push({ label: '"' + m.word + '" is not in the dictionary', dis: 1 });
+      if (sug.length) sug.forEach((w) => items.push({ label: w, fn: () => {
+        snapshot(true);
+        XCW.deleteRange(XW.doc, { p: m.p, o: m.start }, { p: m.p, o: m.end });
+        const np = XCW.insertText(XW.doc, { p: m.p, o: m.start }, isAt() ? atariSanitize([{ align: 'l', bullet: false, runs: [{ t: w, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t : w);
+        refresh({ a: np, f: np });
+      } })); else items.push({ label: '(no suggestions)', dis: 1 });
+      items.push({ label: 'Ignore all', fn: () => { XW.ignore.add(m.word.toLowerCase()); runSpell(); } });
+      items.push({ label: 'Add to my dictionary', fn: () => { XW.ignore.add(m.word.toLowerCase()); LS.set('xcw.ignore', [...XW.ignore]); runSpell(); toast('Added "' + m.word + '"'); } });
+      items.push('-');
+    }
+    items.push({ label: 'Cut', dis: !has, fn: () => copyCut(true) }, { label: 'Copy', dis: !has, fn: () => copyCut(false) }, { label: 'Paste', fn: pasteIn },
+      { label: 'Select all', fn: () => refresh({ a: { p: 0, o: 0 }, f: XCW.docEnd(XW.doc) }) }, '-',
+      { label: 'Clear undo history', dis: !XW.undo.length && !XW.redo.length, fn: () => { XW.undo = []; XW.redo = []; XW.pend = {}; toast('Undo history cleared'); } },
+      { label: 'Clear history', fn: clearHistory });
+    showCtx(e, items);
+  };
   // ---------- status / Atari side panel ----------
   function words(doc) { const t = XCW.plain(doc); return { w: (t.match(/\S+/g) || []).length, c: t.replace(/\n/g, '').length }; }
   function updateStatus() {
@@ -288,9 +322,9 @@
   }
   function newDoc() { loadDoc(XCW.newDoc(), 'Untitled', null); cur().focus(); }
   let saveT;
-  function scheduleSave() { clearTimeout(saveT); saveT = setTimeout(saveRecent, 1500); }
+  function scheduleSave() { XW.cleared = null; clearTimeout(saveT); saveT = setTimeout(saveRecent, 1500); }
   function saveRecent() {
-    if (!XW.id) return;
+    if (!XW.id || XW.cleared === XW.id) return;
     const text = XCW.plain(XW.doc);
     if (!text.trim() && !XW.dirty) return;
     let list = LS.get('xcw.recent', []).filter((r) => r.id !== XW.id);
@@ -306,9 +340,17 @@
       const d = document.createElement('div'); d.className = 'card';
       d.innerHTML = '<b>' + esc(r.name) + '</b><small>' + new Date(r.t).toLocaleString() + (r.fmt ? ' &middot; ' + esc(r.fmt) : '') + '</small><p>' + esc(r.preview) + '</p>';
       d.onclick = () => { loadDoc(r.doc, r.name, r.fmt); XW.id = r.id; };
+      d.dataset.id = r.id;
       box.append(d);
     });
   }
+  $('recent').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const card = e.target.closest('.card'), items = [];
+    if (card) items.push({ label: 'Remove from list', fn: () => { LS.set('xcw.recent', LS.get('xcw.recent', []).filter((r) => r.id !== card.dataset.id)); renderRecent(); } });
+    items.push({ label: 'Clear history', fn: clearHistory });
+    showCtx(e, items);
+  });
 
   // ---------- open ----------
   const KNOWN = /\.(cwd|txt|text|atx|rtf|html?|md|markdown|docx|doc|atr)$/i;
