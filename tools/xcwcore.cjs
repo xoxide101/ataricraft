@@ -349,5 +349,5 @@ module.exports = {
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,
   cleanParas, charOk, craftPayload, fit, toCwd, atariLines, atariWarnings,
   openDoc, save, dropReport, styleCounts, toDocx, zipStore, crc32, spellCheck, suggest,
-  detect: I.detect, parseCwd: D.parse, dictParse: cd.parse, dictHas: cd.has,
+  detect: (b, n) => I.detect(Buffer.from(b), n), parseCwd: (b) => D.parse(Buffer.from(b)), dictParse: (b) => cd.parse(Buffer.from(b)), dictHas: cd.has,
 };
