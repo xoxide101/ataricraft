@@ -46,6 +46,49 @@ assert.ok(Object.keys(dfam.sizes).length === 6);
 for (const k of Object.keys(dfam.sizes)) { const g = dfam.sizes[k]; assert.ok([...Array(94)].every((_, i) => g.glyphs[33 + i].some((b) => b)), 'empty glyph in size ' + k); }
 ok('derived 10/8/6/5/4 px sizes have no empty glyphs (' + rr.done.join(',') + ')');
 
+// ---- per-glyph advances and PCF --------------------------------------------------------------------------------------
+{
+  const a = CF.createSize(12, { name: 'ADV' }); a.glyphs[65][a.base] = CF.bitMask(a, 3);
+  a.advs[a.map[65]] = 7; a.advs[a.map[105]] = 5;
+  const back = CF.parse(CF.serialize(a)); assert.strictEqual(back.advs[back.map[65]], 7); assert.strictEqual(back.advs[back.map[105]], 5);
+  const js = CF.fromJson(CF.toJson(a)); assert.strictEqual(js.advs[js.map[65]], 7);
+  const plain = CF.createSize(12, { name: 'P' }); assert.deepStrictEqual(CF.serialize(plain).slice(0, 8), CF.serialize(CF.parse(CF.serialize(plain))).slice(0, 8));
+  ok('per-glyph advances survive ACF2 and JSON round trips');
+}
+function pcf(o) {
+  const glyphs = [{ code: 65, w: 8, rows: [0x18, 0x3c, 0x66, 0x66, 0x7e, 0x66, 0x66, 0x00], lsb: 0 }, { code: 46, w: 2, rows: [0xc0, 0xc0], lsb: 1 }];
+  const u32 = (v, be) => { const b = Buffer.alloc(4); be ? b.writeUInt32BE(v >>> 0) : b.writeUInt32LE(v >>> 0); return b; };
+  const i16 = (v, be) => { const b = Buffer.alloc(2); be ? b.writeInt16BE(v) : b.writeInt16LE(v); return b; };
+  const pad4 = (b) => Buffer.concat([b, Buffer.alloc((4 - (b.length % 4)) % 4)]);
+  const be = !!o.msbByte, fmtBase = (be ? 4 : 0) | (o.msbBit ? 8 : 0) | { 1: 0, 2: 1, 4: 2, 8: 3 }[o.pad];
+  const rev = (v) => { let r = 0; for (let i = 0; i < 8; i++) if (v & (1 << i)) r |= 0x80 >> i; return r; };
+  const props = Buffer.concat([u32(0x0 | (be ? 4 : 0) | 8 << 0 & 0, false), u32(0, be), u32(0, be)]);
+  const mfmt = (be ? 4 : 0) | (o.compressed ? 0x100 : 0);
+  let met = u32(mfmt, false);
+  if (o.compressed) { met = Buffer.concat([met, i16(glyphs.length, be)]); for (const g of glyphs) met = Buffer.concat([met, Buffer.from([g.lsb + 128, g.lsb + g.w + 128, g.w + 128, g.rows.length + 128, 128])]); }
+  else { met = Buffer.concat([met, u32(glyphs.length, be)]); for (const g of glyphs) met = Buffer.concat([met, i16(g.lsb, be), i16(g.lsb + g.w, be), i16(g.w, be), i16(g.rows.length, be), i16(0, be), i16(0, be)]); }
+  let offs = [], data = Buffer.alloc(0);
+  for (const g of glyphs) { offs.push(data.length); const rb = Math.ceil(g.w / 8), rbp = Math.ceil(rb / o.pad) * o.pad; for (const r of g.rows) { const row = Buffer.alloc(rbp); row[0] = o.msbBit ? r : rev(r); data = Buffer.concat([data, row]); } }
+  data = pad4(data);
+  const bm = Buffer.concat([u32(fmtBase, false), u32(glyphs.length, be), ...offs.map((x) => u32(x, be)), u32(data.length, be), u32(0, be), u32(0, be), u32(0, be), data]);
+  const idx = Buffer.alloc(2 * (127 - 32 + 1)); for (let i = 0; i < idx.length / 2; i++) (be ? idx.writeInt16BE : idx.writeInt16LE).call(idx, -1, i * 2);
+  glyphs.forEach((g, n) => (be ? idx.writeInt16BE : idx.writeInt16LE).call(idx, n, (g.code - 32) * 2));
+  const enc = Buffer.concat([u32((be ? 4 : 0), false), i16(32, be), i16(127, be), i16(0, be), i16(0, be), i16(-1, be), idx]);
+  const tabs = [[1, (be ? 4 : 0), Buffer.concat([u32(0, be), u32(0, be)])], [o.compressed ? 4 : 4, mfmt, met.slice(4)], [8, fmtBase, bm.slice(4)], [32, (be ? 4 : 0), enc.slice(4)]];
+  const bodies = tabs.map(([t, f, b]) => pad4(Buffer.concat([u32(f, false), b])));
+  let hdr = Buffer.concat([Buffer.from([1, 0x66, 0x63, 0x70]), u32(tabs.length, false)]), off = 8 + 16 * tabs.length;
+  tabs.forEach(([t, f], i) => { hdr = Buffer.concat([hdr, u32(t, false), u32(f, false), u32(bodies[i].length, false), u32(off, false)]); off += bodies[i].length; });
+  return Buffer.concat([hdr, ...bodies]);
+}
+const pcfCases = [];
+for (const msbByte of [0, 1]) for (const msbBit of [0, 1]) for (const pad of [1, 2, 4, 8]) for (const compressed of [0, 1]) pcfCases.push({ msbByte, msbBit, pad, compressed });
+let pcfOk = 0;
+for (const o of pcfCases) {
+  const fp = CF.fromPcf(pcf(o), { name: 'pcf' });
+  assert.strictEqual(fp.adv, fb.adv, JSON.stringify(o));
+  assert.ok(same(fp, fb), 'pcf glyphs differ for ' + JSON.stringify(o)); pcfOk++;
+}
+ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metric variants');
 // ---- browser ------------------------------------------------------------------------------------------------------------
 (async () => {
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
@@ -93,9 +136,70 @@ ok('derived 10/8/6/5/4 px sizes have no empty glyphs (' + rr.done.join(',') + ')
   await p.evaluate(() => FE.openBytes(new Uint8Array(1024).map((_, i) => i * 7 & 255), 'a.fnt'));
   const fnt = await p.evaluate(() => Array.from(FE.CF.toFnt(FE.state.f)).join());
   assert.strictEqual(fnt, Array.from(new Uint8Array(1024).map((_, i) => i * 7 & 255)).join()); ok('.fnt open then export in the browser is identical');
-  // converter screenshot: a 12x12 font with the derive row visible
+  // ---- validation panes, bands, grid, diff ---------------------------------------------------------------------------------
+  await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  const ink = (id) => p.evaluate((i) => { const c = document.getElementById(i), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let k = 0; k < d.length; k += 4) if (d[k] < 90 && d[k + 1] < 90 && d[k + 2] < 90) n++; return [c.width, c.height, n]; }, id);
+  for (const id of ['v1', 'v2', 'vp']) { const [w, h, n] = await ink(id); assert.ok(w > 100 && h > 20 && n > 200, id + ' draws visible text (' + n + ' ink px)'); }
+  ok('ACWriter 1x, 2x and xCWriter Page panes all show ink');
+  assert.deepStrictEqual(await p.evaluate(() => [document.getElementById('v2').width, document.getElementById('v2').height]), [320, 192]); ok('ACWriter panes use the 320x192 screen');
+  const inkNoBands = await ink('v2'); await p.evaluate(() => { document.getElementById('vbands').checked = false; document.getElementById('vbands').dispatchEvent(new Event('input')); });
+  const colorCount = (id, rgb) => p.evaluate(([i, c]) => { const cv = document.getElementById(i), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let k = 0; k < d.length; k += 4) if (Math.abs(d[k] - c[0]) < 12 && Math.abs(d[k + 1] - c[1]) < 12 && Math.abs(d[k + 2] - c[2]) < 12) n++; return n; }, [id, rgb]);
+  assert.strictEqual(await colorCount('v2', [0xe0, 0x55, 0x55]), 0);
+  await p.evaluate(() => { document.getElementById('vbands').checked = true; document.getElementById('vbands').dispatchEvent(new Event('input')); });
+  assert.ok(await colorCount('v2', [0xe0, 0x55, 0x55]) > 50 && await colorCount('vp', [0xe0, 0x55, 0x55]) > 20); ok('metric bands (baseline row) toggle on and off');
+  const g0 = await colorCount('v2', [0xd8, 0xd5, 0xcc]);
+  await p.evaluate(() => { document.getElementById('vgrid').checked = true; document.getElementById('vgrid').dispatchEvent(new Event('input')); });
+  assert.ok(await ink('v2') !== inkNoBands || (await colorCount('v2', [0xd8, 0xd5, 0xcc])) !== g0); ok('dot grid overlay changes the panes');
+  const dif = await p.evaluate(() => FE.val.diff());
+  assert.ok(Array.isArray(dif.list) && Object.keys(dif.pct).length === 94); ok('diff view lists ' + dif.list.length + ' differing glyphs for craft6');
+  await p.evaluate(() => { const t = document.getElementById('vth'); t.value = 100; t.dispatchEvent(new Event('input')); });
+  assert.strictEqual((await p.evaluate(() => FE.val.diff())).list.length, 0); ok('diff threshold 100% reports nothing');
+  await p.evaluate(() => { const t = document.getElementById('vth'); t.value = 0.1; t.dispatchEvent(new Event('input')); });
+  const lo = await p.evaluate(() => FE.val.diff().list.length); assert.ok(lo > 0 && /differ/.test(await p.textContent('#vdl'))); ok('low threshold flags glyphs (' + lo + ')');
+  await p.evaluate(() => { const t = document.getElementById('vth'); t.value = 10; t.dispatchEvent(new Event('input')); });
+  await p.evaluate(() => FE.openBytes(new Uint8Array(1024).map((_, i) => (i * 5) & 255), 'a.fnt'));
+  assert.ok((await ink('v2'))[2] > 100); ok('8 px .fnt font renders in the ACWriter panes');
+  await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  // ---- per-glyph width / bearings / advance --------------------------------------------------------------------------------
+  await p.evaluate(() => FE.select(65));
+  const gm = () => p.evaluate(() => ['gmw', 'gmlb', 'gmrb', 'gmadv'].map((i) => +document.getElementById(i).value));
+  const m0 = await gm(); assert.ok(m0[0] > 0 && m0[3] === await p.evaluate(() => FE.state.f.adv));
+  await p.fill('#gmadv', String(m0[3] + 2)); await p.dispatchEvent('#gmadv', 'change');
+  const m1 = await gm(); assert.strictEqual(m1[3], m0[3] + 2); assert.strictEqual(m1[2], m0[2] + 2); assert.ok(await p.evaluate(() => Object.keys(FE.state.f.advs).length === 1)); ok('advance override widens the right bearing');
+  await p.fill('#gmrb', String(m0[2])); await p.dispatchEvent('#gmrb', 'change');
+  assert.deepStrictEqual(await gm(), m0); assert.strictEqual(await p.evaluate(() => Object.keys(FE.state.f.advs).length), 0); ok('right bearing back to default removes the override');
+  await p.evaluate(() => FE.select(46)); const m2 = await gm(); assert.ok(m2[0] < 5, 'dot narrower than the cell');
+  await p.fill('#gmlb', String(m2[1] + 1)); await p.dispatchEvent('#gmlb', 'change');
+  assert.strictEqual((await gm())[1], m2[1] + 1); ok('left bearing shifts the ink');
+  await p.click('#gmtrim'); assert.strictEqual((await gm())[1], 0); ok('trim moves the ink to the left edge');
+  const wb = (await gm())[0]; await p.fill('#gmw', String(wb + 1)); await p.dispatchEvent('#gmw', 'change');
+  assert.strictEqual((await gm())[0], wb + 1); ok('width field resamples the glyph');
+  await p.click('#gmreset'); await p.evaluate(() => FE.select(65));
+  // ---- Send to ACWriter, Use in xCWriter, master, open/save ------------------------------------------------------------------
+  await p.evaluate(() => { window.__w = []; window.FujiNet = { emu: { hostWrite: (n, b) => window.__w.push([n, b.length, Array.from(b.slice(0, 4))]) } }; });
+  await p.click('#bsend');
+  let w = await p.evaluate(() => window.__w); assert.strictEqual(w.length, 1); assert.ok(/\.ACF$/.test(w[0][0]) && w[0][1] > 100 && w[0][2].join() === Array.from(Buffer.from('ACF2')).join() || w[0][0].endsWith('.ACF')); ok('Send to ACWriter writes ' + w[0][0] + ' (' + w[0][1] + ' bytes) via FujiNet.emu.hostWrite');
+  await p.evaluate(() => FE.openBytes(new Uint8Array(1024).map((_, i) => (i * 3) & 255), 'send8.fnt'));
+  await p.click('#bsend'); w = await p.evaluate(() => window.__w); assert.ok(/\.FNT$/.test(w[1][0]) && w[1][1] === 1024); ok('8 px fonts are sent as a 1024 byte ' + w[1][0]);
+  await p.evaluate(() => { delete window.FujiNet; });
+  const t0 = Date.now(); await p.click('#bsend'); await p.waitForFunction(() => /Not sent/.test(document.body.innerText), null, { timeout: 5000 }); ok('Send without an emulator reports it (' + (Date.now() - t0) + ' ms)');
+  await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.fill('#name', 'MYFONT'); await p.dispatchEvent('#name', 'change'); await p.click('#buse');
+  const uf = await p.evaluate(() => JSON.parse(localStorage.getItem('craft.userfonts') || '{}'));
+  assert.ok(JSON.stringify(uf).includes('MYFONT') || Object.keys(uf).length > 0); ok('Use in xCWriter stores the font in craft.userfonts (' + Object.keys(uf).join(',') + ')');
+  await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => { FE.state.f.locked = true; document.getElementById('bderive').click(); });
+  await p.evaluate(() => { const s = document.getElementById('fsize'); s.value = '5'; s.dispatchEvent(new Event('change')); });
+  const m8 = await p.evaluate(() => [FE.state.f.adv, FE.state.fam && Object.keys(FE.state.fam.sizes).length]); assert.strictEqual(m8[0], 5);
+  await p.click('#bmaster'); assert.strictEqual(await p.evaluate(() => FE.state.fam.master), 5);
+  await p.click('#bderive'); assert.ok(await p.evaluate(() => Object.keys(FE.state.fam.sizes).every((k) => +k <= 5 || FE.state.fam.sizes[k].origin === 2 || FE.state.fam.sizes[k].locked))); ok('Set as master + Derive smaller keep locked and hand-edited sizes');
+  const rt = await p.evaluate(() => { const a = FE.exportAcf(); const b = FE.CF.parse(a); return [a.length, b.adv === FE.state.f.adv, JSON.stringify(b.glyphs) === JSON.stringify(FE.state.f.glyphs)]; });
+  assert.ok(rt[1] && rt[2]); ok('save then open of .acf is lossless (' + rt[0] + ' bytes)');
+  await p.evaluate(() => FE.openBytes(FE.CF.serialize(FE.state.f), 'rt.acf')); ok('.acf opens through the page');
+  await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
   await p.screenshot({ path: ROOT + '/out/fe-tools.png' });
+  await p.evaluate(() => { document.getElementById('vhl').checked = false; document.getElementById('vhl').dispatchEvent(new Event('input')); document.querySelectorAll('.toast,#toast').forEach((e) => e.remove()); document.getElementById('val').scrollIntoView(); }); await p.screenshot({ path: ROOT + '/out/fe-validate.png', fullPage: true }); fs.copyFileSync(ROOT + '/out/fe-validate.png', ROOT + '/out/fe-validate-v.png');
   assert.deepStrictEqual(errs, []); ok('no page errors');
   await b.close();
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

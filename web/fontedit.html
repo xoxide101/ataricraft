@@ -27,6 +27,8 @@
   #info{color:var(--dim);font-size:13px}#info b{color:var(--fg);font-weight:500}
   textarea{width:100%;height:84px;background:#14161a;color:var(--fg);border:1px solid var(--line);border-radius:5px;font:13px ui-monospace,Consolas,monospace;padding:6px}
   #pvwrap{background:#eee;border:1px solid var(--line);overflow:auto;max-height:300px}
+  .vpanes{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}.vpanes h4,#val h4{margin:8px 0 4px;font-size:12px;color:var(--dim);font-weight:600}
+  .vpanes canvas{border:1px solid var(--line);background:#fff}#vd{border:1px solid var(--line)}#vdl{font-size:12px;color:var(--dim);margin-top:4px;max-width:1030px;word-break:break-word}
   .legend span{display:inline-block;margin-right:12px;font-size:12px}
   .legend i{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px}
   .toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#14161a;border:1px solid var(--acc);padding:8px 16px;border-radius:6px}
@@ -38,8 +40,8 @@
   <select id="builtin" title="Built-in fonts"><option value="craft6">Built-in: Craft 6 px (10 cpi)</option><option value="craft5">Built-in: Craft 5 px (12 cpi)</option><option value="craft4">Built-in: Craft 4 px (17 cpi)</option></select>
   <select id="flist" title="Font library: shipped (font/), Atari ROM and Personal (font_personal/, never committed). Run node scripts/fontlist.cjs to refresh."><option value="">Font library...</option></select>
   <button id="bnew" title="Start a blank font at the size chosen in the TTF list">New</button>
-  <button id="bopen">Open font / TTF / BDF / PNG...</button>
-  <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt,.bdf,.png" hidden>
+  <button id="bopen">Open font / TTF / BDF / PCF / PNG...</button>
+  <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt,.bdf,.pcf,.gz,.png" hidden>
   <select id="ttfadv" title="Size a TTF/OTF is rasterised to (12x12 is the master; derive the smaller sizes from it)"><option value="12">TTF -> 12x12 master</option><option value="10">TTF -> 10x12</option><option value="8">TTF -> 8x8</option><option value="6">TTF -> 6 px</option><option value="5">TTF -> 5 px</option><option value="4">TTF -> 4 px</option></select>
   <label title="Coverage that turns a pixel on">threshold <input type="number" id="ttfth" min="0.1" max="0.9" step="0.05" value="0.3"></label>
   <label title="Bolder (+) or lighter (-) strokes">weight <input type="number" id="ttfw" min="-2" max="3" step="1" value="0"></label>
@@ -50,11 +52,13 @@
   <button id="bderive" title="Derive the sizes smaller than this one (skips locked and hand-edited sizes)">Derive smaller</button>
   <label>keep stems <input type="checkbox" id="dkeep" checked></label>
   <label>threshold <input type="number" id="dth" min="0.2" max="0.8" step="0.05" value="0.4"></label>
+  <button id="bmaster" title="Make this size the master of the family: the sizes below it are derived from it, the old master is kept as hand-edited">Set as master</button>
   <button id="bfam" title="Save every size of the family as one JSON file">Save family</button>
   </span>
   <label style="color:var(--dim)">Name <input type="text" id="name" maxlength="40"></label>
   <button id="bsave">Save .acf</button><button id="bjson">Save .json</button><button id="binc">Save .inc</button>
   <button id="bfnt" title="Atari 1K charset (8 px fonts)">Export .fnt</button><button id="bpng" title="16 x 16 sheet of all glyph cells (re-importable)">Export PNG sheet</button><button id="bprev" title="The preview text as a PNG">Export preview</button>
+  <button id="bsend" title="Write the font into the emulator H: device (FujiNet.emu.hostWrite) as NAME.FNT (8 px) or NAME.ACF; the main page (index.html) must be open and booted in this browser">Send to ACWriter</button><button id="buse" title="Add the font to the font list of xCWriter (shared in this browser: localStorage craft.userfonts)">Use in xCWriter</button>
   <span id="info"></span>
 </header>
 <main>
@@ -93,19 +97,50 @@
         <div class="row"><label>Superscript up</label><input type="number" id="supup" min="0" max="6"><label>rows into headroom</label></div>
         <div class="row"><label>Subscript down</label><input type="number" id="subdn" min="0" max="6"><label>rows into descender</label></div>
         <div class="row" id="metrics" style="color:var(--dim);font-size:12px"></div>
+        <h3>Glyph metrics <span id="gmname" style="text-transform:none"></span></h3>
+        <div class="row" id="gm">
+          <label>ink width</label><input type="number" id="gmw" min="1" max="16" title="Resamples the ink to this many columns">
+          <label>left bearing</label><input type="number" id="gmlb" min="0" max="16">
+          <label>right bearing</label><input type="number" id="gmrb" min="0" max="16" title="Blank columns after the ink; changes the glyph advance">
+          <label>advance</label><input type="number" id="gmadv" min="1" max="16" title="Advance of this glyph (the font advance unless set); stored in the file, used by the proportional preview">
+          <button id="gmtrim" title="Move the ink to the left edge (left bearing 0)">Trim left</button><button id="gmreset" title="Use the font advance for this glyph">Reset advance</button>
+        </div>
         <h3>Preview (real line spacing)</h3>
         <textarea id="sample" spellcheck="false">The quick brown fox jumps over the lazy dog.
 Hamburgefonstiv, gypsy jug: ^{up}super and _{down}sub 0123456789
 QUICK BROWN FOX; (pqyjg) "descenders" [2px head, 3px tail]</textarea>
         <div class="row"><label>Zoom</label><select id="pvz"><option>1</option><option selected>2</option><option>3</option><option>4</option></select>
-          <label><input type="checkbox" id="pvg"> guides</label><label>extra leading <input type="number" id="lead" min="0" max="8" value="0"></label></div>
+          <label><input type="checkbox" id="pvg"> guides</label><label>extra leading <input type="number" id="lead" min="0" max="8" value="0"></label>
+          <label title="Use the advance of each glyph instead of the fixed pitch"><input type="checkbox" id="pvprop"> proportional</label></div>
       </div>
     </div>
     <div id="pvwrap" style="margin-top:8px"><canvas id="preview"></canvas></div>
+    <div id="val">
+      <h3>Validation: the same text as ACWriter and xCWriter draw it</h3>
+      <div class="row">
+        <label>Atari screen shown at <select id="vsz"><option value="1">1x</option><option value="2" selected>2x</option></select></label>
+        <label>Page view zoom <select id="vpz"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+        <label>pitch <select id="vpitch"><option value="10">10 cpi</option><option value="12">12 cpi</option><option value="17">17 cpi</option></select></label>
+        <label title="Dot grid of the face in every pane"><input type="checkbox" id="vgrid"> pixel grid</label>
+        <label title="Headroom, cap line, x-height, baseline, descender"><input type="checkbox" id="vbands"> metric bands</label>
+        <label title="Tint the cells whose glyph differs between the two renderings"><input type="checkbox" id="vhl" checked> mark differing glyphs</label>
+        <label>differs at <input type="number" id="vth" min="0" max="100" value="10">%</label>
+      </div>
+      <div class="legend"><span><i style="background:#4a78c8"></i>2 rows headroom</span><span><i style="background:#e8b030"></i>cap line</span><span><i style="background:#58c878"></i>x-height</span><span><i style="background:#e05555"></i>baseline</span><span><i style="background:#9a6ad0"></i>descender</span></div>
+      <div class="vpanes">
+        <div><h4>ACWriter PAGE view 1x (320 px screen, 64 columns, 4x8 fold)</h4><canvas id="v1"></canvas></div>
+        <div><h4>ACWriter PAGE view 2x (320 px screen, 20 columns of 16x16, 8x8 glyphs)</h4><canvas id="v2"></canvas></div>
+        <div><h4>xCWriter Page view (<span id="vpinfo"></span>)</h4><canvas id="vp"></canvas></div>
+      </div>
+      <h4>Diff: face as xCWriter Page view draws it (red) against the 8x8 ACWriter 2x glyph (blue); both = grey</h4>
+      <canvas id="vd"></canvas><div id="vdl"></div>
+    </div>
   </div>
 </main>
 <script src="js/xcwriter/core/xcw-core.js"></script>
 <script src="js/fontedit/builtin-fonts.js"></script>
+<script src="js/xcwriter/faces.js"></script>
 <script src="js/fontedit/fontedit.js"></script>
+<script src="js/fontedit/validate.js"></script>
 </body>
 </html>

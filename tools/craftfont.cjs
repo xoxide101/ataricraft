@@ -37,7 +37,7 @@ function create(opt = {}) {
     base: opt.base ?? BASE, desc: opt.desc ?? DESC, supUp: opt.supUp ?? 2, subDown: opt.subDown ?? 3,
     first: opt.first ?? 32, count: opt.count ?? 96, upper: 65, lower: 97,
     origin: opt.origin ?? 0, locked: !!opt.locked, masterAdv: opt.masterAdv ?? 0,
-    glyphs: [], map: [], sup: {}, sub: {},
+    glyphs: [], map: [], sup: {}, sub: {}, advs: {},
   };
   for (let i = 0; i < 256; i++) { f.glyphs.push(zeros(f.rows)); f.map.push(i); }
   return f;
@@ -83,8 +83,9 @@ function serialize(f) {
   const hasMap = !isDefaultMap(f);
   const vars = [];
   for (const [kind, tab] of [[1, f.sup], [2, f.sub]]) for (const c of Object.keys(tab)) vars.push([+c, kind, tab[c]]);
+  const advList = Object.keys(f.advs || {}).filter((k) => f.advs[k] && f.advs[k] !== f.adv).map(Number);
   const hasMeta = f.origin || f.locked || f.masterAdv;
-  const flags = (hasMap ? 1 : 0) | (vars.length ? 2 : 0) | (isWide(f) ? 4 : 0) | (hasMeta ? 8 : 0);
+  const flags = (hasMap ? 1 : 0) | (vars.length ? 2 : 0) | (isWide(f) ? 4 : 0) | (hasMeta ? 8 : 0) | (advList.length ? 16 : 0);
   const head = Buffer.from([f.adv, f.gw, f.rows, f.head, f.xTop, f.base, f.desc, f.supUp & 255, f.subDown & 255, f.first, f.count & 255, flags, f.upper & 255, f.lower & 255, nm.length]);
   const parts = [Buffer.from(MAGIC2, 'latin1'), head, nm];
   if (hasMeta) parts.push(Buffer.from([f.origin & 255, f.locked ? 1 : 0, f.masterAdv & 255]));
@@ -94,6 +95,7 @@ function serialize(f) {
     parts.push(Buffer.from([vars.length]));
     for (const [c, k, r] of vars) parts.push(Buffer.from([c, k]), glyphBytes(f, r));
   }
+  if (advList.length) parts.push(Buffer.from([advList.length]), Buffer.from(advList.flatMap((k) => [k, f.advs[k]])));
   return Buffer.concat(parts);
 }
 
@@ -120,6 +122,7 @@ function parse(buf) {
     const n = b();
     for (let i = 0; i < n; i++) { const c = b(), k = b(); (k === 1 ? f.sup : f.sub)[c] = rowsAt(); }
   }
+  if (flags & 16) { const n = b(); for (let i = 0; i < n; i++) { const sl = b(); f.advs[sl] = b(); } }
   if (p > buf.length) throw new Error('ACF2 truncated');
   return f;
 }
@@ -163,6 +166,7 @@ function toJson(f) {
   const o = { format: 'craft-font', version: 2, name: f.name, adv: f.adv, gw: f.gw, rows: f.rows, head: f.head, xTop: f.xTop, base: f.base, desc: f.desc,
     supUp: f.supUp, subDown: f.subDown, first: f.first, count: f.count, upper: f.upper, lower: f.lower, origin: f.origin, locked: f.locked, masterAdv: f.masterAdv, glyphs: {}, sup: {}, sub: {} };
   if (!isDefaultMap(f)) o.map = f.map.slice();
+  if (Object.keys(f.advs || {}).length) o.advs = Object.assign({}, f.advs);
   for (let i = 0; i < f.count; i++) o.glyphs[f.first + i] = hex(f.glyphs[f.first + i], w);
   for (const c of Object.keys(f.sup)) o.sup[c] = hex(f.sup[c], w);
   for (const c of Object.keys(f.sub)) o.sub[c] = hex(f.sub[c], w);
@@ -176,6 +180,7 @@ function fromJson(text) {
   const w = isWide(f) ? 4 : 2;
   f.upper = o.upper ?? 65; f.lower = o.lower ?? 97;
   if (o.map) f.map = o.map.slice();
+  if (o.advs) f.advs = Object.assign({}, o.advs);
   for (const k of Object.keys(o.glyphs)) f.glyphs[+k] = unhex(o.glyphs[k], w);
   for (const c of Object.keys(o.sup || {})) f.sup[+c] = unhex(o.sup[c], w);
   for (const c of Object.keys(o.sub || {})) f.sub[+c] = unhex(o.sub[c], w);
@@ -482,6 +487,59 @@ function fromBdf(text, opt = {}) {
   return f;
 }
 
+// PCF (X11 compiled bitmap font) -> Craft font. Reads the tables as the X server writes them: either byte order, either bit order, glyph
+// padding 1/2/4/8 and scan unit 1/2/4/8, compressed or full metrics, single-byte encodings. The glyphs are turned into a BDF description and
+// go through fromBdf, so the baseline and size rules are the same as for BDF.
+function fromPcf(input, opt = {}) {
+  const buf = Buffer.from(input);
+  if (buf.length < 8 || buf.readUInt32LE(0) !== 0x70636601) throw new Error('not a PCF font (a gzip-compressed .pcf.gz must be unpacked first)');
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.length), nt = buf.readUInt32LE(4), tabs = {};
+  for (let i = 0; i < nt; i++) tabs[buf.readUInt32LE(8 + i * 16)] = { format: buf.readUInt32LE(12 + i * 16), size: buf.readUInt32LE(16 + i * 16), off: buf.readUInt32LE(20 + i * 16) };
+  const need = (t, n) => { if (!tabs[t]) throw new Error('PCF has no ' + n + ' table'); return tabs[t]; };
+  const rd = (t) => {
+    const msb = !!(t.format & 4), at = t.off + 4;
+    return { msb, p: at, i32() { const v = dv.getInt32(this.p, !msb); this.p += 4; return v; }, i16() { const v = dv.getInt16(this.p, !msb); this.p += 2; return v; }, u8() { return buf[this.p++]; } };
+  };
+  let family = opt.name || '';
+  if (tabs[1]) {
+    const r = rd(tabs[1]), n = r.i32(), props = [];
+    for (let i = 0; i < n; i++) { const no = r.i32(), isStr = r.u8(), v = r.i32(); props.push([no, isStr, v]); }
+    r.p = tabs[1].off + ((r.p - tabs[1].off + 3) & ~3);
+    r.i32();
+    const base = r.p, str = (o) => { let e = base + o; while (buf[e]) e++; return buf.toString('latin1', base + o, e); };
+    for (const [no, isStr, v] of props) if (isStr && !family && str(no) === 'FAMILY_NAME') family = str(v);
+  }
+  const mt = need(4, 'metrics'), mr = rd(mt), metrics = [];
+  if (mt.format & 0x100) { const n = mr.i16(); for (let i = 0; i < n; i++) { const m = [mr.u8() - 128, mr.u8() - 128, mr.u8() - 128, mr.u8() - 128, mr.u8() - 128]; metrics.push({ lsb: m[0], rsb: m[1], w: m[2], asc: m[3], desc: m[4] }); } }
+  else { const n = mr.i32(); for (let i = 0; i < n; i++) { const m = [mr.i16(), mr.i16(), mr.i16(), mr.i16(), mr.i16(), mr.i16()]; metrics.push({ lsb: m[0], rsb: m[1], w: m[2], asc: m[3], desc: m[4] }); } }
+  const bt = need(8, 'bitmaps'), br = rd(bt), bn = br.i32(), offs = [];
+  for (let i = 0; i < bn; i++) offs.push(br.i32());
+  br.p += 16;
+  const dataAt = br.p, pad = 1 << (bt.format & 3), scan = 1 << ((bt.format >> 4) & 3), byteMsb = !!(bt.format & 4), bitMsb = !!(bt.format & 8);
+  const et = need(32, 'encodings'), er = rd(et), minC = er.i16(), maxC = er.i16(), minB1 = er.i16(), maxB1 = er.i16();
+  er.i16();
+  const cols = maxC - minC + 1, idx = [];
+  for (let i = 0; i < cols * (maxB1 - minB1 + 1); i++) idx.push(er.i16());
+  let fh = 0;
+  for (const m of metrics) fh = Math.max(fh, m.asc + m.desc);
+  let out = 'STARTFONT 2.1\nFONT pcf\nFAMILY_NAME "' + (family || 'PCF font') + '"\nFONTBOUNDINGBOX 8 ' + fh + ' 0 0\nCHARS ' + metrics.length + '\n', n = 0;
+  for (let i = 0; i < idx.length; i++) {
+    const gi = idx[i];
+    if (gi < 0 || gi >= metrics.length || minB1 !== 0 || maxB1 !== 0) continue;
+    const m = metrics[gi], w = m.rsb - m.lsb, h = m.asc + m.desc;
+    if (w <= 0 || h <= 0) { out += 'STARTCHAR g\nENCODING ' + (minC + i) + '\nBBX 0 0 0 0\nBITMAP\nENDCHAR\n'; continue; }
+    const rb = Math.ceil(Math.ceil(w / 8) / pad) * pad, rowsHex = [];
+    for (let y = 0; y < h; y++) {
+      const row = Array.from(buf.subarray(dataAt + offs[gi] + y * rb, dataAt + offs[gi] + (y + 1) * rb));
+      if (scan > 1 && byteMsb !== bitMsb) for (let u = 0; u < row.length; u += scan) row.splice(u, scan, ...row.slice(u, u + scan).reverse());
+      if (!bitMsb) for (let k = 0; k < row.length; k++) { let v = row[k], r = 0; for (let b = 0; b < 8; b++) { r = (r << 1) | (v & 1); v >>= 1; } row[k] = r; }
+      rowsHex.push(row.slice(0, Math.ceil(w / 8)).map((v) => v.toString(16).padStart(2, '0')).join(''));
+    }
+    out += 'STARTCHAR g\nENCODING ' + (minC + i) + '\nBBX ' + w + ' ' + h + ' ' + m.lsb + ' ' + (-m.desc) + '\nBITMAP\n' + rowsHex.join('\n') + '\nENDCHAR\n'; n++;
+  }
+  if (!n) throw new Error('PCF contains no glyphs');
+  return fromBdf(out + 'ENDFONT\n', opt);
+}
 // Atari charset binary from an 8 px font: 128 glyphs in screen-code order, rows taken from the headroom down (inverse of fromFnt).
 function toFnt(f) {
   const out = Buffer.alloc(1024);
@@ -513,4 +571,4 @@ function fromSheet(data, w, h, opt = {}) {
   return f;
 }
 
-module.exports = { builtinWide, create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, toFnt, toSheet, fromSheet, setPx };
+module.exports = { builtinWide, create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, fromPcf, toFnt, toSheet, fromSheet, setPx };
