@@ -27,7 +27,23 @@
   #toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
   #toolbar button{min-width:30px;padding:4px 8px}
   #toolbar .hq-only,#toolbar .at-only{display:contents}
-  body.m-hq .at-only,body.m-atari .hq-only{display:none}
+  body.m-hq .at-only,body.m-atari .hq-only,body.m-page .hq-only{display:none}
+  body.m-page .at-only #scalesel{display:none}
+  body.m-page #stage{overflow:hidden}
+  #pgwrap{display:none;width:100%;height:100%;flex-direction:column;position:relative;min-height:0}
+  body.m-page #pgwrap{display:flex}
+  #pgbar{background:var(--panel);padding:5px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:none;border-bottom:1px solid #0c0d10;font-size:13px}
+  #pgfit{color:var(--dim);flex:1;min-width:200px}#pgfit b{color:var(--fg);font-weight:500}#pgfit.warn b{color:#f0c070}
+  #pgruler{display:block;flex:none;width:100%;height:28px;cursor:crosshair;background:#2b2f38}
+  #pgscroll{flex:1;min-height:0;overflow:auto;position:relative;background:#40454f}
+  #pgsizer{position:relative}
+  #pgcanvas{position:sticky;top:0;left:0;display:block;cursor:text}
+  #pgtext{position:fixed;left:-300px;top:0;width:10px;height:10px;opacity:0}
+  #pgnav{position:absolute;right:26px;bottom:18px;border:2px solid #111;background:#2b2f38;box-shadow:0 2px 10px #000a;cursor:pointer;opacity:.95}
+  .fitbar{display:flex;height:22px;border:1px solid var(--line);border-radius:4px;overflow:hidden;margin:6px 0;font-size:11px}
+  .fitbar i{display:block;text-align:center;line-height:20px;font-style:normal;overflow:hidden;white-space:nowrap}
+  .fitbar .m{background:#3a4150;color:var(--dim)}.fitbar .u{background:#4bbf6b;color:#111}
+  .dlg .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.dlg input[type=number]{width:100%;background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font:inherit}
   #findbar{background:var(--panel);padding:6px 14px;display:none;gap:6px;align-items:center;flex:none;border-bottom:1px solid #0c0d10}
   #findbar.on{display:flex}
   #findbar input{width:180px}
@@ -103,7 +119,7 @@
   <span class="logo" id="logo" title="Home">x<i>CWriter</i></span>
   <span class="docname" id="docname"></span>
   <div class="seg" id="modeseg" title="High quality: modern typography. Atari matching: exactly what ACWriter shows and fits.">
-    <button id="mhq" class="on">High quality</button><button id="mat">Atari matching</button>
+    <button id="mhq" class="on">High quality</button><button id="mat">Atari matching</button><button id="mpg" title="True page: paper size, margins, tab stops, zoom and scroll">Page view</button>
   </div>
   <button id="bhome">Home</button><button id="bopen">Open</button><button id="bsave">Save</button><button id="bconv">Convert</button><button id="bhelp">Help</button>
 </header>
@@ -142,6 +158,18 @@
 <section class="screen" id="editor">
   <div id="stage">
     <div id="hqwrap"><div id="hq" contenteditable="true" spellcheck="false"></div></div>
+    <div id="pgwrap">
+      <div id="pgbar">
+        <select id="pgzoom" title="Zoom"></select>
+        <select id="pgkind" title="Tab stop type added by clicking the ruler"><option value="l">L left tab</option><option value="c">C centre tab</option><option value="r">R right tab</option></select>
+        <button id="pgsetup" title="Paper size, pitch, margins, tab stops">Page setup...</button>
+        <span id="pgfit"></span>
+      </div>
+      <canvas id="pgruler" title="Click: add a tab stop. Drag a tab or a margin marker to move it. Double-click a tab to remove it."></canvas>
+      <div id="pgscroll"><div id="pgsizer"><canvas id="pgcanvas" tabindex="0"></canvas></div></div>
+      <canvas id="pgnav" title="Page navigator: click or drag to move the view"></canvas>
+      <textarea id="pgtext" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    </div>
     <div id="atwrap">
       <div id="atcol"><canvas id="atcanvas" width="320" height="192" tabindex="0"></canvas><textarea id="attext" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea></div>
       <div id="atside">
@@ -166,6 +194,7 @@
 <script src="js/xcwriter/core/xcw-core.js"></script>
 <script src="js/xcwriter/editor-hq.js"></script>
 <script src="js/xcwriter/editor-atari.js"></script>
+<script src="js/xcwriter/editor-page.js"></script>
 <script src="js/xcwriter/app.js"></script>
 </body>
 </html>
