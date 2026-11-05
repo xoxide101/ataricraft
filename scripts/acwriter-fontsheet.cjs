@@ -26,7 +26,9 @@ const SHEET = [
   await p.waitForTimeout(10000); await p.keyboard.press('Escape'); await p.waitForTimeout(1500);
   await p.evaluate((t) => FujiNet.emu.hostWrite('ED.TXT', new Uint8Array([...t].map((c) => c.charCodeAt(0) === 13 ? 155 : c.charCodeAt(0)))), SHEET);
   const key = async (k, w = 800) => { await p.keyboard.press(k); await p.waitForTimeout(w); };
-  const MAP = { ' ': 'Space', ':': 'Shift+Semicolon', '.': 'Period' };
+  const MAP = { ' ': 'Space', ':': 'Shift+Semicolon', '.': 'Period',
+    // MAME positional map: Atari '*' = Backslash (shift -> '^'), '=' = BracketRight, '+' = Quote, '-' = BracketLeft
+    '^': 'Shift+Backslash', '=': 'BracketRight', '*': 'Backslash', '+': 'Quote', '-': 'BracketLeft' };
   const type = async (s) => { for (const ch of s) await key(MAP[ch] || ch, 700); };
   const menu = async (...ks) => { await key('Escape', 700); for (const k of ks) await key(k, 700); await p.waitForTimeout(800); };
   // nearest-neighbour blow-up of the emulator canvas so single pixels stay legible in the saved shot
@@ -41,7 +43,7 @@ const SHEET = [
   };
   await key('Escape'); await key('f', 700); await key('o', 700); await type('h:ed.txt'); await key('Enter', 2500);
   await type('H'); await menu('c', 'd'); await type('2'); await menu('c', 'd'); await type('O  x'); await menu('c', 'p'); await type('2'); await menu('c', 'p');
-  await type(' E=mc'); await menu('c', 'p'); await type('2'); await menu('c', 'p'); await type(' a'); await menu('c', 'd'); await type('1'); await menu('c', 'd');
+  await type(' E=mc^'); await menu('c', 'p'); await type('2'); await menu('c', 'p'); await type(' a'); await menu('c', 'd'); await type('1'); await menu('c', 'd');
   await p.waitForTimeout(1200);
   await shot('sheet-acw-1x.png');
   await menu('l', 'v'); await p.waitForTimeout(2500);
