@@ -36,7 +36,9 @@ function fromCells(cells, like) {
     if (l && KEYS.every((k) => l[k] === c[k])) l.t += c.ch;
     else runs.push({ t: c.ch, b: c.b, i: c.i, u: c.u, sup: c.sup, sub: c.sub });
   }
-  return { align: like ? like.align : 'l', bullet: like ? !!like.bullet : false, runs };
+  const o = { align: like ? like.align : 'l', bullet: like ? !!like.bullet : false, runs };
+  if (like && like.font) o.font = like.font;
+  return o;
 }
 // fill in missing style keys and merge equal neighbours (importers leave keys out)
 function normalize(paras) {
@@ -56,9 +58,9 @@ function insertText(paras, pos, text, st) {
   const head = cells.slice(0, pos.o), tail = cells.slice(pos.o), src = paras[pos.p];
   if (parts.length === 1) { paras[pos.p] = fromCells(head.concat(mkc(parts[0]), tail), src); return { p: pos.p, o: pos.o + parts[0].length }; }
   const np = [fromCells(head.concat(mkc(parts[0])), src)];
-  for (let k = 1; k < parts.length - 1; k++) np.push(fromCells(mkc(parts[k]), { align: src.align, bullet: src.bullet }));
+  for (let k = 1; k < parts.length - 1; k++) np.push(fromCells(mkc(parts[k]), src));
   const last = parts[parts.length - 1];
-  np.push(fromCells(mkc(last).concat(tail), { align: src.align, bullet: src.bullet }));
+  np.push(fromCells(mkc(last).concat(tail), src));
   paras.splice(pos.p, 1, ...np);
   return { p: pos.p + parts.length - 1, o: last.length };
 }
@@ -118,7 +120,7 @@ function insertFragment(paras, pos, frag) {
 
 // ---- Craft text / Atari fit --------------------------------------------------
 function cleanParas(paras) {
-  return paras.map((p) => ({ align: p.align, bullet: p.bullet, runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
+  return paras.map((p) => ({ align: p.align, bullet: p.bullet, ...(p.font ? { font: p.font } : {}), runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
 }
 const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173); };
 
@@ -135,6 +137,7 @@ function fit(paras, profile = PROFILES.atari, page = null) {
 // Craft document file from the model. Cuts at the last line end that fits `limit` (ACWriter's document area).
 function toCwd(paras, opt = {}) {
   const prof = opt.profile || PROFILES.atari, limit = opt.limit || prof.docLimit;
+  if (opt.page) opt = { ...opt, page: { ...opt.page, fonts: P.fontRecords(paras, opt.page.font) } };
   let bytes = craftPayload(paras, prof, opt.page), truncated = false, dropped = 0;
   if (bytes.length > limit) {
     let cut = limit; while (cut > 0 && bytes[cut - 1] !== 13 && bytes[cut - 1] !== 14) cut--;
@@ -207,8 +210,11 @@ function openDoc(buf, name, opt = {}) {
   const notes = [];
   if (fmt === 'doc') notes.push('Legacy .doc: text only, formatting is not read');
   if (r.format === 'bankstreet' && buf[0] === 0x96) notes.push('Took the first document on the disk image');
+  if (r.mixedFonts) notes.push(r.mixedFonts + ' paragraph(s) mix fonts on one line; Craft allows one font per line, so the dominant font is used for the whole line');
   const page = r.format === 'craft' ? D.parse(buf).h.page : null;
-  return { format: r.format, paras: normalize(r.paras), notes, page };
+  const model = normalize(r.paras);
+  if (page) P.applyFonts(model, page);
+  return { format: r.format, paras: model, notes, page };
 }
 
 function styleCounts(paras) {

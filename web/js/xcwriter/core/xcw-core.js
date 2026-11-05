@@ -205,7 +205,23 @@ function normalize(p) {
   o.tabs = (o.tabs || []).map((t) => ({ pos: Math.round(+t.pos), kind: KIND_CODE[t.kind] !== undefined ? t.kind : 'l' }))
     .filter((t) => t.pos >= 0 && t.pos < pc && !seen.has(t.pos) && seen.add(t.pos)).sort((a, b) => a.pos - b.pos).slice(0, 24);
   o.font = String(o.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32);
+  const fs = new Set();
+  o.fonts = (Array.isArray(o.fonts) ? o.fonts : []).map((r) => ({ p: Math.max(0, Math.min(65535, Math.round(+r.p) || 0)), font: String(r.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32) }))
+    .filter((r) => !fs.has(r.p) && fs.add(r.p)).sort((a, b) => a.p - b.p).slice(0, 64);
   return o;
+}
+
+// One font per line block (docs/FONT.md): a paragraph's font is its `font` property. The trailer stores only the changes, each at a
+// paragraph start, so a font can never change in the middle of a line.
+function fontRecords(paras, docFont = '') {
+  const out = []; let cur = docFont || '';
+  paras.forEach((p, i) => { const f = p.font || docFont || ''; if (f !== cur) { out.push({ p: i, font: f }); cur = f; } });
+  return out;
+}
+function applyFonts(paras, page) {
+  const recs = (page && page.fonts) || []; let cur = (page && page.font) || '', k = 0;
+  paras.forEach((p, i) => { while (k < recs.length && recs[k].p <= i) cur = recs[k++].font; if (cur) p.font = cur; else delete p.font; });
+  return paras;
 }
 
 function info(page) {
@@ -253,7 +269,8 @@ function expandTabs(paras, page) {
 }
 
 // ---- CRFT trailer ----------------------------------------------------------------
-// After the payload: 'CPG1', then records [tag u8][len u8][data]. Tag 1 page setup, tag 2 font name (ASCII).
+// After the payload: 'CPG1', then records [tag u8][len u8][data]. Tag 1 page setup, tag 2 document font name (ASCII),
+// tag 3 font change at a paragraph start: [paragraph u16 LE][name ASCII] (repeatable; paragraph = hard line, counted by CR codes).
 // Page record: paper u8 (0 letter, 1 a4, 2 legal), pitch u8 (cpi), left, right, top, bottom u8, ntabs u8, ntabs x (pos u8, kind u8: 0 L, 1 C, 2 R).
 function toTrailer(page) {
   const p = normalize(page), rec = [];
@@ -261,6 +278,7 @@ function toTrailer(page) {
   for (const t of p.tabs) d.push(t.pos, KIND_CODE[t.kind]);
   rec.push(1, d.length, ...d);
   if (p.font) { const f = Buffer.from(p.font, 'latin1'); rec.push(2, f.length, ...f); }
+  for (const r of p.fonts) { const f = Buffer.from(r.font, 'latin1'); rec.push(3, 2 + f.length, r.p & 255, r.p >> 8, ...f); }
   return Buffer.concat([Buffer.from(TRAILER_MAGIC, 'latin1'), Buffer.from(rec)]);
 }
 
@@ -275,12 +293,13 @@ function fromTrailer(buf) {
       raw.paper = PAPER_CODE[d[0]]; raw.pitch = d[1]; raw.left = d[2]; raw.right = d[3]; raw.top = d[4]; raw.bottom = d[5];
       raw.tabs = []; for (let k = 0; k < d[6] && 7 + k * 2 + 1 < d.length; k++) raw.tabs.push({ pos: d[7 + k * 2], kind: KIND_NAME[d[8 + k * 2]] || 'l' });
     } else if (tag === 2) raw.font = d.toString('latin1');
+    else if (tag === 3 && len >= 2) (raw.fonts = raw.fonts || []).push({ p: d[0] | (d[1] << 8), font: d.toString('latin1', 2) });
     at += 2 + len;
   }
   return normalize(raw);
 }
 
-module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer };
+module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer, fontRecords, applyFonts };
 
 });
 __def("craftfont.cjs", function (module, exports, require) {
@@ -938,7 +957,10 @@ const cp1252 = (b) => String.fromCharCode(b >= 0x80 && b < 0xa0 ? CP1252[b - 0x8
 function fromRtf(buf) {
   const s = buf.toString('latin1'); const out = []; let cur = para(); let palign = 'l';
   const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const stack = [];
-  let skip = 0, depth = 0, uc = 1, skipUnits = 0, intbl = 0, bulletTab = 0, cap = null;
+  let skip = 0, depth = 0, uc = 1, skipUnits = 0, intbl = 0, bulletTab = 0, cap = null, fnt = '';
+  const ftab = {}; const ft = /\{\\f(\d+)(?:\\[a-z]+-?\d*)*[ ]*(?:\{[^{}]*\})*[ ]*([^;{}\\]+);/g; let fm;
+  const fti = s.indexOf('{\\fonttbl');
+  if (fti >= 0) { const sec = s.slice(fti, fti + 6000); while ((fm = ft.exec(sec))) ftab[fm[1]] = fm[2].trim(); }
   const SKIPDEST = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'header', 'headerl', 'headerr', 'headerf', 'footer', 'footerl', 'footerr', 'footerf', 'generator',
     'listtable', 'listoverridetable', 'rsidtbl', 'themedata', 'colorschememapping', 'datastore', 'latentstyles', 'xmlnstbl', 'fldinst', 'objdata', 'ftnsep', 'ftnsepc', 'aftnsep', 'aftnsepc',
     'revtbl', 'pgptbl', 'mmathPr', 'wgrffmtfilter', 'template', 'private', 'bkmkstart', 'bkmkend']);
@@ -946,6 +968,7 @@ function fromRtf(buf) {
   const add = (t) => {
     if (skip || !t) return;
     if (cap) { cap.buf += t; return; }
+    if (fnt && t.trim()) { cur.fc = cur.fc || {}; cur.fc[fnt] = (cur.fc[fnt] || 0) + t.length; }
     const r = { t: clean(t), ...st }; const last = cur.runs[cur.runs.length - 1];
     if (last && KEYS.every((k) => !!last[k] === !!r[k])) last.t += r.t; else cur.runs.push(r);
   };
@@ -954,7 +977,7 @@ function fromRtf(buf) {
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (c === '{') {
-      stack.push({ ...st, skip, uc, cap }); depth++;
+      stack.push({ ...st, skip, uc, cap, fnt }); depth++;
       const nx = /^\{(\\\*)?\\([a-zA-Z]+)/.exec(s.slice(i, i + 24));
       if (!skip && nx && (nx[2] === 'listtext' || nx[2] === 'pntext')) cap = { depth, buf: '' };
       else if (nx && nx[1]) skip = skip || depth;
@@ -964,7 +987,7 @@ function fromRtf(buf) {
         if (/^[\u00b7\u2022\u00a7\uf0b7\uf0a7\u25cf\u25cb\u25aao*-]$/.test(t)) cur.bullet = true; else if (t) { cap = null; add(t + ' '); }
       }
       const p = stack.pop();
-      if (p) { for (const k of KEYS) st[k] = p[k]; skip = p.skip; uc = p.uc; cap = p.cap; }
+      if (p) { for (const k of KEYS) st[k] = p[k]; skip = p.skip; uc = p.uc; cap = p.cap; fnt = p.fnt; }
       depth--;
     } else if (c === '\\') {
       const m = /^\\([a-zA-Z]+)(-?\d+)? ?/.exec(s.slice(i, i + 40));
@@ -978,6 +1001,7 @@ function fromRtf(buf) {
         else if (w === 'cell' || w === 'nestcell') { if (!skip && !cap) { const l = cur.runs[cur.runs.length - 1]; if (l && / $/.test(l.t)) l.t = l.t.trimEnd(); add(' | '); } }
         else if (w === 'row' || w === 'nestrow') { if (!skip) { endRow(); intbl = 0; } }
         else if (w === 'qc') cur.align = palign = 'c'; else if (w === 'qr') cur.align = palign = 'r'; else if (w === 'qj') cur.align = palign = 'j'; else if (w === 'ql') cur.align = palign = 'l';
+        else if (w === 'f' && n !== null && !skip) fnt = ftab[n] || '';
         else if (w === 'plain') { for (const k of KEYS) st[k] = 0; }
         else if (w === 'b') st.b = n === 0 ? 0 : 1; else if (w === 'i') st.i = n === 0 ? 0 : 1;
         else if (/^ul(d|db|w|th|wave|dash|dashd|dashdd|hwave|ldash)?$/.test(w)) st.u = n === 0 ? 0 : 1; else if (w === 'ulnone') st.u = 0;
@@ -1001,8 +1025,22 @@ function fromRtf(buf) {
     }
   }
   if (cur.runs.length) out.push(cur);
-  return out;
+  return dominantFonts(out);
 }
+
+// One font per line block: a paragraph that uses several source fonts keeps the dominant one (by characters). The count of such
+// paragraphs is left on the array as mixedFonts for a warning; each paragraph's own pick is kept as srcFont.
+function dominantFonts(paras) {
+  let mixed = 0;
+  for (const p of paras) {
+    if (!p.fc) continue;
+    const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]);
+    if (e.length > 1) mixed++;
+    p.srcFont = e[0][0]; delete p.fc;
+  }
+  paras.mixedFonts = mixed;
+  return paras;
+} 
 
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', copy: '\u00a9', reg: '\u00ae', mdash: '\u2014', ndash: '\u2013', hellip: '\u2026', lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d', bull: '\u2022' };
 const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e.toLowerCase()] ?? m));
@@ -1118,7 +1156,7 @@ function toModel(buf, name, opts = {}) {
   const fmt = opts.format || detect(buf, name);
   const O = require('./officeread.cjs');
   const req = (n) => require('./import-' + n + '.cjs').read;
-  const office = (f) => (b) => f(b).map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; });
+  const office = (f) => (b) => { const o = f(b); const r = o.map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; }); r.mixedFonts = o.mixedFonts || 0; return r; };
   const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx),
     letterperfect: office(req('letterperfect')), paperclip: office(req('paperclip')), firstxlent: office(req('firstxlent')), textwizard: office(req('textwizard')), bankstreet: office(req('bankstreet')) };
   const prev = cfg.unicode; cfg.unicode = !!opts.unicode;
@@ -1127,8 +1165,9 @@ function toModel(buf, name, opts = {}) {
     if (fmt === 'craft' && opts.allowCraft) paras = require('./craftexport.cjs').model(require('./craftdoc.cjs').parse(buf).payload, { graphics: true });
     else if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
     else paras = importers[fmt](buf);
+    const mixedFonts = paras.mixedFonts || 0;
     while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
-    return { format: fmt, paras };
+    return { format: fmt, paras, mixedFonts };
   } finally { cfg.unicode = prev; }
 }
 
@@ -1145,6 +1184,7 @@ function cutAtLine(bytes, max) {
 function convert(buf, name, opts = {}) {
   const cols = opts.page ? require('./craftpage.cjs').usableCols(opts.page) : opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
+  if (opts.page) opts = { ...opts, page: { ...opts.page, fonts: require('./craftpage.cjs').fontRecords(paras, opts.page.font) } };
   let bytes = layout(paras, opts.page || cols), truncated = false, dropped = 0;
   const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
   if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }
@@ -1202,7 +1242,11 @@ function readDocx(buf) {
       const st = { b: flag(rpr, 'b'), i: flag(rpr, 'i'), u: flag(rpr, 'u'), sup: va && va[1] === 'superscript' ? 1 : 0, sub: va && va[1] === 'subscript' ? 1 : 0 };
       let t = '';
       for (const tm of r.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>|<w:noBreakHyphen\/>/g)) t += tm[1] !== undefined ? xmlDecode(tm[1]) : tm[0] === '<w:tab/>' ? '    ' : tm[0] === '<w:br/>' ? ' ' : '-';
-      if (t) p.runs.push({ t, ...st });
+      if (t) {
+        p.runs.push({ t, ...st });
+        const fm = /<w:rFonts[^>]*w:ascii="([^"]+)"/.exec(rpr);
+        if (fm && t.trim()) { p.fc = p.fc || {}; p.fc[fm[1]] = (p.fc[fm[1]] || 0) + t.length; }
+      }
     }
     return p;
   };
@@ -1218,6 +1262,9 @@ function readDocx(buf) {
     }
     out.push(row);
   }
+  let mixed = 0;
+  for (const p of out) { if (!p.fc) continue; const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]); if (e.length > 1) mixed++; p.srcFont = e[0][0]; delete p.fc; }
+  out.mixedFonts = mixed;
   return out;
 }
 
@@ -1771,7 +1818,9 @@ function fromCells(cells, like) {
     if (l && KEYS.every((k) => l[k] === c[k])) l.t += c.ch;
     else runs.push({ t: c.ch, b: c.b, i: c.i, u: c.u, sup: c.sup, sub: c.sub });
   }
-  return { align: like ? like.align : 'l', bullet: like ? !!like.bullet : false, runs };
+  const o = { align: like ? like.align : 'l', bullet: like ? !!like.bullet : false, runs };
+  if (like && like.font) o.font = like.font;
+  return o;
 }
 // fill in missing style keys and merge equal neighbours (importers leave keys out)
 function normalize(paras) {
@@ -1791,9 +1840,9 @@ function insertText(paras, pos, text, st) {
   const head = cells.slice(0, pos.o), tail = cells.slice(pos.o), src = paras[pos.p];
   if (parts.length === 1) { paras[pos.p] = fromCells(head.concat(mkc(parts[0]), tail), src); return { p: pos.p, o: pos.o + parts[0].length }; }
   const np = [fromCells(head.concat(mkc(parts[0])), src)];
-  for (let k = 1; k < parts.length - 1; k++) np.push(fromCells(mkc(parts[k]), { align: src.align, bullet: src.bullet }));
+  for (let k = 1; k < parts.length - 1; k++) np.push(fromCells(mkc(parts[k]), src));
   const last = parts[parts.length - 1];
-  np.push(fromCells(mkc(last).concat(tail), { align: src.align, bullet: src.bullet }));
+  np.push(fromCells(mkc(last).concat(tail), src));
   paras.splice(pos.p, 1, ...np);
   return { p: pos.p + parts.length - 1, o: last.length };
 }
@@ -1853,7 +1902,7 @@ function insertFragment(paras, pos, frag) {
 
 // ---- Craft text / Atari fit --------------------------------------------------
 function cleanParas(paras) {
-  return paras.map((p) => ({ align: p.align, bullet: p.bullet, runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
+  return paras.map((p) => ({ align: p.align, bullet: p.bullet, ...(p.font ? { font: p.font } : {}), runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
 }
 const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173); };
 
@@ -1870,6 +1919,7 @@ function fit(paras, profile = PROFILES.atari, page = null) {
 // Craft document file from the model. Cuts at the last line end that fits `limit` (ACWriter's document area).
 function toCwd(paras, opt = {}) {
   const prof = opt.profile || PROFILES.atari, limit = opt.limit || prof.docLimit;
+  if (opt.page) opt = { ...opt, page: { ...opt.page, fonts: P.fontRecords(paras, opt.page.font) } };
   let bytes = craftPayload(paras, prof, opt.page), truncated = false, dropped = 0;
   if (bytes.length > limit) {
     let cut = limit; while (cut > 0 && bytes[cut - 1] !== 13 && bytes[cut - 1] !== 14) cut--;
@@ -1942,8 +1992,11 @@ function openDoc(buf, name, opt = {}) {
   const notes = [];
   if (fmt === 'doc') notes.push('Legacy .doc: text only, formatting is not read');
   if (r.format === 'bankstreet' && buf[0] === 0x96) notes.push('Took the first document on the disk image');
+  if (r.mixedFonts) notes.push(r.mixedFonts + ' paragraph(s) mix fonts on one line; Craft allows one font per line, so the dominant font is used for the whole line');
   const page = r.format === 'craft' ? D.parse(buf).h.page : null;
-  return { format: r.format, paras: normalize(r.paras), notes, page };
+  const model = normalize(r.paras);
+  if (page) P.applyFonts(model, page);
+  return { format: r.format, paras: model, notes, page };
 }
 
 function styleCounts(paras) {

@@ -96,7 +96,10 @@ const cp1252 = (b) => String.fromCharCode(b >= 0x80 && b < 0xa0 ? CP1252[b - 0x8
 function fromRtf(buf) {
   const s = buf.toString('latin1'); const out = []; let cur = para(); let palign = 'l';
   const st = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const stack = [];
-  let skip = 0, depth = 0, uc = 1, skipUnits = 0, intbl = 0, bulletTab = 0, cap = null;
+  let skip = 0, depth = 0, uc = 1, skipUnits = 0, intbl = 0, bulletTab = 0, cap = null, fnt = '';
+  const ftab = {}; const ft = /\{\\f(\d+)(?:\\[a-z]+-?\d*)*[ ]*(?:\{[^{}]*\})*[ ]*([^;{}\\]+);/g; let fm;
+  const fti = s.indexOf('{\\fonttbl');
+  if (fti >= 0) { const sec = s.slice(fti, fti + 6000); while ((fm = ft.exec(sec))) ftab[fm[1]] = fm[2].trim(); }
   const SKIPDEST = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'header', 'headerl', 'headerr', 'headerf', 'footer', 'footerl', 'footerr', 'footerf', 'generator',
     'listtable', 'listoverridetable', 'rsidtbl', 'themedata', 'colorschememapping', 'datastore', 'latentstyles', 'xmlnstbl', 'fldinst', 'objdata', 'ftnsep', 'ftnsepc', 'aftnsep', 'aftnsepc',
     'revtbl', 'pgptbl', 'mmathPr', 'wgrffmtfilter', 'template', 'private', 'bkmkstart', 'bkmkend']);
@@ -104,6 +107,7 @@ function fromRtf(buf) {
   const add = (t) => {
     if (skip || !t) return;
     if (cap) { cap.buf += t; return; }
+    if (fnt && t.trim()) { cur.fc = cur.fc || {}; cur.fc[fnt] = (cur.fc[fnt] || 0) + t.length; }
     const r = { t: clean(t), ...st }; const last = cur.runs[cur.runs.length - 1];
     if (last && KEYS.every((k) => !!last[k] === !!r[k])) last.t += r.t; else cur.runs.push(r);
   };
@@ -112,7 +116,7 @@ function fromRtf(buf) {
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (c === '{') {
-      stack.push({ ...st, skip, uc, cap }); depth++;
+      stack.push({ ...st, skip, uc, cap, fnt }); depth++;
       const nx = /^\{(\\\*)?\\([a-zA-Z]+)/.exec(s.slice(i, i + 24));
       if (!skip && nx && (nx[2] === 'listtext' || nx[2] === 'pntext')) cap = { depth, buf: '' };
       else if (nx && nx[1]) skip = skip || depth;
@@ -122,7 +126,7 @@ function fromRtf(buf) {
         if (/^[\u00b7\u2022\u00a7\uf0b7\uf0a7\u25cf\u25cb\u25aao*-]$/.test(t)) cur.bullet = true; else if (t) { cap = null; add(t + ' '); }
       }
       const p = stack.pop();
-      if (p) { for (const k of KEYS) st[k] = p[k]; skip = p.skip; uc = p.uc; cap = p.cap; }
+      if (p) { for (const k of KEYS) st[k] = p[k]; skip = p.skip; uc = p.uc; cap = p.cap; fnt = p.fnt; }
       depth--;
     } else if (c === '\\') {
       const m = /^\\([a-zA-Z]+)(-?\d+)? ?/.exec(s.slice(i, i + 40));
@@ -136,6 +140,7 @@ function fromRtf(buf) {
         else if (w === 'cell' || w === 'nestcell') { if (!skip && !cap) { const l = cur.runs[cur.runs.length - 1]; if (l && / $/.test(l.t)) l.t = l.t.trimEnd(); add(' | '); } }
         else if (w === 'row' || w === 'nestrow') { if (!skip) { endRow(); intbl = 0; } }
         else if (w === 'qc') cur.align = palign = 'c'; else if (w === 'qr') cur.align = palign = 'r'; else if (w === 'qj') cur.align = palign = 'j'; else if (w === 'ql') cur.align = palign = 'l';
+        else if (w === 'f' && n !== null && !skip) fnt = ftab[n] || '';
         else if (w === 'plain') { for (const k of KEYS) st[k] = 0; }
         else if (w === 'b') st.b = n === 0 ? 0 : 1; else if (w === 'i') st.i = n === 0 ? 0 : 1;
         else if (/^ul(d|db|w|th|wave|dash|dashd|dashdd|hwave|ldash)?$/.test(w)) st.u = n === 0 ? 0 : 1; else if (w === 'ulnone') st.u = 0;
@@ -159,8 +164,22 @@ function fromRtf(buf) {
     }
   }
   if (cur.runs.length) out.push(cur);
-  return out;
+  return dominantFonts(out);
 }
+
+// One font per line block: a paragraph that uses several source fonts keeps the dominant one (by characters). The count of such
+// paragraphs is left on the array as mixedFonts for a warning; each paragraph's own pick is kept as srcFont.
+function dominantFonts(paras) {
+  let mixed = 0;
+  for (const p of paras) {
+    if (!p.fc) continue;
+    const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]);
+    if (e.length > 1) mixed++;
+    p.srcFont = e[0][0]; delete p.fc;
+  }
+  paras.mixedFonts = mixed;
+  return paras;
+} 
 
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', copy: '\u00a9', reg: '\u00ae', mdash: '\u2014', ndash: '\u2013', hellip: '\u2026', lsquo: '\u2018', rsquo: '\u2019', ldquo: '\u201c', rdquo: '\u201d', bull: '\u2022' };
 const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : +e.slice(1)) : (ENT[e.toLowerCase()] ?? m));
@@ -276,7 +295,7 @@ function toModel(buf, name, opts = {}) {
   const fmt = opts.format || detect(buf, name);
   const O = require('./officeread.cjs');
   const req = (n) => require('./import-' + n + '.cjs').read;
-  const office = (f) => (b) => f(b).map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; });
+  const office = (f) => (b) => { const o = f(b); const r = o.map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; }); r.mixedFonts = o.mixedFonts || 0; return r; };
   const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx),
     letterperfect: office(req('letterperfect')), paperclip: office(req('paperclip')), firstxlent: office(req('firstxlent')), textwizard: office(req('textwizard')), bankstreet: office(req('bankstreet')) };
   const prev = cfg.unicode; cfg.unicode = !!opts.unicode;
@@ -285,8 +304,9 @@ function toModel(buf, name, opts = {}) {
     if (fmt === 'craft' && opts.allowCraft) paras = require('./craftexport.cjs').model(require('./craftdoc.cjs').parse(buf).payload, { graphics: true });
     else if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
     else paras = importers[fmt](buf);
+    const mixedFonts = paras.mixedFonts || 0;
     while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
-    return { format: fmt, paras };
+    return { format: fmt, paras, mixedFonts };
   } finally { cfg.unicode = prev; }
 }
 
@@ -303,6 +323,7 @@ function cutAtLine(bytes, max) {
 function convert(buf, name, opts = {}) {
   const cols = opts.page ? require('./craftpage.cjs').usableCols(opts.page) : opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
+  if (opts.page) opts = { ...opts, page: { ...opts.page, fonts: require('./craftpage.cjs').fontRecords(paras, opts.page.font) } };
   let bytes = layout(paras, opts.page || cols), truncated = false, dropped = 0;
   const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
   if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }
