@@ -647,7 +647,22 @@ spmsg
  cmp #20
  bne spmx
  jmp spm20
-spmx sec
+spmx cmp #33
+ bne spmy
+ jmp exrepm
+spmy cmp #27
+ bcc spmz
+ sec
+ sbc #27
+ asl
+ tax
+ lda exmt,x
+ pha
+ lda exmt+1,x
+ tax
+ pla
+ jmp putstr
+spmz sec
  sbc #21
  asl
  tax

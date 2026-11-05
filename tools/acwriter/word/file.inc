@@ -39,8 +39,10 @@ hopen
 dofile
  lda fop
  cmp #4
- bne fz_df0
+ bne fz_df00
  jmp sp_setname
+fz_df00 bcc fz_df0
+ jmp exdone
 fz_df0 lda #0
  sta fdt
  ldy #0

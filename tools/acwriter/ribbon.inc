@@ -29,7 +29,12 @@ cmdkey
  bcc ck1
  cmp #'['
  bcs ck1
- ora #$20
+ ldx fpr
+ beq ck0
+ ldx fop
+ cpx #7
+ beq ck1
+ck0 ora #$20
 ck1 ldx clen
  cpx #60
  bcs ckx
@@ -53,8 +58,13 @@ ckrun lda #0
  lda #1
  sta bd
  lda clen
- beq ckr0
+ bne ckr3
  lda fpr
+ beq ckr0
+ lda fop
+ cmp #7
+ bne ckr0
+ckr3 lda fpr
  beq ckr1
  lda #0
  sta fpr
@@ -237,6 +247,11 @@ br0 lda cmdon
  beq br0a
  lda #<rs12
  ldx #>rs12
+ ldy fop
+ cpy #5
+ bcc br0a
+ lda exprl-5,y
+ ldx exprh-5,y
 br0a jsr putstr
  ldx clen
  lda #'_'
