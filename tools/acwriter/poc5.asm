@@ -18,6 +18,7 @@
  icl 'word/status.inc'
  icl 'word/home.inc'
  icl 'word/import.inc'
+ icl 'word/spell.inc'
  .macro body
  dta b(1),c'ACWriter',b(1),c' hi-res page: 64 columns x 20 lines',b(13)
  dta c'Normal, ',b(1),c'bold',b(1),c', ',b(2),c'italic',b(2),c' and ',b(4-1),c'underline',b(3),c' text.',b(13)
@@ -79,4 +80,5 @@ BFNT = $9800
 
  org $1500
  icl 'word/helpdoc.inc'
+ icl 'word/spellbk.inc'
  run start

@@ -37,7 +37,11 @@ hopen
 
 ; the typed name is in CMDB[0..clen)
 dofile
- lda #0
+ lda fop
+ cmp #4
+ bne fz_df0
+ jmp sp_setname
+fz_df0 lda #0
  sta fdt
  ldy #0
 fz_df1 lda CMDB,y
@@ -176,7 +180,7 @@ fz_dl1 lda HDR,x
  cmp #'W'
  bne fbj
  lda HDR+9
- cmp #$40
+ cmp #>($9000-DOC)
  bcs fbig
  sta fln+1
  lda HDR+8

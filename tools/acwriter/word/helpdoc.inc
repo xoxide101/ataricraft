@@ -12,7 +12,7 @@ helpdoc
  dta b(1),c'Menus',b(1),b(13)
  dta c'File: New Open Save Save-As, Home page, Help page.',b(13)
  dta c'Edit: Top and End work. Undo/Cut/Copy/Paste: not yet.',b(13)
- dta c'Search: not yet.',b(13)
+ dta c'Search: S spell check (^K), D dictionary name. Find: soon.',b(13)
  dta c'Character: bold, italic, underline, W width, T tall,',b(13)
  dta c' L larger, S smaller, P superscript, D subscript,',b(13)
  dta c' O fonts, N no-break space, H no-break hyphen,',b(13)
@@ -45,9 +45,19 @@ helpdoc
  dta c'N new  O open  S save  A save as  C convert  H help',b(13)
  dta c'E or Esc: back to the document (it stays in memory).',b(13)
  dta c'Up/Down + Return also pick an entry. T cycles colours.',b(13)
+ dta b(13)
+ dta b(1),c'Spell check',b(1),b(13)
+ dta c'^K or Search > Spell check checks from the cursor and',b(13)
+ dta c'stops on each unknown word (shown inverse):',b(13)
+ dta c' I ignore  A ignore for this session  Esc stop',b(13)
+ dta c' 1-5 replace with a suggestion (a letter deleted or',b(13)
+ dta c' two swapped)  Return/N next. Needs D1:EN.CDC or',b(13)
+ dta c'H:EN.CDC; a 130XE is needed for the 16 KB table.',b(13)
+ dta c'See docs/SPELL.md and docs/DICTIONARY.md.',b(13)
  dta b(0)
 
 ; line 0 is the logo; entries start at line EL0, each 12 scanlines tall at double width
+ org $5800
 homedoc
  dta b(15),b(10),b(30),b(1),c'A C  W R I T E R',b(1),b(13)
  dta b(15),b(5),c'----------------------------------------------------------------',b(13)
