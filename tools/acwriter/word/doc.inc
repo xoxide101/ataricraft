@@ -75,7 +75,10 @@ h4 cmp #$7E
  jmp delete
 h5 cmp #$9B
  bne h6
- lda #13
+ lda fpn
+ beq h5a
+ jsr o_fsplit
+h5a lda #13
  jmp insert
 h6 cmp #2
  bne h7
@@ -650,8 +653,10 @@ delete
  bne dl1
  lda cl
  beq dlx
- ldx cl
- lda LPL,x
+ lda fpn
+ beq dl0
+ jsr o_fjoin
+dl0 ldx cl
  sec
  sbc #1
  sta src

@@ -35,6 +35,23 @@ pwo    = $14E5               ; cursor pointer saved over a rewrap (2)
 pwtp   = $14E8               ; tab stop columns on the paper (8)
 pwtk   = $14F0               ; kinds 0 left, 1 centre, 2 right (8)
 pzoom  = $14E7               ; 1 = PAGE mode shows the 2x zoom (word/zoom.inc)
+; typeface state (word/fontz.inc): bank 3 holds up to 4 loaded 8x8 charsets (1 KB each); slot 0 is the OS ROM set
+fpn    = $0781               ; font changes in the table
+fns    = $0782               ; loaded fonts (slots 1..fns)
+fz1    = $0783               ; scratch
+fz2    = $0784
+fz3    = $0785
+fz4    = $0786
+fz5    = $0787
+fnm    = $0788               ; 4 names x 16 bytes (12 letters, 0 end, byte 15: 0 loaded, 1 pending, 2 failed)
+fpi    = $07C8               ; change table: paragraph number (sorted), 8 entries
+fps    = $07D0               ; its font slot
+FG8    = $07D8               ; the 8 glyph bytes being drawn
+fz6    = $07E0
+fz7    = $07E1
+fz8    = $07E2
+fzp    = $07E3               ; paragraph of the line being drawn
+fzf    = $07E4               ; font slot of that line
 SWB  = $1380                 ; spell: word, 24 letter codes (a=1..z=26, apostrophe=27)
 DNM  = $1450                 ; dictionary file name, 0x9B ended
 ISB  = $9B00                 ; session ignore list: 32 entries x 4 byte hash

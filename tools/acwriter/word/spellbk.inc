@@ -66,6 +66,38 @@ bk_out
  cli
  rts
 
+; bank 3 holds the loaded typefaces ($4000.., 1 KB each). fb_put: copy LDB to bank 3 page A ($40..$7F)
+fb_put
+ sta fbp+2
+ jsr fb_in
+ ldy #0
+fbq lda LDB,y
+fbp sta $FF00,y
+ iny
+ bne fbq
+ jmp bk_out
+
+; fb_get8: copy the 8 bytes at (src) in bank 3 to FG8
+fb_get8
+ jsr fb_in
+ ldy #7
+fbg lda (src),y
+ sta FG8,y
+ dey
+ bpl fbg
+ jmp bk_out
+
+fb_in
+ sei
+ lda #0
+ sta NMIEN
+ lda PORTB
+ sta sv_t
+ and #$E3
+ ora #$0C
+ sta PORTB
+ rts
+
 ; sv_xe = 1 when bank 1 is a separate 16 KB of RAM (130XE), else 0
 bk_det
  lda #0

@@ -93,3 +93,10 @@ pwst ovstub P.pwst,2
 pwmain ovstub P.pwmain,2
 hpgz ovstub Z.hpgz,3
 pzmain ovstub Z.pzmain,3
+hface ovstub Z.hface,3
+o_fnload ovstub Z.fnload,3
+o_fsplit ovstub Z.fsplit,3
+o_fjoin ovstub Z.fjoin,3
+o_fsave ovstub Z.fsave,3
+o_ftag ovstub Z.ftag,3
+o_fpend ovstub Z.fpend,3

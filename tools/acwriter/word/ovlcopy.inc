@@ -92,6 +92,6 @@ ovs2 sta $4000,y
  sta ovid
  rts
 ovdp dta b(0)
-ovsp dta b($A1,$A9,$B1,$BD)
+ovsp dta b($A1,$A9,$B1,$80)
 ovnp dta b([E.e_end-SLA+255]/256),b([S.e_end-SLA+255]/256),b([P.e_end-SLA+255]/256),b([Z.e_end-SLA+255]/256)
 ovbp dta b(0,0,0,0)

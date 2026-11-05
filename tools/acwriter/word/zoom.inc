@@ -70,6 +70,14 @@ pzc9 rts
 
 ; the 9 text lines of 16 scanlines each (text area = 144 of its 156 scanlines)
 pzdraw lda #0
+ sta fzf
+ sta fzp
+ lda fpn
+ beq pzd0
+ ldx top
+ jsr fpara
+ sta fzp
+pzd0 lda #0
  sta pwii
 pzd1 lda pwii
  asl
@@ -84,7 +92,12 @@ pzd1 lda pwii
  sta t0
  cmp nl
  bcs pzd8
- tax
+ lda fpn
+ beq pzd1a
+ lda fzp
+ jsr ffind
+ sta fzf
+pzd1a ldx t0
  lda LPL,x
  sta tp
  lda LPH,x
@@ -122,11 +135,32 @@ pzd8 lda t0
  cmp cl
  bne pzd9
  jsr pzcur
-pzd9 inc pwii
+pzd9 lda fpn
+ beq pzd9b
+ lda t0
+ clc
+ adc #1
+ cmp nl
+ bcs pzd9b
+ tax
+ lda LPL,x
+ sec
+ sbc #1
+ sta tp
+ lda LPH,x
+ sbc #0
+ sta tp+1
+ ldy #0
+ lda (tp),y
+ cmp #13
+ bne pzd9b
+ inc fzp
+pzd9b inc pwii
  lda pwii
  cmp #9
- bne pzd1
- rts
+ beq pzd9c
+ jmp pzd1
+pzd9c rts
 
 ; A = character code 32.. -> OS ROM screen code (0 = blank)
 pzmap cmp #127
@@ -177,11 +211,26 @@ pzblit sta src
  rol src+1
  asl src
  rol src+1
- lda src+1
+ lda fzf
+ beq pzbr
+ asl
+ asl
+ clc
+ adc #$3C
+ clc
+ adc src+1
+ sta src+1
+ jsr fb_get8
+ lda #<FG8
+ sta src
+ lda #>FG8
+ sta src+1
+ jmp pzbg
+pzbr lda src+1
  clc
  adc #$E0
  sta src+1
- lda pwsc
+pzbg lda pwsc
  asl
  clc
  adc sp
