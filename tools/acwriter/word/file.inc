@@ -266,7 +266,7 @@ fbj jmp fbad
 
 ; not a CRFT file: read it again as plain text / ATASCII
 fbm jsr fclose
- jmp doimport
+ jmp fbm2
 
 mkhdr
  ldx #15

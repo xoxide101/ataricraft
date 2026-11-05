@@ -278,6 +278,7 @@ ed_fl  = $14C3               ; find text length
 ed_rl  = $14C4               ; replacement length
 ed_cnt = $14C5               ; replacements made
 ed_l   = $14C6
+ed_dn  = $14E2               ; set by Cut (1) / Paste (2) so the main loop can realign the font table
 ed_cl  = $14C8               ; clipboard length (2)
 ed_ap  = $14CA               ; selection anchor, raw document pointer
 ed_cp  = $14CC               ; cursor pointer

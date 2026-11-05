@@ -59,7 +59,7 @@ hnew lda #0
  sta cc
  sta top
  sta anyv
- jsr scan
+ jsr hnew2
  lda #2
  sta fl
  rts

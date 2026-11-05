@@ -118,17 +118,95 @@ fsetcur pha
 fsplit ldx cl
  jsr fpara
  sta fz4
- ldx #0
+ lda #1
+ sta fz7
+; fgrow: fz7 paragraphs were added after paragraph fz4; later entries move down
+fgrow ldx #0
 fsp1 cpx fpn
  bcs fsp9
  lda fpi,x
  cmp fz4
  beq fsp2
  bcc fsp2
- inc fpi,x
+ clc
+ adc fz7
+ sta fpi,x
 fsp2 inx
- bne fsp1
+ jmp fsp1
 fsp9 rts
+
+; fdrp: fz7 paragraphs after paragraph fz4 were merged into it; their entries go, later ones move up
+fdrp ldx #0
+ ldy #0
+fdr1 cpx fpn
+ bcs fdr8
+ lda fpi,x
+ cmp fz4
+ beq fdr3
+ bcc fdr3
+ sec
+ sbc fz4
+ cmp fz7
+ beq fdr4
+ bcc fdr4
+ lda fpi,x
+ sec
+ sbc fz7
+ jmp fdr5
+fdr3 lda fpi,x
+fdr5 sta fpi,y
+ lda fps,x
+ sta fps,y
+ iny
+fdr4 inx
+ jmp fdr1
+fdr8 sty fpn
+ rts
+
+; after Cut (A = 0) or Paste (A = 1): the clipboard's hard line ends change the paragraph count
+fclip sta fz6
+ lda #<CLIP
+ sta tp
+ lda #>CLIP
+ sta tp+1
+ lda #0
+ sta fz7
+ lda ed_cl
+ sta fz1
+ lda ed_cl+1
+ sta fz2
+ ldy #0
+fcl1 lda fz1
+ ora fz2
+ beq fcl3
+ lda (tp),y
+ cmp #13
+ bne fcl2
+ inc fz7
+fcl2 inc tp
+ bne fcl2a
+ inc tp+1
+fcl2a lda fz1
+ bne fcl2b
+ dec fz2
+fcl2b dec fz1
+ jmp fcl1
+fcl3 lda fz7
+ beq fcl9
+ ldx cl
+ jsr fpara
+ ldx fz6
+ beq fcl4
+ sec
+ sbc fz7
+ bcs fcl4
+ lda #0
+fcl4 sta fz4
+ lda fz6
+ bne fcl5
+ jmp fdrp
+fcl5 jmp fgrow
+fcl9 rts
 
 ; backspace at the start of a line: when the line above ended with a hard end, two paragraphs join
 fjoin ldx cl
@@ -145,30 +223,12 @@ fjoin ldx cl
  bne fjx
  ldx cl
  jsr fpara
+ sec
+ sbc #1
  sta fz4
- ldx #0
-fj1 cpx fpn
- bcs fj3
- lda fpi,x
- cmp fz4
- beq fj2
- bcc fj2
- dec fpi,x
-fj2 inx
- bne fj1
-fj3 ldx #0
-fj4 txa
- clc
- adc #1
- cmp fpn
- bcs fjx
- lda fpi,x
- cmp fpi+1,x
- bne fj5
- jsr fdel
- jmp fj4
-fj5 inx
- jmp fj4
+ lda #1
+ sta fz7
+ jmp fdrp
 fjx rts
 
 ; ---------------------------------------------------------------- names
