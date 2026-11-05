@@ -48,12 +48,12 @@ function normalize(p) {
 // paragraph start, so a font can never change in the middle of a line.
 function fontRecords(paras, docFont = '') {
   const out = []; let cur = docFont || '';
-  paras.forEach((p, i) => { const f = p.font || docFont || ''; if (f !== cur) { out.push({ p: i, font: f }); cur = f; } });
+  paras.forEach((p, i) => { let f = p.font || docFont || ''; if (!f && cur) f = 'ROM'; if (f !== cur) { out.push({ p: i, font: f }); cur = f; } });
   return out;
 }
 function applyFonts(paras, page) {
   const recs = (page && page.fonts) || []; let cur = (page && page.font) || '', k = 0;
-  paras.forEach((p, i) => { while (k < recs.length && recs[k].p <= i) cur = recs[k++].font; if (cur) p.font = cur; else delete p.font; });
+  paras.forEach((p, i) => { while (k < recs.length && recs[k].p <= i) cur = recs[k++].font; if (cur && cur !== 'ROM') p.font = cur; else delete p.font; });
   return paras;
 }
 

@@ -112,6 +112,13 @@
     XCW.styleRange(XW.doc, a, b, key, !XCW.hasStyle(XW.doc, a, b, key));
     refresh(s);
   }
+  // typeface per paragraph (docs/FONT.md): the face of every paragraph touched by the selection; '' = standard
+  XW.setFont = (name) => {
+    const s = sel(), [a, b] = XCW.order(s.a, s.f);
+    snapshot(true);
+    for (let p = a.p; p <= b.p; p++) { if (name) XW.doc[p].font = name; else delete XW.doc[p].font; }
+    XW.dirty = true; refresh(s);
+  };
   function setAlign(al) {
     const s = sel(), [a, b] = XCW.order(s.a, s.f);
     snapshot(true);
