@@ -67,6 +67,8 @@ $acw = 'library\craftapps\ACWriter'
 Add-File (Join-Path $root 'tools\acwriter\poc5.xex') "$acw\POC5.XEX"
 foreach ($f in Get-ChildItem (Join-Path $root 'font') -File -ErrorAction SilentlyContinue) { Add-File $f.FullName "$acw\FONTS\$($f.Name)" }
 foreach ($f in Get-ChildItem (Join-Path $root 'tools\acwriter') -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(cwd|dic|ovl|fnt|acf)$' }) { Add-File $f.FullName "$acw\$($f.Name)" }
+# dictionaries (EN.CDC, EN8.CDC) and the demo document, next to the program
+foreach ($f in Get-ChildItem (Join-Path $root 'docs\samples') -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match '^\.(cdc|cwd)$' }) { Add-File $f.FullName "$acw\$($f.Name)" }
 if (-not $NoPersonal) { foreach ($f in Get-ChildItem (Join-Path $root 'font_personal') -File -ErrorAction SilentlyContinue) { Add-File $f.FullName "$acw\FONTS\PERSONAL\$($f.Name)" } }
 else { $excluded.Add("$root\font_personal\*  (-NoPersonal)") }
 
