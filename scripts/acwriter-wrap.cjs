@@ -1,5 +1,5 @@
-// ACWord word-wrap check: types a long paragraph on a new empty first line and screenshots it.
-// Usage: node scripts/acword-wrap.cjs poc5.xex
+// ACWriter word-wrap check: types a long paragraph on a new empty first line and screenshots it.
+// Usage: node scripts/acwriter-wrap.cjs poc5.xex
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs');
 const ROOT = 'C:/Users/raver/ataricraft';
@@ -12,7 +12,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
   await p.selectOption('#model', '800xl').catch(() => {});
   await p.click('#boot'); await p.waitForTimeout(3000);
-  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acword/' + (process.argv[2] || 'poc5.xex')));
+  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acwriter/' + (process.argv[2] || 'poc5.xex')));
   await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), bytes);
   await p.waitForTimeout(3000);
   await p.locator('canvas').first().click();

@@ -1,4 +1,4 @@
-// ACWord paragraph alignment check: left, centre and right lines plus a wrapped centred paragraph.
+// ACWord indent and bullet check.
 // Usage: node scripts/acword-align.cjs poc5.xex
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs');
@@ -16,20 +16,20 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.waitForTimeout(3000);
   await p.locator('canvas').first().click();
   const key = async (k, w = 350) => { await p.keyboard.press(k); await p.waitForTimeout(w); };
-  const type = async (s) => { for (const ch of s) await key(ch === ' ' ? 'Space' : ch); };
+  const type = async (s) => { for (const ch of s) await key(ch === ' ' ? 'Space' : ch, 600); };
   let n = 0; const shot = () => p.locator('canvas').first().screenshot({ path: ROOT + '/out/als' + (n++) + '.png' });
   const menu = async (...ks) => { await key('Escape'); for (const k of ks) { await key(k, 700); } await p.waitForTimeout(1000); };
-  await menu('e', 'e');
-  await key('Enter', 1200);
-  await menu('p', 'l'); await type('Left aligned line'); await key('Enter', 1200);
-  await menu('p', 'c'); await type('Centered line'); await key('Enter', 1200);
-  await menu('p', 'r'); await type('Right aligned line'); await key('Enter', 1200);
-  await menu('p', 'c'); await type('A centered paragraph that is long enough to wrap onto a second line'); await key('Enter', 1200);
-  await menu('p', 'j'); await type('A justified paragraph spreads the extra space between its words so both edges line up neatly'); await key('Enter', 1200);
-  await menu('p', 'l');
-  await menu('d', 'm');
   await p.waitForTimeout(1500);
-  await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-align.png' });
+  await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-base.png' });
   console.log('errors:', errs);
   await b.close();
 })();
+
+
+
+
+
+
+
+
+

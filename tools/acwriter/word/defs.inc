@@ -1,4 +1,4 @@
-; ACWord proof of concept: 320x192 1-bit page, 6px glyphs, bold/italic/underline,
+; ACWriter proof of concept: 320x192 1-bit page, 6px glyphs, bold/italic/underline,
 ; typing, scrolling, and frame timing. Stock 64K XL/XE. Build: mads poc.asm -o:poc.xex
 SDMCTL = $022F
 SDLSTL = $0230

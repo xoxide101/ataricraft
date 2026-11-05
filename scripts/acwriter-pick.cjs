@@ -1,5 +1,5 @@
-// ACWord indent and bullet check.
-// Usage: node scripts/acword-align.cjs poc5.xex
+// ACWriter indent and bullet check.
+// Usage: node scripts/acwriter-align.cjs poc5.xex
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs');
 const ROOT = 'C:/Users/raver/ataricraft';
@@ -11,7 +11,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
   await p.selectOption('#model', '800xl').catch(() => {});
   await p.click('#boot'); await p.waitForTimeout(3000);
-  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acword/' + (process.argv[2] || 'poc5.xex')));
+  const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acwriter/' + (process.argv[2] || 'poc5.xex')));
   await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), bytes);
   await p.waitForTimeout(3000);
   await p.locator('canvas').first().click();
@@ -19,13 +19,16 @@ const ROOT = 'C:/Users/raver/ataricraft';
   const type = async (s) => { for (const ch of s) await key(ch === ' ' ? 'Space' : ch, 600); };
   let n = 0; const shot = () => p.locator('canvas').first().screenshot({ path: ROOT + '/out/als' + (n++) + '.png' });
   const menu = async (...ks) => { await key('Escape'); for (const k of ks) { await key(k, 700); } await p.waitForTimeout(1000); };
-  await menu('f', 'n');
-  await key('Enter', 1200);
-  await type('Fact'); await menu('c', 'p'); await type('1'); await menu('c', 'p'); await type(' and more'); await menu('c', 'p'); await type('ab'); await menu('c', 'p'); await key('Enter', 1200);
-  await type('Last line');
-  await menu('d', 'g');
+  await key('ArrowDown', 900);
+  await menu('c', 'y');
+  await key('ArrowRight', 500); await key('ArrowRight', 500); await key('ArrowDown', 500);
+  await p.waitForTimeout(800); await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-pk1.png' });
+  await key('Enter', 1500);
+  await menu('c', 'y'); await key('Space', 800); await key('ArrowRight', 500);
+  await p.waitForTimeout(800); await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-pk2.png' });
+  await key('Enter', 1500);
   await p.waitForTimeout(1500);
-  await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-leg.png' });
+  await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-pk3.png' });
   console.log('errors:', errs);
   await b.close();
 })();

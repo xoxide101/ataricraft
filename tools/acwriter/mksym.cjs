@@ -1,6 +1,6 @@
 // Builds the extended glyph table (codes 128..255, 8 bytes each, 4-bit rows with bit 3 = leftmost pixel)
 // and writes sym.inc. 128..159 are Atari graphics, 160..255 are Latin-1 (160 and 173 are handled in code).
-// Usage: node tools/acword/mksym.cjs [dump]
+// Usage: node tools/acwriter/mksym.cjs [dump]
 const fs = require('fs');
 const base = require('./font4.json');
 const atari = fs.readFileSync(__dirname + '/../../web/library/fonts/personal/Altered Chrome/Atari8/Altered Chrome.fnt');

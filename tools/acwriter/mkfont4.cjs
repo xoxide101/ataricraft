@@ -1,6 +1,6 @@
 // Builds a 4x7 glyph set (ASCII 32..127) from the 8x8 Atari font and writes font4.inc
 // (seven planes f4_0..f4_6, 96 entries each, 4-bit values, bit 3 = leftmost pixel).
-// Usage: node tools/acword/mkfont4.cjs [preview.png-data-out]
+// Usage: node tools/acwriter/mkfont4.cjs [preview.png-data-out]
 const fs = require('fs');
 const R = __dirname + '/../../';
 const fnt = fs.readFileSync(R + 'web/library/fonts/atari/AtariPixel8.fnt');

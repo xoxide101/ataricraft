@@ -1,5 +1,5 @@
 // Opens converted .CWD files (from tools/craftimport.cjs) in the app through the H: device and screenshots each.
-// Usage: node scripts/acword-import.cjs poc5.xex FILE1.CWD FILE2.CWD ...   (files from out/ ; screenshots out/acw-imp-NAME.png)
+// Usage: node scripts/acwriter-import.cjs poc5.xex FILE1.CWD FILE2.CWD ...   (files from out/ ; screenshots out/acw-imp-NAME.png)
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs'), path = require('path');
 const ROOT = 'C:/Users/raver/ataricraft';
@@ -12,7 +12,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
   await p.selectOption('#model', '800xl').catch(() => {});
   await p.click('#boot'); await p.waitForTimeout(3000);
-  await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), Array.from(fs.readFileSync(ROOT + '/tools/acword/' + xex)));
+  await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), Array.from(fs.readFileSync(ROOT + '/tools/acwriter/' + xex)));
   await p.waitForTimeout(3000);
   await p.locator('canvas').first().click();
   const key = async (k, w = 350) => { await p.keyboard.press(k); await p.waitForTimeout(w); };
