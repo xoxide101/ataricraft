@@ -38,6 +38,8 @@ hopen
 ; the typed name is in CMDB[0..clen)
 dofile
  lda fop
+ cmp #9
+ beq fz_df0
  cmp #4
  bne fz_df00
  jmp sp_setname
@@ -86,21 +88,30 @@ fz_df7 lda fdt
  cmp #3
  beq fz_df8
  ldy #0
+ cmp #9
+ bne fz_df9
+ ldy #4
 fz_df9 lda fext,y
  sta FNB,x
  inx
  iny
- cpy #4
+ tya
+ and #3
  bne fz_df9
 fz_df8 lda #$9B
  sta FNB,x
  stx fnl
  lda fop
- cmp #2
- beq doload
- cmp #3
- bne dosave
- jmp doimport
+ cmp #9
+ bne fz_df8a
+ jmp o_fnload
+fz_df8a cmp #2
+ bne fz_df8b
+ jmp doload
+fz_df8b cmp #3
+ beq fz_df8c
+ jmp dosave
+fz_df8c jmp doimport
 
 dosave
  jsr mkhdr
@@ -134,6 +145,11 @@ dosave
  cpy #$80
  bcs fer1
 fz_sv8 jsr pwsave
+ cpy #$80
+ bcs fer1
+ lda fpn
+ beq fz_sv9
+ jsr o_fsave
  cpy #$80
  bcs fer1
 fz_sv9 jsr fclose
@@ -185,8 +201,9 @@ fz_dl8 dex
  bpl fz_dl1
  lda HDR+5
  cmp #'W'
- bne fbj
- lda HDR+9
+ beq fz_dl8b
+ jmp fbad
+fz_dl8b lda HDR+9
  cmp #>($9000-DOC)
  bcs fbig
  sta fln+1
@@ -199,8 +216,12 @@ fz_dl8 dex
  ldy #>DOC
  jsr fblk
  cpy #$80
- bcs fer1
-fz_dl2 lda #<DOC
+ bcc fz_dl2
+ jmp fer1
+fz_dl2 lda #0
+ sta fpn
+ sta fns
+ lda #<DOC
  clc
  adc fln
  sta dend
@@ -222,7 +243,10 @@ fz_dl2 lda #<DOC
  beq fz_dl3
  jsr pwload
 fz_dl3 jsr fclose
- lda #0
+ lda fpn
+ beq fz_dl3a
+ jsr o_fpend
+fz_dl3a lda #0
  sta cl
  sta cc
  sta top
@@ -423,6 +447,13 @@ fz_pl2 lda #2
  jsr fz_pl9
  bcs fz_plr
  lda pwb
+ cmp #2
+ beq fz_plf
+ cmp #3
+ bne fz_pl2a
+fz_plf jsr o_ftag
+ jmp fz_pl2
+fz_pl2a lda pwb
  cmp #1
  bne fz_pl2
  lda pwc
@@ -489,4 +520,4 @@ fz_pl9 lda #7
  jsr fblk
  cpy #$80
  rts
-fext dta c'.CWD'
+fext dta c'.CWD.FNT'

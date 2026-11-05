@@ -105,10 +105,11 @@ e_end = *
  icl 'craftpg.inc'
 e_end = *
  .endl
- org $BD00
+ org $8000
  org r:SLA
  .local Z
  icl 'word/zoom.inc'
+ icl 'word/fontz.inc'
 e_end = *
  .endl
 

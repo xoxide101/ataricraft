@@ -266,7 +266,7 @@ sv_ss  = $13E2
 sv_hc  = $13E3
 sv_pi  = $13E4
 DNM2   = $1470               ; fallback dictionary name (H:EN.CDC)
-NCMD   = 63
+NCMD   = 64
 
 ; selection, clipboard, find / replace (word/edit.inc)
 FND    = $1480               ; find text, lower case (32)
