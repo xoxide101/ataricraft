@@ -34,7 +34,11 @@ function readDocx(buf) {
       const st = { b: flag(rpr, 'b'), i: flag(rpr, 'i'), u: flag(rpr, 'u'), sup: va && va[1] === 'superscript' ? 1 : 0, sub: va && va[1] === 'subscript' ? 1 : 0 };
       let t = '';
       for (const tm of r.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>|<w:noBreakHyphen\/>/g)) t += tm[1] !== undefined ? xmlDecode(tm[1]) : tm[0] === '<w:tab/>' ? '    ' : tm[0] === '<w:br/>' ? ' ' : '-';
-      if (t) p.runs.push({ t, ...st });
+      if (t) {
+        p.runs.push({ t, ...st });
+        const fm = /<w:rFonts[^>]*w:ascii="([^"]+)"/.exec(rpr);
+        if (fm && t.trim()) { p.fc = p.fc || {}; p.fc[fm[1]] = (p.fc[fm[1]] || 0) + t.length; }
+      }
     }
     return p;
   };
@@ -50,6 +54,9 @@ function readDocx(buf) {
     }
     out.push(row);
   }
+  let mixed = 0;
+  for (const p of out) { if (!p.fc) continue; const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]); if (e.length > 1) mixed++; p.srcFont = e[0][0]; delete p.fc; }
+  out.mixedFonts = mixed;
   return out;
 }
 

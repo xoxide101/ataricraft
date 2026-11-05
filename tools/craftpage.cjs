@@ -38,7 +38,23 @@ function normalize(p) {
   o.tabs = (o.tabs || []).map((t) => ({ pos: Math.round(+t.pos), kind: KIND_CODE[t.kind] !== undefined ? t.kind : 'l' }))
     .filter((t) => t.pos >= 0 && t.pos < pc && !seen.has(t.pos) && seen.add(t.pos)).sort((a, b) => a.pos - b.pos).slice(0, 24);
   o.font = String(o.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32);
+  const fs = new Set();
+  o.fonts = (Array.isArray(o.fonts) ? o.fonts : []).map((r) => ({ p: Math.max(0, Math.min(65535, Math.round(+r.p) || 0)), font: String(r.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32) }))
+    .filter((r) => !fs.has(r.p) && fs.add(r.p)).sort((a, b) => a.p - b.p).slice(0, 64);
   return o;
+}
+
+// One font per line block (docs/FONT.md): a paragraph's font is its `font` property. The trailer stores only the changes, each at a
+// paragraph start, so a font can never change in the middle of a line.
+function fontRecords(paras, docFont = '') {
+  const out = []; let cur = docFont || '';
+  paras.forEach((p, i) => { const f = p.font || docFont || ''; if (f !== cur) { out.push({ p: i, font: f }); cur = f; } });
+  return out;
+}
+function applyFonts(paras, page) {
+  const recs = (page && page.fonts) || []; let cur = (page && page.font) || '', k = 0;
+  paras.forEach((p, i) => { while (k < recs.length && recs[k].p <= i) cur = recs[k++].font; if (cur) p.font = cur; else delete p.font; });
+  return paras;
 }
 
 function info(page) {
@@ -86,7 +102,8 @@ function expandTabs(paras, page) {
 }
 
 // ---- CRFT trailer ----------------------------------------------------------------
-// After the payload: 'CPG1', then records [tag u8][len u8][data]. Tag 1 page setup, tag 2 font name (ASCII).
+// After the payload: 'CPG1', then records [tag u8][len u8][data]. Tag 1 page setup, tag 2 document font name (ASCII),
+// tag 3 font change at a paragraph start: [paragraph u16 LE][name ASCII] (repeatable; paragraph = hard line, counted by CR codes).
 // Page record: paper u8 (0 letter, 1 a4, 2 legal), pitch u8 (cpi), left, right, top, bottom u8, ntabs u8, ntabs x (pos u8, kind u8: 0 L, 1 C, 2 R).
 function toTrailer(page) {
   const p = normalize(page), rec = [];
@@ -94,6 +111,7 @@ function toTrailer(page) {
   for (const t of p.tabs) d.push(t.pos, KIND_CODE[t.kind]);
   rec.push(1, d.length, ...d);
   if (p.font) { const f = Buffer.from(p.font, 'latin1'); rec.push(2, f.length, ...f); }
+  for (const r of p.fonts) { const f = Buffer.from(r.font, 'latin1'); rec.push(3, 2 + f.length, r.p & 255, r.p >> 8, ...f); }
   return Buffer.concat([Buffer.from(TRAILER_MAGIC, 'latin1'), Buffer.from(rec)]);
 }
 
@@ -108,9 +126,10 @@ function fromTrailer(buf) {
       raw.paper = PAPER_CODE[d[0]]; raw.pitch = d[1]; raw.left = d[2]; raw.right = d[3]; raw.top = d[4]; raw.bottom = d[5];
       raw.tabs = []; for (let k = 0; k < d[6] && 7 + k * 2 + 1 < d.length; k++) raw.tabs.push({ pos: d[7 + k * 2], kind: KIND_NAME[d[8 + k * 2]] || 'l' });
     } else if (tag === 2) raw.font = d.toString('latin1');
+    else if (tag === 3 && len >= 2) (raw.fonts = raw.fonts || []).push({ p: d[0] | (d[1] << 8), font: d.toString('latin1', 2) });
     at += 2 + len;
   }
   return normalize(raw);
 }
 
-module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer };
+module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer, fontRecords, applyFonts };
