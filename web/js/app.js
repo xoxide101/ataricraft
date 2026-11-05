@@ -588,6 +588,22 @@
     });
   }
   setInterval(() => renderHost(), 1000);
+  // xCWriter (xcwriter.html, another tab) sends documents to the H: device through this channel
+  if (window.BroadcastChannel) {
+    const xch = new BroadcastChannel('xcwriter');
+    xch.onmessage = (e) => {
+      const m = e.data || {};
+      if (m.type === 'ping') xch.postMessage({ type: 'pong', booted: !!S.emu });
+      else if (m.type === 'hostWrite') {
+        if (!S.emu) { xch.postMessage({ type: 'result', ok: false, msg: 'emulator not booted' }); return; }
+        const n = hostName(m.name) || 'DOC.CWD';
+        S.emu.hostWrite(n, new Uint8Array(m.bytes));
+        renderHost(true);
+        log('xCWriter wrote H:' + n + ' - in ACWriter use File > Open H:' + n);
+        xch.postMessage({ type: 'result', ok: true, name: n });
+      }
+    };
+  }
   $('hostpaste').onclick = () => navigator.clipboard.readText().then((t) => {
     if (!S.emu) { log('boot first'); return; }
     const n = hostName($('hostname').value) || 'PASTE.LST';
@@ -2170,7 +2186,7 @@
       document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
       localStorage.setItem('ac.sidetab', t);
     };
-    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'insp' ? AC.InspectPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : show(b.dataset.t)); });
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'insp' ? AC.InspectPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : b.dataset.t === 'xcw' ? window.open('xcwriter.html', '_blank') : show(b.dataset.t)); });
     const t0 = localStorage.getItem('ac.sidetab');
     show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
   }
