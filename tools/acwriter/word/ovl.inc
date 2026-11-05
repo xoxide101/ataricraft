@@ -97,6 +97,31 @@ hface ovstub Z.hface,3
 o_fnload ovstub Z.fnload,3
 o_fsplit ovstub Z.fsplit,3
 o_fjoin ovstub Z.fjoin,3
+; New document / text import: forget the per-paragraph fonts (kept out of line so earlier routines keep their addresses)
+hnew2 lda #0
+ sta fpn
+ jmp scan
+fbm2 lda #0
+ sta fpn
+ sta fns
+ jmp doimport
+o_fclip ovstub Z.fclip,3
+; the key handler plus fixcc, then the font table realignment after Cut / Paste
+hdl2 jsr handle
+ lda ed_dn
+ beq hdl3
+ jsr fcgo
+hdl3 jmp fixcc
+; after Cut (ed_dn 1) / Paste (2): realign the per-paragraph font table
+fcgo ldx ed_dn
+ lda #0
+ sta ed_dn
+ lda fpn
+ beq fcg9
+ dex
+ txa
+ jmp o_fclip
+fcg9 rts
 o_fsave ovstub Z.fsave,3
 o_ftag ovstub Z.ftag,3
 o_fpend ovstub Z.fpend,3

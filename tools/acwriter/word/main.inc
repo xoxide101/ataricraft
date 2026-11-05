@@ -143,8 +143,7 @@ lgot
 lgotk sta kk
  lda #0
  sta fl
- jsr handle
- jsr fixcc
+ jsr hdl2
  lda hmode
  cmp #PGV
  bne lgo1

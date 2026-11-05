@@ -429,6 +429,8 @@ excut jsr exclip
  sta ed_on
  lda #31
  sta cmsg
+ lda #1
+ sta ed_dn
 xct9 jmp exfin
 
 expaste lda #0
@@ -479,7 +481,9 @@ xpa3 lda ed_l
  bcs xpa4
  inc ed_l
  jmp xpa3
-xpa4 jmp exfin
+xpa4 lda #2
+ sta ed_dn
+ jmp exfin
 
 ; ---------------------------------------------------------------- find
 exnorm cmp #14
