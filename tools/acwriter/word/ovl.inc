@@ -36,10 +36,12 @@ ovq lda $FFFF,y
  beq ov_no
  lda ovid
  cmp #2
- bne ov_sw
+ bcc ov_sw
+ cmp #4
+ bcs ov_sw
  lda ovrq
  cmp #2
- beq ov_sw
+ bcs ov_sw
  lda hmode
  cmp #PGV
  beq ov_no
@@ -89,3 +91,5 @@ pwsetlm ovstub P.pwsetlm,2
 pwcalc ovstub P.pwcalc,2
 pwst ovstub P.pwst,2
 pwmain ovstub P.pwmain,2
+hpgz ovstub Z.hpgz,3
+pzmain ovstub Z.pzmain,3

@@ -147,7 +147,11 @@ lgotk sta kk
  lda hmode
  cmp #PGV
  bne lgo1
+ lda pzoom
+ bne lgz
  jsr pwmain
+ jmp lp2
+lgz jsr pzmain
  jmp lp2
 lgo1 jsr tend
  sta $A4

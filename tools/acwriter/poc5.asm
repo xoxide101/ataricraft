@@ -105,6 +105,12 @@ e_end = *
  icl 'craftpg.inc'
 e_end = *
  .endl
+ org $BD00
+ org r:SLA
+ .local Z
+ icl 'word/zoom.inc'
+e_end = *
+ .endl
 
  org $96A0
  icl 'word/ovlcopy.inc'
