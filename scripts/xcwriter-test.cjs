@@ -127,7 +127,25 @@ fs.mkdirSync(OUT, { recursive: true });
   assert(/emulator/i.test(await p.locator('#toast').innerText()));
   ok('Send to Atari reports no emulator tab; ATASCII drop report shown');
 
-  await p.click('#bhelp'); await shot('11-help'); await p.click('#bhome'); await shot('12-home-recent');
+  // in-page export -> import round trips (browser bundle) on the document just edited
+  const rtr = await p.evaluate(() => {
+    const doc = XW.doc, base = XCW.plain(doc), out = {};
+    for (const f of ['rtf', 'html', 'docx', 'md', 'cwd', 'text', 'atascii']) {
+      const r = XCW.save(doc, f), back = XCW.openDoc(r.bytes, 'rt.' + (f === 'text' ? 'txt' : f === 'atascii' ? 'atascii' : f));
+      out[f] = [XCW.plain(back.paras).replace(/\s+/g, ' ').trim() === base.replace(/\s+/g, ' ').trim(), r.bytes.length];
+    }
+    return out;
+  });
+  for (const f of ['rtf', 'html', 'docx', 'md']) assert(rtr[f][0], f + ' export->import changed the text in the page');
+  ok('in-page export->import keeps text for rtf/html/docx/md; ' + Object.entries(rtr).map(([k, v]) => k + ':' + (v[0] ? 'same' : 'differs(lossy)')).join(' '));
+  for (const [f, label] of [['rich.docx', 'Word docx'], ['rich.rtf', 'Word RTF'], ['rich.doc', 'Word doc']]) {
+    await p.setInputFiles('#filein', path.join(ROOT, 'docs/samples/word', f)); await p.waitForTimeout(300);
+    const t = await p.evaluate(() => XCW.plain(XW.doc));
+    assert(/Quarterly Report/.test(t) && /First bullet/.test(t) && /Name \| Qty \| Price/.test(t), label + ' import lost text/table: ' + t.slice(0, 120));
+  }
+  ok('Word-made .docx/.rtf/.doc import with headings, bullets and table rows as text');
+  await p.click('#bhelp'); await shot('11-help');
+ await p.click('#bhome'); await shot('12-home-recent');
   assert((await p.locator('#recent .card').count()) >= 1, 'recent docs');
   ok('help + recent documents');
   assert.strictEqual(errs.length, 0, 'page errors: ' + errs.join(' | '));

@@ -47,6 +47,22 @@ The core takes a profile (`XCW.PROFILES.atari`: columns, rows, document limit, p
 
 `node scripts/test-xcwcore.cjs` (core round trips for all formats), `node scripts/test-xcwriter-bundle.cjs` (browser bundle equals Node output for 21 inputs x 7 formats), `node scripts/xcwriter-test.cjs` (Playwright: samples, typing, spelling, undo, find, both modes, round trip, convert, screenshots in `out/xcw-*.png`). The older `craft-convert`, `test-dict` and `test-import-*` scripts still pass.
 
+## Round-trip verification
+
+Run: `node scripts/test-roundtrip.cjs` (Node: formats, RTF variants, Word fixtures, truncation), `node scripts/xcwriter-test.cjs` (in-page export->import, Word files), `node scripts/acwriter-roundtrip.cjs` (real emulator + xCWriter page, about 2 min; screenshots `out/rt-*.png`). Word fixtures: `scripts/mk-word-fixtures.ps1` (Word COM; run it as a background job), samples in `docs/samples/word/`. After changing `tools/craftimport.cjs`, `craftexport.cjs`, `officeread.cjs` or `xcwcore.cjs` run `node scripts/sync-xcwriter-core.cjs`.
+
+Verified (evidence in the scripts above):
+
+- ACWriter -> xCWriter: composed bold, italic, underline, centre, right, bullet, sub, sup in the emulator, File > Save As `h:acrt`, read the bytes from `hostFiles()`; xCWriter opens it in HQ and matching mode with an identical model. Pass.
+- xCWriter -> ACWriter: Send to Atari (BroadcastChannel) reached the emulator; File > Open `h:xcrt` renders the text, styles and alignment (screenshot checked); ACWriter Save As and xCWriter re-read give the same model. Pass. Smart quotes become ASCII quotes on the Atari side; `é` survives in the file but draws as an odd glyph in ACWriter's font.
+- Export then re-import in xCWriter: rtf, html, docx and cwd are lossless for text and styles (cwd transliterates quotes, dashes, euro); md loses underline, sub/sup and alignment; text and ATASCII keep plain lines only (ATASCII turns `é` into `?`). Partial for md/text/ATASCII, by design.
+- Real Word (COM): xCWriter's exported RTF, docx and HTML open, export to PDF, and keep paragraphs, bold, italic, underline, sub/sup and centre/right/justify. docx bullets are real Word lists; RTF bullets arrive as literal "•<tab>" text.
+- Word-made .doc/.docx/.rtf (headings, styles, bullets, alignment, table, smart quotes, symbols, long text) import into xCWriter and, through `craftimport.cjs`, open in ACWriter. `.docx`/`.rtf` keep styles, alignment and bullets; `.doc` is text only. Tables become ` | ` separated lines. Pictures, headers/footers, fonts, colours, sizes, hyperlink targets are dropped (link text kept). Non-Latin-1 symbols become look-alikes or `?` in Craft mode (euro -> E, trademark -> TM); xCWriter HQ keeps them.
+- RTF reader bugs fixed: per-character runs, `\uN` with `\uc` fallback skipping, `\'xx` cp1252 bytes, `\pntext`/`\listtext` lists, tables (`\trowd..\cell..\row`), alignment persisting until `\pard`, `\plain`, skipped groups (fonttbl, colortbl, stylesheet, info, pict, fldinst, `\*`). Hand-written, WordPad-style and Word RTF are covered by tests.
+- Atari limit: imports are cut to 11,264 bytes at a paragraph end, open styles closed, and flagged (`truncated`, `dropped`, CLI message). The 220-paragraph test RTF became 11,278 bytes (9,530 dropped); ACWriter opened it without hanging and showed "11262 ch, 0K free". Previously the cap was 16,383 and ACWriter refused such files.
+
+Known losses: `.doc` formatting; Markdown underline/sub/sup/alignment; plain-text styles; Atari glyph coverage (accents draw badly, euro/trademark/emoji transliterated); Word RTF bullets are not Word lists; tables are flattened; images are skipped.
+
 ## Not done / known limits
 
-Legacy .doc is text only; inverse video (code 4) round-trips as underline; docx not verified in Word; no print/PDF; no images or tables; matching-mode glyph styles are approximations; C64 profile not started.
+Legacy .doc is text only; inverse video (code 4) round-trips as underline; docx/rtf/html exports verified in Word (see Round-trip verification); no print/PDF; no images; tables are flattened to  | b lines; matching-mode glyph styles are approximations; C64 profile not started.
