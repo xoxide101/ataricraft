@@ -14,7 +14,7 @@
 | `.docx` | bold, italic, underline, super/sub, alignment, bullets | fonts, colours, images, tables (cell text is kept) |
 | `.doc` (Word 97-2003) | text only | all formatting; encrypted files are refused |
 
-Smart quotes and dashes are transliterated to ASCII. The payload is cut at 16383 bytes.
+Smart quotes and dashes are transliterated to ASCII. The payload is cut at 11264 bytes (ACWriter's document area; ACWriter refuses larger files) at a paragraph end, open styles are closed, and the CLI prints a 	runcated message (convert() returns {truncated, dropped}; the .CWD header has no flag). Table rows become one  | b | c line; RTF/Word bullets become Craft bullets.
 
 AtariWriter rules come from its manual and from sample documents on the AtariWriter+ disks. Its bold, elongated and sub/superscript markers are not decoded, because no sample file shows how they are stored.
 
