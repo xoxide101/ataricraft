@@ -2,41 +2,6 @@
 ; reflow, cursor keys); only the drawing differs. The page is up to 144 columns of 4 px cells with the
 ; 12-row Craft cell (2 headroom rows, cap line, baseline, 3 descender rows), so lines advance 12 scanlines.
 ; Paper columns are scrolled horizontally to follow the cursor. Docs: docs/ACWRITER-PAGE.md.
-PGV    = 4
-pwx    = $13E5               ; first paper column on screen
-pwrow  = $13E6
-pwsp   = $13E7               ; 1 superscript, 2 subscript
-pwsc   = $13E8               ; screen column being drawn
-pwpap  = $13E9               ; 0 letter, 1 A4, 2 legal
-pwpit  = $13EA               ; 0 10 cpi, 1 12 cpi, 2 17 cpi
-pwplm  = $13EB               ; left margin, columns
-pwprm  = $13EC               ; right margin, columns
-pwcols = $13ED               ; columns across the paper
-pwwid  = $13EE               ; usable columns
-pwlpp  = $13EF               ; text lines per page
-pwsl   = $13F0               ; saved lm / rm of the normal view
-pwsr   = $13F1
-pwcv   = $13F2               ; cursor column (visible characters before it)
-pwnt   = $13F3               ; tab stops
-pwcc   = $13F4
-pwch   = $13F5
-pwchg  = $13F6
-pwol   = $13F7               ; previous cursor line
-pwii    = $13F8
-pwdl   = $13F9
-pwdh   = $13FA
-pwa    = $13FB
-pwb    = $13FC
-pwc    = $13FD
-pwvx   = $13FE
-pwvw   = $13FF
-pwvy   = $14E1
-pwm0   = $14E2
-pwm1   = $14E3
-pwm2   = $14E4
-pwo    = $14E5               ; cursor pointer saved over a rewrap (2)
-pwtp   = $14E8               ; tab stop columns on the paper (8)
-pwtk   = $14F0               ; kinds 0 left, 1 centre, 2 right (8)
 
 ; --------------------------------------------------------------- commands (Layout menu)
 hpgv lda hmode
@@ -241,7 +206,7 @@ pww5 ldx cl
 
 ; --------------------------------------------------------------- per key redraw (main loop, PAGE mode)
 pwmain lda dend+1
- cmp #$83
+ cmp #$90
  bcc pwm0a
  jmp pwleave
 pwm0a lda #0

@@ -1,5 +1,12 @@
 ; ACWriter proof of concept: sections in word/, shared pieces in lib/ and ribbon.inc
  icl 'word/defs.inc'
+ icl 'word/ovdefs.inc'
+ org $0480
+bsoff lda $D301
+ ora #2
+ sta $D301
+ rts
+ ini bsoff
 
  org $2000
  icl 'word/main.inc'
@@ -18,8 +25,10 @@
  icl 'word/status.inc'
  icl 'word/home.inc'
  icl 'word/import.inc'
- icl 'word/spell.inc'
- icl 'word/edit.inc'
+ icl 'word/msgs.inc'
+ icl 'word/ovl.inc'
+SLA = *                        ; overlay slot: 12 pages shared by the edit, spell and page code (word/ovl.inc)
+ org SLA+$0C00
  .macro body
  dta b(1),c'ACWriter',b(1),c' hi-res page: 64 columns x 20 lines',b(13)
  dta c'Normal, ',b(1),c'bold',b(1),c', ',b(2),c'italic',b(2),c' and ',b(4-1),c'underline',b(3),c' text.',b(13)
@@ -75,11 +84,30 @@ hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),
  org $9400
  icl 'font4.inc'
 
-; PAGE mode (word/page.inc) and its 3 px glyph planes (craftpg.inc, from mkpgfont.cjs) sit in the top of the document area,
-; $8400-$8FFF; the document is limited to $8400 (8 KB) so the page code is never overwritten (docs/ACWRITER-PAGE.md).
- org $8400
+; Overlay images are assembled to run at SLA but stored page aligned in the display-buffer area ($A100..), where
+; the startup code copies them into bank 2 (ovstage); the screen buffer is cleared after that.
+ org $A100
+ org r:SLA
+ .local E
+ icl 'word/edit.inc'
+e_end = *
+ .endl
+ org $A900
+ org r:SLA
+ .local S
+ icl 'word/spell.inc'
+e_end = *
+ .endl
+ org $B100
+ org r:SLA
+ .local P
  icl 'word/page.inc'
  icl 'craftpg.inc'
+e_end = *
+ .endl
+
+ org $96A0
+ icl 'word/ovlcopy.inc'
 
 BFNT = $9800
  org BFNT

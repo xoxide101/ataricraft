@@ -431,7 +431,7 @@ mu3 lda (src),y
 insert
  sta tmp
  lda dend+1
- cmp #$83
+ cmp #$90
  bcc ins0
  rts
 ins0 jsr curptr

@@ -187,7 +187,7 @@ fz_dl8 dex
  cmp #'W'
  bne fbj
  lda HDR+9
- cmp #>($8400-DOC)
+ cmp #>($9000-DOC)
  bcs fbig
  sta fln+1
  lda HDR+8

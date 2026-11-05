@@ -6,11 +6,6 @@
 ; Words with digits or non-ASCII characters, 1-letter words and words over 24 letters are not checked.
 ; The unknown word is shown inverse (style code 4 inserted around it, removed again before moving on).
 
-SWB  = $1380                 ; word, 24 letter codes (a=1..z=26, apostrophe=27)
-DNM  = $1450                 ; dictionary file name, 0x9B ended
-ISB  = $9B00                 ; session ignore list: 32 entries x 4 byte hash
-SGB  = $9B80                 ; suggestions: 5 x 25 bytes (length + codes)
-LDB  = $9F00                 ; 256 byte load buffer
 
 hspell
  jsr sp_load
@@ -640,46 +635,7 @@ spq1 lda SCB,y
 spq9 rts
 sgo dta b(0),b(25),b(50),b(75),b(100)
 
-; ---------------------------------------------------------------- message line (cmsg 20..26)
-MSB = $9C00
-spmsg
- lda cmsg
- cmp #20
- bne spmx
- jmp spm20
-spmx cmp #33
- bne spmy
- jmp exrepm
-spmy cmp #27
- bcc spmz
- sec
- sbc #27
- asl
- tax
- lda exmt,x
- pha
- lda exmt+1,x
- tax
- pla
- jmp putstr
-spmz sec
- sbc #21
- asl
- tax
- lda spmt,x
- pha
- lda spmt+1,x
- tax
- pla
- jmp putstr
-spmt dta a(spm21),a(spm22),a(spm23),a(spm24),a(spm25),a(spm26)
-spm21 dta c'Spell check finished.',b(0)
-spm22 dta c'No EN.CDC on D1: or H: (Search > Dictionary)',b(0)
-spm23 dta c'Bad dictionary file (need CDIC v1, 4-64 pages).',b(0)
-spm24 dta c'Table does not fit: 130XE needed, or less text.',b(0)
-spm25 dta c'Spell check stopped.',b(0)
-spm26 dta c'Dictionary name set.',b(0)
-
+; message texts live in msgs.inc (resident)
 spm20
  lda #0
  sta sv_ss
