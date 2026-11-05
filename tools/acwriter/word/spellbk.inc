@@ -98,6 +98,77 @@ fb_in
  sta PORTB
  rts
 
+; sv_nb = number of distinct extended-RAM banks the CPU can reach through PORTB bits 2,3,5,6,7 (1 = none, 4 = 130XE,
+; 16 = Rambo / Compy-Shop 320K, 32 = 576K and up). Every bank-bit combination gets its own signature at $4000; combinations
+; that alias the same bank read back the same signature. The original bytes are restored.
+bk_cnt
+ sei
+ lda #0
+ sta NMIEN
+ lda PORTB
+ sta sv_t
+ ldx #31
+bkc1 jsr bkc_sel
+ lda $4000
+ sta BUF,x
+ lda #0
+ sta BUF+$40,x
+ dex
+ bpl bkc1
+ ldx #0
+bkc2 jsr bkc_sel
+ txa
+ sta $4000
+ inx
+ cpx #32
+ bne bkc2
+ ldx #0
+bkc3 jsr bkc_sel
+ ldy $4000
+ lda #1
+ sta BUF+$40,y
+ inx
+ cpx #32
+ bne bkc3
+ ldx #31
+bkc4 jsr bkc_sel
+ lda BUF,x
+ sta $4000
+ dex
+ bpl bkc4
+ lda #0
+ tay
+bkc5 clc
+ adc BUF+$40,y
+ iny
+ cpy #32
+ bne bkc5
+ sta sv_nb
+ lda sv_t
+ sta PORTB
+ lda #$C0
+ sta NMIEN
+ cli
+ rts
+bkc_sel
+ txa
+ and #3
+ asl
+ asl
+ sta tmp
+ txa
+ and #$1C
+ asl
+ asl
+ asl
+ ora tmp
+ sta tmp
+ lda sv_t
+ and #3
+ ora tmp
+ sta PORTB
+ rts
+
 ; sv_xe = 1 when bank 1 is a separate 16 KB of RAM (130XE), else 0
 bk_det
  lda #0
