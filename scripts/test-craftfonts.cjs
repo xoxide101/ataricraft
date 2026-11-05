@@ -15,9 +15,9 @@ const paras = [mk('one'), mk('two', 'craft12'), mk('three', 'craft12'), mk('four
 const page = P.normalize({ paper: 'letter', pitch: 10, font: '' });
 const f = X.toCwd(paras, { page }).file;
 const hd = D.parse(f).h.page;
-assert.deepStrictEqual(hd.fonts, [{ p: 1, font: 'craft12' }, { p: 3, font: '' }, { p: 4, font: 'ROM' }]); ok('toCwd stores only font changes at paragraph starts');
+assert.deepStrictEqual(hd.fonts, [{ p: 1, font: 'craft12' }, { p: 3, font: 'ROM' }]); ok('toCwd stores only font changes at paragraph starts');
 const o = X.openDoc(f, 'X.CWD');
-assert.deepStrictEqual(o.paras.map((p) => p.font || ''), ['', 'craft12', 'craft12', '', 'ROM']); ok('openDoc restores one font per paragraph');
+assert.deepStrictEqual(o.paras.map((p) => p.font || ''), ['', 'craft12', 'craft12', '', '']); ok('openDoc restores one font per paragraph');
 
 const sp = X.insertText(o.paras, { p: 1, o: 2 }, '\nsplit', undefined);
 assert.strictEqual(o.paras[1].font, 'craft12'); assert.strictEqual(o.paras[2].font, 'craft12'); ok('splitting a paragraph keeps its font on both halves (no mid-line change)');

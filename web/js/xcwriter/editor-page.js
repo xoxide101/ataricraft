@@ -16,7 +16,36 @@
   let theme = THEMES.paper, caret = { p: 0, o: 0 }, anchor = { p: 0, o: 0 }, lines = [], goalX = null, blink = 1, drag = false, zoomSel = 100, z = 3, dpr = 1, rd = null, nd = false, G = null;
   const cmp = XCW.cmp;
 
-  const glyph = (c) => (c >= 128 && c <= 255 ? SY.slice((c - 128) * 8, (c - 128) * 8 + 8) : c >= 32 && c <= 127 ? F4[c - 32] : F4[0]);
+  const glyph = (c, face) => {
+    if (face && c >= 32 && c <= 127) { const g = faceGlyph(face, c); if (g) return g; }
+    return c >= 128 && c <= 255 ? SY.slice((c - 128) * 8, (c - 128) * 8 + 8) : c >= 32 && c <= 127 ? F4[c - 32] : F4[0];
+  };
+
+  // typefaces: Atari 1 KB charsets (.fnt, OS screen-code order) listed in the font manifest; the page view shows each 8x8 glyph
+  // folded to the 4-pixel cell (the same glyph the ACWriter zoom view draws at 2x). Names are 8.3-safe ids, as ACWriter loads <ID>.FNT.
+  const FACES = {}, FCACHE = {};
+  const faceId = (u) => u.split('/').pop().replace(/\.[^.]*$/, '').toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 8);
+  const screenCode = (c) => (c >= 96 ? c : c - 32);
+  function faceRows(face, c) { const f = FACES[face]; if (!f) return null; const o = screenCode(c) * 8; return Array.from(f.slice(o, o + 8)); }
+  function faceGlyph(face, c) {
+    const key = face + ':' + c; if (FCACHE[key]) return FCACHE[key];
+    const r = faceRows(face, c); if (!r) return null;
+    return (FCACHE[key] = r.map((b) => { let n = 0; for (let k = 0; k < 4; k++) if ((b >> (7 - 2 * k)) & 3) n |= 8 >> k; return n; }));
+  }
+  async function loadFaces() {
+    if (!/^https?:/.test(location.protocol)) return;
+    try {
+      const m = await (await fetch('library/fonts/local/manifest.json')).json(), sel = $('pgfont');
+      for (const g of m.groups) for (const f of g.fonts) {
+        if (!/\.fnt$/i.test(f.url)) continue;
+        const id = faceId(f.url); if (FACES[id]) continue;
+        const buf = new Uint8Array(await (await fetch(f.url)).arrayBuffer()); if (buf.length !== 1024) continue;
+        FACES[id] = buf;
+        const o = document.createElement('option'); o.value = id; o.textContent = id + (g.id === 'personal' ? ' (personal)' : ''); sel.appendChild(o);
+      }
+      render();
+    } catch (e) { /* the manifest is only served over http */ }
+  }
   const page = () => P.info(XW.page || {});
   function geom() {
     const i = page(), cw = CELL[i.pitch], pw = i.paperCols * cw, ph = i.paperLines * LH, n = Math.max(1, Math.ceil(lines.length / i.textLines));
@@ -32,8 +61,8 @@
     if (x1 <= 0 || y1 <= 0 || x0 >= cv.width || y0 >= cv.height) return;
     c.fillStyle = col; c.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
   }
-  function drawCell(x, y, cell, ink, cw) {
-    const rows = glyph(cell.ch.charCodeAt(0)), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(4, cw);
+  function drawCell(x, y, cell, ink, cw, face) {
+    const rows = glyph(cell.ch.charCodeAt(0), face), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(4, cw);
     for (let r = 0; r < rows.length && r < 8; r++) {
       const sh = cell.i && r < 3 ? 1 : 0, bits = rows[r];
       for (let c = 0; c < bw; c++) if (bits & (8 >> c)) { px(ctx, x + c + sh, y + r + dy, 1, 1, ink); if (cell.b && cw > 3) px(ctx, x + c + sh + 1, y + r + dy, 1, 1, ink); }
@@ -133,18 +162,20 @@
       const y = lineY(g, li);
       if (y * S - oy > cv.height) break;
       if ((y + LH) * S - oy < 0) continue;
-      const l = lines[li], xs = xsOf(l);
+      const l = lines[li], xs = xsOf(l), face = (XW.doc[l.p] && XW.doc[l.p].font) || '';
       if (l.bullet && l.first) drawCell(PAD + i.left * g.cw, y, { ch: '*', b: 1, i: 0, u: 0, sup: 0, sub: 0 }, th.ink, g.cw);
       l.cells.forEach((c, k) => {
         const x = PAD + (i.left + xs[k]) * g.cw, here = { p: l.p, o: l.o0 + k };
         const on = has && cmp(here, s) >= 0 && cmp(here, e) < 0;
         if (on) px(ctx, x, y, g.cw, LH, th.ink);
-        if (c.ch !== ' ' || c.u) drawCell(x, y, c, on ? th.bg : th.ink, g.cw);
+        if (c.ch !== ' ' || c.u) drawCell(x, y, c, on ? th.bg : th.ink, g.cw, face);
         if (XW.missAt(l.p, l.o0 + k)) for (let q = 0; q < g.cw; q += 2) px(ctx, x + q, y + 7, 1, 1, '#e0382c');
       });
       if (blink && !has && li === cl.li) px(ctx, PAD + (i.left + xs[cl.k]) * g.cw, y, 1, LH, th.ink);
     }
     drawRuler(g); drawNav(g); info(g);
+    const pf = (XW.doc[caret.p] && XW.doc[caret.p].font) || '', fs = $('pgfont');
+    if (fs.value !== pf && [...fs.options].some((o) => o.value === pf)) fs.value = pf;
     const f = XCW.fit(XW.doc, undefined, XW.page || P.normalize({}));
     XW.atariInfo(f);
   }
@@ -345,6 +376,8 @@
   // ---- zoom select and Page setup dialog ----
   $('pgzoom').innerHTML = ZOOMS.map((q) => '<option value="' + q[0] + '"' + (q[0] === 100 ? ' selected' : '') + '>' + q[1] + '</option>').join('');
   $('pgzoom').onchange = () => { setZoom($('pgzoom').value); ta.focus(); };
+  $('pgfont').onchange = () => { XW.setFont($('pgfont').value); ta.focus(); };
+  loadFaces();
 
   function setupDialog() {
     const cur = page(); let tabs = cur.tabs.map((t) => ({ ...t }));
@@ -386,7 +419,7 @@
     focus() { ta.focus(); },
     setTheme(n) { theme = THEMES[n] || THEMES.paper; render(); },
     lines() { relayout(); return lines; },
-    canvas: cv, setup: setupDialog, setZoom, scroller: scr,
+    canvas: cv, setup: setupDialog, setZoom, scroller: scr, faceRows, faces: () => Object.keys(FACES),
     state: () => ({ z, dpr, geom: geom(), scrollLeft: scr.scrollLeft, scrollTop: scr.scrollTop }),
   };
 })();
