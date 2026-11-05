@@ -63,9 +63,36 @@ const ok = (m) => console.log('ok  ' + m);
   await p.evaluate((x) => FE.openBytes(Uint8Array.from(atob(x), (c) => c.charCodeAt(0)), 'OLD.acf'), a1.toString('base64'));
   assert.strictEqual(await p.evaluate(() => FE.state.f.rows), 8);
   ok('legacy ACF1 (2 sizes) opens, size 0 chosen');
+  await p.selectOption('#ttfadv', '6');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
   await p.waitForFunction(() => FE.state.f.name === 'arial', null, { timeout: 20000 });
   assert.deepStrictEqual(await p.evaluate(() => [FE.state.f.rows, FE.state.f.adv]), [12, 6]);
+
+  // TTF -> 12x12 master -> derived 8x8 and 4 px; locked / hand-edited sizes survive a re-derive
+  await p.selectOption('#ttfadv', '12');
+  await p.setInputFiles('#file', 'C:/Windows/Fonts/ariblk.ttf');
+  await p.waitForFunction(() => FE.state.f.name === 'ariblk', null, { timeout: 20000 });
+  await p.click('#bderive');
+  const fam = await p.evaluate(() => {
+    const out = {};
+    for (const [k, f] of Object.entries(FE.state.fam.sizes)) {
+      let n = 0, empty = 0;
+      for (let c = 33; c < 127; c++) { const g = f.glyphs[c]; if (g) { n++; if (!g.some((v) => v)) { empty++; (out.list = out.list || []).push(k + ':' + c); } } }
+      out[k] = { n, empty, origin: f.origin, gw: f.gw };
+    }
+    return out;
+  });
+  assert.ok(!fam.list, 'empty glyphs ' + fam.list);
+  for (const k of ['12', '10', '8', '6', '5', '4']) { assert.ok(fam[k], 'size ' + k); assert.strictEqual(fam[k].n, 94, 'glyphs ' + k); assert.strictEqual(fam[k].empty, 0, 'empty ' + k + ' ' + JSON.stringify(fam[k])); }
+  assert.strictEqual(fam[12].origin, 0); assert.strictEqual(fam[8].origin, 1);
+  await p.screenshot({ path: ROOT + '/out/fe-4-family.png' });
+  await p.evaluate(() => { const f = FE.state.fam.sizes[8]; f.glyphs[65][3] ^= 0x10; FE.state.fam.sizes[8].origin = 2; FE.state.fam.sizes[4].locked = true; });
+  const kept = await p.evaluate(() => { const b = FE.state.fam.sizes[8].glyphs[65].join(), c = FE.state.fam.sizes[4]; FE.state.fam.sizes[12].glyphs[66][5] ^= 1; document.getElementById('bderive').click(); return [b === FE.state.fam.sizes[8].glyphs[65].join(), c === FE.state.fam.sizes[4]]; });
+  assert.deepStrictEqual(kept, [true, true]);
+  ok('TTF -> 12x12 master -> derived 10/8/6/5/4 px: 94 glyphs each, none empty; hand-edited and locked sizes survive re-derive');
+  await p.selectOption('#ttfadv', '6');
+  await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
+  await p.waitForFunction(() => FE.state.f.name === 'arial', null, { timeout: 20000 });
   await p.evaluate(() => FE.select(72));
   await p.fill('#sample', 'Hamburgefonstiv gypsy quick fox\nSuper^{2} and sub_{2} (jpqy)');
   await p.screenshot({ path: ROOT + '/out/fe-3-ttf.png' });

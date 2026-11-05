@@ -10,13 +10,40 @@
   const bufToB64 = (b) => Buffer.from(b).toString('base64');
   const toast = (m) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = m; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
 
-  function setFont(f) {
+  function setFont(f, fam) {
     st.f = f; st.undo = [];
+    st.fam = fam || (st.fam && Object.values(st.fam.sizes).includes(f) ? st.fam : null);
     st.slot = f.map[65] === undefined ? 65 : f.map[65];
     $('name').value = f.name; $('supup').value = f.supUp; $('subdn').value = f.subDown;
     $('upslot').value = f.map[65]; $('lowslot').value = f.map[97];
-    sizeCanvases(); renderAll();
+    sizeCanvases(); renderAll(); refreshFam();
   }
+
+  // ---- family: master + derived sizes -------------------------------------------------------------------------------
+  const ORIG = ['master', 'derived', 'hand-edited'];
+  function refreshFam() {
+    const f = st.f, sel = $('fsize'), fam = st.fam;
+    sel.innerHTML = '';
+    const sizes = fam ? Object.keys(fam.sizes).map(Number) : [f.adv];
+    for (const k of sizes.sort((a, b) => b - a)) {
+      const g = fam ? fam.sizes[k] : f, o = document.createElement('option');
+      o.value = k; o.textContent = (CF.SIZES[k] ? CF.SIZES[k].label : k + ' px') + ' - ' + ORIG[g.origin] + (g.locked ? ', locked' : '');
+      sel.appendChild(o);
+    }
+    sel.value = f.adv; $('flock').checked = !!f.locked;
+  }
+  $('fsize').onchange = () => { const g = st.fam && st.fam.sizes[$('fsize').value]; if (g) setFont(g); };
+  $('flock').onchange = () => { st.f.locked = $('flock').checked; refreshFam(); };
+  $('bderive').onclick = () => {
+    const f = st.f, fam = st.fam || CF.familyNew(f);
+    if (!fam.sizes[f.adv]) fam.sizes[f.adv] = f;
+    fam.master = fam.master === undefined || !fam.sizes[fam.master] ? f.adv : fam.master;
+    const sizes = Object.keys(CF.SIZES).map(Number).filter((s) => s < fam.master);
+    const r = CF.familyDerive(fam, sizes, { threshold: +$('dth').value, keepStems: $('dkeep').checked });
+    st.fam = fam; setFont(fam.sizes[fam.master], fam);
+    toast('Derived ' + (r.done.join(', ') || 'nothing') + (r.skipped.length ? '; kept locked/hand-edited ' + r.skipped.join(', ') : ''));
+  };
+  $('bfam').onclick = () => { const fam = st.fam || CF.familyNew(st.f); download(fname() + '.family.json', CF.familyToJson(fam), 'application/json'); };
 
   // The code whose glyph lives in the selected slot (the first code that maps there), so Super/Sub variants have a character to attach to.
   const codeOfSlot = (slot) => { const f = st.f; for (let c = 0; c < 256; c++) if (f.map[c] === slot) return c; return slot; };
@@ -54,7 +81,7 @@
       if (inl) { gx.fillStyle = '#1a2538'; gx.fillRect(x0, y0, c.w, c.h); }
       const g = f.glyphs[s];
       gx.fillStyle = '#e8eaee';
-      if (g) for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (g[r] & (0x80 >> q)) gx.fillRect(x0 + GS + q * GS, y0 + GS + r * GS, GS, GS);
+      if (g) for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) gx.fillRect(x0 + GS + q * GS, y0 + GS + r * GS, GS, GS);
       if (s === st.slot) { gx.strokeStyle = '#ff9d3a'; gx.lineWidth = 2; gx.strokeRect(x0 + 1, y0 + 1, c.w - 2, c.h - 2); }
     }
   }
@@ -68,7 +95,7 @@
     for (let q = 0; q <= f.gw; q++) { ex.beginPath(); ex.moveTo(q * ES + .5, 0); ex.lineTo(q * ES + .5, ed.height); ex.stroke(); }
     for (let r = 0; r <= f.rows; r++) { ex.beginPath(); ex.moveTo(0, r * ES + .5); ex.lineTo(ed.width, r * ES + .5); ex.stroke(); }
     ex.fillStyle = '#f2f4f8';
-    for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (g[r] & (0x80 >> q)) ex.fillRect(q * ES + 1, r * ES + 1, ES - 1, ES - 1);
+    for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) ex.fillRect(q * ES + 1, r * ES + 1, ES - 1, ES - 1);
     const line = (y, col) => { ex.fillStyle = col; ex.fillRect(0, y - 1, ed.width, 2); };
     line(f.head * ES, COL.cap); line(f.xTop * ES, COL.xh); line((f.base + 1) * ES, COL.base);
     const c = cur();
@@ -100,7 +127,7 @@
       px.fillStyle = '#16181c';
       ln.forEach(([code, mode], i) => {
         const g = CF.render(f, code, mode);
-        for (let r = 0; r < f.rows; r++) if (g[r]) for (let q = 0; q < f.gw; q++) if (g[r] & (0x80 >> q)) px.fillRect((4 + i * f.adv + q) * z, (y0 + r) * z, z, z);
+        for (let r = 0; r < f.rows; r++) if (g[r]) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) px.fillRect((4 + i * f.adv + q) * z, (y0 + r) * z, z, z);
       });
     });
   }
@@ -125,10 +152,11 @@
     const r = ed.getBoundingClientRect(), f = st.f;
     const q = Math.floor(((e.clientX - r.left) / r.width) * f.gw), y = Math.floor(((e.clientY - r.top) / r.height) * f.rows);
     if (q < 0 || y < 0 || q >= f.gw || y >= f.rows) return;
-    const g = target(true), bit = 0x80 >> q;
+    const g = target(true), bit = CF.bitMask(f, q);
     if (val === undefined) val = (g[y] & bit) ? 0 : 1; // first click decides draw / erase for the drag
     if (!!(g[y] & bit) === !!val) return val;
     g[y] = val ? g[y] | bit : g[y] & ~bit;
+    CF.markEdited(f);
     drawEdit(); drawGrid(); drawPreview();
     return val;
   }
@@ -137,15 +165,15 @@
   window.addEventListener('mouseup', () => { st.down = 0; });
   ed.addEventListener('contextmenu', (e) => e.preventDefault());
 
-  const edit = (fn) => { pushUndo(); const g = target(true), n = fn(g.slice()); for (let i = 0; i < g.length; i++) g[i] = n[i]; renderAll(); };
-  const mask = () => (0xff << (8 - st.f.gw)) & 0xff;
+  const edit = (fn) => { pushUndo(); const g = target(true), n = fn(g.slice()); for (let i = 0; i < g.length; i++) g[i] = n[i]; CF.markEdited(st.f); renderAll(); };
+  const mask = () => CF.fullMask(st.f);
   $('up').onclick = () => edit((g) => g.slice(1).concat([0]));
   $('down').onclick = () => edit((g) => [0].concat(g.slice(0, -1)));
   $('left').onclick = () => edit((g) => g.map((b) => (b << 1) & mask()));
   $('right').onclick = () => edit((g) => g.map((b) => (b >> 1) & mask()));
   $('clr').onclick = () => edit((g) => g.map(() => 0));
   $('inv').onclick = () => edit((g) => g.map((b) => ~b & mask()));
-  $('mir').onclick = () => edit((g) => g.map((b) => { let o = 0; for (let q = 0; q < st.f.gw; q++) if (b & (0x80 >> q)) o |= 0x80 >> (st.f.gw - 1 - q); return o; }));
+  $('mir').onclick = () => edit((g) => g.map((b) => { let o = 0; for (let q = 0; q < st.f.gw; q++) if (CF.hasPx(st.f, b, q)) o |= CF.bitMask(st.f, st.f.gw - 1 - q); return o; }));
   $('cpy').onclick = () => { st.clip = target(false).slice(); toast('Glyph copied'); };
   $('pst').onclick = () => { if (st.clip) edit(() => st.clip.slice()); };
   $('undo').onclick = () => {
@@ -200,13 +228,17 @@
       if (sizes.length > 1) idx = Math.max(0, Math.min(sizes.length - 1, parseInt(prompt('This legacy .acf has ' + sizes.length + ' sizes:\n' + sizes.map((s, i) => i + ': ' + s.W + 'x' + s.H).join('\n') + '\nUse which?', '0'), 10) || 0));
       const f = CF.fromAcf1(buf, idx); f.name = name; return setFont(f);
     }
-    if (buf[0] === 0x7b) return setFont(CF.fromJson(buf.toString('utf8')));
+    if (buf[0] === 0x7b) {
+      const txt = buf.toString('utf8');
+      if (/"format":\s*"craft-family"/.test(txt)) { const fam = CF.familyFromJson(txt); return setFont(fam.sizes[fam.master], fam); }
+      return setFont(CF.fromJson(txt));
+    }
     const isSfnt = buf.length > 4 && (buf.readUInt32BE(0) === 0x00010000 || ['OTTO', 'true', 'wOFF', 'wOF2'].includes(magic));
     if (!isSfnt && (buf.length === 1024 || buf.length === 2048 || /\.fnt$/i.test(name))) {
       const f = CF.fromFnt(buf, { name: name.replace(/\.[^.]+$/, '') }); setFont(f); return toast('Atari charset imported as 8 px; 8x8 glyphs, descender rows used by g j p q y');
     }
-    const f = await CF.rasterTtf(buf.toString('base64'), { adv: +$('ttfadv').value, name: name.replace(/\.[^.]+$/, '').slice(0, 40) });
-    setFont(f); toast('TTF converted to ' + f.adv + ' px; tune the glyphs, then save');
+    const f = await CF.rasterTtf(buf.toString('base64'), { size: +$('ttfadv').value, threshold: +$('ttfth').value, weight: +$('ttfw').value, hint: $('ttfh').checked, name: name.replace(/\.[^.]+$/, '').slice(0, 40) });
+    setFont(f); toast('TTF converted to ' + CF.SIZES[f.adv].label + '; tune the glyphs, derive the smaller sizes, then save');
   }
 
   // Font library (manifest from scripts/fontlist.cjs); personal fonts only exist on this machine.

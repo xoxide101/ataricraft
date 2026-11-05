@@ -39,7 +39,18 @@
   <select id="flist" title="Font library: shipped (font/), Atari ROM and Personal (font_personal/, never committed). Run node scripts/fontlist.cjs to refresh."><option value="">Font library...</option></select>
   <button id="bopen">Open font / TTF...</button>
   <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt" hidden>
-  <select id="ttfadv" title="Pixel advance used when a TTF is converted"><option value="6">TTF -> 6 px</option><option value="8">TTF -> 8 px</option><option value="5">TTF -> 5 px</option><option value="4">TTF -> 4 px</option></select>
+  <select id="ttfadv" title="Size a TTF/OTF is rasterised to (12x12 is the master; derive the smaller sizes from it)"><option value="12">TTF -> 12x12 master</option><option value="10">TTF -> 10x12</option><option value="8">TTF -> 8x8</option><option value="6">TTF -> 6 px</option><option value="5">TTF -> 5 px</option><option value="4">TTF -> 4 px</option></select>
+  <label title="Coverage that turns a pixel on">threshold <input type="number" id="ttfth" min="0.1" max="0.9" step="0.05" value="0.3"></label>
+  <label title="Bolder (+) or lighter (-) strokes">weight <input type="number" id="ttfw" min="-2" max="3" step="1" value="0"></label>
+  <label title="Stretch so the x-height lands on whole rows"><input type="checkbox" id="ttfh" checked> hint</label>
+  <span id="famrow">
+  <select id="fsize" title="Sizes of this family"></select>
+  <label title="A locked size is never overwritten by Derive"><input type="checkbox" id="flock"> lock</label>
+  <button id="bderive" title="Derive the sizes smaller than this one (skips locked and hand-edited sizes)">Derive smaller</button>
+  <label>keep stems <input type="checkbox" id="dkeep" checked></label>
+  <label>threshold <input type="number" id="dth" min="0.2" max="0.8" step="0.05" value="0.4"></label>
+  <button id="bfam" title="Save every size of the family as one JSON file">Save family</button>
+  </span>
   <label style="color:var(--dim)">Name <input type="text" id="name" maxlength="40"></label>
   <button id="bsave">Save .acf</button><button id="bjson">Save .json</button><button id="binc">Save .inc</button>
   <span id="info"></span>

@@ -58,6 +58,27 @@ Old `ttf2acf` files (`"ACF1"`, several sizes, 96 glyphs each) still load: one si
 
 `web/fontedit.html` (no build, works from `file://`): open a built-in font, `.acf` (ACF2 or legacy ACF1, which asks which size), `.json` or a TTF/OTF/WOFF (converted in the browser to the chosen advance); glyph-slot grid; pixel editor with the guide lines (headroom, cap, x-height, baseline, descender), shift/clear/invert/mirror/copy/paste/undo; Normal / Super / Sub target (a first edit of Super or Sub creates a variant, "Use auto shift" removes it); upper/lower case placement and a per-code slot field; `supUp` / `subDown`; preview text at 1-4x with real line spacing (`^{..}` super, `_{..}` sub, optional guide lines and extra leading); save `.acf`, `.json`, `.inc`.
 
+## Size family, 12x12 master and derived sizes
+
+Screen sizes are chosen for legibility: anything under 10 px is hard to read on a monitor, so 12x12 is the minimum *viewing* cell and the **master** of a family. The 4/5/6 px faces are overview and navigator faces only. The screen is a representation (a pixel font, not dot-matrix emulation); printing is a separate output process (see below).
+
+| size | adv x rows | ink (gw) | head / cap..baseline / desc | use |
+|---|---|---|---|---|
+| 12 (master) | 12 x 12 | 10 | 2 / rows 2..9 (8 body) / 2 | default editing/viewing size, TTF target |
+| 10 | 10 x 12 | 8 | 2 / 8 / 2 | narrower tall face |
+| 8 | 8 x 12 | 8 | 2 / rows 2..8 (7) / 3 | native Atari size (8x8 body) |
+| 6, 5, 4 | 6/5/4 x 12 | 5/4/3 | 2 / 7 / 3 | overview, navigator, 17 cpi |
+
+Tall sizes (12, 10) use 2 rows above, an 8-row body and 2 below; the small faces and 8 keep the earlier 2/7/3 cell (the 6502 planes). Sup goes into the headroom and sub into the descender rows, scaled per size (`supUp`/`subDown` in `SIZES`).
+
+**ACF2 additions (backward compatible):** header flag bit2 = *wide* (`gw > 8`): each glyph row is two bytes, high byte first, bit 15 leftmost (so 10-12 px ink fits). Flag bit3 = meta block `[u8 origin, u8 locked, u8 masterAdv]` after the name; origin 0 master, 1 derived, 2 hand-edited. Variants use the same row width. `.inc` output for wide fonts adds an `_<row>L` low-byte plane per row. A family is saved as one JSON file (`format: "craft-family"`, one font per size) or as one `.acf` per size.
+
+**TTF/OTF/BDF/PNG -> 12x12:** `rasterTtf(b64, {size:12, threshold, weight, hint})` renders at 4x supersampling, scales capitals to the 8 cap rows, squeezes the width into the ink columns; `weight` thickens (+) or thins (-); `hint` stretches vertically so the x-height is a whole number of rows; a glyph that would vanish (thin underscore) keeps its strongest pixels.
+
+**Derive smaller:** `derive(master, size, {threshold, keepStems})` maps the head, cap-to-baseline and descender bands onto the target bands and the ink columns onto the target ink columns by area coverage; a pixel is on at `threshold` (0.4), and with `keepStems` a pixel with >= 25 % coverage and no inked horizontal neighbour is kept so thin stems survive. Map, case locations and sup/sub variants are carried over. `familyDerive` skips any size that is locked or hand-edited unless `force`; editing a glyph of a derived size marks it hand-edited. The editor shows the origin and lock per size.
+
+**150/300 dpi (print, not built):** the page maps as paper inches x dpi (Letter 8.5x11 at 300 dpi = 2550x3300 dots; at 150 dpi 1275x1650). Pitch gives dots per column: 300/10 cpi = 30 dots, 25 at 12 cpi, ~17.6 at 17 cpi; line pitch 300/6 = 50 dots. A font cell is scaled so its advance equals the column pitch (12 px cell -> 2.5x at 10 cpi/300 dpi) and rows by the line pitch. A print engine would rasterise the layout this way; none is implemented. xCWriter's PDF/RTF/docx exports are unchanged.
+
 ## Status
 
 Verified: model and file round-trips, built-in metrics, ACF1 load, `.inc` plane count (Node); editor flows and a TTF conversion (Playwright, `out/fe-*.png` viewed). Not yet verified: the 6502 consuming these files (stages 4-5). Known quality limits: the 3 px face is a compromise (several glyphs such as `0 $ 5` are crude, fixable in the editor); TTF conversion at 4-6 px needs hand tuning; sup/sub use shifts, so a subscript descender can be clipped by the cell bottom.
