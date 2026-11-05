@@ -16,6 +16,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), bytes);
   await p.waitForTimeout(3000);
   await p.locator('canvas').first().click();
+  await p.waitForTimeout(10000); await p.keyboard.press('Escape'); await p.waitForTimeout(1500); // leave the start menu
   await p.keyboard.press('Escape'); await p.waitForTimeout(400);
   await p.keyboard.press('e'); await p.waitForTimeout(400);
   await p.keyboard.press('e'); await p.waitForTimeout(600);

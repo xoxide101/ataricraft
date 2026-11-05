@@ -5,8 +5,20 @@ handle
  jmp pkkey
 hn00 lda cmdon
  beq hn0
- jmp cmdkey
-hn0 lda mn
+ jsr cmdkey
+ lda hmode
+ beq hnr
+ jmp pgafter
+hnr rts
+hn0 lda hmode
+ beq hn0z
+ jmp pagekey
+hn0z lda kk
+ cmp #$F1
+ bne hn0y
+ lda #2
+ jmp pgto
+hn0y lda mn
  beq hn0a
  jmp menukey
 hn0a lda kk

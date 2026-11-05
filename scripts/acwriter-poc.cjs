@@ -18,6 +18,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   console.log('full, scroll, key frames:', await zp());
   if (process.argv[2] === 'shots') await p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw80-1.png' });
   await p.locator('canvas').first().click();
+  await p.waitForTimeout(10000); await p.keyboard.press('Escape'); await p.waitForTimeout(1500); // leave the start menu
   for (const ch of 'Hello') { await p.keyboard.press(ch); await p.waitForTimeout(250); }
   await p.waitForTimeout(500);
   console.log('after typing:', await zp());

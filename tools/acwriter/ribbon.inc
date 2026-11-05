@@ -169,7 +169,7 @@ cmdopen
  sta mn
  rts
 
-ribbon
+ribbon0
  lda #0
  sta bi
  sta tmp
@@ -216,7 +216,7 @@ rb2 inc tmp
  jsr rowsetup
  jmp drawtext
 
-bar
+bar0
  lda #0
  sta bi
  lda mn
@@ -295,10 +295,16 @@ br6d cmp #9
  ldx #>rs16
  jmp br8
 br6e cmp #10
- bne br6f
+ bne br6g
  lda #<rs17
  ldx #>rs17
  jmp br8
+br6g cmp #11
+ bcc br6f
+ cmp #13
+ bcs br6f
+ jsr impmsg
+ jmp br9
 br6f lda #<rs8
  ldx #>rs8
 br8 jsr putstr

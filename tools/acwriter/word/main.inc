@@ -49,6 +49,10 @@ start
  sta mhl
  sta rz
  sta anyv
+ sta hmode
+ sta hback
+ sta hsel
+ sta hchd
  lda #63
  sta rm
  lda #0
@@ -69,11 +73,30 @@ start
  jsr ribbon
  jsr bar
  jsr status
+ lda #1
+ jsr gopage
 
 loop
  lda #0
  sta ATRACT
- lda CH
+ lda CONSOL
+ and #1
+ bne lc0
+ lda hchd
+ bne lc1
+ inc hchd
+ bne lhelp
+lc0 lda #0
+ sta hchd
+lc1 lda HELPFG
+ beq lc2
+ lda #0
+ sta HELPFG
+lhelp lda RTCLOK+2
+ sta tm
+ lda #$F1
+ jmp lgotk
+lc2 lda CH
  cmp #$FF
  bne lgot
  lda sd
@@ -91,7 +114,7 @@ lgot
  lda RTCLOK+2
  sta tm
  jsr getkey
- sta kk
+lgotk sta kk
  lda #0
  sta fl
  jsr handle

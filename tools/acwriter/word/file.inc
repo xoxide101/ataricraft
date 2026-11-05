@@ -76,6 +76,9 @@ fz_df6 inx
  bcc fz_df4
 fz_df7 lda fdt
  bne fz_df8
+ lda fop
+ cmp #3
+ beq fz_df8
  ldy #0
 fz_df9 lda fext,y
  sta FNB,x
@@ -89,6 +92,9 @@ fz_df8 lda #$9B
  lda fop
  cmp #2
  beq doload
+ cmp #3
+ bne dosave
+ jmp doimport
 
 dosave
  jsr mkhdr
@@ -156,11 +162,14 @@ doload
  ldy #>HDR
  jsr fblk
  cpy #$80
- bcs fer1
- ldx #3
+ bcc fz_dl0
+ cpy #$88
+ beq fbm
+ jmp fer1
+fz_dl0 ldx #3
 fz_dl1 lda HDR,x
  cmp hmag,x
- bne fbj
+ bne fbm
  dex
  bpl fz_dl1
  lda HDR+5
@@ -211,6 +220,10 @@ fz_dl2 lda #<DOC
  rts
 
 fbj jmp fbad
+
+; not a CRFT file: read it again as plain text / ATASCII
+fbm jsr fclose
+ jmp doimport
 
 mkhdr
  ldx #15

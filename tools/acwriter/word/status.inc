@@ -139,7 +139,7 @@ iv2 lda (sp),y
  bne iv2
  rts
 
-status
+status0
  jsr ruler
  lda #0
  sta bi
@@ -257,5 +257,5 @@ fgr dta c' ',b(4),c'GRN',b(4),b(0)
 tfl dta l(fb),l(fb),l(fam),l(fgr)
 tfh dta h(fb),h(fb),h(fam),h(fgr)
 kname dta c'K:',b($9B)
-helpmsg dta c'^X command  Tab mode  ^B bold ^I italic ^U underline  Ctrl-arrows move',b(0)
+helpmsg dta c'Esc menu  ^X command  ^B ^I ^U style  F1 help',b(0)
 

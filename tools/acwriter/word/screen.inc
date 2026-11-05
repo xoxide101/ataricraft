@@ -58,9 +58,10 @@ mt3 lda src
 ; rebuild line pointer table
 scan
  lda #<DOC
+ ldx #>DOC
+scanat
  sta tp
- lda #>DOC
- sta tp+1
+ stx tp+1
  ldx #0
 sc1 lda tp
  sta LPL,x

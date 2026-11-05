@@ -15,6 +15,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), bytes);
   await p.waitForTimeout(3000);
   await p.locator('canvas').first().click();
+  await p.waitForTimeout(10000); await p.keyboard.press('Escape'); await p.waitForTimeout(1500); // leave the start menu
   const key = async (k, w = 350) => { await p.keyboard.press(k); await p.waitForTimeout(w); };
   const type = async (s) => { for (const ch of s) await key(ch === ' ' ? 'Space' : ch); };
   let n = 0; const shot = () => p.locator('canvas').first().screenshot({ path: ROOT + '/out/als' + (n++) + '.png' });
