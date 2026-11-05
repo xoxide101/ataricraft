@@ -66,7 +66,7 @@ helpdoc
  dta b(0)
 
 ; line 0 is the logo; entries start at line EL0, each 12 scanlines tall at double width
-  org $5F40
+  org $60D8
 homedoc
  dta b(15),b(10),b(30),b(1),c'A C  W R I T E R',b(1),b(13)
  dta b(15),b(5),c'----------------------------------------------------------------',b(13)

@@ -50,6 +50,10 @@ start
  sta rz
  sta anyv
  sta hmode
+ sta pwpap
+ sta pwpit
+ sta pwx
+ sta pwnt
  sta hback
  sta hsel
  sta hchd
@@ -62,6 +66,11 @@ mied sta $14C0,x
  bpl mied
  lda #63
  sta rm
+ lda #3
+ sta pwplm
+ lda #2
+ sta pwprm
+ jsr pwcalc
  lda #0
  jsr scan
  lda RTCLOK+2
@@ -126,7 +135,12 @@ lgotk sta kk
  sta fl
  jsr handle
  jsr fixcc
- jsr tend
+ lda hmode
+ cmp #PGV
+ bne lgo1
+ jsr pwmain
+ jmp lp2
+lgo1 jsr tend
  sta $A4
  jsr visible
  jsr tend

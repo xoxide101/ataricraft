@@ -28,7 +28,7 @@ TEXT += 'the end Beta final\r';
   const shot = (n) => p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-edit-' + MODEL + '-' + n + '.png' });
   const menu = async (...ks) => { await key('Escape'); for (const k of ks) await key(k, 700); await p.waitForTimeout(800); };
   const peek = (a, n = 1) => p.evaluate(([x, m]) => ataricraft.peek(x, m), [a, n]);
-  const doc = async (n = 400) => { const a = await p.evaluate(([x, m]) => Array.from(ataricraft.peek(x, m)), [0x6400, n]); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
+  const doc = async (n = 400) => { const a = await p.evaluate(([x, m]) => Array.from(ataricraft.peek(x, m)), [0x6500, n]); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
   const lineOf = async (n) => (await doc(900)).split('|')[n];
   let fails = 0;
   const check = (name, ok, extra) => { if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); };
@@ -64,12 +64,12 @@ TEXT += 'the end Beta final\r';
   s = await state(); check('find next wraps to line 1', s.sel === 1 && s.cl === 0, s);
   await key('Escape', 600);
   // goto line
-  await key('Control+l', 800); await type('2'); await key('Enter', 2200); await shot('9-goto');
+  await key('Control+l', 1500); await type('2'); await key('Enter', 2200); await shot('9-goto');
   s = await state(); check('goto line 2', s.cl === 1 && s.cc === 0, s);
-  await key('Control+l', 800); await type('99'); await key('Enter', 2200);
+  await key('Control+l', 1500); await type('99'); await key('Enter', 2200);
   s = await state(); check('goto past the end clamps to the last line', s.cl === (await peek(0x96))[0] - 1, s);
   // replace: beta -> zed (typed under the Atari caps lock, so ZED), Y then N
-  await key('Control+l', 800); await type('1'); await key('Enter', 2000);
+  await key('Control+l', 1500); await type('1'); await key('Enter', 2000);
   await key('Control+r', 800); await type('beta'); await key('Enter', 900); await type('zed'); await key('Enter', 2200); await shot('10-replace-prompt');
   s = await state(); check('replace prompt shown', s.cmsg === 32 && s.sel === 1, s);
   await key('y', 1500); await shot('11-replaced-one');
@@ -77,7 +77,7 @@ TEXT += 'the end Beta final\r';
   await key('n', 1500); await shot('12-skipped');
   check('N skipped the second', (await lineOf(30)) === 'the end Beta final', await lineOf(30));
   // replace all: line -> LN
-  await key('Control+l', 800); await type('1'); await key('Enter', 2000);
+  await key('Control+l', 1500); await type('1'); await key('Enter', 2000);
   await key('Control+r', 800); await type('line'); await key('Enter', 900); await type('LN'); await key('Enter', 2200);
   await key('a', 1000); for (let i = 0; i < 60 && (await peek(0x14C2))[0]; i++) await p.waitForTimeout(1000);
   await p.waitForTimeout(1500); await shot('13-replace-all');
