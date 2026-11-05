@@ -52,7 +52,7 @@ fs.mkdirSync(OUT, { recursive: true });
   assert.strictEqual(tl.left + tl.n, 20, 'tab to stop at absolute column 20'); ok('Tab key moves to the left stop at column 20');
 
   // zoom
-  for (const [v, want] of [['50', 1], ['100', 2], ['400', 8]]) {
+  for (const [v, want] of [['50', 1.5], ['100', 3], ['400', 12]]) {
     await p.selectOption('#pgzoom', v); await p.waitForTimeout(150);
     const z = await p.evaluate(() => PG.state().z); assert.strictEqual(z, want); ok('zoom ' + v + '% = ' + want + 'x');
   }

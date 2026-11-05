@@ -12,8 +12,8 @@
     paper: { bg: '#efece2', ink: '#14110c' }, blue: { bg: '#1b2c8c', ink: '#a8b8ff' },
     amber: { bg: '#2a1700', ink: '#ffb000' }, green: { bg: '#00200a', ink: '#46ff6c' },
   };
-  const ZOOMS = [[50, '50%'], [75, '75%'], [100, '100% (about life size)'], [150, '150%'], [200, '200%'], [300, '300%'], [400, '400%'], ['width', 'Fit width'], ['page', 'Fit page'], ['pixel', '1:1 pixels']];
-  let theme = THEMES.paper, caret = { p: 0, o: 0 }, anchor = { p: 0, o: 0 }, lines = [], goalX = null, blink = 1, drag = false, zoomSel = 100, z = 2, dpr = 1, rd = null, nd = false, G = null;
+  const ZOOMS = [[50, '50%'], [75, '75%'], [100, '100% (12 px+ cells)'], [150, '150%'], [200, '200%'], [300, '300%'], [400, '400%'], ['width', 'Fit width'], ['page', 'Fit page'], ['pixel', '1:1 pixels']];
+  let theme = THEMES.paper, caret = { p: 0, o: 0 }, anchor = { p: 0, o: 0 }, lines = [], goalX = null, blink = 1, drag = false, zoomSel = 100, z = 3, dpr = 1, rd = null, nd = false, G = null;
   const cmp = XCW.cmp;
 
   const glyph = (c) => (c >= 128 && c <= 255 ? SY.slice((c - 128) * 8, (c - 128) * 8 + 8) : c >= 32 && c <= 127 ? F4[c - 32] : F4[0]);
@@ -79,8 +79,8 @@
     if (zoomSel === 'width') z = (vw - 6) / g.dw;
     else if (zoomSel === 'page') z = Math.min((vw - 6) / g.dw, (vh - 6) / (g.ph + 2 * PAD));
     else if (zoomSel === 'pixel') z = 1 / dpr;
-    else z = zoomSel / 50;
-    z = Math.max(0.25, Math.min(10, z));
+    else z = zoomSel * 3 / 100;
+    z = Math.max(0.25, Math.min(16, z));
   }
   function setZoom(v) {
     const old = z, cx = (scr.scrollLeft + scr.clientWidth / 2) / old, cy = (scr.scrollTop + scr.clientHeight / 2) / old;
@@ -334,7 +334,7 @@
   scr.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
-    const steps = [50, 75, 100, 150, 200, 300, 400], cur = Math.round(z * 50);
+    const steps = [50, 75, 100, 150, 200, 300, 400], cur = Math.round(z * 100 / 3);
     let k = steps.findIndex((s) => s >= cur - 1); if (k < 0) k = steps.length - 1;
     k = Math.max(0, Math.min(steps.length - 1, k + (e.deltaY < 0 ? 1 : -1)));
     $('pgzoom').value = String(steps[k]); setZoom(steps[k]);
