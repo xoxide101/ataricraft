@@ -19,9 +19,13 @@ hn00 lda cmdon
  jsr cmdkey
  lda hmode
  beq hnr
+ cmp #PGV
+ beq hnr
  jmp pgafter
 hnr rts
 hn0 lda hmode
+ beq hn0z
+ cmp #PGV
  beq hn0z
  jmp pagekey
 hn0z lda kk
@@ -49,7 +53,11 @@ hn0m jsr exkeys
 hn0n lda kk
 hn1 cmp #$7F
  bne hn2
- jmp ribnext
+ lda hmode
+ cmp #PGV
+ bne hn1a
+ jmp pwtab
+hn1a jmp ribnext
 hn2 cmp #$1C
  bne h1
  jmp kup
@@ -75,7 +83,11 @@ h6 cmp #2
  jmp insert
 h7 cmp #9
  bne h8
- lda #2
+ lda hmode
+ cmp #PGV
+ bne h7a
+ jmp pwtab
+h7a lda #2
  jmp insert
 h8 cmp #$15
  bne h9

@@ -182,7 +182,7 @@ fz_dl1 lda HDR,x
  cmp #'W'
  bne fbj
  lda HDR+9
- cmp #>($9000-DOC)
+ cmp #>($8400-DOC)
  bcs fbig
  sta fln+1
  lda HDR+8

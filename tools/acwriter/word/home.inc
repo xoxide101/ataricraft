@@ -9,15 +9,22 @@ NENT = 8
 ; the editor calls these; pages draw their own bars
 ribbon lda hmode
  beq hrb0
+ cmp #PGV
+ beq hrb0
  jmp pgrib
 hrb0 jmp ribbon0
 bar lda hmode
+ beq hbr0
+ cmp #PGV
  beq hbr0
  jmp pgbar
 hbr0 jmp bar0
 status lda hmode
  beq hst0
- jmp pgst
+ cmp #PGV
+ bne hst1
+ jmp pwst
+hst1 jmp pgst
 hst0 jmp status0
 
 hhome lda #1

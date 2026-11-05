@@ -58,7 +58,7 @@ exgap clc
  lda dend+1
  adc ed_n+1
  sta dst+1
- cmp #$8F
+ cmp #$84
  bcc xg0
  sec
  rts
@@ -152,7 +152,7 @@ exhlon lda ed_ap
  cmp ed_cp+1
  beq xh9
 xh1 lda dend+1
- cmp #$8E
+ cmp #$83
  bcs xh9
  jsr exsrt
  mv16 ed_hi,ed_q

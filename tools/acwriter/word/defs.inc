@@ -26,7 +26,7 @@ ICAX1  = $034A
 ICAX2  = $034B
 
 SCR  = $A060
-DOC  = $6400
+DOC  = $6500
 LPL  = $9000
 LPH  = $9100
 BUF  = $0600
@@ -266,7 +266,7 @@ sv_ss  = $13E2
 sv_hc  = $13E3
 sv_pi  = $13E4
 DNM2   = $1470               ; fallback dictionary name (H:EN.CDC)
-NCMD   = 53
+NCMD   = 62
 
 ; selection, clipboard, find / replace (word/edit.inc)
 FND    = $1480               ; find text, lower case (32)

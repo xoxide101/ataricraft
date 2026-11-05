@@ -75,6 +75,12 @@ hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),
  org $9400
  icl 'font4.inc'
 
+; PAGE mode (word/page.inc) and its 3 px glyph planes (craftpg.inc, from mkpgfont.cjs) sit in the top of the document area,
+; $8400-$8FFF; the document is limited to $8400 (8 KB) so the page code is never overwritten (docs/ACWRITER-PAGE.md).
+ org $8400
+ icl 'word/page.inc'
+ icl 'craftpg.inc'
+
 BFNT = $9800
  org BFNT
  icl 'font6.inc'
