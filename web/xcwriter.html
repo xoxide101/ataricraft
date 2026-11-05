@@ -27,6 +27,8 @@
   #toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
   #toolbar button{min-width:30px;padding:4px 8px}
   #toolbar .hq-only,#toolbar .at-only{display:contents}
+  #toolbar .tface{display:inline-flex;gap:6px;align-items:center;color:var(--dim,#9aa);font-size:12px}
+  #toolbar .tface select{max-width:230px;border-color:#ff9a30;color:#fff;font-size:13px}
   body.m-hq .at-only,body.m-atari .hq-only,body.m-page .hq-only{display:none}
   body.m-page .at-only #scalesel{display:none}
   body.m-page #stage{overflow:hidden}
@@ -133,8 +135,10 @@
   <button id="tb-undo" title="Undo (Ctrl+Z)">&#8630;</button><button id="tb-redo" title="Redo (Ctrl+Y)">&#8631;</button><button id="tb-find" title="Find and replace (Ctrl+F)">Find</button>
   <button id="tb-spell" class="on" title="Spell check squiggles (EN.CDC dictionary)">Spell</button>
   <span class="sep"></span>
+  <label class="tface" title="Typeface of the selected paragraphs: one font per paragraph, never inside a line (docs/FONT.md)">Typeface <select id="pgfont"><option value="">Standard (ACWriter 4x7)</option></select></label>
+  <span class="sep"></span>
   <span class="hq-only"><select id="fontsel" title="Font (system fonts)"></select><select id="sizesel" title="Size"></select><select id="spacesel" title="Line spacing"><option value="1.15">1.15</option><option value="1.55" selected>1.55</option><option value="2">2.0</option></select></span>
-  <span class="at-only"><select id="themesel" title="ACWriter colour theme (C key in ACWriter)"><option value="paper">Paper</option><option value="blue">Blue</option><option value="amber">Amber</option><option value="green">Green</option></select><select id="scalesel" title="Screen scale"><option value="3" selected>3x (15 px cells)</option><option value="4">4x</option><option value="5">5x</option></select></span>
+  <span class="at-only"><select id="atview" title="Atari view: 1x = ACWriter's 64 column screen (4 px font); 2x = ACWriter PAGE zoom (8x8 faces, per-paragraph fonts)"><option value="1">ACWriter 1x (64 col)</option><option value="2">ACWriter PAGE 2x (8x8 faces)</option></select><select id="themesel" title="ACWriter colour theme (C key in ACWriter)"><option value="paper">Paper</option><option value="blue">Blue</option><option value="amber">Amber</option><option value="green">Green</option></select><select id="scalesel" title="Screen scale"><option value="3" selected>3x (15 px cells)</option><option value="4">4x</option><option value="5">5x</option></select></span>
   <span class="sep"></span>
   <button id="tb-send" title="Write this document to the emulator's H: device so ACWriter can open it with File > Open">Send to Atari</button>
 </div>
@@ -161,7 +165,6 @@
     <div id="pgwrap">
       <div id="pgbar">
         <select id="pgzoom" title="Zoom"></select>
-        <select id="pgfont" title="Typeface of the selected paragraphs (one font per paragraph, never inside a line)"><option value="">Font: standard</option></select>
         <select id="pgkind" title="Tab stop type added by clicking the ruler"><option value="l">L left tab</option><option value="c">C centre tab</option><option value="r">R right tab</option></select>
         <button id="pgsetup" title="Paper size, pitch, margins, tab stops">Page setup...</button>
         <span id="pgfit"></span>
@@ -193,6 +196,7 @@
 
 <script src="js/xcwriter/core/xcw-data.js"></script>
 <script src="js/xcwriter/core/xcw-core.js"></script>
+<script src="js/xcwriter/faces.js"></script>
 <script src="js/xcwriter/editor-hq.js"></script>
 <script src="js/xcwriter/editor-atari.js"></script>
 <script src="js/xcwriter/editor-page.js"></script>

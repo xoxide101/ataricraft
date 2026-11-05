@@ -16,36 +16,24 @@
   let theme = THEMES.paper, caret = { p: 0, o: 0 }, anchor = { p: 0, o: 0 }, lines = [], goalX = null, blink = 1, drag = false, zoomSel = 100, z = 3, dpr = 1, rd = null, nd = false, G = null;
   const cmp = XCW.cmp;
 
-  const glyph = (c, face) => {
-    if (face && c >= 32 && c <= 127) { const g = faceGlyph(face, c); if (g) return g; }
-    return c >= 128 && c <= 255 ? SY.slice((c - 128) * 8, (c - 128) * 8 + 8) : c >= 32 && c <= 127 ? F4[c - 32] : F4[0];
-  };
+  const glyph = (c) => (c >= 128 && c <= 255 ? SY.slice((c - 128) * 8, (c - 128) * 8 + 8) : c >= 32 && c <= 127 ? F4[c - 32] : F4[0]);
+  let FCACHE = {};
 
-  // typefaces: Atari 1 KB charsets (.fnt, OS screen-code order) listed in the font manifest; the page view shows each 8x8 glyph
-  // folded to the 4-pixel cell (the same glyph the ACWriter zoom view draws at 2x). Names are 8.3-safe ids, as ACWriter loads <ID>.FNT.
-  const FACES = {}, FCACHE = {};
-  const faceId = (u) => u.split('/').pop().replace(/\.[^.]*$/, '').toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 8);
-  const screenCode = (c) => (c >= 96 ? c : c - 32);
-  function faceRows(face, c) { const f = FACES[face]; if (!f) return null; const o = screenCode(c) * 8; return Array.from(f.slice(o, o + 8)); }
-  function faceGlyph(face, c) {
-    const key = face + ':' + c; if (FCACHE[key]) return FCACHE[key];
-    const r = faceRows(face, c); if (!r) return null;
-    return (FCACHE[key] = r.map((b) => { let n = 0; for (let k = 0; k < 4; k++) if ((b >> (7 - 2 * k)) & 3) n |= 8 >> k; return n; }));
+  // typefaces come from XFACE (faces.js): one bitmap per character, scaled into the cell, so the 8x8, 10x12 and 12x12 faces show their
+  // real pixels at every zoom. The standard face (no font on the paragraph) stays the 4x7 ACWriter font.
+  function faceRows(face, c) { const f = XFACE.use(face), bm = f && f.get(c); if (!bm) return null; return Array.from({ length: bm.h }, (_, y) => { let n = 0; for (let x = 0; x < bm.w; x++) n = (n << 1) | bm.px[y * bm.w + x]; return n; }); }
+  function fillFaceSelect() {
+    const sel = $('pgfont'), cur = sel.value; sel.innerHTML = '<option value="">Standard (ACWriter 4x7)</option>';
+    const groups = {};
+    for (const f of XFACE.list()) {
+      const g = groups[f.group] = groups[f.group] || Object.assign(document.createElement('optgroup'), { label: f.group });
+      const o = document.createElement('option'); o.value = f.id; o.textContent = f.label + ' [' + f.id + ']' + (f.state === 'error' ? ' - cannot load' : ''); g.appendChild(o);
+    }
+    for (const g of Object.values(groups)) sel.appendChild(g);
+    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
   }
-  async function loadFaces() {
-    if (!/^https?:/.test(location.protocol)) return;
-    try {
-      const m = await (await fetch('library/fonts/local/manifest.json')).json(), sel = $('pgfont');
-      for (const g of m.groups) for (const f of g.fonts) {
-        if (!/\.fnt$/i.test(f.url)) continue;
-        const id = faceId(f.url); if (FACES[id]) continue;
-        const buf = new Uint8Array(await (await fetch(f.url)).arrayBuffer()); if (buf.length !== 1024) continue;
-        FACES[id] = buf;
-        const o = document.createElement('option'); o.value = id; o.textContent = id + (g.id === 'personal' ? ' (personal)' : ''); sel.appendChild(o);
-      }
-      render();
-    } catch (e) { /* the manifest is only served over http */ }
-  }
+  XFACE.onChange(() => { fillFaceSelect(); FCACHE = {}; render(); });
+  XFACE.init();
   const page = () => P.info(XW.page || {});
   function geom() {
     const i = page(), cw = CELL[i.pitch], pw = i.paperCols * cw, ph = i.paperLines * LH, n = Math.max(1, Math.ceil(lines.length / i.textLines));
@@ -61,8 +49,23 @@
     if (x1 <= 0 || y1 <= 0 || x0 >= cv.width || y0 >= cv.height) return;
     c.fillStyle = col; c.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
   }
+  // a face bitmap scaled into the cw x LH cell: runs of ink in a row are one rectangle, edges are rounded to device pixels by px()
+  function drawBitmap(x, y, cell, ink, cw, bm) {
+    const sx = cw / bm.w, sy = LH / bm.h, bold = Math.max(sx, 0.5);
+    for (let r = 0; r < bm.h; r++) {
+      const sh = cell.i && r < bm.h * 0.4 ? Math.max(sx, 0.5) : 0;
+      for (let c = 0; c < bm.w;) {
+        if (!bm.px[r * bm.w + c]) { c++; continue; }
+        let e = c; while (e < bm.w && bm.px[r * bm.w + e]) e++;
+        px(ctx, x + c * sx + sh, y + r * sy, (e - c) * sx + (cell.b ? bold : 0), sy, ink); c = e;
+      }
+    }
+    if (cell.u) px(ctx, x, y + 7, cw, 1, ink);
+  }
   function drawCell(x, y, cell, ink, cw, face) {
-    const rows = glyph(cell.ch.charCodeAt(0), face), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(4, cw);
+    const code = cell.ch.charCodeAt(0), f = face && code >= 32 && code <= 127 ? XFACE.use(face) : null, bm = f && f.get(code, cell.sup ? 1 : cell.sub ? 2 : 0);
+    if (bm) { drawBitmap(x, y, cell, ink, cw, bm); return; }
+    const rows = glyph(code), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(4, cw);
     for (let r = 0; r < rows.length && r < 8; r++) {
       const sh = cell.i && r < 3 ? 1 : 0, bits = rows[r];
       for (let c = 0; c < bw; c++) if (bits & (8 >> c)) { px(ctx, x + c + sh, y + r + dy, 1, 1, ink); if (cell.b && cw > 3) px(ctx, x + c + sh + 1, y + r + dy, 1, 1, ink); }
@@ -378,8 +381,7 @@
   // ---- zoom select and Page setup dialog ----
   $('pgzoom').innerHTML = ZOOMS.map((q) => '<option value="' + q[0] + '"' + (q[0] === 100 ? ' selected' : '') + '>' + q[1] + '</option>').join('');
   $('pgzoom').onchange = () => { setZoom($('pgzoom').value); ta.focus(); };
-  $('pgfont').onchange = () => { XW.setFont($('pgfont').value); ta.focus(); };
-  loadFaces();
+  $('pgfont').onchange = () => { XW.setFont($('pgfont').value); XW.focus ? XW.focus() : ta.focus(); };
 
   function setupDialog() {
     const cur = page(); let tabs = cur.tabs.map((t) => ({ ...t }));
@@ -421,7 +423,7 @@
     focus() { ta.focus(); },
     setTheme(n) { theme = THEMES[n] || THEMES.paper; render(); },
     lines() { relayout(); return lines; },
-    canvas: cv, setup: setupDialog, setZoom, scroller: scr, faceRows, faces: () => Object.keys(FACES),
+    canvas: cv, setup: setupDialog, setZoom, scroller: scr, faceRows, faces: () => XFACE.list().map((f) => f.id),
     state: () => ({ z, dpr, geom: geom(), scrollLeft: scr.scrollLeft, scrollTop: scr.scrollTop }),
   };
 })();

@@ -20,6 +20,7 @@
   }
   function readPara(el) {
     const p = { align: ({ c: 'c', r: 'r', j: 'j' })[el.dataset.a] || 'l', bullet: el.classList.contains('bul') || el.nodeName === 'LI', runs: [] };
+    if (el.dataset.font) p.font = el.dataset.font;
     const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     for (let n; (n = w.nextNode());) {
       const t = n.nodeValue.replace(/[\r\n\u200b]/g, '');
@@ -46,9 +47,26 @@
         if (r.u) s = '<u>' + s + '</u>'; if (r.i) s = '<i>' + s + '</i>'; if (r.b) s = '<b>' + s + '</b>';
         h += s;
       }
-      return '<p' + (p.align !== 'l' ? ' data-a="' + p.align + '"' : '') + (p.bullet ? ' class="bul"' : '') + '>' + (h || '<br>') + '</p>';
+      return '<p' + (p.align !== 'l' ? ' data-a="' + p.align + '"' : '') + (p.font ? ' data-font="' + esc(p.font) + '"' : '') + (p.bullet ? ' class="bul"' : '') + '>' + (h || '<br>') + '</p>';
     }).join('');
+    applyFaces();
   }
+  // paragraphs with a Craft typeface get that face as a web font (bitmap faces become a generated TrueType font, TTF/OTF use their own file);
+  // the pixel size is a whole multiple of the cell height so the pixels stay crisp
+  const hqFamilyIsVector = (css) => /XCV_/.test(css);
+  function applyFaces() {
+    for (const el of hq.querySelectorAll('p[data-font]')) {
+      const id = el.dataset.font, f = XFACE.get(id);
+      if (!f) continue;
+      const css = XFACE.css(id);
+      if (!css) { XFACE.hqFont(f).then((c) => { if (c) applyFaces(); }); continue; }
+      const pt = parseFloat(hq.style.fontSize) || 11, k = Math.max(1, Math.round((pt * 4 / 3 * 1.5) / (f.h || 12)));
+      const px = hqFamilyIsVector(css) ? Math.round(pt * 4 / 3) : k * (f.h || 12);
+      el.style.fontFamily = css; el.style.fontSize = px + 'px';
+      el.style.lineHeight = Math.round(px * 1.35) + 'px'; el.style.letterSpacing = '0'; el.style.fontWeight = ''; el.title = 'Typeface ' + f.label;
+    }
+  }
+  XFACE.onChange(applyFaces);
 
   function posOf(node, off) {
     if (node === hq) { const k = hq.children; return off >= k.length ? endPos() : { p: off, o: 0 }; }

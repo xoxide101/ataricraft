@@ -561,6 +561,21 @@ function builtin(fnt, adv, f4rows) {
   return f;
 }
 
+// 12x12 master (10 px ink) and 10x12 (8 px ink) from the Atari 8x8 face: the 8 body rows sit under 2 rows of headroom, descender letters
+// get 2-3 tail rows below the baseline. A starting point for hand editing in fontedit, not a redesign.
+function builtinWide(fnt, size) {
+  const gw = size === 12 ? 10 : 8, pick = size === 12 ? [0, 1, 1, 2, 3, 4, 5, 5, 6, 7] : [0, 1, 2, 3, 4, 5, 6, 7];
+  const f = create(Object.assign({}, SIZES[size], { name: 'Craft ' + SIZES[size].label.split(' ')[0] }));
+  const top = gw > 8 ? 15 : 7, wide = (b) => pick.reduce((v, k, i) => v | (((b >> (7 - k)) & 1) << (top - i)), 0);
+  for (let a = 32; a < 128; a++) {
+    const r = atariRows(fnt, a), g = zeros(f.rows);
+    if (DESC_LETTERS.includes(String.fromCharCode(a))) [r[2], r[3], r[3], r[4], r[5], r[6], r[6], r[7]].forEach((b, i) => { g[XTOP + i] = wide(b); });
+    else r.forEach((b, i) => { g[HEAD + i] = wide(b); });
+    f.glyphs[a] = g;
+  }
+  return f;
+}
+
 // ---- TTF rasteriser (browser only; also injected into Chrome by ttf2acf.cjs) --------------------------------------------
 // Returns a font in one of the SIZES (opt.size or opt.adv: 12 is the master): capitals are scaled to the cap rows, then the glyph is
 // squeezed horizontally into gw columns. Controls: threshold (coverage 0..1 that turns a pixel on), weight (0 normal, 1-3 bolder,
@@ -798,7 +813,7 @@ function fromSheet(data, w, h, opt = {}) {
   return f;
 }
 
-module.exports = { create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, toFnt, toSheet, fromSheet, setPx };
+module.exports = { builtinWide, create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, toFnt, toSheet, fromSheet, setPx };
 
 });
 __def("craftdoc.cjs", function (module, exports, require) {
