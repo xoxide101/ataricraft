@@ -161,7 +161,14 @@ pgst
  lda pih-1,x
  tax
  pla
- jsr putstr
+ ldy hmode
+ cpy #1
+ bne pgsx
+ ldy sv_xe
+ bne pgsx
+ lda #<pgi0
+ ldx #>pgi0
+pgsx jsr putstr
  lda #0
  jsr putc
  lda #<BUF
@@ -420,6 +427,7 @@ pih dta h(pgi1),h(pgi2),h(pgi3)
 pgt1 dta c' AC Writer 0.1    Start menu',b(0)
 pgt2 dta c' AC Writer 0.1    Help',b(0)
 pgt3 dta c' AC Writer 0.1    Convert / import',b(0)
+pgi0 dta c'Needs 130XE 128K: no extended RAM found!',b(0)
 pgi1 dta c'Letter key, or Up/Down + Return.  T colours',b(0)
 pgi2 dta c'Up/Down scroll  Space page  B back  Esc return',b(0)
 pgi3 dta c'I or Return: choose file  E edit  Esc back',b(0)
