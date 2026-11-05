@@ -35,20 +35,33 @@ Save As writes the CPG1 trailer (flags bit 1, [PAGE.md](PAGE.md)) with paper, pi
 
 ## Memory
 
-The page code and planes live at `$8400-$8FF2` (about 2.6 KB), inside what was the top of the document area.
+Machine tiers (detected at startup; the startup message is "Needs 128K (130XE); uses more if found"):
 
-* The document area is now `$6600-$83FF` = 7,680 bytes (was 11 KB). Load, import and Edit-gap check it; typing in
-  the normal view has no insert-time check (as before), so a very long document can now run into the page code.
-* On a stock 64K machine the spell checker puts its table below `$9000`, which can overwrite the page code.
-  Use PAGE mode on a 130XE or without the spell checker on 64K.
-* Code grew, so help/spell-book data moved from `$5F40` to `$6170` and `DOC` from `$6400` to `$6600`.
+| tier | detection | behaviour |
+|---|---|---|
+| 64K | `bk_det`: no separate bank at `$4000-$7FFF` (`sv_xe = 0`) | the old view works; PAGE, zoom, fonts and the dictionary need banks, so they show message 39 |
+| 128K (130XE) | `bk_cnt`: 4 distinct banks | baseline: dictionary in bank 1, overlay images in bank 2, font charsets in bank 3 |
+| expanded (Rambo / Compy-Shop 320K, 576K, 1MB) | `bk_cnt`: 16 or 32 banks, stored in `sv_nb` (`$07E5`) | the count is detected and kept; **nothing uses banks above 3 yet**, so extra RAM gives no extra capacity today |
+
+`bk_cnt` writes a signature to `$4000` under every PORTB bank-bit combination (bits 2,3,5,6,7), counts distinct signatures and restores the bytes. `scripts\acwriter-banks.cjs` runs it on the emulator's 64K, 128K, 320K (Rambo and Compy-Shop), 576K and 1088K settings: it reports 1, 4, 16, 16, 16, 32 banks. The 576K setting reports 16 because that machine's extra bank bits (PORTB bit 1 and others) are outside the probed set, so only the standard five bits are counted. This is verified in the emulator only; no real hardware was tried.
+
+* Document area: `$6400-$8FFF` = **11,264 bytes** in every view; the old view's capacity check stops typing at the end (`scripts\acwriter-cap.cjs`).
+* Page code (P), the font module (Z), edit (E) and spell (S) code are overlay images stored in bank 2 and run from the shared slot `SLA = $54FC` (the overlay manager is `ovl.inc`; `ovc` refuses E/S while P/Z is loaded and the view is PAGE). Image Z is staged at `$8000` because staging sources must be outside the `$4000-$7FFF` bank window and the images no longer fit `$BD00`.
+* Bank 3 holds up to 4 loaded 1 KB charsets (4 pages each, `$40 + (slot-1)*4`).
+
+## Zoom (2x) and fonts
+
+PAGE mode has a 2x blow-up that draws the true 8x8 glyphs at 2x (16 px cells, 20 columns on screen, horizontal scroll and the mini navigator). 12x12 and 10x12 glyphs are **not** used on the Atari yet (no plane for them): the 6502 only has 8x8 plus the 4/5/6 px faces.
+
+`Esc`, `C`, `F` (Character > Font; the Character menu has no visible label for this key yet) asks for a file name and loads a 1,024-byte `.FNT` Atari charset from disk or `H:` into the next free font slot, then applies it to the paragraph at the cursor. The font name is written as CPG1 tag 2 (paragraph 0) and tag 3 (`[paragraph lo, hi, name]`, one per change); `ROM` means the standard face. A font change only exists at a paragraph start, so a line never mixes fonts. On Open, tags 2/3 load the named files (looked up on the same device) before the first paint. Limits: 4 loaded fonts, 8 font changes; `.acf` files are not read directly (export `.fnt` from the font editor).
+
+Typing in the old view is unchanged: `scripts\acwriter-latency.cjs` prints `mfull/mkey [34, 5, 5]` on the 130XE after these changes (the earlier `77/6` figure came from a different meter format and a cold start; the build before the bank probe printed `[35, 5, 5]`).
 
 ## Not done / limits (honest list)
 
-* No 2x blow-up. A 2x view needs 8-bit-wide scaled glyph rows and a second full-width display list; there is no
-  free RAM (below `$8400` is code, above it the display list, fonts, spell scratch at `$9B00`/`$9F00`). It would
-  need XE bank memory for the glyph planes and the page code, which is not implemented.
-* No alignment, indent, bullet, bold/italic/underline rendering in PAGE mode (text only). Sub-script descenders are clipped.
+* The font table follows paragraph numbers only for Return and for a Backspace that joins paragraphs. Cut/paste, find/replace, import and New do not renumber or reset it.
+* Per-block fonts show only in the 2x view; the 1x PAGE view uses the 4 px face.
+* No alignment, indent, bullet, bold/italic/underline rendering in PAGE mode (text only), and none in the 2x view either. Sub-script descenders are clipped.
 * Centre/right tab stops only affect the ruler.
-* Not implemented: the font-name record (tag 2) is neither written nor read yet (Stage 5).
+* Expanded memory is detected but unused (see tiers).
 * Changing paper/pitch/margins changes soft wrap breaks stored in the document (the text is unchanged).

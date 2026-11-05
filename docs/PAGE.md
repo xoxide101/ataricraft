@@ -36,9 +36,14 @@ Version stays 1. Header `flags` bit 1 (`0x02`) says "page trailer present". The 
 records, until end of file:    [tag u8][len u8][data]
   tag 1 page setup:  paper u8 (0 letter, 1 a4, 2 legal), pitch u8 (cpi), left u8, right u8, top u8, bottom u8,
                      ntabs u8, ntabs x ( pos u8, kind u8: 0 left, 1 centre, 2 right )
-  tag 2 font name:   ASCII bytes (stage 5)
+  tag 2 font name:   ASCII bytes, the font of paragraph 0 ('ROM' = the standard face)
+  tag 3 font change: p u16 (paragraph index, lo/hi), then the name; one record per change after paragraph 0
 ```
 
 Readers skip unknown tags and stop at a damaged record; a trailer that fails to parse gives the default page. Files without the flag have no page setup (`page: null` from `craftdoc.parse`; editors then use their defaults: the 64-column Atari screen layout).
 
-Not preserved: ACWriter on the Atari currently drops the trailer when it re-saves a file (it writes only header + payload), so page setup is lost on an Atari round trip until stage 4 teaches it to keep or edit the record.
+**One font per line block.** A font change is a paragraph property: tag 3 names the paragraph index where a face starts and it stays in force until the next record, so a line never mixes fonts. xCWriter keeps `font` per paragraph (picker in the Page view bar); importing RTF/docx with several fonts in one paragraph picks the dominant font by character count and shows a warning. `ROM` returns to the standard face (an empty name would mean "keep the previous face" for ACWriter). Names are 8.3-safe ids (`[A-Z0-9_-]`, at most 8 characters) because ACWriter looks the file up as `NAME.FNT`. ACWriter limits: 4 loaded fonts and 8 changes.
+
+Print mapping (not built; print is a separate output process, not the editing screen): dots = inches x dpi (Letter at 300 dpi 2550x3300, at 150 dpi 1275x1650); dots per column = dpi / cpi (30 at 10 cpi, 25 at 12 cpi, about 17.6 at 17 cpi at 300 dpi); dots per line = dpi / 6. See [FONT.md](FONT.md).
+
+ACWriter keeps the trailer on Save (it writes paper, pitch, margins, tabs and the font records again); the old "drops the trailer" limitation no longer applies.
