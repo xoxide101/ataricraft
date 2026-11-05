@@ -144,6 +144,14 @@ fs.mkdirSync(OUT, { recursive: true });
     assert(/Quarterly Report/.test(t) && /First bullet/.test(t) && /Name \| Qty \| Price/.test(t), label + ' import lost text/table: ' + t.slice(0, 120));
   }
   ok('Word-made .docx/.rtf/.doc import with headings, bullets and table rows as text');
+  // mixed-font docx (scripts/mkmixeddoc.ps1): one font per paragraph, the dominant one by characters, and a warning toast
+  await p.setInputFiles('#filein', path.join(ROOT, 'docs/samples/word/mixed-fonts.docx')); await p.waitForTimeout(400);
+  const mx = await p.evaluate(() => ({ t: XCW.plain(XW.doc), toast: document.body.innerText }));
+  assert(/Arial dominant/.test(mx.t) && /Only Courier New here/.test(mx.t), 'mixed docx text: ' + mx.t);
+  assert(/2 paragraph\(s\) mix fonts on one line/.test(mx.toast), 'mixed-font warning not shown');
+  const mi = require('../tools/craftimport.cjs').toModel(fs.readFileSync(path.join(ROOT, 'docs/samples/word/mixed-fonts.docx')), 'mixed-fonts.docx');
+  assert.deepStrictEqual(mi.paras.map((q) => q.srcFont), ['Arial', 'Times New Roman', 'Courier New', 'Arial']); assert.strictEqual(mi.mixedFonts, 2);
+  ok('mixed-font Word docx: dominant font per paragraph (Arial, Times New Roman, Courier New, Arial) and the "2 paragraph(s) mix fonts" warning');
   await p.click('#bhelp'); await shot('11-help');
  await p.click('#bhome'); await shot('12-home-recent');
   assert((await p.locator('#recent .card').count()) >= 1, 'recent docs');
