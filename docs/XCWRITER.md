@@ -45,7 +45,21 @@ The core takes a profile (`XCW.PROFILES.atari`: columns, rows, document limit, p
 
 ## Page model
 
-Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md](PAGE.md) (`tools/craftpage.cjs`, `XCW.Page`). `.CWD` files can carry it as a trailer; the matching-mode UI for it is stage 2 and is not built yet.
+Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md](PAGE.md) (`tools/craftpage.cjs`, `XCW.Page`). ``.CWD`` files carry it as a trailer.
+
+### Page view (third mode)
+
+`Page view` draws the true page (`web/js/xcwriter/editor-page.js`): paper size and pitch from the page setup, text wrapped at the usable columns (80 for Letter at 10 cpi, not the 64-column screen), the ACWriter pixel font, 6 lpi lines, page breaks every `textLines` lines. One logical pixel grid: a column is 5 / 4 / 3 px at 10 / 12 / 17 cpi and a line is 8 px, so a Letter page is 425 x 528 px (about 50 px per inch; 12 and 17 cpi differ from true scale by up to 4%, because whole-pixel columns are used). 17 cpi draws only the left 3 columns of each 4 px glyph, so it is legible only roughly (the font work in stage 3 addresses this).
+
+- **Zoom**: 50-400% (100% = 2 device px per logical px, close to life size), Fit width, Fit page, 1:1 pixels, Ctrl+wheel. Pixels are drawn as whole device pixels at every zoom (no canvas smoothing); 75% and 150% use uneven 1-2 px rows, so they are crisp but not perfectly regular.
+- **Scroll**: native scrollbars in both directions; the caret scrolls into view.
+- **Ruler**: inch labels, margin markers (blue, drag), page centre mark (red), left / centre / right tab stops (orange). Click to add a stop of the type chosen in the bar, drag to move, double-click or right-click to remove.
+- **Navigator**: thumbnail of all pages with the viewport rectangle, bottom right; click or drag to move the view.
+- **Page setup...**: paper (Letter, A4, Legal), pitch, margins, with a fit bar showing the usable columns, inches and lines per page, and whether the text width fits the 320 px Atari screen without scrolling. Changing the pitch resets margins to that pitch's defaults and clears tab stops.
+- **Tab key** inserts spaces up to the next stop; centre and right stops act as left stops while typing (they are honoured as real centre/right alignment only when text with tab characters is imported or laid out through `Page.expandTabs`).
+- The page (and its tab stops) is saved into the `.CWD` trailer from any mode once the document has one; opening a `.CWD` that has a trailer restores it. In Atari matching mode the view still wraps at 64 columns.
+
+Test: `node scripts/xcwriter-page-test.cjs` (screenshots `out/xcwp-*.png`). Not verified: other browsers (only Chrome), high-DPI displays (devicePixelRatio is handled but only tested at 1).
 
 ## Tests
 

@@ -18,7 +18,9 @@
     undo: [], redo: [], lastSnap: 0, pend: {}, lastKey: '', clip: null, misses: [], missSet: new Set(), spellOn: true, ignore: new Set(LS.get('xcw.ignore', [])),
     sourceFormat: null, find: { q: '', matches: [] },
   };
-  const cur = () => (XW.mode === 'atari' ? AT : HQ);
+  const isAt = () => XW.mode !== 'hq';
+  const cur = () => (XW.mode === 'page' ? PG : XW.mode === 'atari' ? AT : HQ);
+  const pgOpt = () => (XW.page ? { page: XW.page } : {});
   const sel = () => cur().getSel() || { a: { p: 0, o: 0 }, f: { p: 0, o: 0 } };
 
   // ---------- small UI helpers ----------
@@ -47,16 +49,17 @@
   }
   function setMode(m) {
     if (m === XW.mode) return;
-    if (m === 'atari') {
+    if (m === 'page' && !XW.page) XW.page = XCW.Page.normalize({});
+    const s = sel();
+    XW.mode = m;
+    if (m === 'atari' || m === 'page') {
       const before = XCW.atariWarnings(XW.doc);
       const fixed = atariSanitize(XW.doc);
       if (JSON.stringify(fixed) !== JSON.stringify(XW.doc)) { snapshot(true); XW.doc = fixed; }
       if (before.length) toast('Atari matching: ' + before.join('; '), 7000);
     }
-    const s = sel();
-    XW.mode = m;
-    document.body.classList.toggle('m-hq', m === 'hq'); document.body.classList.toggle('m-atari', m === 'atari');
-    $('mhq').classList.toggle('on', m === 'hq'); $('mat').classList.toggle('on', m === 'atari');
+    document.body.classList.toggle('m-hq', m === 'hq'); document.body.classList.toggle('m-atari', m === 'atari'); document.body.classList.toggle('m-page', m === 'page');
+    $('mhq').classList.toggle('on', m === 'hq'); $('mat').classList.toggle('on', m === 'atari'); $('mpg').classList.toggle('on', m === 'page');
     XW.pend = {};
     cur().load(XW.doc, s);
     if (document.body.classList.contains('s-editor')) cur().focus();
@@ -64,12 +67,13 @@
   }
   // characters ACWriter cannot show become their look-alike or ?, so that caret offsets map 1:1 onto screen cells
   function atariSanitize(doc) {
-    const c = XCW.cleanParas(doc);
+    const c = XCW.cleanParas(XW.mode === 'page' && XW.page ? XCW.Page.expandTabs(doc, XW.page) : doc);
     for (const p of c) for (const r of p.runs) r.t = [...r.t].map((ch) => (XCW.charOk(ch) || (ch.codePointAt(0) >= 0xe080 && ch.codePointAt(0) <= 0xe09f) ? ch : '?')).join('');
     return XCW.normalize(c);
   }
   $('mhq').onclick = () => setMode('hq');
   $('mat').onclick = () => setMode('atari');
+  $('mpg').onclick = () => setMode('page');
 
   // ---------- undo / change tracking ----------
   function snapshot(force) {
@@ -83,7 +87,7 @@
   XW.beforeEdit = () => snapshot(false);
   XW.edit = (fn) => { snapshot(false); fn(XW.doc); XW.doc = XCW.normalize(XW.doc); changed(); };
   function changed() { XW.dirty = true; XW.docVer++; scheduleSpell(); scheduleSave(); updateStatus(); }
-  function refreshAll() { XW.docVer++; scheduleSpell(); updateStatus(); updateTools(); if (XW.mode === 'atari') AT.render(); }
+  function refreshAll() { XW.docVer++; scheduleSpell(); updateStatus(); updateTools(); if (isAt()) cur().render(); }
   function doUndo(redo) {
     const from = redo ? XW.redo : XW.undo, to = redo ? XW.undo : XW.redo;
     if (!from.length) return;
@@ -128,14 +132,14 @@
   };
   XW.selChanged = () => {
     const s = sel(), key = s.f.p + ':' + s.f.o;
-    if (XW.mode === 'atari' && key !== XW.lastKey) XW.pend = {};
+    if (isAt() && key !== XW.lastKey) XW.pend = {};
     XW.lastKey = key; updateTools(); updateStatus();
   };
   function updateTools() {
     const s = sel(), [a, b] = XCW.order(s.a, s.f);
     for (const k of KEYS) {
       let on = XCW.hasStyle(XW.doc, a, b, k);
-      if (!cmp(a, b) && XW.mode === 'atari' && XW.pend[k] !== undefined) on = !!XW.pend[k];
+      if (!cmp(a, b) && isAt() && XW.pend[k] !== undefined) on = !!XW.pend[k];
       if (!cmp(a, b) && XW.mode === 'hq') { try { on = document.queryCommandState({ b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' }[k]); } catch (e) { /* ignore */ } }
       $('tb-' + k).classList.toggle('on', on);
     }
@@ -162,12 +166,12 @@
     if (k === 'f') return go(openFind);
     if (k === 's') return go(saveDialog);
     if (k === 'o') return go(() => $('filein').click());
-    if (k === 'a' && XW.mode === 'atari') return go(() => AT.setSel({ p: 0, o: 0 }, XCW.docEnd(XW.doc)));
+    if (k === 'a' && isAt()) return go(() => cur().setSel({ p: 0, o: 0 }, XCW.docEnd(XW.doc)));
     return false;
   };
 
   // ---------- clipboard ----------
-  function sanitizeFrag(frag) { return XW.mode === 'atari' ? atariSanitize(frag) : XCW.normalize(frag); }
+  function sanitizeFrag(frag) { return isAt() ? atariSanitize(frag) : XCW.normalize(frag); }
   function replaceSel(frag) {
     const s = sel(), [a, b] = XCW.order(s.a, s.f);
     snapshot(true);
@@ -205,7 +209,7 @@
     XW.misses = XW.spellOn ? XCW.spellCheck(dict, XW.doc, XW.ignore) : [];
     XW.missSet = new Set();
     for (const m of XW.misses) for (let o = m.start; o < m.end; o++) XW.missSet.add(m.p * 100000 + o);
-    if (XW.mode === 'hq') HQ.mark('xcw-miss', XW.misses); else AT.render();
+    if (XW.mode === 'hq') HQ.mark('xcw-miss', XW.misses); else cur().render();
     updateStatus();
   }
   XW.missAt = (p, o) => XW.missSet.has(p * 100000 + o);
@@ -225,7 +229,7 @@
     if (sug.length) sug.forEach((s) => add(s, () => {
       snapshot(true);
       XCW.deleteRange(XW.doc, { p: m.p, o: m.start }, { p: m.p, o: m.end });
-      const np = XCW.insertText(XW.doc, { p: m.p, o: m.start }, XW.mode === 'atari' ? atariSanitize([{ align: 'l', bullet: false, runs: [{ t: s, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t : s);
+      const np = XCW.insertText(XW.doc, { p: m.p, o: m.start }, isAt() ? atariSanitize([{ align: 'l', bullet: false, runs: [{ t: s, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t : s);
       refresh({ a: np, f: np });
     })); else add('(no suggestions)', null, 'dis');
     ctxEl.append(document.createElement('hr'));
@@ -241,12 +245,14 @@
     const n = words(XW.doc), s = sel();
     $('st-words').innerHTML = '<b>' + n.w + '</b> words, <b>' + n.c + '</b> characters';
     $('st-pos').textContent = 'Paragraph ' + (s.f.p + 1) + '/' + XW.doc.length + ', char ' + (s.f.o + 1) + (XW.misses.length ? ' | ' + XW.misses.length + ' spelling' : '');
-    const f = XCW.fit(XW.doc);
+    const f = XCW.fit(XW.doc, undefined, XW.mode === 'page' ? XW.page : null);
     $('st-fit').textContent = 'Fits in ACWriter: ' + (f.bytes / 1024).toFixed(1) + ' of ~11 KB' + (f.over ? ' (OVER by ' + f.over + ' bytes)' : '');
     $('st-fit').classList.toggle('over', !!f.over);
-    $('st-mode').textContent = XW.mode === 'atari' ? 'ATARI MATCHING' : 'HIGH QUALITY';
+    $('st-mode').textContent = isAt() ? (XW.mode === 'page' ? 'PAGE VIEW' : 'ATARI MATCHING') : 'HIGH QUALITY';
     $('docname').innerHTML = '<b>' + esc(XW.name) + '</b>' + (XW.sourceFormat ? ' &middot; opened as ' + esc(XW.sourceFormat) : '') + (XW.dirty ? ' &middot; edited' : '');
   }
+  XW.modal = modal; XW.closeModal = closeModal; XW.toast = toast;
+  XW.pageChanged = () => { XW.dirty = true; XW.warnVer = -1; scheduleSave(); refreshAll(); };
   XW.atariInfo = (f) => {
     $('fittext').innerHTML = '<b>' + (f.bytes / 1024).toFixed(1) + ' KB</b> of ~11 KB (' + f.bytes + ' / ' + f.limit + ' bytes, ' + f.pct + '%)';
     const m = $('meter'); m.className = 'meter' + (f.over ? ' over' : f.pct > 85 ? ' warn' : ''); m.firstElementChild.style.width = Math.min(100, f.pct) + '%';
@@ -256,10 +262,11 @@
   function updateStatusFit(f) { $('st-fit').textContent = 'Fits in ACWriter: ' + (f.bytes / 1024).toFixed(1) + ' of ~11 KB' + (f.over ? ' (OVER by ' + f.over + ' bytes)' : ''); $('st-fit').classList.toggle('over', !!f.over); }
 
   // ---------- documents, recents ----------
-  function loadDoc(paras, name, fmt, notes) {
+  function loadDoc(paras, name, fmt, notes, page) {
+    XW.page = page || (XW.mode === 'page' ? XCW.Page.normalize({}) : null);
     XW.doc = XCW.normalize(paras); XW.name = name; XW.sourceFormat = fmt || null; XW.id = 'd' + Date.now(); XW.dirty = false;
     XW.undo = []; XW.redo = []; XW.pend = {};
-    if (XW.mode === 'atari') XW.doc = atariSanitize(XW.doc);
+    if (isAt()) XW.doc = atariSanitize(XW.doc);
     screen('editor');
     cur().load(XW.doc, { a: { p: 0, o: 0 }, f: { p: 0, o: 0 } });
     refreshAll();
@@ -301,7 +308,7 @@
   function openBuf(buf, name, fmt) {
     try {
       const r = XCW.openDoc(buf, name, { format: fmt });
-      loadDoc(r.paras, baseName(name), r.format, r.notes);
+      loadDoc(r.paras, baseName(name), r.format, r.notes, r.page);
     } catch (err) { toast('Could not open ' + name + ': ' + err.message, 6000); }
   }
   function chooseFormat(name, buf) {
@@ -321,13 +328,13 @@
 
   // ---------- save / export ----------
   function saveDialog() {
-    const def = XW.mode === 'atari' ? 'cwd' : LS.get('xcw.fmt', 'rtf');
+    const def = isAt() ? 'cwd' : LS.get('xcw.fmt', 'rtf');
     modal('<h3>Save / export</h3><label>Format</label><select id="sfmt">' + XCW.SAVE_FORMATS.map((f) => '<option value="' + f.id + '"' + (f.id === def ? ' selected' : '') + '>' + esc(f.label) + '</option>').join('') + '</select><label>File name</label><input type="text" id="sname" value="' + esc(XW.name) + '"><div id="srep"></div><div class="row"><button id="scancel">Close</button><button class="on" id="sok">Download</button></div>');
-    const upd = () => { const r = XCW.save(XW.doc, $('sfmt').value); $('srep').innerHTML = '<label>What this format cannot keep</label>' + repHtml(r.report); };
+    const upd = () => { const r = XCW.save(XW.doc, $('sfmt').value, pgOpt()); $('srep').innerHTML = '<label>What this format cannot keep</label>' + repHtml(r.report); };
     $('sfmt').onchange = upd; upd();
     $('scancel').onclick = closeModal;
     $('sok').onclick = () => {
-      const fmt = $('sfmt').value, r = XCW.save(XW.doc, fmt), nm = ($('sname').value || 'Untitled').replace(/[\\/:*?"<>|]/g, '_');
+      const fmt = $('sfmt').value, r = XCW.save(XW.doc, fmt, pgOpt()), nm = ($('sname').value || 'Untitled').replace(/[\\/:*?"<>|]/g, '_');
       LS.set('xcw.fmt', fmt);
       download(r.bytes, nm.replace(/\.[^.]*$/, '') + '.' + r.ext, r.mime);
       if (nm) XW.name = nm.replace(/\.[^.]*$/, '');
@@ -380,7 +387,7 @@
     if (dir > 0 && m && cmp(a, b) && m.p === a.p && m.start === a.o) m = ms.find((x) => cmp({ p: x.p, o: x.start }, b) >= 0 && !(x.p === a.p && x.start === a.o));
     if (!m) m = dir > 0 ? ms[0] : ms[ms.length - 1];
     cur().setSel({ p: m.p, o: m.start }, { p: m.p, o: m.end });
-    if (XW.mode === 'atari') AT.render();
+    if (isAt()) cur().render();
   }
   $('fnext').onclick = () => gotoMatch(1); $('fprev').onclick = () => gotoMatch(-1);
   $('fq').oninput = () => { findAll(); }; $('fcase').onchange = findAll;
@@ -388,7 +395,7 @@
   $('fclose').onclick = () => { $('findbar').classList.remove('on'); if (XW.mode === 'hq') HQ.mark('xcw-find', []); cur().focus(); };
   function replaceAt(m, text) {
     XCW.deleteRange(XW.doc, { p: m.p, o: m.start }, { p: m.p, o: m.end });
-    return XCW.insertText(XW.doc, { p: m.p, o: m.start }, XW.mode === 'atari' ? atariSanitize([{ align: 'l', bullet: false, runs: [{ t: text, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t : text);
+    return XCW.insertText(XW.doc, { p: m.p, o: m.start }, isAt() ? atariSanitize([{ align: 'l', bullet: false, runs: [{ t: text, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t : text);
   }
   $('frep').onclick = () => {
     const s = sel(), [a, b] = XCW.order(s.a, s.f), ms = findAll(), m = ms.find((x) => x.p === a.p && x.start === a.o && x.end === b.o);
@@ -405,7 +412,7 @@
   // ---------- Send to Atari ----------
   const bc = window.BroadcastChannel ? new BroadcastChannel('xcwriter') : null;
   function sendAtari() {
-    const r = XCW.save(XW.doc, 'cwd'), nm = (hostName(XW.name.replace(/\.[^.]*$/, '')).replace(/\./g, '').slice(0, 8) || 'DOC') + '.CWD';
+    const r = XCW.save(XW.doc, 'cwd', pgOpt()), nm = (hostName(XW.name.replace(/\.[^.]*$/, '')).replace(/\./g, '').slice(0, 8) || 'DOC') + '.CWD';
     if (!bc) { toast('BroadcastChannel is not available: save the .CWD and add it to H: in the emulator'); return; }
     let answered = false;
     bc.onmessage = (e) => {
@@ -427,7 +434,7 @@
   $('sizesel').innerHTML = [10, 11, 12, 13, 14, 16, 18, 20].map((s) => '<option' + (s === 12 ? ' selected' : '') + '>' + s + '</option>').join('');
   const applyFont = () => HQ.setFont(FONTS[$('fontsel').value][1], $('sizesel').value, $('spacesel').value);
   $('fontsel').onchange = $('sizesel').onchange = $('spacesel').onchange = applyFont;
-  $('themesel').onchange = () => AT.setTheme($('themesel').value);
+  $('themesel').onchange = () => { AT.setTheme($('themesel').value); PG.setTheme($('themesel').value); };
   $('scalesel').onchange = () => { const k = +$('scalesel').value; AT.canvas.style.width = 320 * k + 'px'; AT.canvas.style.height = 192 * k + 'px'; };
 
   // ---------- help, nav ----------
