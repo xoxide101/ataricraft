@@ -8,6 +8,7 @@ const E = require('./craftexport.cjs');
 const D = require('./craftdoc.cjs');
 const cd = require('./cdict.cjs');
 const P = require('./craftpage.cjs');
+const CF = require('./craftfont.cjs');
 
 const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
@@ -348,7 +349,7 @@ function suggest(dict, word, max = 6) {
 }
 
 module.exports = {
-  Page: P, PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
+  Page: P, Font: CF, PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
   emptyPara, newDoc, clone, ptext, plain, toCells, fromCells, normalize, cmp, order, docEnd,
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,
   cleanParas, charOk, craftPayload, fit, toCwd, atariLines, atariWarnings,
