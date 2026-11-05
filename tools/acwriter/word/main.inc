@@ -71,7 +71,12 @@ mied sta $14C0,x
  lda #2
  sta pwprm
  jsr pwcalc
- lda #0
+ jsr bk_det
+ lda sv_xe
+ bne stx1
+ lda #39
+ sta cmsg
+stx1 lda #0
  jsr scan
  lda RTCLOK+2
  sta tm

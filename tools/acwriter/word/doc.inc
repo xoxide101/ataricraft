@@ -430,7 +430,11 @@ mu3 lda (src),y
 
 insert
  sta tmp
- jsr curptr
+ lda dend+1
+ cmp #$83
+ bcc ins0
+ rts
+ins0 jsr curptr
  jsr memup
  inc16 dend
 in4 ldy #0
