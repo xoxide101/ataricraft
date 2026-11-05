@@ -4,7 +4,7 @@
 const fs = require('fs');
 const R = __dirname + '/../../';
 const fnt = fs.readFileSync(R + 'web/library/fonts/atari/AtariPixel8.fnt');
-const OVR = require('./font4_fix.cjs');
+const OVR = require('./font4_art.cjs');
 
 function rows8(a) {
   const sc = a < 32 ? a + 64 : a < 96 ? a - 32 : a;

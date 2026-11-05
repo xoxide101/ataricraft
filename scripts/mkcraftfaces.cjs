@@ -5,9 +5,9 @@ const CF = require('../tools/craftfont.cjs'), M = require('../tools/craftmaster.
 const root = path.join(__dirname, '..'), force = process.argv.includes('--force');
 
 function build() {
-  const m = M.master(), d10 = CF.derive(m, 10, {}), d8 = CF.derive(m, 8, {});
-  d10.name = 'Craft 10x12'; d8.name = 'Craft 8x8';
-  return { m, d10, d8 };
+  const m = M.master(), d10 = CF.derive(m, 10, {}), f8 = require('../tools/craft8art.cjs').face();
+  d10.name = 'Craft 10x12';
+  return { m, d10, d8: f8 };
 }
 function write(fn, buf) {
   const p = path.join(root, 'font', fn);
