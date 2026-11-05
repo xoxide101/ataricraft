@@ -4,8 +4,8 @@
 // and Atari Letter Perfect, PaperClip, First XLEnt, Text Wizard and Bank Street Writer (explicit --format; see docs/formats).
 // AtariWriter inverse video, centre and right codes are decoded. See docs/IMPORT.md.
 const fs = require('fs'), path = require('path');
-const MAXPAYLOAD = 0x3fff; // format limit; ACWriter's own document area (-$8FFF) holds ATARI_DOC bytes
-const ATARI_DOC = 11264;
+const MAXPAYLOAD = 0x3fff; // format limit; ACWriter's own document area (-$83FF) holds ATARI_DOC bytes
+const ATARI_DOC = 7680;
 
 // ---- detection -----------------------------------------------------------
 function detect(buf, name) {
@@ -317,7 +317,7 @@ if (require.main === module) {
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
   fs.writeFileSync(outp, r.file);
-  console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to the 11264 byte ACWriter document area, ' + r.dropped + ' bytes dropped)' : ''} -> ${outp}`);
+  console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to the 7680 byte ACWriter document area, ' + r.dropped + ' bytes dropped)' : ''} -> ${outp}`);
 }
 
 module.exports = { convert, detect, toModel, layout, build, toCraft, clean, MAXPAYLOAD, ATARI_DOC, cutAtLine, fromText, fromAtascii, fromRtf, fromHtml, fromMd };

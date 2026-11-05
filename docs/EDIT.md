@@ -16,7 +16,7 @@ Keys (also in the Help page and the Edit/Search menus):
 
 Selection is drawn with the engine's inverse style (code 4 inserted at both ends temporarily).
 
-Clipboard: 384 bytes at $9C80-$9DFF, raw bytes including style codes; larger copies give "Too big". Find/replace text: 32 bytes each. Document area is $6400-$8FFF (~11 KB).
+Clipboard: 384 bytes at $9C80-$9DFF, raw bytes including style codes; larger copies give "Too big". Find/replace text: 32 bytes each. Document area is $6600-$83FF (~7.5 KB).
 
 Limitations: no undo; find cannot match across style codes; replace searches forward from the cursor only (go to line 1 first); selection moves redraw the whole page (slow in the emulator).
 

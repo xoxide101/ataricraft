@@ -25,7 +25,7 @@ for (let i = 4; i <= 12; i++) TEXT += 'line number ' + i + ' filler text that is
   const shot = (n) => p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-page-' + MODEL + '-' + n + '.png' });
   const menu = async (...ks) => { await key('Escape'); for (const k of ks) await key(k, 700); await p.waitForTimeout(1200); };
   const peek = (a, n = 1) => p.evaluate(([x, m]) => Array.from(ataricraft.peek(x, m)), [a, n]);
-  const doc = async (n = 600) => { const a = await peek(0x6500, n); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
+  const doc = async (n = 600) => { const a = await peek(0x6600, n); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
   let fails = 0;
   const check = (name, ok, extra) => { if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); };
   const hmode = async () => (await peek(0x1330))[0];
@@ -50,6 +50,24 @@ for (let i = 4; i <= 12; i++) TEXT += 'line number ' + i + ' filler text that is
   check('pitch change keeps the text', await same(), await doc(120));
   await menu('l', '2'); await p.waitForTimeout(1500); await shot('7b-tab');
   check('tab stop keeps the text', await same(), await doc(120));
+  // page setup round trip through the CRFT trailer (paper A4, 17 cpi, one centre tab)
+  const D = require('../tools/craftdoc.cjs');
+  const setup = async () => ({ pap: (await peek(0x13E9))[0], pit: (await peek(0x13EA))[0], lm: (await peek(0x13EB))[0], rm: (await peek(0x13EC))[0], nt: (await peek(0x13F3))[0], tp: (await peek(0x14E8))[0], tk: (await peek(0x14F0))[0] });
+  const s0 = await setup(); console.log('setup before save', JSON.stringify(s0));
+  await menu('f', 'a'); await type('h:pg.cwd'); await key('Enter', 3000);
+  const files = await p.evaluate(() => Object.fromEntries(Object.entries(FujiNet.emu.hostFiles()).map(([k, v]) => [k, Array.from(v)])));
+  const fk = Object.keys(files).find((k) => /^PG\.CWD$/i.test(k));
+  check('PG.CWD saved on H:', !!fk);
+  if (fk) {
+    const pg = D.parse(Buffer.from(files[fk])).h.page;
+    check('saved file carries the page trailer', !!pg && pg.paper === 'a4' && pg.pitch === 17 && pg.tabs.length === s0.nt && (s0.nt === 0 || pg.tabs[0].kind === 'c'), pg);
+  }
+  await menu('l', 'x'); await menu('l', 't'); await menu('l', 'p'); await menu('l', 'p');
+  check('setup changed before reload', JSON.stringify(await setup()) !== JSON.stringify(s0), await setup());
+  await menu('f', 'o'); await type('h:pg.cwd'); await key('Enter', 3000);
+  const s1 = await setup();
+  check('open restores paper, pitch, margins and tab stops', JSON.stringify(s1) === JSON.stringify(s0), [s0, s1]);
+  await shot('9-reloaded');
   await menu('l', 'v'); await p.waitForTimeout(2500);
   check('left PAGE mode', (await hmode()) === 0, await hmode()); await shot('8-back');
   check('document intact after leaving', await same());

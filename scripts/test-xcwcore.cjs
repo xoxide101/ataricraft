@@ -74,10 +74,10 @@ assert.strictEqual(lines.filter((l) => l.p === 4).length, 2);
 assert.strictEqual(lines.map((l) => l.cells.map((c) => c.ch).join('')).slice(0, 2).join('|'), 'Title|Plain bold it und x2 H2O');
 const rebuilt = {}; for (const l of lines) for (const c of l.cells) rebuilt[c.p] = (rebuilt[c.p] || '') + c.ch;
 doc.forEach((p, i) => assert.strictEqual(rebuilt[i], X.ptext(p)));
-const f = X.fit(doc); assert(f.bytes > 100 && f.limit === 11264 && f.over === 0);
+const f = X.fit(doc); assert(f.bytes > 100 && f.limit === 7680 && f.over === 0);
 const big = X.normalize([{ align: 'l', bullet: false, runs: [st('word '.repeat(4000))] }]);
 assert(X.fit(big).over > 0);
-const bc = X.save(big, 'cwd'); assert(bc.report[0].includes('cut at') && X.parseCwd(bc.bytes).h.length <= 11264);
+const bc = X.save(big, 'cwd'); assert(bc.report[0].includes('cut at') && X.parseCwd(bc.bytes).h.length <= 7680);
 
 // editing
 const ed = X.newDoc();
