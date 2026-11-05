@@ -57,4 +57,26 @@ const a1 = Buffer.concat([Buffer.from('ACF1'), Buffer.from([1, 5, 8, 1]), Buffer
 const o = CF.parse(a1);
 assert.strictEqual(o.adv, 5); assert.strictEqual(o.rows, 8); assert.strictEqual(CF.glyph(o, 65)[0], 0x80);
 ok('ACF1 file loads with inferred metrics (' + o.head + ' head, ' + o.desc + ' desc)');
+// wide (12x12) rows, derive, lock, serialize/json/inc roundtrips
+{
+  const m = CF.createSize(12, { name: 'T' });
+  for (let c = 33; c < 127; c++) m.glyphs[c] = [0, 0, 0xff80 & 0xffc0, 0x8040, 0x8040, 0xffc0, 0x8040, 0x8040, 0x8040, 0, 0, 0];
+  const p = CF.parse(CF.serialize(m));
+  assert.ok(CF.isWide(p)); assert.deepStrictEqual(p.glyphs[65], m.glyphs[65]); assert.strictEqual(p.adv, 12);
+  assert.deepStrictEqual(CF.fromJson(CF.toJson(m)).glyphs[66], m.glyphs[66]);
+  assert.ok(/cf_\d+L/.test(CF.toInc(m, 'cf')) || /_\d+L/.test(CF.toInc(m, 'cf')));
+  ok('12x12 wide rows roundtrip through ACF2, JSON and .inc');
+  const fam = CF.familyNew(m);
+  let r = CF.familyDerive(fam, [10, 8, 6, 5, 4]);
+  assert.deepStrictEqual(r.done, [10, 8, 6, 5, 4]);
+  for (const s of [10, 8, 6, 5, 4]) { const f = fam.sizes[s]; assert.strictEqual(f.origin, CF.ORIGIN.derived); for (let c = 33; c < 127; c++) assert.ok(f.glyphs[c].some((v) => v), s + ':' + c); assert.strictEqual(CF.parse(CF.serialize(f)).origin, 1); }
+  fam.sizes[8].glyphs[65][0] = 0x80; CF.markEdited(fam.sizes[8]); fam.sizes[4].locked = true;
+  const keep = fam.sizes[8].glyphs[65].join(), k4 = fam.sizes[4];
+  r = CF.familyDerive(fam, [8, 4, 6]);
+  assert.deepStrictEqual(r.skipped, [8, 4]); assert.strictEqual(fam.sizes[8].glyphs[65].join(), keep); assert.strictEqual(fam.sizes[4], k4);
+  assert.strictEqual(CF.parse(CF.serialize(fam.sizes[8])).origin, 2); assert.strictEqual(CF.parse(CF.serialize(fam.sizes[4])).locked, true);
+  r = CF.familyDerive(fam, [8, 4], { force: true }); assert.deepStrictEqual(r.done, [8, 4]);
+  assert.strictEqual(CF.familyFromJson(CF.familyToJson(fam)).sizes[10].adv, 10);
+  ok('derive 10/8/6/5/4 from a 12x12 master; hand-edited/locked kept, force overrides, origin persisted');
+}
 console.log('test-craftfont: ' + n + ' groups passed');
