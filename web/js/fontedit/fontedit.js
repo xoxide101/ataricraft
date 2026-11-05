@@ -4,6 +4,7 @@
   const CF = XCW.Font, $ = (id) => document.getElementById(id);
   const M = CF.METRICS;
   const COL = { head: '#4a78c8', cap: '#e8b030', xh: '#58c878', base: '#e05555', desc: '#9a6ad0' };
+  const hooks = [];
   const st = { f: null, slot: 65, tgt: 0, clip: null, undo: [], down: 0 };
 
   const b64ToBuf = (s) => Buffer.from(s, 'base64');
@@ -116,7 +117,8 @@
       }
       return out;
     });
-    const W = Math.max(8, ...cells.map((c) => c.length)) * f.adv + 8, lh = f.rows + lead, H = cells.length * lh + 8;
+    const prop = $('pvprop').checked, advOf = (code) => (prop && f.advs[f.map[code]]) || f.adv;
+    const W = Math.max(8 * f.adv, ...cells.map((c) => c.reduce((s, [code]) => s + advOf(code), 0))) + 8, lh = f.rows + lead, H = cells.length * lh + 8;
     pv.width = W * z; pv.height = H * z;
     px.fillStyle = '#f6f3ea'; px.fillRect(0, 0, pv.width, pv.height);
     cells.forEach((ln, li) => {
@@ -125,11 +127,13 @@
         for (const [k, col] of [[f.head, COL.cap], [f.xTop, COL.xh], [f.base + 1, COL.base], [f.head - 0, null]]) if (col) { px.fillStyle = col + '77'; px.fillRect(0, (y0 + k) * z, pv.width, 1); }
       }
       px.fillStyle = '#16181c';
-      ln.forEach(([code, mode], i) => {
-        const g = CF.render(f, code, mode);
-        for (let r = 0; r < f.rows; r++) if (g[r]) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) px.fillRect((4 + i * f.adv + q) * z, (y0 + r) * z, z, z);
+      let xo = 0;
+      ln.forEach(([code, mode]) => {
+        const g = CF.render(f, code, mode), i0 = xo; xo += advOf(code);
+        for (let r = 0; r < f.rows; r++) if (g[r]) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) px.fillRect((4 + i0 + q) * z, (y0 + r) * z, z, z);
       });
     });
+    hooks.forEach((h) => h());
   }
 
   function drawInfo() {
@@ -256,7 +260,96 @@
   $('lowgo').onclick = () => { CF.setCase(st.f, 'lower', num('lowslot', 0, 230)); st.slot = st.f.map[97]; renderAll(); };
   $('codeslot').onchange = () => { const c = cur(); st.f.map[c] = num('codeslot', 0, 255); st.slot = st.f.map[c]; renderAll(); };
   $('name').onchange = () => { st.f.name = $('name').value.slice(0, 40); };
-  for (const id of ['sample', 'pvz', 'pvg', 'lead']) $(id).addEventListener('input', drawPreview);
+  for (const id of ['sample', 'pvz', 'pvg', 'lead', 'pvprop']) $(id).addEventListener('input', drawPreview);
+
+  // ---- per-glyph metrics: ink width, bearings and advance ------------------------------------------------------------
+  // Left bearing = blank columns before the ink, right bearing = blank columns from the ink to the advance (so a normal glyph has 1).
+  // The advance of a glyph defaults to the font advance; an override is stored in f.advs[slot] (ACF2 flag 16, JSON "advs").
+  const inkSpan = (g) => { const f = st.f; let lo = 99, hi = -1; for (const r of g) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, r, q)) { lo = Math.min(lo, q); hi = Math.max(hi, q); } return hi < 0 ? null : [lo, hi]; };
+  const advOfSlot = (s) => st.f.advs[s] || st.f.adv;
+  function drawGM() {
+    const sp = inkSpan(target(false)), a = advOfSlot(st.slot);
+    $('gmname').textContent = '(slot ' + st.slot + ')';
+    $('gmw').value = sp ? sp[1] - sp[0] + 1 : 0; $('gmlb').value = sp ? sp[0] : 0; $('gmrb').value = sp ? a - sp[1] - 1 : 0; $('gmadv').value = a;
+  }
+  hooks.push(drawGM);
+  function setAdv(v) {
+    const f = st.f; v = Math.max(1, Math.min(16, v | 0));
+    if (v === f.adv) delete f.advs[st.slot]; else f.advs[st.slot] = v;
+    CF.markEdited(f); renderAll();
+  }
+  $('gmadv').onchange = () => setAdv(+$('gmadv').value);
+  $('gmreset').onclick = () => setAdv(st.f.adv);
+  $('gmrb').onchange = () => { const sp = inkSpan(target(false)); if (sp) setAdv(sp[1] + 1 + Math.max(0, +$('gmrb').value || 0)); };
+  function setLb(lb) {
+    const sp = inkSpan(target(false)); if (!sp) return;
+    const d = Math.max(0, Math.min(st.f.gw - (sp[1] - sp[0] + 1), lb)) - sp[0], m = mask();
+    if (d) edit((g) => g.map((b) => (d > 0 ? b >> d : (b << -d) & m)));
+  }
+  $('gmlb').onchange = () => setLb(+$('gmlb').value || 0);
+  $('gmtrim').onclick = () => setLb(0);
+  $('gmw').onchange = () => {
+    const f = st.f, sp = inkSpan(target(false)); if (!sp) return;
+    const w0 = sp[1] - sp[0] + 1, w1 = Math.max(1, Math.min(f.gw - sp[0], +$('gmw').value || 1));
+    if (w1 === w0) return;
+    edit((g) => g.map((b) => {
+      let o = 0;
+      for (let q = 0; q < w1; q++) if (CF.hasPx(f, b, sp[0] + Math.min(w0 - 1, Math.floor(((q + 0.5) * w0) / w1)))) o |= CF.bitMask(f, sp[0] + q);
+      return o;
+    }));
+  };
+
+  // ---- Send to ACWriter (H:), Use in xCWriter, master size ---------------------------------------------------------
+  // 8 px fonts go to ACWriter as an Atari charset (NAME.FNT, what Character > Font loads), other sizes as NAME.ACF.
+  function acwriterFile() {
+    const f = st.f, acf = exportAcf();
+    return f.adv === 8 && f.gw <= 8 ? [fname() + '.FNT', new Uint8Array(CF.toFnt(f))] : [fname() + '.ACF', new Uint8Array(acf)];
+  }
+  const directEmu = () => {
+    const c = [window.FujiNet && window.FujiNet.emu];
+    try { if (window.opener && !window.opener.closed) c.push(window.opener.FujiNet && window.opener.FujiNet.emu); } catch (e) { /* cross-origin opener */ }
+    return c.find((e) => e && typeof e.hostWrite === 'function') || null;
+  };
+  function viaChannel(name, bytes) {
+    return new Promise((res) => {
+      if (!window.BroadcastChannel) return res({ ok: false, msg: 'BroadcastChannel is not available' });
+      const bc = new BroadcastChannel('xcwriter'); let done = false;
+      const end = (r) => { if (done) return; done = true; bc.close(); res(r); };
+      bc.onmessage = (e) => {
+        const m = e.data || {};
+        if (m.type === 'pong') { if (!m.booted) end({ ok: false, msg: 'the emulator tab is open but not booted' }); else bc.postMessage({ type: 'hostWrite', name, bytes: Array.from(bytes) }); }
+        else if (m.type === 'result') end({ ok: m.ok, name: m.name, msg: m.msg });
+      };
+      bc.postMessage({ type: 'ping' });
+      setTimeout(() => end({ ok: false, msg: 'no emulator tab found: open index.html in this browser and boot ACWriter' }), 1500);
+    });
+  }
+  async function sendToAcwriter() {
+    const [name, bytes] = acwriterFile(), emu = directEmu();
+    let r;
+    if (emu) { emu.hostWrite(name, bytes); r = { ok: true, name, via: 'emulator' }; }
+    else { r = await viaChannel(name, bytes); r.via = 'channel'; }
+    toast(r.ok ? 'Wrote H:' + (r.name || name) + ' (' + bytes.length + ' bytes). In ACWriter use Character > Font and pick ' + (r.name || name) : 'Not sent: ' + r.msg);
+    return Object.assign({ name, size: bytes.length }, r);
+  }
+  $('bsend').onclick = sendToAcwriter;
+  function useInXcwriter() {
+    if (!window.XFACE) throw new Error('faces.js is not loaded');
+    const id = XFACE.faceId(fname() + '.acf'), bytes = new Uint8Array(exportAcf());
+    XFACE.saveUser(id, bytes);
+    toast('xCWriter font list now has ' + id + ' (Font editor group, this browser)');
+    return id;
+  }
+  $('buse').onclick = useInXcwriter;
+  $('bmaster').onclick = () => {
+    const f = st.f, fam = st.fam || CF.familyNew(f);
+    fam.sizes[f.adv] = f;
+    const old = fam.sizes[fam.master];
+    if (old && old !== f && old.origin === CF.ORIGIN.master) old.origin = CF.ORIGIN.hand;
+    fam.master = f.adv; f.origin = CF.ORIGIN.master; f.masterAdv = 0;
+    for (const g of Object.values(fam.sizes)) if (g !== f) g.masterAdv = f.adv;
+    st.fam = fam; refreshFam(); toast(CF.SIZES[f.adv].label + ' is now the master; Derive smaller rebuilds the sizes below it');
+  };
 
   // ---- files --------------------------------------------------------------------------------------------------------
   function exportAcf() { st.f.name = $('name').value || st.f.name; ensureRange(); return CF.serialize(st.f); }
@@ -301,6 +394,11 @@
     const buf = Buffer.from(bytes), magic = buf.toString('latin1', 0, 4);
     if (buf[0] === 0x89 && magic.slice(1) === 'PNG') { const f = await sheetFromPng(bytes, name.replace(/\.[^.]+$/, '')); setFont(f); return toast('PNG sheet imported as ' + CF.SIZES[f.adv].label); }
     if (buf.toString('latin1', 0, 9) === 'STARTFONT') { const f = CF.fromBdf(buf.toString('latin1'), { name: name.replace(/\.[^.]+$/, ''), size: +$('ttfadv').value !== 12 ? +$('ttfadv').value : 0 }); setFont(f); return toast('BDF imported as ' + CF.SIZES[f.adv].label); }
+    if (buf[0] === 0x1f && buf[1] === 0x8b) {
+      const raw = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+      return openBytes(new Uint8Array(raw), name.replace(/\.gz$/i, ''));
+    }
+    if (buf.length > 8 && buf.readUInt32LE(0) === 0x70636601) { const f = CF.fromPcf(buf, { name: name.replace(/\.[^.]+$/, ''), size: +$('ttfadv').value !== 12 ? +$('ttfadv').value : 0 }); setFont(f); return toast('PCF imported as ' + CF.SIZES[f.adv].label); }
     if (magic === 'ACF2') return setFont(CF.parse(buf));
     if (magic === 'ACF1') {
       const sizes = CF.acf1Sizes(buf);
@@ -343,6 +441,6 @@
     $('file').value = '';
   };
 
-  window.FE = { state: st, setFont, openBytes, exportAcf, render: renderAll, CF, select: (s) => { st.slot = s; renderAll(); } };
+  window.FE = { hooks, fname, sendToAcwriter, useInXcwriter, acwriterFile, toast, state: st, setFont, openBytes, exportAcf, render: renderAll, CF, select: (s) => { st.slot = s; renderAll(); } };
   setFont(CF.parse(b64ToBuf(window.CRAFT_FONTS.craft6)));
 })();
