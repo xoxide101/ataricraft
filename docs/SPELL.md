@@ -24,8 +24,8 @@ on random strings) and `EN8.CDC` (8 KB, ~2%).
 - 130XE: the table goes into an extended bank (bank detected at start).
 - Stock 64K: the table sits just below $9000 and is freed after the check;
   it fits only if the document is small (EN8 with a doc under ~5 KB).
-- To make room the document area moved from $5000 to $6000: the maximum
-  document is now 12 KB.
+- To make room the document area moved from $5000 to $6000, and later to $6400 for the edit code: the maximum
+  document is now about 11 KB ($6400-$8FFF).
 - Bank detection was only tested in the emulator, not on real hardware.
 
 Words checked: letters and inner apostrophes; numbers, 1-letter words and

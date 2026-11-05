@@ -26,7 +26,7 @@ ICAX1  = $034A
 ICAX2  = $034B
 
 SCR  = $A060
-DOC  = $6000
+DOC  = $6400
 LPL  = $9000
 LPH  = $9100
 BUF  = $0600
@@ -266,4 +266,30 @@ sv_ss  = $13E2
 sv_hc  = $13E3
 sv_pi  = $13E4
 DNM2   = $1470               ; fallback dictionary name (H:EN.CDC)
-NCMD   = 45
+NCMD   = 53
+
+; selection, clipboard, find / replace (word/edit.inc)
+FND    = $1480               ; find text, lower case (32)
+RPL    = $14A0               ; replacement text (32)
+ed_on  = $14C0               ; 1 = a selection exists
+ed_hl  = $14C1               ; 1 = its two highlight codes are in the document
+ed_rp  = $14C2               ; 1 = replace prompt (Y/N/A/Esc) active
+ed_fl  = $14C3               ; find text length
+ed_rl  = $14C4               ; replacement length
+ed_cnt = $14C5               ; replacements made
+ed_l   = $14C6
+ed_cl  = $14C8               ; clipboard length (2)
+ed_ap  = $14CA               ; selection anchor, raw document pointer
+ed_cp  = $14CC               ; cursor pointer
+ed_h1  = $14CE               ; pointers of the highlight codes
+ed_h2  = $14D0
+ed_q   = $14D2               ; work pointer
+ed_n   = $14D4               ; work count
+ed_ps  = $14D6               ; search range
+ed_pe  = $14D8
+ed_ep  = $14DA
+ed_lo  = $14DC               ; selection sorted
+ed_hi  = $14DE
+ed_t   = $14E0
+CLIP   = $9C80               ; clipboard, 384 bytes
+CLIPMAX = 384

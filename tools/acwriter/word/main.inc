@@ -56,6 +56,10 @@ start
  sta sv_on
  sta sv_dl
  sta sv_ni
+ ldx #39
+mied sta $14C0,x
+ dex
+ bpl mied
  lda #63
  sta rm
  lda #0

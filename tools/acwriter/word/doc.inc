@@ -3,7 +3,15 @@ handle
  lda sv_on
  beq hn_s
  jmp spkey
-hn_s lda pkon
+hn_s lda ed_rp
+ beq hn_r
+ jmp exrkey
+hn_r lda ed_on
+ beq hn_e
+ jsr expre
+ bcc hn_e
+ rts
+hn_e lda pkon
  beq hn00
  jmp pkkey
 hn00 lda cmdon
@@ -33,8 +41,12 @@ hn0b lda kk
  bne hn0k
  jmp cmdopen
 hn0k cmp #$0B
- bne hn1
+ bne hn0m
  jmp hspell
+hn0m jsr exkeys
+ bcc hn0n
+ rts
+hn0n lda kk
 hn1 cmp #$7F
  bne hn2
  jmp ribnext

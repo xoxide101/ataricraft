@@ -48,3 +48,8 @@ Final Word, Indus Writer, the Atari Wordprocessor, TextPro, SpeedScript and othe
 The 6502 app (`tools/acwriter`) opens on a start menu: N new, O open, S save, A save as, C convert/import, H help (also F1 or the Help key), E or Esc back to the document (kept in memory), Q quit to the OS. Up/Down + Return also pick an entry. The help page lists the keys and the import notes.
 
 Convert / import reads a plain text or ATASCII file through CIO and replaces the document: lines end at $9B/$0D/$0A, long lines wrap at 64 columns with soft breaks (14), inverse video becomes underline, Ctrl-C at the start of a line centres (two = right-aligns), other control bytes are dropped. File > Open uses the same path for any file without a CRFT header. It does not yet drop the command lines of foreign word processors; convert Letter Perfect, PaperClip, Text Wizard, Bank Street, RTF and Word files on the PC with `tools/craftimport.cjs` first. Test: `node scripts/acwriter-home.cjs`.
+
+## Document size limit
+
+ACWriter holds the document in RAM at $6400-$8FFF, so a document (and therefore an import) is limited to about 11 KB (11,264 bytes). Longer imports are truncated.
+

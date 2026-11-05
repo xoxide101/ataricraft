@@ -11,8 +11,9 @@ helpdoc
  dta b(13)
  dta b(1),c'Menus',b(1),b(13)
  dta c'File: New Open Save Save-As, Home page, Help page.',b(13)
- dta c'Edit: Top and End work. Undo/Cut/Copy/Paste: not yet.',b(13)
- dta c'Search: S spell check (^K), D dictionary name. Find: soon.',b(13)
+ dta c'Edit: Cut Copy Paste Mark Top End (no Undo yet).',b(13)
+ dta c'Search: F find N next R replace G goto line,',b(13)
+ dta c' S spell check (^K), D dictionary name.',b(13)
  dta c'Character: bold, italic, underline, W width, T tall,',b(13)
  dta c' L larger, S smaller, P superscript, D subscript,',b(13)
  dta c' O fonts, N no-break space, H no-break hyphen,',b(13)
@@ -46,6 +47,14 @@ helpdoc
  dta c'E or Esc: back to the document (it stays in memory).',b(13)
  dta c'Up/Down + Return also pick an entry. T cycles colours.',b(13)
  dta b(13)
+ dta b(1),c'Select / copy / find',b(1),b(13)
+ dta c'^S mark, then arrows extend; ^S or Esc clears.',b(13)
+ dta c'^Y copy  ^D cut  ^P paste (clipboard 384 bytes; with',b(13)
+ dta c'no mark they take the current line). Style kept.',b(13)
+ dta c'^F find (Return)  ^G next  ^R replace: Y N A Esc',b(13)
+ dta c'^L goto line  ^A line start  ^E line end.',b(13)
+ dta c'Find ignores case and wraps round the document.',b(13)
+ dta b(13)
  dta b(1),c'Spell check',b(1),b(13)
  dta c'^K or Search > Spell check checks from the cursor and',b(13)
  dta c'stops on each unknown word (shown inverse):',b(13)
@@ -57,7 +66,7 @@ helpdoc
  dta b(0)
 
 ; line 0 is the logo; entries start at line EL0, each 12 scanlines tall at double width
- org $5800
+  org $5F40
 homedoc
  dta b(15),b(10),b(30),b(1),c'A C  W R I T E R',b(1),b(13)
  dta b(15),b(5),c'----------------------------------------------------------------',b(13)
