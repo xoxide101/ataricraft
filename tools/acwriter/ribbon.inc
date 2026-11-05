@@ -299,7 +299,11 @@ br6e cmp #10
  lda #<rs17
  ldx #>rs17
  jmp br8
-br6g cmp #11
+br6g cmp #20
+ bcc br6h
+ jsr spmsg
+ jmp br9
+br6h cmp #11
  bcc br6f
  cmp #13
  bcs br6f

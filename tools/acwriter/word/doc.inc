@@ -1,6 +1,9 @@
 ; key handling
 handle
- lda pkon
+ lda sv_on
+ beq hn_s
+ jmp spkey
+hn_s lda pkon
  beq hn00
  jmp pkkey
 hn00 lda cmdon
@@ -27,8 +30,11 @@ hn0a lda kk
  jmp menuopen
 hn0b lda kk
  cmp #$18
- bne hn1
+ bne hn0k
  jmp cmdopen
+hn0k cmp #$0B
+ bne hn1
+ jmp hspell
 hn1 cmp #$7F
  bne hn2
  jmp ribnext

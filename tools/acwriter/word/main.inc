@@ -53,6 +53,9 @@ start
  sta hback
  sta hsel
  sta hchd
+ sta sv_on
+ sta sv_dl
+ sta sv_ni
  lda #63
  sta rm
  lda #0

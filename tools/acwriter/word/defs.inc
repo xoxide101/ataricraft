@@ -26,7 +26,7 @@ ICAX1  = $034A
 ICAX2  = $034B
 
 SCR  = $A060
-DOC  = $5000
+DOC  = $6000
 LPL  = $9000
 LPH  = $9100
 BUF  = $0600
@@ -224,3 +224,46 @@ ilsa   = $134D
 ilsc   = $134F
 ibyte  = $1350
 ichr   = $1351
+
+; spell checker (word/spell.inc)
+sv_on  = $1352               ; 1 while the prompt is shown
+sv_ln  = $1353               ; scan position
+sv_co  = $1354
+sv_us  = $1355               ; unknown word: start, end, line
+sv_ue  = $1356
+sv_ul  = $1357
+sv_wl  = $1358               ; letters in SWB
+sv_bad = $1359
+sv_cap = $135A
+sv_ms  = $135B
+sv_xe  = $135C               ; 1 = table in XE bank 1
+sv_tb  = $135D               ; hi byte of table base (window or RAM)
+sv_dl  = $135E               ; 1 = dictionary loaded
+sv_ni  = $135F               ; ignore list entries
+sv_sg  = $1360               ; suggestions
+sv_k   = $1361
+sv_pg  = $1362               ; table pages (hi byte count)
+sv_n   = $1363
+sv_i   = $1364
+sv_si  = $1365
+sv_pl  = $1366               ; hi byte of mask low page = pages-1
+sv_bo  = $1367               ; byte offset in table (2)
+sv_pr  = $1369               ; probe position (4)
+sv_h2  = $136D               ; step (4)
+sv_x   = $1371               ; hash (4)
+sv_fx  = $1375               ; hash of the word shown (4)
+sv_pc  = $1379               ; probe count
+sv_wo  = $137A               ; original length of the word shown
+sv_sl  = $137B               ; length of the word being tested
+sv_ty  = $137C
+sv_hm  = $137D               ; byte at probe
+sv_t   = $137E
+SWO    = $13A0               ; copy of the unknown word (24)
+SCB    = $13C0               ; candidate word (26)
+sv_m1  = $13E0               ; mask bytes of the bit index
+sv_m2  = $13E1
+sv_ss  = $13E2
+sv_hc  = $13E3
+sv_pi  = $13E4
+DNM2   = $1470               ; fallback dictionary name (H:EN.CDC)
+NCMD   = 45
