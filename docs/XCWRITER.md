@@ -63,6 +63,15 @@ Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md
 
 Test: `node scripts/xcwriter-page-test.cjs` (screenshots `out/xcwp-*.png`). Not verified: other browsers (only Chrome), high-DPI displays (devicePixelRatio is handled but only tested at 1).
 
+### Right-click menus and Clear history
+
+xCWriter replaces the browser context menu only on the editor surfaces and the start-screen recent list; the find box, toolbar inputs and everything else keep the normal browser menu (copy/paste/spelling).
+
+- Recent documents list: **Remove from list** (the card under the pointer) and **Clear history**.
+- Editor (all three views): Cut, Copy, Paste, Select all, **Clear undo history** and **Clear history**. On a misspelling the spelling suggestions, Ignore all and Add to my dictionary come first. Cut/Copy/Paste use the system clipboard when the browser allows it and the internal clipboard otherwise. The Open dialog is a native file picker, so it has no list of its own.
+- **Clear history** empties the recent list, the remembered save format (`xcw.fmt`), the undo/redo stacks and the find/replace boxes and matches, then toasts "History cleared". It never touches documents, saved or personal fonts (`craft.userfonts`, the font library) or the user dictionary (`xcw.ignore`). A document that is open when you clear is not re-added to the recent list until you edit it again. xCWriter stores no recent paper sizes or last-used folders.
+
+Test: `node scripts/xcwriter-history-test.cjs` (screenshots `out/xcwh-*.png`). Not verified: real clipboard permission prompts in non-Chrome browsers.
 ## Tests
 
 `node scripts/test-xcwcore.cjs` (core round trips for all formats), `node scripts/test-xcwriter-bundle.cjs` (browser bundle equals Node output for 21 inputs x 7 formats), `node scripts/xcwriter-test.cjs` (Playwright: samples, typing, spelling, undo, find, both modes, round trip, convert, screenshots in `out/xcw-*.png`). The older `craft-convert`, `test-dict` and `test-import-*` scripts still pass.
