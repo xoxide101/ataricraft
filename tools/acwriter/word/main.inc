@@ -3,7 +3,11 @@ start
  lda PORTB
  ora #2
  sta PORTB
- jsr mktab
+ jsr bk_det
+ lda sv_xe
+ beq stn
+ jsr ovstage
+stn jsr mktab
  jsr mkfont
  jsr mkst
  jsr openk

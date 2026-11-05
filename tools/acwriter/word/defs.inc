@@ -26,7 +26,7 @@ ICAX1  = $034A
 ICAX2  = $034B
 
 SCR  = $A060
-DOC  = $6600
+DOC  = $6400
 LPL  = $9000
 LPH  = $9100
 BUF  = $0600

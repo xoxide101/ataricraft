@@ -25,7 +25,7 @@ for (let i = 4; i <= 12; i++) TEXT += 'line number ' + i + ' filler text that is
   const shot = (n) => p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-page-' + MODEL + '-' + n + '.png' });
   const menu = async (...ks) => { await key('Escape'); for (const k of ks) await key(k, 700); await p.waitForTimeout(1200); };
   const peek = (a, n = 1) => p.evaluate(([x, m]) => Array.from(ataricraft.peek(x, m)), [a, n]);
-  const doc = async (n = 600) => { const a = await peek(0x6600, n); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
+  const doc = async (n = 600) => { const a = await peek(0x6400, n); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
   let fails = 0;
   const check = (name, ok, extra) => { if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); };
   const hmode = async () => (await peek(0x1330))[0];

@@ -846,8 +846,8 @@ __def("craftimport.cjs", function (module, exports, require) {
 // and Atari Letter Perfect, PaperClip, First XLEnt, Text Wizard and Bank Street Writer (explicit --format; see docs/formats).
 // AtariWriter inverse video, centre and right codes are decoded. See docs/IMPORT.md.
 const fs = require('fs'), path = require('path');
-const MAXPAYLOAD = 0x3fff; // format limit; ACWriter's own document area (-$83FF) holds ATARI_DOC bytes
-const ATARI_DOC = 7680;
+const MAXPAYLOAD = 0x3fff; // format limit; ACWriter's own document area ($6400-$8FFF) holds ATARI_DOC bytes
+const ATARI_DOC = 11264;
 
 // ---- detection -----------------------------------------------------------
 function detect(buf, name) {
@@ -1159,7 +1159,7 @@ if (require.main === module) {
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
   fs.writeFileSync(outp, r.file);
-  console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to the 7680 byte ACWriter document area, ' + r.dropped + ' bytes dropped)' : ''} -> ${outp}`);
+  console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to the 11264 byte ACWriter document area, ' + r.dropped + ' bytes dropped)' : ''} -> ${outp}`);
 }
 
 module.exports = { convert, detect, toModel, layout, build, toCraft, clean, MAXPAYLOAD, ATARI_DOC, cutAtLine, fromText, fromAtascii, fromRtf, fromHtml, fromMd };
@@ -1749,7 +1749,7 @@ const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
 
 const PROFILES = {
-  atari: { id: 'atari', name: 'Atari 8-bit (ACWriter)', cols: 64, rows: 20, docLimit: 7680, payloadMax: I.MAXPAYLOAD, pixelW: 320, pixelH: 192, pitch: 5, lineH: 8, ext: 'CWD' },
+  atari: { id: 'atari', name: 'Atari 8-bit (ACWriter)', cols: 64, rows: 20, docLimit: 11264, payloadMax: I.MAXPAYLOAD, pixelW: 320, pixelH: 192, pitch: 5, lineH: 8, ext: 'CWD' },
 };
 
 // ---- model basics ----------------------------------------------------------

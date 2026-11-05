@@ -10,7 +10,7 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.addInitScript(() => localStorage.setItem('ac.profile', 'natural'));
   await p.goto('file:///' + ROOT + '/web/index.html');
   await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
-  await p.selectOption('#model', '800xl').catch(() => {});
+  await p.selectOption('#model', '130xe').catch(() => {});
   await p.click('#boot'); await p.waitForTimeout(3000);
   const bytes = Array.from(fs.readFileSync(ROOT + '/tools/acwriter/' + (process.argv[2] || 'poc5.xex')));
   await p.evaluate((a) => FujiNet.emu.bootFile('POC.XEX', new Uint8Array(a)), bytes);

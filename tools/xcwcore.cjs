@@ -14,7 +14,7 @@ const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
 
 const PROFILES = {
-  atari: { id: 'atari', name: 'Atari 8-bit (ACWriter)', cols: 64, rows: 20, docLimit: 7680, payloadMax: I.MAXPAYLOAD, pixelW: 320, pixelH: 192, pitch: 5, lineH: 8, ext: 'CWD' },
+  atari: { id: 'atari', name: 'Atari 8-bit (ACWriter)', cols: 64, rows: 20, docLimit: 11264, payloadMax: I.MAXPAYLOAD, pixelW: 320, pixelH: 192, pitch: 5, lineH: 8, ext: 'CWD' },
 };
 
 // ---- model basics ----------------------------------------------------------

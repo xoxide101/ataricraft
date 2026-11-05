@@ -58,7 +58,7 @@ exgap clc
  lda dend+1
  adc ed_n+1
  sta dst+1
- cmp #$84
+ cmp #$90
  bcc xg0
  sec
  rts
@@ -152,7 +152,7 @@ exhlon lda ed_ap
  cmp ed_cp+1
  beq xh9
 xh1 lda dend+1
- cmp #$83
+ cmp #$90
  bcs xh9
  jsr exsrt
  mv16 ed_hi,ed_q
@@ -774,22 +774,4 @@ exrepm lda #<exrm1
 exrm1 dta c'Replaced ',b(0)
 exrm2 dta c' time(s).',b(0)
 
-exmt dta a(exm27),a(exm28),a(exm29),a(exm30),a(exm31),a(exm32),a(exm33),a(exm34),a(exm35),a(exm36),a(exm37),a(exm38),a(exm39)
-exm27 dta c'Not found.',b(0)
-exm28 dta c'Nothing to copy.',b(0)
-exm29 dta c'Too big for the clipboard (384 bytes).',b(0)
-exm30 dta c'Copied.',b(0)
-exm31 dta c'Cut.',b(0)
-exm32 dta c'Replace?  Y yes  N skip  A all  Esc stop',b(0)
-exm33 dta c'Replaced.',b(0)
-exm34 dta c'Mark set. Move, then ^Y copy or ^D cut. Esc clears.',b(0)
-exm35 dta c'The clipboard is empty.',b(0)
-exm36 dta c'No room in the document.',b(0)
-exm37 dta c'Replace stopped.',b(0)
-exm38 dta c'Found. ^G next, ^R replace, Esc clears.',b(0)
-exm39 dta c'Needs a 130XE (128K): no extended RAM found.',b(0)
-exprl dta l(exp5),l(exp5),l(exp7),l(exp8)
-exprh dta h(exp5),h(exp5),h(exp7),h(exp8)
-exp5 dta c'Find: ',b(0)
-exp7 dta c'Replace with (Return alone deletes): ',b(0)
-exp8 dta c'Go to line: ',b(0)
+; prompt texts (exprl/exprh) live in msgs.inc (resident)

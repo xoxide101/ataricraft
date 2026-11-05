@@ -28,7 +28,7 @@ TEXT += 'the end Beta final\r';
   const shot = (n) => p.locator('canvas').first().screenshot({ path: ROOT + '/out/acw-edit-' + MODEL + '-' + n + '.png' });
   const menu = async (...ks) => { await key('Escape'); for (const k of ks) await key(k, 700); await p.waitForTimeout(800); };
   const peek = (a, n = 1) => p.evaluate(([x, m]) => ataricraft.peek(x, m), [a, n]);
-  const doc = async (n = 400) => { const a = await p.evaluate(([x, m]) => Array.from(ataricraft.peek(x, m)), [0x6600, n]); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
+  const doc = async (n = 400) => { const a = await p.evaluate(([x, m]) => Array.from(ataricraft.peek(x, m)), [0x6400, n]); return String.fromCharCode(...a.map((c) => c === 13 || c === 14 ? 124 : c < 32 ? 94 : c)); };
   const lineOf = async (n) => (await doc(900)).split('|')[n];
   let fails = 0;
   const check = (name, ok, extra) => { if (!ok) fails++; console.log(ok ? 'ok  ' : 'FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); };

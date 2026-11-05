@@ -102,12 +102,12 @@ for (const f of ['rich.docx', 'rich.rtf', 'rich.doc']) {
   const long = Buffer.from('{\\rtf1\\ansi{\\fonttbl{\\f0 Arial;}}' + body + '}', 'latin1');
   const r = I.convert(long, 'long.rtf');
   assert(r.truncated && r.dropped > 0 && r.bytes <= I.ATARI_DOC); const h = D.parse(r.file);
-  assert(h.h.checksumOk && h.h.length === r.bytes && r.bytes < 0x1e00, 'ACWriter rejects payloads of 0x1E00 bytes or more');
+  assert(h.h.checksumOk && h.h.length === r.bytes && r.bytes < 0x2c00, 'ACWriter rejects payloads of 0x2c00 bytes or more');
   const last = r.file[r.file.length - 1]; assert(last === 13, 'ends at a paragraph end');
   const again = X.openDoc(r.file, 'LONG.CWD'); assert(again.paras.length > 60 && /paragraph \d+ of a long real-world RTF document\.$/.test(textOf(again.paras)));
   assert(I.convert(long, 'long.rtf', { max: 0x3fff }).bytes <= 0x3fff);
   const short = I.convert(Buffer.from('{\\rtf1 hi\\par}'), 'a.rtf'); assert(!short.truncated);
-  ok('long RTF: cut to ' + r.bytes + ' bytes at a paragraph end (' + r.dropped + ' dropped), flagged truncated, checksum valid, below ACWriter 7680 byte area');
+  ok('long RTF: cut to ' + r.bytes + ' bytes at a paragraph end (' + r.dropped + ' dropped), flagged truncated, checksum valid, below ACWriter 11264 byte area');
   const x = X.save(X.openDoc(long, 'long.rtf').paras, 'cwd'); assert(x.report.some((m) => /cut at/.test(m)) && x.report.length); ok('xCWriter reports the same cut when saving .CWD');
 }
 {

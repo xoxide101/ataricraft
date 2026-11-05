@@ -2,7 +2,7 @@
 ; writes a Craft stream at DOC (rules follow fromAtascii in tools/craftimport.cjs: line ends
 ; $9B/$0D/$0A, wrap at 64 columns with soft break 14, hard end 13, inverse -> underline 3,
 ; $03 at line start -> centre marker 15 / right 16, control bytes dropped).
-ILIM = $83
+ILIM = $90
 doimport
  lda #<DOC
  sta dend
