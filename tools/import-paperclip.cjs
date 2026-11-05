@@ -17,9 +17,11 @@ function read(buf) {
     if (c === 0x7e) { t += '    '; continue; }
     if (c >= 0x80 && c <= 0x9f) {
       if (c === 0x94 && t === '' && !p.runs.length) { skip = true; continue; } // special/dot line (header etc.)
-      if (c === 0x8c || c === 0x92) { // left/right margin: code, decimal digits, EOL
+      if (c === 0x8c || c === 0x92) { // left/right margin: code, decimal digits, EOL; text before it ends its paragraph
+        if (t || p.runs.length) eol();
         while (k + 1 < buf.length && buf[k + 1] >= 0x30 && buf[k + 1] <= 0x39) k++;
         if (buf[k + 1] === 0x9b) k++;
+        any = false;
         continue;
       }
       put();

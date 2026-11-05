@@ -24,7 +24,7 @@ const S = read(fs.readFileSync(path.join(dir, 'paperclip-scripts.bin')));
 assert.strictEqual(S.length, 1);
 assert.deepStrictEqual(S[0].runs.map((x) => [x.t, x.sup, x.sub]), [['ab', 0, 0], ['UP', 1, 0], ['cd', 0, 0], ['DN', 0, 1], ['ef', 0, 0]]);
 const M = read(fs.readFileSync(path.join(dir, 'paperclip-margins.bin')));
-assert.deepStrictEqual(M.map((x) => x.runs.map((y) => y.t).join('')), ['ab', 'cdef']);
+assert.deepStrictEqual(M.map((x) => x.runs.map((y) => y.t).join('')), ['ab', 'cd', 'ef']);
 console.log('paperclip import OK');
 
 
