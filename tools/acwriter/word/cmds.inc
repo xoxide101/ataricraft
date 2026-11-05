@@ -401,9 +401,9 @@ thb dta b($0F),b($94),b($1C),b($C8)
 thi dta b(0),b($0A),b(0),b(0)
 
 cejl dta l(hst-1),l(hst-1),l(hst-1),l(htop-1),l(hend-1),l(hnew-1),l(hsize-1),l(hrul-1),l(hbar-1),l(hcol-1),l(hlin-1)
- dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1),l(hwid-1),l(hht-1),l(hnb-1),l(hnh-1),l(hspc-1),l(hsup-1),l(hsub-1),l(hleg-1),l(hpick-1),l(hsave-1),l(hopen-1),l(hsas-1),l(hhome-1), l(hhelp-1), l(hspell-1),l(hsetdict-1),l(excut-1),l(excopy-1),l(expaste-1),l(exmark-1),l(exfind-1),l(exnext-1),l(exrepl-1),l(exgoto-1),l(hpgv-1),l(hpgpap-1),l(hpgpit-1),l(hpglm-1),l(hprm-1),l(hpgtl-1),l(hpgtc-1),l(hpgtr-1),l(hpgtx-1)
+ dta l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hmenu-1),l(hstub-1),l(hhil-1),l(hmar-1),l(hal-1),l(hac-1),l(har-1),l(haj-1),l(hind-1),l(hbul-1),l(hfont-1),l(hlg-1),l(hsm-1),l(hwid-1),l(hht-1),l(hnb-1),l(hnh-1),l(hspc-1),l(hsup-1),l(hsub-1),l(hleg-1),l(hpick-1),l(hsave-1),l(hopen-1),l(hsas-1),l(hhome-1), l(hhelp-1), l(hspell-1),l(hsetdict-1),l(excut-1),l(excopy-1),l(expaste-1),l(exmark-1),l(exfind-1),l(exnext-1),l(exrepl-1),l(exgoto-1),l(hpgv-1),l(hpgpap-1),l(hpgpit-1),l(hpglm-1),l(hprm-1),l(hpgtl-1),l(hpgtc-1),l(hpgtr-1),l(hpgtx-1),l(hpgz-1)
 cejh dta h(hst-1),h(hst-1),h(hst-1),h(htop-1),h(hend-1),h(hnew-1),h(hsize-1),h(hrul-1),h(hbar-1),h(hcol-1),h(hlin-1)
- dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1),h(hwid-1),h(hht-1),h(hnb-1),h(hnh-1),h(hspc-1),h(hsup-1),h(hsub-1),h(hleg-1),h(hpick-1),h(hsave-1),h(hopen-1),h(hsas-1),h(hhome-1), h(hhelp-1), h(hspell-1),h(hsetdict-1),h(excut-1),h(excopy-1),h(expaste-1),h(exmark-1),h(exfind-1),h(exnext-1),h(exrepl-1),h(exgoto-1),h(hpgv-1),h(hpgpap-1),h(hpgpit-1),h(hpglm-1),h(hprm-1),h(hpgtl-1),h(hpgtc-1),h(hpgtr-1),h(hpgtx-1)
+ dta h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hmenu-1),h(hstub-1),h(hhil-1),h(hmar-1),h(hal-1),h(hac-1),h(har-1),h(haj-1),h(hind-1),h(hbul-1),h(hfont-1),h(hlg-1),h(hsm-1),h(hwid-1),h(hht-1),h(hnb-1),h(hnh-1),h(hspc-1),h(hsup-1),h(hsub-1),h(hleg-1),h(hpick-1),h(hsave-1),h(hopen-1),h(hsas-1),h(hhome-1), h(hhelp-1), h(hspell-1),h(hsetdict-1),h(excut-1),h(excopy-1),h(expaste-1),h(exmark-1),h(exfind-1),h(exnext-1),h(exrepl-1),h(exgoto-1),h(hpgv-1),h(hpgpap-1),h(hpgpit-1),h(hpglm-1),h(hprm-1),h(hpgtl-1),h(hpgtc-1),h(hpgtr-1),h(hpgtx-1),h(hpgz-1)
 ; menu keys: Esc opens, then a menu letter, then an item letter
 menuopen
  lda #1
@@ -515,8 +515,8 @@ it1 dta b(3),c'U',b(3),c'ndo  Cu',b(3),c't',b(3),c'  ',b(3),c'C',b(3),c'opy  ',b
 it2 dta b(3),c'F',b(3),c'ind  ',b(3),c'N',b(3),c'ext  ',b(3),c'R',b(3),c'eplace  ',b(3),c'G',b(3),c'oto  ',b(3),c'S',b(3),c'pell check  ',b(3),c'D',b(3),c'ictionary',b(0)
 it3 dta b(3),c'R',b(3),c'egular ',b(3),c'B',b(3),c'old ',b(3),c'I',b(3),c'talic ',b(3),c'U',b(3),c'nderline ',b(3),c'S',b(3),c'maller ',b(3),c'L',b(3),c'arger F',b(3),c'o',b(3),c'nts',b(0)
 it4 dta b(3),c'L',b(3),c'eft  ',b(3),c'C',b(3),c'enter  ',b(3),c'R',b(3),c'ight  ',b(3),c'J',b(3),c'ustify  ',b(3),c'B',b(3),c'ullet  ',b(3),c'I',b(3),c'ndent',b(0)
-ip6 dta c'V',b(53),c'P',b(54),c'T',b(55),c'L',b(56),c'R',b(57),c'1',b(58),c'2',b(59),c'3',b(60),c'X',b(61),b(0)
-it6 dta b(3),c'V',b(3),c'iew page  ',b(3),c'P',b(3),c'aper  pi',b(3),c'T',b(3),c'ch  ',b(3),c'L',b(3),c'eft  ',b(3),c'R',b(3),c'ight  tab ',b(3),c'1',b(3),c' ',b(3),c'2',b(3),c' ',b(3),c'3',b(3),c' ',b(3),c'X',b(3),c' clear',b(0)
+ip6 dta c'V',b(53),c'P',b(54),c'T',b(55),c'L',b(56),c'R',b(57),c'1',b(58),c'2',b(59),c'3',b(60),c'X',b(61),c'Z',b(62),b(0)
+it6 dta b(3),c'V',b(3),c'iew page  ',b(3),c'P',b(3),c'aper  pi',b(3),c'T',b(3),c'ch  ',b(3),c'L',b(3),c'eft  ',b(3),c'R',b(3),c'ight  tab ',b(3),c'1',b(3),c' ',b(3),c'2',b(3),c' ',b(3),c'3',b(3),c' ',b(3),c'X',b(3),c' clear ',b(3),c'Z',b(3),c'oom',b(0)
 it5 dta b(3),c'R',b(3),c'uler  ',b(3),c'T',b(3),c'abs  ',b(3),c'M',b(3),c'argins  ',b(3),c'B',b(3),c'ars  ',b(3),c'C',b(3),c'olor  Si',b(3),c'z',b(3),c'e  ',b(3),c'L',b(3),c'ine  ',b(3),c'H',b(3),c'ilite',b(0)
 
 dli1

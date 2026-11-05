@@ -34,6 +34,7 @@ pwm2   = $14E4
 pwo    = $14E5               ; cursor pointer saved over a rewrap (2)
 pwtp   = $14E8               ; tab stop columns on the paper (8)
 pwtk   = $14F0               ; kinds 0 left, 1 centre, 2 right (8)
+pzoom  = $14E7               ; 1 = PAGE mode shows the 2x zoom (word/zoom.inc)
 SWB  = $1380                 ; spell: word, 24 letter codes (a=1..z=26, apostrophe=27)
 DNM  = $1450                 ; dictionary file name, 0x9B ended
 ISB  = $9B00                 ; session ignore list: 32 entries x 4 byte hash

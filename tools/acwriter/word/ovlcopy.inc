@@ -86,12 +86,12 @@ ovs2 sta $4000,y
  cli
  ldx ovsx
  inx
- cpx #3
+ cpx #4
  bne ovs0
  lda #$FF
  sta ovid
  rts
 ovdp dta b(0)
-ovsp dta b($A1,$A9,$B1)
-ovnp dta b([E.e_end-SLA+255]/256),b([S.e_end-SLA+255]/256),b([P.e_end-SLA+255]/256)
-ovbp dta b(0,0,0)
+ovsp dta b($A1,$A9,$B1,$BD)
+ovnp dta b([E.e_end-SLA+255]/256),b([S.e_end-SLA+255]/256),b([P.e_end-SLA+255]/256),b([Z.e_end-SLA+255]/256)
+ovbp dta b(0,0,0,0)

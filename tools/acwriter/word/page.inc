@@ -863,7 +863,10 @@ pwnav lda pwx
  jsr pwscl
  sta pwvx
  lda #80
- sta pwa
+ ldx pzoom
+ beq pwn00
+ lda #20
+pwn00 sta pwa
  jsr pwscl
  sta pwvw
  lda pwvx
