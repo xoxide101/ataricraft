@@ -43,6 +43,10 @@ web/js/xcwriter/editor-hq.js, editor-atari.js, app.js   the only DOM code
 
 The core takes a profile (`XCW.PROFILES.atari`: columns, rows, document limit, pixel size). A C64 profile means a new profile plus its own importer/exporter pair; the UI reads sizes from the profile. Electron can `require('tools/xcwcore.cjs')` directly and reuse the same UI files.
 
+## Page model
+
+Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md](PAGE.md) (`tools/craftpage.cjs`, `XCW.Page`). `.CWD` files can carry it as a trailer; the matching-mode UI for it is stage 2 and is not built yet.
+
 ## Tests
 
 `node scripts/test-xcwcore.cjs` (core round trips for all formats), `node scripts/test-xcwriter-bundle.cjs` (browser bundle equals Node output for 21 inputs x 7 formats), `node scripts/xcwriter-test.cjs` (Playwright: samples, typing, spelling, undo, find, both modes, round trip, convert, screenshots in `out/xcw-*.png`). The older `craft-convert`, `test-dict` and `test-import-*` scripts still pass.

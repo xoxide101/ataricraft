@@ -230,6 +230,7 @@ function fromMd(buf) {
 // ---- layout to the Craft stream --------------------------------------------
 // Wraps at `cols`, writes style toggles, alignment and bullet markers, 13 at a paragraph end and 14 at a soft wrap.
 function layout(paras, cols) {
+  if (cols && typeof cols === 'object') { const P = require('./craftpage.cjs'); paras = P.expandTabs(paras, cols); cols = P.usableCols(cols); }
   const bytes = []; const A = { c: 15, r: 16, j: 17 };
   const on = { b: 0, i: 0, u: 0, sup: 0, sub: 0 }; const CODE = { b: 1, i: 2, u: 3, sup: 11, sub: 12 };
   for (const p of paras) {
@@ -259,12 +260,14 @@ function layout(paras, cols) {
   return bytes;
 }
 
-function build(bytes, cols, lines) {
+function build(bytes, cols, lines, page) {
   const pay = Buffer.from(bytes); let sum = 0;
   for (const b of pay) sum = (sum + b) & 0xffff;
   const h = Buffer.alloc(16);
   h.write('CRFT', 0, 'latin1'); h[4] = 1; h[5] = 0x57; h.writeUInt16LE(pay.length, 8); h.writeUInt16LE(Math.min(lines, 255), 10); h[12] = cols; h[13] = 20; h.writeUInt16LE(sum, 14);
-  return Buffer.concat([h, pay]);
+  if (!page) return Buffer.concat([h, pay]);
+  const P = require('./craftpage.cjs'); h[6] |= P.FLAG_TRAILER; h[12] = P.usableCols(page);
+  return Buffer.concat([h, pay, P.toTrailer(page)]);
 }
 
 // Any supported input to the intermediate model (opts.unicode keeps text un-transliterated; opts.allowCraft also reads .CWD).
@@ -298,18 +301,18 @@ function cutAtLine(bytes, max) {
 }
 
 function convert(buf, name, opts = {}) {
-  const cols = opts.cols || 64;
+  const cols = opts.page ? require('./craftpage.cjs').usableCols(opts.page) : opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
-  let bytes = layout(paras, cols), truncated = false, dropped = 0;
+  let bytes = layout(paras, opts.page || cols), truncated = false, dropped = 0;
   const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
   if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }
   const lines = bytes.filter((b) => b === 13 || b === 14).length;
-  return { format, file: build(bytes, cols, lines), truncated, dropped, paragraphs: paras.length, bytes: bytes.length };
+  return { format, file: build(bytes, cols, lines, opts.page), truncated, dropped, paragraphs: paras.length, bytes: bytes.length };
 }
 
 if (require.main === module) {
   const args = process.argv.slice(2); const o = {}; const pos = [];
-  for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else pos.push(args[i]); }
+  for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else if (args[i] === '--paper') (o.page = o.page || {}).paper = args[++i]; else if (args[i] === '--pitch') (o.page = o.page || {}).pitch = +args[++i]; else pos.push(args[i]); }
   if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]'); process.exit(2); }
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
