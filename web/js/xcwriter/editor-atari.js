@@ -26,9 +26,13 @@
   }
   function text(s, x, y, ink) { for (let k = 0; k < s.length; k++) drawCell(x + k * 5, y, { ch: s[k], b: 0, i: 0, u: 0, sup: 0, sub: 0 }, ink); }
 
+  // 2x view = ACWriter PAGE mode zoom (word/zoom.inc): page layout, 20 columns x 9 lines of 16x16 cells from true 8x8 glyphs, scrolled sideways
+  let view2 = false, pwx = 0, top2 = 0;
+  const pinfo = () => XCW.Page.info(XW.page || XCW.Page.normalize({}));
+  const WCOLS = () => (view2 ? pinfo().usable : COLS);
   // column of every cell on a line, after alignment and justification
   function cols(line) {
-    const base = line.bullet ? 2 : 0, width = COLS - base, cells = line.cells;
+    const base = line.bullet ? 2 : 0, width = WCOLS() - base, cells = line.cells;
     let t = cells.length; while (t > 0 && cells[t - 1].ch === ' ') t--;
     const xs = new Array(cells.length + 1);
     let off = 0;
@@ -45,7 +49,7 @@
     }
     return xs;
   }
-  function relayout() { lines = XCW.atariLines(XW.doc); }
+  function relayout() { lines = view2 ? XCW.atariLines(XW.doc, undefined, XW.page || XCW.Page.normalize({})) : XCW.atariLines(XW.doc); }
   function posToLC(pos) {
     let best = null;
     for (let li = 0; li < lines.length; li++) {
@@ -60,8 +64,49 @@
   const normPos = (pos) => { const d = XW.doc, p = Math.max(0, Math.min(d.length - 1, pos.p)); return { p, o: Math.max(0, Math.min(XCW.ptext(d[p]).length, pos.o)) }; };
   const xsCol = (cl) => { const l = lines[cl.li]; return l ? cols(l)[cl.k] : 0; };
 
+  // ACWriter's default 2x face is the OS ROM charset; paragraphs with a font use their own 8x8 face
+  function glyph8(face, ch) {
+    const c = ch.charCodeAt(0);
+    if (c < 32 || c > 127) return null;
+    const f = XFACE.use(face || 'ATARIROM') || XFACE.use('ATARIROM');
+    const bm = f && (face ? XFACE.b8(face, c) : XFACE.b8('ATARIROM', c));
+    return bm || null;
+  }
+  function render2() {
+    relayout();
+    caret = normPos(caret); anchor = normPos(anchor);
+    const th = theme, pi = pinfo(), cl = posToLC(caret);
+    const lx = pi.left, l0 = lines[cl.li], ccol = l0 ? lx + cols(l0)[cl.k] : 0;
+    if (follow) {
+      if (ccol < pwx) pwx = ccol; else if (ccol - pwx >= 19) pwx = ccol - 18;
+      if (cl.li < top2) top2 = cl.li; else if (cl.li - top2 >= 9) top2 = cl.li - 8;
+    }
+    top2 = Math.max(0, Math.min(top2, Math.max(0, lines.length - 1)));
+    px(0, 0, 320, 192, th.bg); px(0, 0, 320, 8, th.bar);
+    text(' ACWriter PAGE 2x zoom', 0, 0, th.bt);
+    const [s, e] = cmp(anchor, caret) <= 0 ? [anchor, caret] : [caret, anchor], has = cmp(s, e) !== 0;
+    for (let r = 0; r < 9; r++) {
+      const li = top2 + r; if (li >= lines.length) break;
+      const l = lines[li], xs = cols(l), y = 16 + r * 16, face = XW.doc[l.p] && XW.doc[l.p].font;
+      l.cells.forEach((c, k) => {
+        const col = lx + xs[k] - pwx; if (col < 0 || col >= 20) return;
+        const x = col * 16, here = { p: l.p, o: l.o0 + k }, on = has && cmp(here, s) >= 0 && cmp(here, e) < 0 || (!has && li === cl.li && k === cl.k && blink);
+        if (on) px(x, y, 16, 16, th.ink);
+        const g = c.ch === ' ' ? null : glyph8(face, c.ch);
+        if (!g) return;
+        for (let gy = 0; gy < 8; gy++) for (let gx = 0; gx < 8; gx++) if (g.px[gy * 8 + gx]) px(x + gx * 2, y + gy * 2, 2, 2, on ? th.bg : th.ink);
+      });
+      if (!has && li === cl.li && cl.k >= (l.cells.length)) { const col = lx + xs[cl.k] - pwx; if (blink && col >= 0 && col < 20) px(col * 16, y, 16, 16, th.ink); }
+    }
+    px(0, 168, 320, 24, th.bar);
+    text('Ln ' + (cl.li + 1) + '/' + lines.length + ' Col ' + (ccol + 1) + '  2x 8x8 faces', 2, 169, th.bt);
+    text('page ' + pi.paper + ' ' + pi.pitch + ' cpi', 2, 177, th.bt);
+    XW.atariInfo(XCW.fit(XW.doc));
+  }
+
   function render() {
     if (!document.body.classList.contains('m-atari')) return;
+    if (view2) return render2();
     relayout();
     caret = normPos(caret); anchor = normPos(anchor);
     const cl = posToLC(caret);
@@ -172,6 +217,7 @@
   cv.addEventListener('contextmenu', (e) => { relayout(); XW.contextMenu(e, pointPos(e)); });
   setInterval(() => { blink ^= 1; if (document.activeElement === ta) render(); }, 530);
 
+  XFACE.onChange(() => render());
   window.AT = {
     render,
     load(doc, s) { if (s) { anchor = s.a; caret = s.f; } render(); },
@@ -180,6 +226,8 @@
     focus() { ta.focus(); },
     setTheme(n) { theme = THEMES[n] || THEMES.paper; render(); },
     lines() { relayout(); return lines; },
+    setView2(on) { view2 = !!on; pwx = 0; top2 = 0; follow = true; render(); },
+    get view2() { return view2; },
     canvas: cv,
   };
 })();

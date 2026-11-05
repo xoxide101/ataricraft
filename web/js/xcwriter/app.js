@@ -151,8 +151,14 @@
       $('tb-' + k).classList.toggle('on', on);
     }
     const para = XW.doc[Math.min(a.p, XW.doc.length - 1)];
-    if (para) { for (const al of ['l', 'c', 'r', 'j']) $('tb-' + al).classList.toggle('on', para.align === al); $('tb-bul').classList.toggle('on', !!para.bullet); }
+    if (para) {
+      for (const al of ['l', 'c', 'r', 'j']) $('tb-' + al).classList.toggle('on', para.align === al); $('tb-bul').classList.toggle('on', !!para.bullet);
+      const fs = $('pgfont'), pf = para.font || ''; if (fs.value !== pf && [...fs.options].some((o) => o.value === pf)) fs.value = pf;
+    }
   }
+  // load the faces a document uses as soon as it is opened, so every view can draw them
+  XW.useFaces = () => { for (const p of XW.doc) if (p.font) XFACE.use(p.font); };
+  XFACE.onChange(() => { XW.useFaces(); updateTools(); });
   for (const k of KEYS) $('tb-' + k).onmousedown = (e) => { e.preventDefault(); toggle(k); };
   for (const al of ['l', 'c', 'r', 'j']) $('tb-' + al).onmousedown = (e) => { e.preventDefault(); setAlign(al); };
   $('tb-bul').onmousedown = (e) => { e.preventDefault(); toggleBullet(); };
@@ -276,7 +282,7 @@
     if (isAt()) XW.doc = atariSanitize(XW.doc);
     screen('editor');
     cur().load(XW.doc, { a: { p: 0, o: 0 }, f: { p: 0, o: 0 } });
-    refreshAll();
+    refreshAll(); XW.useFaces();
     saveRecent();
     if (notes && notes.length) toast(notes.join('; '), 6000);
   }
@@ -441,6 +447,7 @@
   $('sizesel').innerHTML = [10, 11, 12, 13, 14, 16, 18, 20].map((s) => '<option' + (s === 12 ? ' selected' : '') + '>' + s + '</option>').join('');
   const applyFont = () => HQ.setFont(FONTS[$('fontsel').value][1], $('sizesel').value, $('spacesel').value);
   $('fontsel').onchange = $('sizesel').onchange = $('spacesel').onchange = applyFont;
+  $('atview').onchange = () => { AT.setView2($('atview').value === '2'); AT.focus(); };
   $('themesel').onchange = () => { AT.setTheme($('themesel').value); PG.setTheme($('themesel').value); };
   $('scalesel').onchange = () => { const k = +$('scalesel').value; AT.canvas.style.width = 320 * k + 'px'; AT.canvas.style.height = 192 * k + 'px'; };
 
