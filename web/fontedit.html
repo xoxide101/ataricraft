@@ -37,8 +37,9 @@
   <span class="logo">Craft <i>Font Editor</i></span>
   <select id="builtin" title="Built-in fonts"><option value="craft6">Built-in: Craft 6 px (10 cpi)</option><option value="craft5">Built-in: Craft 5 px (12 cpi)</option><option value="craft4">Built-in: Craft 4 px (17 cpi)</option></select>
   <select id="flist" title="Font library: shipped (font/), Atari ROM and Personal (font_personal/, never committed). Run node scripts/fontlist.cjs to refresh."><option value="">Font library...</option></select>
-  <button id="bopen">Open font / TTF...</button>
-  <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt" hidden>
+  <button id="bnew" title="Start a blank font at the size chosen in the TTF list">New</button>
+  <button id="bopen">Open font / TTF / BDF / PNG...</button>
+  <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt,.bdf,.png" hidden>
   <select id="ttfadv" title="Size a TTF/OTF is rasterised to (12x12 is the master; derive the smaller sizes from it)"><option value="12">TTF -> 12x12 master</option><option value="10">TTF -> 10x12</option><option value="8">TTF -> 8x8</option><option value="6">TTF -> 6 px</option><option value="5">TTF -> 5 px</option><option value="4">TTF -> 4 px</option></select>
   <label title="Coverage that turns a pixel on">threshold <input type="number" id="ttfth" min="0.1" max="0.9" step="0.05" value="0.3"></label>
   <label title="Bolder (+) or lighter (-) strokes">weight <input type="number" id="ttfw" min="-2" max="3" step="1" value="0"></label>
@@ -53,6 +54,7 @@
   </span>
   <label style="color:var(--dim)">Name <input type="text" id="name" maxlength="40"></label>
   <button id="bsave">Save .acf</button><button id="bjson">Save .json</button><button id="binc">Save .inc</button>
+  <button id="bfnt" title="Atari 1K charset (8 px fonts)">Export .fnt</button><button id="bpng" title="16 x 16 sheet of all glyph cells (re-importable)">Export PNG sheet</button><button id="bprev" title="The preview text as a PNG">Export preview</button>
   <span id="info"></span>
 </header>
 <main>
@@ -78,7 +80,12 @@
         <div class="row">
           <button id="up">Up</button><button id="down">Down</button><button id="left">Left</button><button id="right">Right</button>
           <button id="clr">Clear</button><button id="inv">Invert</button><button id="mir">Mirror</button>
-          <button id="cpy">Copy</button><button id="pst">Paste</button><button id="undo">Undo</button>
+          <button id="cpy">Copy</button><button id="pst">Paste</button><button id="undo">Undo</button><button id="redo">Redo</button>
+          <button id="flipv" title="Flip top to bottom">Flip V</button><button id="rot" title="Rotate the ink square a quarter turn">Rotate</button>
+        </div>
+        <div class="row" title="Left button draws, right button erases (pencil); line, rect and fill apply on release / click">
+          <span class="seg"><button data-tool="pen" class="tool on">Pencil</button> <button data-tool="line" class="tool">Line</button> <button data-tool="rect" class="tool">Rect</button> <button data-tool="fill" class="tool">Fill</button></span>
+          <label><input type="checkbox" id="rectfill"> filled rect</label>
         </div>
       </div>
       <div style="min-width:280px;flex:1">

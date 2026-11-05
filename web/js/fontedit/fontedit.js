@@ -57,7 +57,7 @@
     if (!tab[c] && create) tab[c] = CF.render(f, c, st.tgt);
     return tab[c] || CF.render(f, c, st.tgt);
   }
-  const pushUndo = () => { st.undo.push(JSON.stringify([st.slot, st.tgt, target(false)])); if (st.undo.length > 100) st.undo.shift(); };
+  const pushUndo = () => { st.undo.push(JSON.stringify([st.slot, st.tgt, target(false)])); st.redo = []; if (st.undo.length > 100) st.undo.shift(); };
 
   // ---- drawing -----------------------------------------------------------------------------------------------
   const grid = $('grid'), gx = grid.getContext('2d'), ed = $('edit'), ex = ed.getContext('2d'), pv = $('preview'), px = pv.getContext('2d');
@@ -160,9 +160,53 @@
     drawEdit(); drawGrid(); drawPreview();
     return val;
   }
-  ed.addEventListener('mousedown', (e) => { pushUndo(); st.down = 1; st.dragVal = paint(e); e.preventDefault(); });
-  window.addEventListener('mousemove', (e) => { if (st.down) paint(e, st.dragVal); });
-  window.addEventListener('mouseup', () => { st.down = 0; });
+  const cellAt = (e) => {
+    const r = ed.getBoundingClientRect(), f = st.f;
+    const q = Math.floor(((e.clientX - r.left) / r.width) * f.gw), y = Math.floor(((e.clientY - r.top) / r.height) * f.rows);
+    return q < 0 || y < 0 || q >= f.gw || y >= f.rows ? null : [q, y];
+  };
+  const setPixel = (g, q, y, val) => { const bit = CF.bitMask(st.f, q); g[y] = val ? g[y] | bit : g[y] & ~bit; };
+  const getPixel = (g, q, y) => CF.hasPx(st.f, g[y], q);
+  function lineCells(a, b) {
+    const out = []; let [x0, y0] = a; const [x1, y1] = b;
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (;;) { out.push([x0, y0]); if (x0 === x1 && y0 === y1) break; const e2 = 2 * err; if (e2 >= dy) { err += dy; x0 += sx; } if (e2 <= dx) { err += dx; y0 += sy; } }
+    return out;
+  }
+  function applyShape(tool, a, b, val) {
+    const g = target(true), f = st.f;
+    if (tool === 'line') lineCells(a, b).forEach(([q, y]) => setPixel(g, q, y, val));
+    else if (tool === 'rect') {
+      const [x0, x1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])], [y0, y1] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])], fill = $('rectfill').checked;
+      for (let y = y0; y <= y1; y++) for (let q = x0; q <= x1; q++) if (fill || y === y0 || y === y1 || q === x0 || q === x1) setPixel(g, q, y, val);
+    } else if (tool === 'fill') {
+      const from = getPixel(g, a[0], a[1]), seen = new Set(), stack = [a];
+      if (from === !!val) return;
+      while (stack.length) {
+        const [q, y] = stack.pop(), k = y * 32 + q;
+        if (q < 0 || y < 0 || q >= f.gw || y >= f.rows || seen.has(k) || getPixel(g, q, y) !== from) continue;
+        seen.add(k); setPixel(g, q, y, val); stack.push([q + 1, y], [q - 1, y], [q, y + 1], [q, y - 1]);
+      }
+    }
+    CF.markEdited(f); renderAll();
+  }
+  st.tool = 'pen';
+  document.querySelectorAll('.tool').forEach((b) => { b.onclick = () => { st.tool = b.dataset.tool; document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x === b)); }; });
+  ed.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const c = cellAt(e); if (!c) return;
+    pushUndo();
+    const val = e.button === 2 ? 0 : 1;
+    if (st.tool === 'fill') { applyShape('fill', c, c, val); return; }
+    st.down = 1; st.start = c; st.shapeVal = val;
+    if (st.tool === 'pen') st.dragVal = paint(e, e.button === 2 ? 0 : undefined);
+  });
+  window.addEventListener('mousemove', (e) => { if (st.down && st.tool === 'pen') paint(e, st.dragVal); });
+  window.addEventListener('mouseup', (e) => {
+    if (st.down && (st.tool === 'line' || st.tool === 'rect')) { const c = cellAt(e); if (c) applyShape(st.tool, st.start, c, st.shapeVal); }
+    st.down = 0;
+  });
   ed.addEventListener('contextmenu', (e) => e.preventDefault());
 
   const edit = (fn) => { pushUndo(); const g = target(true), n = fn(g.slice()); for (let i = 0; i < g.length; i++) g[i] = n[i]; CF.markEdited(st.f); renderAll(); };
@@ -176,14 +220,30 @@
   $('mir').onclick = () => edit((g) => g.map((b) => { let o = 0; for (let q = 0; q < st.f.gw; q++) if (CF.hasPx(st.f, b, q)) o |= CF.bitMask(st.f, st.f.gw - 1 - q); return o; }));
   $('cpy').onclick = () => { st.clip = target(false).slice(); toast('Glyph copied'); };
   $('pst').onclick = () => { if (st.clip) edit(() => st.clip.slice()); };
-  $('undo').onclick = () => {
-    const u = st.undo.pop(); if (!u) return;
+  const restore = (u) => {
     const [slot, tgt, rows] = JSON.parse(u); st.slot = slot; st.tgt = tgt;
     const g = target(true); for (let i = 0; i < g.length; i++) g[i] = rows[i];
     document.querySelectorAll('.tgt').forEach((b) => b.classList.toggle('on', +b.dataset.t === st.tgt));
     renderAll();
   };
-  window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && document.activeElement.tagName !== 'TEXTAREA') { $('undo').click(); e.preventDefault(); } });
+  $('undo').onclick = () => {
+    const u = st.undo.pop(); if (!u) return;
+    const [slot, tgt] = JSON.parse(u); st.slot = slot; st.tgt = tgt;
+    (st.redo = st.redo || []).push(JSON.stringify([slot, tgt, target(false).slice()]));
+    restore(u);
+  };
+  $('redo').onclick = () => {
+    const u = (st.redo || []).pop(); if (!u) return;
+    const [slot, tgt] = JSON.parse(u); st.slot = slot; st.tgt = tgt;
+    st.undo.push(JSON.stringify([slot, tgt, target(false).slice()]));
+    restore(u);
+  };
+  $('flipv').onclick = () => edit((g) => CF.flipV(st.f, g));
+  $('rot').onclick = () => edit((g) => CF.rotate(st.f, g));
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') return;
+    if (e.key === 'z' && !e.shiftKey) { $('undo').click(); e.preventDefault(); } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { $('redo').click(); e.preventDefault(); }
+  });
   document.querySelectorAll('.tgt').forEach((b) => {
     b.onclick = () => { st.tgt = +b.dataset.t; document.querySelectorAll('.tgt').forEach((x) => x.classList.toggle('on', x === b)); renderAll(); };
   });
@@ -217,10 +277,30 @@
   $('bjson').onclick = () => { exportAcf(); download(fname() + '.json', CF.toJson(st.f), 'application/json'); };
   $('binc').onclick = () => { exportAcf(); download(fname() + '.inc', CF.toInc(st.f, 'cf'), 'text/plain'); };
   $('bopen').onclick = () => $('file').click();
+  $('bnew').onclick = () => { setFont(CF.createSize(+$('ttfadv').value, { name: 'New font' })); toast('Blank ' + CF.SIZES[st.f.adv].label + ' font'); };
+  $('bfnt').onclick = () => { if (st.f.gw > 8) return toast('Atari charsets are 8 px: derive the 8x8 size first'); download(fname() + '.fnt', CF.toFnt(st.f), 'application/octet-stream'); };
+  const canvasPng = (cv, name) => cv.toBlob((bl) => { const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = name; document.body.appendChild(a); a.click(); a.remove(); });
+  $('bpng').onclick = () => {
+    const sh = CF.toSheet(st.f), cv = document.createElement('canvas'); cv.width = sh.w; cv.height = sh.h;
+    const c = cv.getContext('2d'), im = c.createImageData(sh.w, sh.h);
+    for (let i = 0; i < sh.data.length; i++) { const v = sh.data[i] ? 0 : 255; im.data.set([v, v, v, 255], i * 4); }
+    c.putImageData(im, 0, 0); canvasPng(cv, fname() + '.sheet.png');
+  };
+  $('bprev').onclick = () => canvasPng(pv, fname() + '.preview.png');
+  async function sheetFromPng(bytes, name) {
+    const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+    const c = cv.getContext('2d'); c.drawImage(bmp, 0, 0);
+    const im = c.getImageData(0, 0, bmp.width, bmp.height).data, data = new Uint8Array(bmp.width * bmp.height);
+    for (let i = 0; i < data.length; i++) data[i] = im[i * 4 + 3] > 127 && (im[i * 4] + im[i * 4 + 1] + im[i * 4 + 2]) / 3 < 128 ? 1 : 0;
+    return CF.fromSheet(data, bmp.width, bmp.height, { name });
+  }
   $('builtin').onchange = () => setFont(CF.parse(b64ToBuf(window.CRAFT_FONTS[$('builtin').value])));
 
   async function openBytes(bytes, name) {
     const buf = Buffer.from(bytes), magic = buf.toString('latin1', 0, 4);
+    if (buf[0] === 0x89 && magic.slice(1) === 'PNG') { const f = await sheetFromPng(bytes, name.replace(/\.[^.]+$/, '')); setFont(f); return toast('PNG sheet imported as ' + CF.SIZES[f.adv].label); }
+    if (buf.toString('latin1', 0, 9) === 'STARTFONT') { const f = CF.fromBdf(buf.toString('latin1'), { name: name.replace(/\.[^.]+$/, ''), size: +$('ttfadv').value !== 12 ? +$('ttfadv').value : 0 }); setFont(f); return toast('BDF imported as ' + CF.SIZES[f.adv].label); }
     if (magic === 'ACF2') return setFont(CF.parse(buf));
     if (magic === 'ACF1') {
       const sizes = CF.acf1Sizes(buf);
