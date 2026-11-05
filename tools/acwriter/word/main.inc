@@ -3,6 +3,7 @@ start
  lda PORTB
  ora #2
  sta PORTB
+ jsr bk_cnt
  jsr bk_det
  lda sv_xe
  beq stn

@@ -52,6 +52,7 @@ fz7    = $07E1
 fz8    = $07E2
 fzp    = $07E3               ; paragraph of the line being drawn
 fzf    = $07E4               ; font slot of that line
+sv_nb  = $07E5               ; extended banks found at startup (bk_cnt)
 SWB  = $1380                 ; spell: word, 24 letter codes (a=1..z=26, apostrophe=27)
 DNM  = $1450                 ; dictionary file name, 0x9B ended
 ISB  = $9B00                 ; session ignore list: 32 entries x 4 byte hash
