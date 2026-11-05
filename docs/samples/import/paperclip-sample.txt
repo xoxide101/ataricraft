@@ -1,0 +1,9 @@
+paperclip-sample.bin  (71 bytes) - saved by PaperClip 1.0 (Batteries Included) via Ctrl+Shift+W "D1:SAMPLE".
+Contents (3 paragraphs):
+ 1. "Title"                       centred
+ 2. "Plain" + bold "bold" + underline "under" + " x" + superscript "2" + " h" + subscript "2" + "o"
+ 3. "right side"                  block right ($87)
+ 4. "Second paragraph here"        (no trailing EOL in the file)
+(Paragraph 3 is the third line; the file therefore has 4 paragraphs.)
+Other samples: paperclip-scripts.bin  "ab"+sup"UP"+"cd"+sub"DN"+"ef";  paperclip-margins.bin  left margin 5 / right margin 60 codes.
+

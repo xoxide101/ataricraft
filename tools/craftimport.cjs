@@ -1,6 +1,7 @@
 // Imports other document formats into a Craft Word document (docs/CRAFT-FORMAT.md).
-// Usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx] [--cols N]
-// Formats: ATASCII text (incl. AtariWriter), ASCII/UTF-8 text, RTF, HTML, Markdown, Word .docx and .doc.
+// Usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]
+// Formats: ATASCII text (incl. AtariWriter), ASCII/UTF-8 text, RTF, HTML, Markdown, Word .docx and .doc,
+// and Atari Letter Perfect, PaperClip, First XLEnt, Text Wizard and Bank Street Writer (explicit --format; see docs/formats).
 // AtariWriter inverse video, centre and right codes are decoded. See docs/IMPORT.md.
 const fs = require('fs'), path = require('path');
 const MAXPAYLOAD = 0x3fff;
@@ -12,6 +13,7 @@ function detect(buf, name) {
   if (head.startsWith('CRFT')) return 'craft';
   if (head.startsWith('{\\rtf')) return 'rtf';
   if (/^\s*<(!doctype|html|head|body|p|h[1-6]|div)\b/i.test(buf.toString('latin1', 0, 256))) return 'html';
+  if (buf.length > 16 && buf[0] === 0x96 && buf[1] === 0x02 && require('./import-bankstreet.cjs').extractFromAtr(buf).length) return 'bankstreet';
   if (buf.readUInt32BE(0) === 0xd0cf11e0) return 'doc';
   if (buf.readUInt16BE(0) === 0x504b && ext === '.docx') return 'docx';
   if (ext === '.md' || ext === '.markdown') return 'md';
@@ -208,8 +210,10 @@ function build(bytes, cols, lines) {
 function convert(buf, name, opts = {}) {
   const fmt = opts.format || detect(buf, name); const cols = opts.cols || 64;
   const O = require('./officeread.cjs');
+  const req = (n) => require('./import-' + n + '.cjs').read;
   const office = (f) => (b) => f(b).map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; });
-  const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx) };
+  const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx),
+    letterperfect: office(req('letterperfect')), paperclip: office(req('paperclip')), firstxlent: office(req('firstxlent')), textwizard: office(req('textwizard')), bankstreet: office(req('bankstreet')) };
   if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
   let paras = importers[fmt](buf);
   while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
@@ -222,7 +226,7 @@ function convert(buf, name, opts = {}) {
 if (require.main === module) {
   const args = process.argv.slice(2); const o = {}; const pos = [];
   for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else pos.push(args[i]); }
-  if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx] [--cols N]'); process.exit(2); }
+  if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]'); process.exit(2); }
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
   const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
   fs.writeFileSync(outp, r.file);
