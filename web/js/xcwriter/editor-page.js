@@ -116,7 +116,9 @@
     zoomSel = v === 'width' || v === 'page' || v === 'pixel' ? v : +v;
     computeZ();
     layoutSizer();
-    scr.scrollLeft = cx * z - scr.clientWidth / 2; scr.scrollTop = cy * z - scr.clientHeight / 2;
+    if (typeof zoomSel === 'string') { scr.scrollLeft = 0; scr.scrollTop = 0; }
+    else { scr.scrollLeft = cx * z - scr.clientWidth / 2; scr.scrollTop = cy * z - scr.clientHeight / 2; }
+    relayout(); ensureVisible(posToLC(caret));
     render();
   }
   function layoutSizer() {

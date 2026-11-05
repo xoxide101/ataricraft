@@ -56,10 +56,14 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.selectOption('#pgzoom', v); await p.waitForTimeout(150);
     const z = await p.evaluate(() => PG.state().z); assert.strictEqual(z, want); ok('zoom ' + v + '% = ' + want + 'x');
   }
+  const ink = () => p.evaluate(() => { const c = document.getElementById('pgcanvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 90 && d[i + 1] < 90 && d[i + 2] < 90 && d[i + 3] > 200) n++; return n; });
+  await p.selectOption('#pgzoom', '400'); await p.waitForTimeout(150);
+  const i400 = await ink(); assert(i400 > 300, 'text visible at 400%: ' + i400); ok('400%: ' + i400 + ' ink pixels visible');
   await shot('3-zoom400');
   await p.selectOption('#pgzoom', 'width'); await p.waitForTimeout(150);
-  const fw = await p.evaluate(() => { const s = PG.state(); return { z: s.z, dw: s.geom.dw * s.z, vw: PG.scroller.clientWidth }; });
+  const fw = await p.evaluate(() => { const s = PG.state(); return { z: s.z, dw: s.geom.dw * s.z, vw: PG.scroller.clientWidth, top: PG.scroller.scrollTop }; });
   assert(fw.dw <= fw.vw + 1 && fw.dw > fw.vw - 12, 'fit width ' + JSON.stringify(fw)); ok('fit width: page ' + Math.round(fw.dw) + ' px in ' + fw.vw + ' px');
+  const iw = await ink(); assert(iw > 300, 'text visible at fit width: ' + iw + ' scrollTop ' + fw.top); ok('fit width: ' + iw + ' ink pixels visible (scrollTop ' + Math.round(fw.top) + ')');
   await shot('4-fitwidth');
   await p.selectOption('#pgzoom', '300'); await p.waitForTimeout(150);
 
@@ -85,7 +89,8 @@ fs.mkdirSync(OUT, { recursive: true });
   const g2 = await p.evaluate(() => PG.state().geom); assert.strictEqual(g2.pw, 99 * 4);
   lines = await p.evaluate(() => PG.lines().map((l) => l.cells.length)); assert(Math.max(...lines) > 80, 'A4 12 cpi usable 93: ' + lines);
   ok('page setup A4 / 12 cpi: ' + g2.i.paperCols + ' cols, usable ' + g2.i.usable + ', ' + g2.i.textLines + ' lines');
-  await p.selectOption('#pgzoom', 'page'); await p.waitForTimeout(200); await shot('7-a4');
+  await p.selectOption('#pgzoom', 'page'); await p.waitForTimeout(200);
+  const ia4 = await ink(); assert(ia4 > 100, 'text visible on the A4 page: ' + ia4); ok('A4 fit page: ' + ia4 + ' ink pixels'); await shot('7-a4');
 
   // save to CWD carries the page; reopening restores it
   const saved = await p.evaluate(() => Array.from(XCW.save(XW.doc, 'cwd', { page: XW.page }).bytes));
