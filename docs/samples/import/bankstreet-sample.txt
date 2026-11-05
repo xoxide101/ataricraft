@@ -1,0 +1,7 @@
+bankstreet-sample.bin: document TEST2 created in The Bank Street Writer (Atari 800 emulation) and saved with
+Transfer > Save to a data disk initialised by BSW; extracted from the DOS 2 file (126 bytes... see below).
+Keystrokes: Ctrl-C, "Centered", Return, Ctrl-I (ignored by the editor), "Tabbed", Return,
+"THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG AND KEEPS RUNNING ON AND ON FOR A LONG TIME." (wrapped on screen only), Return, "last".
+
+Bytes: 03 "Centered" 9B "Tabbed" 9B "THE QUICK ... LONG TIME." 9B "last" 9B
+Expected paragraphs: [c] Centered / [l] Tabbed / [l] the long line (no stored line breaks) / [l] last

@@ -27,8 +27,18 @@ The format defaults to the output extension (`.txt`, `.atx`, `.rtf`, `.htm`, `.m
 - `rtf`: bold, italic, underline, super/sub, alignment, bullets. Word opens it.
 - `html`, `md`: the same styles in their own markup.
 
-## Not supported (no sample files found)
+## Atari word processors (decoded from documents saved by the real programs)
 
-Final Word, Indus Writer, Paperclip, Bank Street Writer, First XLent Wordprocessor and the Atari Wordprocessor store documents in their own formats. The collection has the programs but no documents written by them, so none are decoded. Point me at sample files and the importer can be extended.
+Use `--format letterperfect|paperclip|firstxlent|textwizard|bankstreet`. A Bank Street Writer disk image is detected automatically. Each format is documented in `docs/formats/`, with samples in `docs/samples/import/`. Only codes seen in saved files are decoded; unverified ones are listed in each format note and dropped.
+
+- Letter Perfect: centre, bold, underline, super/subscript.
+- PaperClip: bold, underline, super/subscript, centre, right.
+- First XLEnt: centre, right. Bold and underline are printer-driver codes and are dropped.
+- Text Wizard: centre, underline, super/subscript.
+- Bank Street Writer: centre only.
+
+## Not supported
+
+Final Word, Indus Writer, the Atari Wordprocessor, TextPro, SpeedScript and others: no program or documents available yet. Point me at sample files and the importer can be extended.
 
 `tools/lsdisk.cjs DISK.ATR [NAME [OUT]]` lists or extracts files from an ATR to feed the importer. `node scripts/craft-convert.cjs` runs the round-trip test.

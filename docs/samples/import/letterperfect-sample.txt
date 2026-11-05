@@ -1,0 +1,16 @@
+Letter Perfect sample documents (saved by Letter Perfect on the emulated Atari, ATR LetterPerfect.ATR; raw data sectors, text ends at the first $1B)
+
+letterperfect-sample.bin  (typed in the editor, saved as T1.LP, 56 text bytes)
+  1. Ctrl-C, "Title"                      -> centred paragraph "Title"
+  2. "Sup" Ctrl-V ^ "up" Ctrl-V ^ " Sub" Ctrl-V * "dn" Ctrl-V * " end"
+                                          -> "Sup" + superscript "up" + " Sub" + subscript "dn" + " end"
+  3. Ctrl-F, "j1m5w60"                    -> format line (justify on), not a text paragraph
+  4. "Long line here"                     -> paragraph, justified (after the j1 format line)
+
+letterperfect-sample2.bin (saved as T2.LP, 160 text bytes)
+  1. "Plain" Ctrl-B "Bold" Ctrl-B " and" Ctrl-U "Under" Ctrl-U Ctrl-B Ctrl-U "Both" Ctrl-U Ctrl-B (typing harness dropped some trailing spaces)
+  2. One ~130 character line (stored as one paragraph, no hard wraps)
+  3. Ctrl-H "Head"  -> header line;  Ctrl-G "Foot" -> footer line
+  4. Ctrl-P "After page" -> forced end of page, then paragraph "After page"
+
+letterperfect-letter.bin  SAMPLE.LP, the business letter that ships on the Letter Perfect disk (1192 text bytes; underline pair around the publication title, ^F j0 format line).

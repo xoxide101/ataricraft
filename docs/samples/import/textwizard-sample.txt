@@ -1,0 +1,12 @@
+Text Wizard v1.3 (Datasoft) sample, saved by the real program (booted from the ATX, Option+S to D1:SAMPLE).
+textwizard-sample.bin, 8 lines (0x9B-terminated), 7 paragraphs after import:
+ 1. ^C "Centred title"              -> centred
+ 2. "plain" ^U "under" ^U "after"   -> underline run in the middle
+ 3. ^B "up" ^B "mid" ^F "down" ^F   -> superscript, plain, subscript
+ 4. ^L 10 ^R 70 "margins set"       -> left margin 10, right margin 70 (layout codes, not text)
+ 5. ^C ^C "Right block"             -> right-aligned (per reference card)
+ 6. (empty line)
+ 7. one 77-char line typed without Enter (the editor does not store soft wraps)
+ 8. "Last"                          -> no trailing EOL at end of file
+textwizard-codes.bin: ^C"Centre" / "a" ^J "1jus" ^J "0" / ^C^C "BR" / "head" / ^P "x".
+  Ctrl-J was stored as a plain line break ($9B) by the editor, Ctrl-H did nothing: those two are unverified.

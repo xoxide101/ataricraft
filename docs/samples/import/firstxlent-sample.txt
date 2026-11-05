@@ -1,0 +1,13 @@
+firstxlent-sample.bin - saved from The First XLEnt Word Processor (Polish ed.) as "SAMPLE" on D1 (Ctrl+Shift+U, 3, Y).
+Typed content, one line each (EOL = $9B):
+ 1. Option+C, "Centered Title"
+ 2. "Plain line"
+ 3. Option+C Option+C, "Right line"
+ 4. Option+F, "ju1"                       (format line)
+ 5. a 90-char line that word-wrapped on screen ("the quick brown fox ... farmer today")
+ 6. "Some", Option+B, "bold", Option+B, " and", Option+U, "under", Option+U, " text."
+    (trailing spaces were trimmed by the typing harness, so the stored text is "Somebold andunder text.")
+ 7. "Soft", Option+-, "hyphen and", Option+Space, "nbsp"
+ 8. (empty line)
+ 9. "Last"
+firstxlent-hello.bin - "Hello World" + EOL, the minimal file.
