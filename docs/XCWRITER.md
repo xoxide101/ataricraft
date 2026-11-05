@@ -8,7 +8,7 @@ A browser word processor (`web/xcwriter.html`) for the Craft family. One documen
 |---|---|---|
 | Page | contenteditable page, system fonts (Georgia, Calibri, Consolas...), 10-20 pt, line spacing | 320x192 canvas, 64 columns x 20 lines, ACWriter 4x7 pixel font (font4 + symbol set), 5 px pitch, themes paper/blue/amber/green |
 | Wrap | browser | `craftimport.layout()` through `XCW.atariLines`, soft break 14, hard end 13 |
-| Limits | none | live meter: bytes of the CRFT payload against the 11264 byte document area ($6400-$8FFF) |
+| Limits | none | live meter: bytes of the CRFT payload against the 7680 byte document area ($6600-$83FF) |
 | Characters | anything | non-Atari characters become look-alikes or `?` on entering the mode (undoable); typing is mapped the same way |
 
 Switching keeps the document. The side panel lists what the Atari cannot show. A `.CWD` exported from matching mode reopens to the same payload and the same screen lines (checked by `scripts/xcwriter-test.cjs`). Bold, italic and underline are drawn approximately (smear, shear, underline row); the file stores exact style codes. Justify and centring are drawn from the alignment marker, not read back from ACWriter. The round trip is proven at file level (export, import, export), not by running the file in ACWriter.
@@ -77,7 +77,7 @@ Verified (evidence in the scripts above):
 - Real Word (COM): xCWriter's exported RTF, docx and HTML open, export to PDF, and keep paragraphs, bold, italic, underline, sub/sup and centre/right/justify. docx bullets are real Word lists; RTF bullets arrive as literal "•<tab>" text.
 - Word-made .doc/.docx/.rtf (headings, styles, bullets, alignment, table, smart quotes, symbols, long text) import into xCWriter and, through `craftimport.cjs`, open in ACWriter. `.docx`/`.rtf` keep styles, alignment and bullets; `.doc` is text only. Tables become ` | ` separated lines. Pictures, headers/footers, fonts, colours, sizes, hyperlink targets are dropped (link text kept). Non-Latin-1 symbols become look-alikes or `?` in Craft mode (euro -> E, trademark -> TM); xCWriter HQ keeps them.
 - RTF reader bugs fixed: per-character runs, `\uN` with `\uc` fallback skipping, `\'xx` cp1252 bytes, `\pntext`/`\listtext` lists, tables (`\trowd..\cell..\row`), alignment persisting until `\pard`, `\plain`, skipped groups (fonttbl, colortbl, stylesheet, info, pict, fldinst, `\*`). Hand-written, WordPad-style and Word RTF are covered by tests.
-- Atari limit: imports are cut to 11,264 bytes at a paragraph end, open styles closed, and flagged (`truncated`, `dropped`, CLI message). The 220-paragraph test RTF became 11,278 bytes (9,530 dropped); ACWriter opened it without hanging and showed "11262 ch, 0K free". Previously the cap was 16,383 and ACWriter refused such files.
+- Atari limit: imports are cut to 7,680 bytes (11,264 before PAGE mode took the top of the area) at a paragraph end, open styles closed, and flagged (`truncated`, `dropped`, CLI message). The 220-paragraph test RTF became 11,278 bytes (9,530 dropped); ACWriter opened it without hanging and showed "11262 ch, 0K free". Previously the cap was 16,383 and ACWriter refused such files.
 
 Known losses: `.doc` formatting; Markdown underline/sub/sup/alignment; plain-text styles; Atari glyph coverage (accents draw badly, euro/trademark/emoji transliterated); Word RTF bullets are not Word lists; tables are flattened; images are skipped.
 

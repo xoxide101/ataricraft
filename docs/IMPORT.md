@@ -14,7 +14,7 @@
 | `.docx` | bold, italic, underline, super/sub, alignment, bullets | fonts, colours, images, tables (cell text is kept) |
 | `.doc` (Word 97-2003) | text only | all formatting; encrypted files are refused |
 
-Smart quotes and dashes are transliterated to ASCII. The payload is cut at 11264 bytes (ACWriter's document area; ACWriter refuses larger files) at a paragraph end, open styles are closed, and the CLI prints a 	runcated message (convert() returns {truncated, dropped}; the .CWD header has no flag). Table rows become one  | b | c line; RTF/Word bullets become Craft bullets.
+Smart quotes and dashes are transliterated to ASCII. The payload is cut at 7680 bytes (ACWriter's document area; ACWriter refuses larger files) at a paragraph end, open styles are closed, and the CLI prints a 	runcated message (convert() returns {truncated, dropped}; the .CWD header has no flag). Table rows become one  | b | c line; RTF/Word bullets become Craft bullets.
 
 AtariWriter rules come from its manual and from sample documents on the AtariWriter+ disks. Its bold, elongated and sub/superscript markers are not decoded, because no sample file shows how they are stored.
 
@@ -51,5 +51,5 @@ Convert / import reads a plain text or ATASCII file through CIO and replaces the
 
 ## Document size limit
 
-ACWriter holds the document in RAM at $6400-$8FFF, so a document (and therefore an import) is limited to about 11 KB (11,264 bytes). Longer imports are truncated.
+ACWriter holds the document in RAM at $6600-$83FF, so a document (and therefore an import) is limited to about 7.5 KB (7,680 bytes; PAGE mode code lives above it, see ACWRITER-PAGE.md). Longer imports are truncated.
 

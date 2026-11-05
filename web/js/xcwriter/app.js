@@ -246,7 +246,7 @@
     $('st-words').innerHTML = '<b>' + n.w + '</b> words, <b>' + n.c + '</b> characters';
     $('st-pos').textContent = 'Paragraph ' + (s.f.p + 1) + '/' + XW.doc.length + ', char ' + (s.f.o + 1) + (XW.misses.length ? ' | ' + XW.misses.length + ' spelling' : '');
     const f = XCW.fit(XW.doc, undefined, XW.mode === 'page' ? XW.page : null);
-    $('st-fit').textContent = 'Fits in ACWriter: ' + (f.bytes / 1024).toFixed(1) + ' of ~11 KB' + (f.over ? ' (OVER by ' + f.over + ' bytes)' : '');
+    $('st-fit').textContent = 'Fits in ACWriter: ' + (f.bytes / 1024).toFixed(1) + ' of ~7.5 KB' + (f.over ? ' (OVER by ' + f.over + ' bytes)' : '');
     $('st-fit').classList.toggle('over', !!f.over);
     $('st-mode').textContent = isAt() ? (XW.mode === 'page' ? 'PAGE VIEW' : 'ATARI MATCHING') : 'HIGH QUALITY';
     $('docname').innerHTML = '<b>' + esc(XW.name) + '</b>' + (XW.sourceFormat ? ' &middot; opened as ' + esc(XW.sourceFormat) : '') + (XW.dirty ? ' &middot; edited' : '');
@@ -254,12 +254,12 @@
   XW.modal = modal; XW.closeModal = closeModal; XW.toast = toast;
   XW.pageChanged = () => { XW.dirty = true; XW.warnVer = -1; scheduleSave(); refreshAll(); };
   XW.atariInfo = (f) => {
-    $('fittext').innerHTML = '<b>' + (f.bytes / 1024).toFixed(1) + ' KB</b> of ~11 KB (' + f.bytes + ' / ' + f.limit + ' bytes, ' + f.pct + '%)';
+    $('fittext').innerHTML = '<b>' + (f.bytes / 1024).toFixed(1) + ' KB</b> of ~7.5 KB (' + f.bytes + ' / ' + f.limit + ' bytes, ' + f.pct + '%)';
     const m = $('meter'); m.className = 'meter' + (f.over ? ' over' : f.pct > 85 ? ' warn' : ''); m.firstElementChild.style.width = Math.min(100, f.pct) + '%';
     if (XW.warnVer !== XW.docVer) { XW.warnVer = XW.docVer; XW.warns = XCW.atariWarnings(XW.doc).concat(NOTES); $('warns').innerHTML = XW.warns.map((w) => '<li>' + esc(w) + '</li>').join(''); }
     updateStatusFit(f);
   };
-  function updateStatusFit(f) { $('st-fit').textContent = 'Fits in ACWriter: ' + (f.bytes / 1024).toFixed(1) + ' of ~11 KB' + (f.over ? ' (OVER by ' + f.over + ' bytes)' : ''); $('st-fit').classList.toggle('over', !!f.over); }
+  function updateStatusFit(f) { $('st-fit').textContent = 'Fits in ACWriter: ' + (f.bytes / 1024).toFixed(1) + ' of ~7.5 KB' + (f.over ? ' (OVER by ' + f.over + ' bytes)' : ''); $('st-fit').classList.toggle('over', !!f.over); }
 
   // ---------- documents, recents ----------
   function loadDoc(paras, name, fmt, notes, page) {
@@ -441,7 +441,7 @@
   $('helpdoc').innerHTML = `<h2>xCWriter help</h2>
 <p>xCWriter (eXtreme Craft Writer) writes, opens and converts documents for the Atari 8-bit ACWriter and for ordinary desktop word processors. Everything runs in your browser; no file leaves it.</p>
 <h3>Two modes</h3>
-<p><b>High quality</b> is a normal word processor page with proportional system fonts, real sizes and justification. <b>Atari matching</b> shows the document exactly as ACWriter will: 64 columns by 20 lines on a 320x192 screen with the ACWriter pixel font, the same word wrap as the .CWD exporter, and a live meter of how much of ACWriter's ~11 KB document area you use. Switching keeps the document. Entering matching mode turns characters the Atari lacks into look-alikes (curly quotes, dashes) or ?, which you can undo.</p>
+<p><b>High quality</b> is a normal word processor page with proportional system fonts, real sizes and justification. <b>Atari matching</b> shows the document exactly as ACWriter will: 64 columns by 20 lines on a 320x192 screen with the ACWriter pixel font, the same word wrap as the .CWD exporter, and a live meter of how much of ACWriter's ~7.5 KB document area you use. Switching keeps the document. Entering matching mode turns characters the Atari lacks into look-alikes (curly quotes, dashes) or ?, which you can undo.</p>
 <h3>Opening</h3>
 <p>Open or drop: .CWD, text, ATASCII (EOL $9B), RTF, HTML, Markdown, .docx, .doc (text only), Letter Perfect, PaperClip, First XLEnt, Text Wizard, Bank Street Writer files and Bank Street .ATR disk images. Files whose type is not recognised ask you how to read them; hold <kbd>Shift</kbd> when opening to always choose the format.</p>
 <h3>Saving and converting</h3>

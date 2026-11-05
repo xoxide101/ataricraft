@@ -20,6 +20,10 @@ pre-PAGE build).
 `Tab` (the Atari Tab key, `$7F`, or Ctrl-I) pads with spaces to the next tab stop, else the next multiple of 5.
 All three stop kinds act as left tabs when typing (centre / right alignment is drawn on the ruler only).
 
+## File format
+
+Save As writes the CPG1 trailer (flags bit 1, [PAGE.md](PAGE.md)) with paper, pitch, margins (top/bottom 6) and up to 8 tab stops; Open restores them, and ignores unknown records. Files without a trailer keep the defaults. `scripts\acwriter-page.cjs` proves the round trip through `craftdoc.cjs`.
+
 ## What it shows
 
 * 4px cells, 12-row Craft lines (2px headroom, cap row, x-height, baseline, 3px descender rows).
@@ -33,11 +37,11 @@ All three stop kinds act as left tabs when typing (centre / right alignment is d
 
 The page code and planes live at `$8400-$8FF2` (about 2.6 KB), inside what was the top of the document area.
 
-* The document limit is now `$8400` (about 7.9 KB, down from 11 KB). Load, import and Edit-gap check it; typing in
+* The document area is now `$6600-$83FF` = 7,680 bytes (was 11 KB). Load, import and Edit-gap check it; typing in
   the normal view has no insert-time check (as before), so a very long document can now run into the page code.
 * On a stock 64K machine the spell checker puts its table below `$9000`, which can overwrite the page code.
   Use PAGE mode on a 130XE or without the spell checker on 64K.
-* Help/spell-book data moved from `$5F40` to `$60D8`, `DOC` from `$6400` to `$6500`.
+* Code grew, so help/spell-book data moved from `$5F40` to `$6170` and `DOC` from `$6400` to `$6600`.
 
 ## Not done / limits (honest list)
 
@@ -46,5 +50,5 @@ The page code and planes live at `$8400-$8FF2` (about 2.6 KB), inside what was t
   need XE bank memory for the glyph planes and the page code, which is not implemented.
 * No alignment, indent, bullet, bold/italic/underline rendering in PAGE mode (text only). Sub-script descenders are clipped.
 * Centre/right tab stops only affect the ruler.
-* Page setup is not yet saved in the file (see CRAFT-FORMAT.md, CPG1 trailer, for the format xCWriter writes).
-* Page setup changes soft wrap breaks stored in the document (the text is unchanged).
+* Not implemented: the font-name record (tag 2) is neither written nor read yet (Stage 5).
+* Changing paper/pitch/margins changes soft wrap breaks stored in the document (the text is unchanged).

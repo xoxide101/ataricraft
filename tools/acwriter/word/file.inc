@@ -126,11 +126,14 @@ dosave
  sbc #>DOC
  sta fln+1
  ora fln
- beq fz_sv9
+ beq fz_sv8
  lda #11
  ldx #<DOC
  ldy #>DOC
  jsr fblk
+ cpy #$80
+ bcs fer1
+fz_sv8 jsr pwsave
  cpy #$80
  bcs fer1
 fz_sv9 jsr fclose
@@ -170,13 +173,15 @@ doload
  cpy #$80
  bcc fz_dl0
  cpy #$88
- beq fbm
- jmp fer1
+ bne fz_dl9
+ jmp fbm
+fz_dl9 jmp fer1
 fz_dl0 ldx #3
 fz_dl1 lda HDR,x
  cmp hmag,x
- bne fbm
- dex
+ beq fz_dl8
+ jmp fbm
+fz_dl8 dex
  bpl fz_dl1
  lda HDR+5
  cmp #'W'
@@ -212,13 +217,21 @@ fz_dl2 lda #<DOC
  lda fcs+1
  cmp HDR+15
  bne fbj
- jsr fclose
+ lda HDR+6
+ and #2
+ beq fz_dl3
+ jsr pwload
+fz_dl3 jsr fclose
  lda #0
  sta cl
  sta cc
  sta top
  sta anyv
- jsr scan
+ lda hmode
+ cmp #PGV
+ bne fz_dl4
+ jsr pwsetlm
+fz_dl4 jsr scan
  lda #2
  sta fl
  lda #7
@@ -246,6 +259,8 @@ fz_mh2 lda hmag,x
  sta HDR+4
  lda #'W'
  sta HDR+5
+ lda #2
+ sta HDR+6
  lda dend
  sec
  sbc #<DOC
@@ -326,4 +341,152 @@ fclose
  jmp CIOV
 
 hmag dta c'CRFT'
+ptag dta c'CPG1'
+pwcpi dta b(10),b(12),b(17)
+
+; page setup trailer (docs/PAGE.md): 'CPG1', then records [tag][len][data]; tag 1 = paper, cpi, left, right, top, bottom, ntabs, (pos,kind)*
+pwsave
+ ldx #3
+fz_ps1 lda ptag,x
+ sta CMDB,x
+ dex
+ bpl fz_ps1
+ lda #1
+ sta CMDB+4
+ lda pwnt
+ asl
+ clc
+ adc #7
+ sta CMDB+5
+ lda pwpap
+ sta CMDB+6
+ ldx pwpit
+ lda pwcpi,x
+ sta CMDB+7
+ lda pwplm
+ sta CMDB+8
+ lda pwprm
+ sta CMDB+9
+ lda #6
+ sta CMDB+10
+ sta CMDB+11
+ lda pwnt
+ sta CMDB+12
+ ldx #0
+ ldy #13
+fz_ps2 cpx pwnt
+ bcs fz_ps3
+ lda pwtp,x
+ sta CMDB,y
+ iny
+ lda pwtk,x
+ sta CMDB,y
+ iny
+ inx
+ bne fz_ps2
+fz_ps3 sty fln
+ lda #0
+ sta fln+1
+ lda #11
+ ldx #<CMDB
+ ldy #>CMDB
+ jmp fblk
+
+; reads the trailer if present; anything unexpected ends the parse and keeps the defaults
+pwload
+ jmp fz_pl0
+fz_plr rts
+fz_pl0 lda #0
+ sta fln+1
+ lda #4
+ sta fln
+ jsr fz_pl9
+ bcs fz_plr
+ ldx #3
+fz_pl1 lda CMDB,x
+ cmp ptag,x
+ bne fz_plr
+ dex
+ bpl fz_pl1
+fz_pl2 lda #2
+ sta fln
+ jsr fz_pl9
+ bcs fz_plr
+ lda CMDB
+ sta pwb
+ lda CMDB+1
+ beq fz_plr
+ cmp #57
+ bcs fz_plr
+ sta fln
+ sta pwc
+ jsr fz_pl9
+ bcs fz_plr
+ lda pwb
+ cmp #1
+ bne fz_pl2
+ lda pwc
+ cmp #7
+ bcc fz_pl2
+ lda CMDB
+ cmp #3
+ bcs fz_pl2
+ sta pwpap
+ lda CMDB+1
+ ldx #0
+ cmp #11
+ bcc fz_pl4
+ inx
+ cmp #15
+ bcc fz_pl4
+ inx
+fz_pl4 stx pwpit
+ lda CMDB+2
+ cmp #11
+ bcc fz_pl41
+ lda #10
+fz_pl41 sta pwplm
+ lda CMDB+3
+ cmp #11
+ bcc fz_pl42
+ lda #10
+fz_pl42 sta pwprm
+ lda pwc
+ sec
+ sbc #7
+ lsr
+ sta pwa
+ lda CMDB+6
+ cmp #9
+ bcc fz_pl5
+ lda #8
+fz_pl5 cmp pwa
+ bcc fz_pl6
+ lda pwa
+fz_pl6 sta pwnt
+ ldx #0
+fz_pl7 cpx pwnt
+ bcs fz_pl8
+ txa
+ asl
+ tay
+ lda CMDB+7,y
+ sta pwtp,x
+ lda CMDB+8,y
+ and #3
+ cmp #3
+ bcc fz_pl71
+ lda #0
+fz_pl71 sta pwtk,x
+ inx
+ bne fz_pl7
+fz_pl8 jsr pwcalc
+ jmp fz_pl2
+
+fz_pl9 lda #7
+ ldx #<CMDB
+ ldy #>CMDB
+ jsr fblk
+ cpy #$80
+ rts
 fext dta c'.CWD'
