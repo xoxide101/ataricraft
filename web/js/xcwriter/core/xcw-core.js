@@ -643,6 +643,12 @@ function deriveGlyph(src, dst, rows, opt) {
       if (v >= th || lone) out[r] |= top >> q;
     }
   }
+  // A glyph with ink never derives to nothing: switch on the cell with the most coverage.
+  if (rows.some((v) => v) && !out.some((v) => v)) {
+    let best = -1, br = 0, bq = 0;
+    cov.forEach((row, r) => row.forEach((v, q) => { if (v > best) { best = v; br = r; bq = q; } }));
+    out[br] |= top >> bq;
+  }
   return out;
 }
 
@@ -703,7 +709,96 @@ function fromFnt(buf, opt = {}) {
   return f;
 }
 
-module.exports = { create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp };
+// ---- converters and glyph transforms (shared by fontedit.html and the tests) ----------------------------------------------------
+// A glyph is an array of row bit masks; pixel (q, r) is on when hasPx(f, g[r], q).
+const setPx = (f, row, q) => row | bitMask(f, q);
+function flipV(f, g) { return g.slice().reverse(); }
+// Rotate the gw x gw square that starts at the headroom row (the ink area of the narrow glyph) a quarter turn clockwise.
+function rotate(f, g) {
+  const n = f.gw, out = g.slice();
+  for (let r = 0; r < n; r++) out[f.head + r] = 0;
+  for (let r = 0; r < n; r++) for (let q = 0; q < n; q++) {
+    if (g[f.head + r] !== undefined && hasPx(f, g[f.head + r], q)) {
+      const nr = q, nq = n - 1 - r;
+      if (f.head + nr < f.rows) out[f.head + nr] = setPx(f, out[f.head + nr], nq);
+    }
+  }
+  return out;
+}
+
+// BDF bitmap font -> Craft font. size: 12 (default for fonts taller than 10 rows) or 8. The BDF baseline lands on f.base.
+function fromBdf(text, opt = {}) {
+  const lines = String(text).split(/\r?\n/);
+  let fh = 0, name = opt.name || 'BDF font';
+  for (const l of lines) {
+    let m;
+    if ((m = /^FONTBOUNDINGBOX\s+(-?\d+)\s+(-?\d+)/.exec(l))) fh = +m[2];
+    if ((m = /^FAMILY_NAME\s+"?([^"]*)"?/.exec(l)) && !opt.name) name = m[1];
+  }
+  const size = opt.size || (fh > 10 ? 12 : 8);
+  const f = createSize(size, { name: name.slice(0, 40), first: 0, count: 256 });
+  let cur = null, inBits = false, row = 0, n = 0;
+  for (const l of lines) {
+    let m;
+    if (l.startsWith('STARTCHAR')) { cur = { enc: -1, w: 0, h: 0, xo: 0, yo: 0, rows: [] }; inBits = false; }
+    else if (!cur) continue;
+    else if ((m = /^ENCODING\s+(-?\d+)/.exec(l))) cur.enc = +m[1];
+    else if ((m = /^BBX\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)/.exec(l))) { cur.w = +m[1]; cur.h = +m[2]; cur.xo = +m[3]; cur.yo = +m[4]; }
+    else if (l.startsWith('BITMAP')) { inBits = true; row = 0; }
+    else if (l.startsWith('ENDCHAR')) {
+      if (cur.enc >= 0 && cur.enc < 256) {
+        const g = zeros(f.rows), top = f.base - cur.yo - cur.h + 1;
+        cur.rows.forEach((hexRow, i) => {
+          const y = top + i;
+          if (y < 0 || y >= f.rows) return;
+          for (let x = 0; x < cur.w; x++) {
+            const q = cur.xo + x;
+            if (q < 0 || q >= f.gw) continue;
+            const byte = parseInt(hexRow.substr(Math.floor(x / 8) * 2, 2) || '0', 16);
+            if (byte & (0x80 >> (x % 8))) g[y] = setPx(f, g[y], q);
+          }
+        });
+        f.glyphs[cur.enc] = g; n++;
+      }
+      cur = null; inBits = false;
+    } else if (inBits && /^[0-9A-Fa-f]+$/.test(l.trim())) cur.rows.push(l.trim());
+  }
+  if (!n) throw new Error('BDF contains no glyphs');
+  return f;
+}
+
+// Atari charset binary from an 8 px font: 128 glyphs in screen-code order, rows taken from the headroom down (inverse of fromFnt).
+function toFnt(f) {
+  const out = Buffer.alloc(1024);
+  for (let a = 0; a < 128; a++) {
+    const sc = a < 32 ? a + 64 : a < 96 ? a - 32 : a, g = f.glyphs[f.map[a]] || zeros(f.rows);
+    for (let i = 0; i < 8; i++) out[sc * 8 + i] = ((g[f.head + i] || 0) >> (isWide(f) ? 8 : 0)) & 255;
+  }
+  return out;
+}
+
+// Sheet: 16 x 16 cells of adv x rows pixels, 1 byte per pixel (0 / 1), row-major.
+function toSheet(f) {
+  const cw = f.adv, ch = f.rows, w = cw * 16, h = ch * 16, data = new Uint8Array(w * h);
+  for (let s = 0; s < 256; s++) {
+    const g = f.glyphs[s]; if (!g) continue;
+    for (let r = 0; r < ch; r++) for (let q = 0; q < f.gw; q++) if (hasPx(f, g[r], q)) data[((Math.floor(s / 16) * ch + r) * w) + (s % 16) * cw + q] = 1;
+  }
+  return { w, h, cw, ch, data };
+}
+function fromSheet(data, w, h, opt = {}) {
+  const size = opt.size || ({ 192: 12, 160: 10, 128: 8, 96: 6, 80: 5, 64: 4 }[w] || 12), f = createSize(size, { name: (opt.name || 'Sheet font').slice(0, 40), first: 0, count: 256 });
+  const cw = w / 16, ch = h / 16;
+  if (cw !== f.adv || ch !== f.rows) throw new Error('sheet cells are ' + cw + 'x' + ch + ', expected ' + f.adv + 'x' + f.rows);
+  for (let s = 0; s < 256; s++) {
+    const g = zeros(f.rows);
+    for (let r = 0; r < ch; r++) for (let q = 0; q < f.gw; q++) if (data[(Math.floor(s / 16) * ch + r) * w + (s % 16) * cw + q]) g[r] = setPx(f, g[r], q);
+    f.glyphs[s] = g;
+  }
+  return f;
+}
+
+module.exports = { create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, toFnt, toSheet, fromSheet, setPx };
 
 });
 __def("craftdoc.cjs", function (module, exports, require) {
