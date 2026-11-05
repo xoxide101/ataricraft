@@ -23,7 +23,7 @@ Always run `-WhatIf` first and review the list.
 
 - the whole `web\` tree: `index.html`, `xcwriter.html`, `fontedit.html`, `workbench.html`, `js\`, `js\xcwriter\*` (incl. `core\`), `js\fontedit\*`, `img\`, `ref\`, `library\` (disk images, craftapps, samples, fonts incl. `fonts\personal\`);
 - `web\library\fonts\local\` regenerated first by `node scripts\fontlist.cjs`: `manifest.json` (groups Craft faces / Shipped / Atari ROM / Personal), the shipped fonts from `font\`, the ROM charset extracted from the OS ROM, and `font_personal\` (Atari8bit.ttf, FONT.FNT, ...). Manifest URLs are relative, so the picker and the font editor find them under the subfolder;
-- ACWriter: the built `tools\acwriter\poc5.xex` as `library\craftapps\ACWriter\POC5.XEX`, `font\*` as `...\ACWriter\FONTS\`, personal fonts as `...\FONTS\PERSONAL\`, and any `.cwd/.dic/.ovl/.fnt/.acf` next to the source;
+- ACWriter: the built `tools\acwriter\poc5.xex` as `library\craftapps\ACWriter\POC5.XEX`, `font\*` as `...\ACWriter\FONTS\`, personal fonts as `...\FONTS\PERSONAL\`, any `.cwd/.dic/.ovl/.fnt/.acf` next to the source, and the spell-check dictionaries `docs\samples\EN.CDC`, `EN8.CDC` and the demo `ACWRITER-DEMO.CWD` into the same `ACWriter\` folder (the main app lists `library\craftapps\*` by folder; xCWriter itself embeds the dictionary and demo in `xcw-data.js`, so it needs no extra files);
 - `roms\` (Altirra OS/BASIC) to `<server root>\roms\`, where the app probes `../roms/`.
 
 A file is copied only when it is missing on the server, differs in size, or is older there. Files on the server that are not ours are never touched.
@@ -38,6 +38,10 @@ A file is copied only when it is missing on the server, differs in size, or is o
 `xcwriter.html` and `fontedit.html` use only relative URLs (no `/web/...`, no localhost, no `showDirectoryPicker`); fonts load through `fetch` of the manifest over http.
 On deploy both pages get `?v=<sha1 of the file>` appended to each local `.js`/`.css` link (the source files are unchanged), so changed scripts bypass browser caches.
 The xCWriter bundle (`web\js\xcwriter\core\xcw-core.js`) must be current: the script runs `sync-xcwriter-core.cjs --check` and stops if not.
+
+## Last dry run (`-WhatIf`, nothing copied)
+
+2041 of 4378 candidates would be copied, 67.6 MB (all candidates 509.9 MB; the rest, incl. the 6 ROM files in `<server root>\roms\`, is already current on the server). Groups: `library\fonts\personal` 1948 files / 58.8 MB, `ref` 2 / 6.7 MB, `js` 43 / 1.2 MB (incl. `js\fontedit\validate.js`), `library\craftapps\ACWriter` 12 files (POC5.XEX, FONTS\, EN.CDC, EN8.CDC, ACWRITER-DEMO.CWD, FONTS\PERSONAL\), `library\fonts` manifests and Craft/Atari/local fonts ~0.4 MB, web root pages 6 files.
 
 ## Not verified
 
