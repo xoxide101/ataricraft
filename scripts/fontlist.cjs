@@ -24,13 +24,8 @@ function build() {
     const p = path.join(root, 'font', m[1] + '.acf');
     if (!fs.existsSync(p)) fs.writeFileSync(p, Buffer.from(m[2], 'base64'));
   }
-  // craft 8x8 / 10x12 / 12x12: the Atari-style 8x8 face we already ship, widened for the larger cells (see docs/FONT.md)
-  const px8 = path.join(root, 'web', 'library', 'fonts', 'atari', 'AtariPixel8.fnt');
-  if (fs.existsSync(px8)) {
-    const fnt = fs.readFileSync(px8);
-    fs.writeFileSync(path.join(root, 'font', 'craft8.fnt'), fnt);
-    for (const s of [10, 12]) fs.writeFileSync(path.join(root, 'font', 'craft' + s + '.acf'), CF.serialize(CF.builtinWide(fnt, s)));
-  }
+  // craft 8x8 / 10x12 / 12x12 are real designs (tools/craftmaster.cjs); mkcraftfaces writes them only when missing
+  require('./mkcraftfaces.cjs').ensure();
   const CRAFT = { craft4: 'Craft 4 px (overview)', craft5: 'Craft 5 px (overview)', craft6: 'Craft 6 px (overview)', craft8: 'Craft 8x8 (Atari native)', craft10: 'Craft 10x12', craft12: 'Craft 12x12 (master)' };
   const all = rd(path.join(root, 'font')).map((f) => {
     fs.copyFileSync(path.join(root, 'font', f), path.join(local, 'shared', f));

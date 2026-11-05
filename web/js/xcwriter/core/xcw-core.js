@@ -630,6 +630,11 @@ function deriveGlyph(src, dst, rows, opt) {
   const th = opt.threshold ?? 0.4, keep = opt.keepStems !== false;
   const bands = (f) => [[0, f.head], [f.head, f.base + 1], [f.base + 1, f.rows]];
   const sb = bands(src), db = bands(dst), out = zeros(dst.rows);
+  // columns: a glyph whose ink already fits the target is moved, not resampled, so one-pixel stems stay one pixel wide
+  let minx = src.gw, maxx = -1;
+  for (const r of rows) for (let q = 0; q < src.gw; q++) if (hasPx(src, r, q)) { if (q < minx) minx = q; if (q > maxx) maxx = q; }
+  const inkW = maxx - minx + 1, fits = maxx >= 0 && inkW <= dst.gw && opt.resample !== true;
+  const dx = fits ? minx - clamp(Math.round((minx * dst.gw) / src.gw), 0, dst.gw - inkW) : 0;
   const cov = [];
   for (let r = 0; r < dst.rows; r++) {
     const bi = db.findIndex(([a, b]) => r >= a && r < b);
@@ -637,7 +642,7 @@ function deriveGlyph(src, dst, rows, opt) {
     const y0 = sa + ((r - da) / (dbb - da)) * (sbb - sa), y1 = sa + ((r - da + 1) / (dbb - da)) * (sbb - sa);
     const row = [];
     for (let q = 0; q < dst.gw; q++) {
-      const x0 = (q / dst.gw) * src.gw, x1 = ((q + 1) / dst.gw) * src.gw;
+      const x0 = fits ? q + dx : (q / dst.gw) * src.gw, x1 = fits ? q + dx + 1 : ((q + 1) / dst.gw) * src.gw;
       let sum = 0, area = 0;
       for (let yy = Math.floor(y0); yy < Math.ceil(y1) && yy < src.rows; yy++) {
         const wy = Math.min(yy + 1, y1) - Math.max(yy, y0);
