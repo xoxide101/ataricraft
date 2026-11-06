@@ -1,6 +1,6 @@
 # Inspector and remote control
 
-**Inspect** tab (sidebar) opens a floating panel (drag the title bar; **X** closes it) with six views. Hover any button for a one-line tip.
+**Inspect** (Tools hub, `tools.html#insp`, linked to the emulator tab; see [TOOLSHUB.md](TOOLSHUB.md)) opens a floating panel (drag the title bar; **X** closes it) with six views. Hover any button for a one-line tip.
 
 ![Inspector, RAM tab](screenshots/09-inspect-ram.png)
 

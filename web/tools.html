@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Craft Tools &amp; Workbench</title>
+<link rel="icon" href="logo.svg">
+<style>
+:root{--bg:#14161a;--panel:#1e2128;--line:#2c313b;--fg:#d8dce4;--dim:#8a93a3;--acc:#e8a33d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px system-ui,sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header img{height:26px}header h1{font-size:16px;margin:0;color:var(--acc);font-weight:600}
+button,.btn{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:5px 10px;font:13px system-ui,sans-serif;cursor:pointer;text-decoration:none}
+button:hover,.btn:hover{border-color:var(--acc)}
+input[type=search]{background:#0c0e12;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:5px 9px;width:240px;font:13px system-ui}
+#status{display:flex;align-items:center;gap:6px;color:var(--dim)}
+#dot{width:9px;height:9px;border-radius:50%;background:#a44}#status.on #dot{background:#4c4}
+.sp{flex:1}
+main{max-width:1100px;margin:0 auto;padding:16px 14px 40px}
+.intro{color:var(--dim);margin:0 0 14px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc);margin:22px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.card:hover,.card:focus{border-color:var(--acc);outline:0}
+.card b{font-size:14px}.card span{color:var(--dim);font-size:12px;line-height:1.4}
+.tag{font-size:10px;color:var(--acc);text-transform:uppercase;letter-spacing:.06em}
+#none{display:none;color:var(--dim);margin-top:20px}
+footer{color:var(--dim);font-size:12px;margin-top:26px}
+footer a{color:var(--acc)}
+</style></head><body>
+<header>
+  <img src="logo.svg" alt=""><h1>Craft Tools &amp; Workbench</h1>
+  <input id="q" type="search" placeholder="Search tools…" aria-label="Search tools">
+  <span class="sp"></span>
+  <span id="status"><i id="dot"></i><span id="stxt">Emulator not connected</span></span>
+  <button id="openemu" title="Open the Atari emulator in a new tab; the tools connect to it automatically">Open emulator</button>
+</header>
+<main>
+  <p class="intro">The hybrid Craft apps are a core proof of concept for the actual system, using very specific data: each shows that the web side and the Atari side can be used together. All of these tools are ways to manipulate existing data and move it into and out of the system from current standards. The goal is to bring the evolved apps to the main system with the same features and a way to present them correctly. Tools marked <i>needs emulator</i> run programs, read memory or boot files on the machine in the emulator tab.</p>
+  <div id="groups"></div>
+  <div id="none">No tool matches.</div>
+  <footer>Protocol and design: <a href="https://github.com/xoxide101/ataricraft/blob/main/docs/TOOLSHUB.md">docs/TOOLSHUB.md</a>. The emulator itself (File manager, WebAFM, drives, debugging) stays at <a href="index.html">index.html</a>.</footer>
+</main>
+<script src="js/fontlib.js?v=1"></script>
+<script src="js/basic.js"></script>
+<script src="js/basicpanel.js"></script>
+<script src="js/asm6502.js"></script>
+<script src="js/bcomp.js"></script>
+<script src="js/asmpanel.js"></script>
+<script src="js/ttf.js"></script>
+<script src="js/fontpanel.js"></script>
+<script src="js/toolshub-link.js?v=1"></script>
+<script src="js/inspectpanel.js?v=1"></script>
+<script src="js/toolshub.js?v=1"></script>
+</body></html>
