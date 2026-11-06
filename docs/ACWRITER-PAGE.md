@@ -57,6 +57,26 @@ PAGE mode has a 2x blow-up that draws the true 8x8 glyphs at 2x (16 px cells, 20
 
 Typing in the old view is unchanged: `scripts\acwriter-latency.cjs` prints `mfull/mscr/mkey` (`$A0..$A2`) on the 130XE. History: `[34, 5, 5]` before the overlay work, `[77, 6, 7]` now. The change is explained, not a code regression: `mfull` is a full redraw of the start-up sample document, and until the overlap fix (see Segment overlaps) the sample was truncated by the home/convert text (353 then 594 bytes, `dend` = $6561/$6692); it is now the intended 1499 bytes (two `body` copies), so `mfull` scales with it. `mscr` (one `scrolldown` = 6144-byte block copy + one `drawdoc` line) is 5.5 jiffies of copying plus a line draw, so the longer sample text tips it over a one-jiffy boundary; typing latency (`mkey`) is within one or two jiffies. Compare builds only with the same sample length.
 
+### 12x12 / 10x12 faces on the Atari: constraint analysis (not implemented)
+
+Decision: **analysis only**; no partial is shipped, because every viable partial needs a new overlay image and there is no room for one without evicting existing features.
+
+Numbers (from the current build):
+* Overlay slot `SLA=$57B7`, 12 pages, must end at or below `$63B7` (DOC starts `$6400`, 11,264 bytes, fixed by the document-size requirement). It cannot grow. Image ends: E `$637A`, S `$5FEA`, R `$618A`, P `$63B1` (6 bytes spare), Z `$6357` (~96 bytes spare), H `$5C28`. The 2x view (Z) has no space for an unaligned blitter plus a layout pass.
+* Resident code slack is ~73 bytes below `$6400`; each overlay stub costs ~9 bytes, plus a command entry and menu text.
+* Low RAM is full: LDB/copy buffer `$9F00` (256 B), SCR `$A060-$BF9F`. Staging area in bank 2 uses E `$6A00`, H `$7600`, Z `$8000`, P `$A100`, S `$AD00`, R `$B500` (ends `$BFFF`); a seventh image has nowhere in the staging window without re-packing the existing six.
+* Storage is **not** the problem: a 12x12 face is 96 glyphs x 12 rows x 2 bytes = 2,304 B (9 pages); 10x12 uses the same 2-byte rows. Bank 3 holds the 4 charset slots (4 KB, `$40..$4F` pages) and about 12 KB is free, i.e. 5 such faces.
+* Rendering is the problem: a 12 px cell is not byte aligned on the 40-byte 1-bpp line (the 2x view relies on 8 px = 1 byte, 16 px = 2 bytes). Each glyph needs a 12-row shift/merge blit (~60 bytes of code) plus a column/layout routine for ~26 columns, cursor drawing, horizontal scroll and the style (bold/underline) passes, about 600-900 bytes in all.
+* The loader differs: `fnload` reads a 1,024-byte `.FNT`; a wide face needs a new 2,304-byte format and a different font-table state/size byte.
+
+Memory plan if the space is ever freed (e.g. by dropping the image-H home/convert text or moving S to a second slot):
+1. New overlay image Y (id 6, <= 12 pages) with the 12-px view: pzmain-style loop, `ysh` blitter, loader for `.F12` files.
+2. Stage Y at `$B500` after moving R down by shrinking nothing else; or re-stage P/S one page lower each (P has 6 spare bytes, so this only works after trimming P).
+3. Wide faces in bank 3 pages `$50+` (2,304 B each, up to 5), selected by font-table byte 15 bit 7 (wide) with the existing CPG1 tag 2/3 names unchanged (name suffix `.F12`).
+4. `ovc` guard `cmp #4` extended to the new id; `ovsp` and `cpx #7` in `ovlcopy.inc`; `NCMD` +1.
+
+Until then the Craft 12x12 and 10x12 faces are used on the host side (web/PC rendering, bitmap printing is 8x8 Craft face only) and the Atari shows 8x8 doubled.
+
 ### Segment overlaps (scripts/xex-overlap.cjs)
 Two overlaps reported by `xex-overlap.cjs` were real corruption, not overlay reuse, and are fixed: (1) `homedoc`/`convdoc` were assembled at `SLA+$0C00` = `$6225`, on top of the first 589 bytes of the sample DOC (`$6400`); they are now overlay image H (id 4, staged at `$7600`, run from the slot by `pgshow`; home and convert pages therefore need a 130XE like the editor does). (2) the spell dictionary access code (`spellbk`, `$9300-$947F`) overwrote `font4` planes f4_0/f4_1 (`$9400+`); it is now resident below `$4000`. The tool reports no overlapping segments.
 
