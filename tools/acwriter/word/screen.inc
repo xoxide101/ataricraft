@@ -154,15 +154,6 @@ apc
  sta dfrom
  rts
 
-redrawcur
- lda cl
- sec
- sbc top
- sta rr
- lda cl
- sta t0
- jmp drawdoc
-
 drawdoc
  jsr rowsetup
  lda t0

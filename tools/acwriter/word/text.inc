@@ -153,7 +153,7 @@ dlbb txa
  jsr drawchar
  pla
  sta col
-dt1 ldy #0
+dt1 jsr cuhit
  lda (tp),y
  beq dtend
  cmp #13
