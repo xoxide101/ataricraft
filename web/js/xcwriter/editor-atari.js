@@ -169,6 +169,7 @@
     return lcToPos(li, k);
   }
   const mapChar = (ch) => {
+    if (XCW.Gfx.acwCodeOfUni(ch.codePointAt(0)) >= 0) return ch;
     const t = XCW.cleanParas([{ align: 'l', bullet: false, runs: [{ t: ch, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] }])[0].runs[0].t;
     return t.length === 1 && XCW.charOk(t) ? t : '?';
   };

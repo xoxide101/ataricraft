@@ -68,7 +68,7 @@
   // characters ACWriter cannot show become their look-alike or ?, so that caret offsets map 1:1 onto screen cells
   function atariSanitize(doc) {
     const c = XCW.cleanParas(XW.mode === 'page' && XW.page ? XCW.Page.expandTabs(doc, XW.page) : doc);
-    for (const p of c) for (const r of p.runs) r.t = [...r.t].map((ch) => (XCW.charOk(ch) || (ch.codePointAt(0) >= 0xe080 && ch.codePointAt(0) <= 0xe09f) ? ch : '?')).join('');
+    for (const p of c) for (const r of p.runs) r.t = [...r.t].map((ch) => { const cp = ch.codePointAt(0); return cp >= 0x80 && cp <= 0x9f ? String.fromCodePoint(XCW.Gfx.uniOfAcw(cp)) : ch; }).map((ch) => (XCW.charOk(ch) || (ch.codePointAt(0) >= 0xe080 && ch.codePointAt(0) <= 0xe09f) || (ch.codePointAt(0) >= 0x80 && ch.codePointAt(0) <= 0x9f) ? ch : '?')).join('');
     return XCW.normalize(c);
   }
   $('mhq').onclick = () => setMode('hq');

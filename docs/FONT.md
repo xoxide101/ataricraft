@@ -50,6 +50,8 @@ count x rows bytes     glyph slots first.. (one byte per row)
 
 Old `ttf2acf` files (`"ACF1"`, several sizes, 96 glyphs each) still load: one size is chosen and metrics are inferred from the height (a sixth headroom, a quarter descender), identity map. `ttf2acf.cjs` without `--cell` still writes ACF1; `ttf2acf.cjs font.ttf out.acf --cell 5 [--name N]` writes ACF2 (supersampled 4x, glyph scaled so capitals fill rows 2-8, squeezed to `gw` columns, coverage >= 30 %). The font editor does the same conversion in the browser. A JSON form (`format: "craft-font"`, glyph rows as hex strings) is also read and written.
 
+**Row bytes (flag bit5, sizes above 16 px):** when the advance is wider than 16 px a `u8 bpr` byte follows the meta block (after `[u8 origin, u8 locked, u8 masterAdv]`; if flag bit3 is not set it follows the name) and every glyph row is `bpr` bytes (3 or 4: up to 32 px), high byte first, bit `8*bpr-1` leftmost. Files without flag bit5 keep their old layout (bpr 1 when not wide, 2 when wide), so every older `.acf` loads unchanged. Bit operations on 4-byte rows must be unsigned (`>>> 0`), a signed `1 << 31` bit breaks shifts.
+
 ## 6502 data (`.inc`)
 
 `toInc(font, prefix)` writes constants (`prefix_ADV`, `_GW`, `_ROWS`, `_HEAD`, `_XTOP`, `_BASE`, `_DESC`, `_SUPUP`, `_SUBDN`, `_FIRST`, `_COUNT`), then one plane per cell row `prefix_0 .. prefix_11` (`count` bytes each, MSB-left) and `prefix_map` (256 bytes, slot minus `first`, 255 = not stored). `tools/acwriter/mkcraftfonts.cjs` emits `craft4.inc`, `craft5.inc`, `craft6.inc` (prefix `c4`, `c5`, `c6`) and `web/js/fontedit/builtin-fonts.js`. Per-code variants are not emitted: the 6502 uses the automatic shift.
@@ -167,3 +169,45 @@ All import/export in `web/fontedit.html` goes through `XCW.FontPipe` (xcf, bdf, 
 **Integration still needed in `tools/acwriter/*` (not touched):** in `mkcraftfonts.cjs` wrap each built face for adv 4/5/6 with `require('../acwfaces.cjs').override('craft' + adv, f)` before serialize/toInc; in `mkzoomfont.cjs` use `acwfaces.zfontInc(acwfaces.override('zfont', face))`. `mkpgfont.cjs` follows via craft4.inc. Or copy the generated `font/build/*.inc`; with no overrides they are byte-identical to `tools/acwriter/*.inc`.
 
 Tests: `node scripts/fontedit-ui-test.cjs` (real Chrome clicks, screenshots `out/fe-ui-*.png`).
+
+## Atari graphics characters, sizes 14-26 (`tools/atarigfx.cjs`)
+
+Every Craft face (4, 5, 6, 8, 10, 12 and the large 14, 16, 18, 20, 22, 24, 26) holds the Atari graphics, **drawn procedurally** (box lines, suits, blocks, triangles and arrows are plain shapes generated from the cell geometry; no ROM data is read, stored or committed). The Atari ROM charset is used only as a visual reference and for the existing "Atari ROM" font entry.
+
+| Slot | Unicode | Slot | Unicode | Slot | Unicode | Slot | Unicode |
+|---|---|---|---|---|---|---|---|
+| 0 ♥ | U+2665 | 8 ◢ | U+25E2 | 16 ♣ | U+2663 | 24 ┴ | U+2534 |
+| 1 ├ | U+251C | 9 ▗ | U+2597 | 17 ┌ | U+250C | 25 ▌ | U+258C |
+| 2 ▕ | U+2595 | 10 ◣ | U+25E3 | 18 ─ | U+2500 | 26 └ | U+2514 |
+| 3 ┘ | U+2518 | 11 ▝ | U+259D | 19 ┼ | U+253C | 27 ⎋ | U+238B |
+| 4 ┤ | U+2524 | 12 ▘ | U+2598 | 20 ● | U+25CF | 28 ↑ | U+2191 |
+| 5 ┐ | U+2510 | 13 ▔ | U+2594 | 21 ▄ | U+2584 | 29 ↓ | U+2193 |
+| 6 ╱ | U+2571 | 14 ▂ | U+2582 | 22 ▎ | U+258E | 30 ← | U+2190 |
+| 7 ╲ | U+2572 | 15 ▖ | U+2596 | 23 ┬ | U+252C | 31 → | U+2192 |
+
+Slots 0-31 are the ATASCII / internal-set graphics (code = slot). Five more symbols have no ACWriter code and live in slots 128-132: ♦ U+2666, ♠ U+2660, ↰ U+21B0, ◀ U+25C0, ▶ U+25B6. The printable ASCII specials stay where they are (96 backtick, 123 `{`, 125 `}`, 126 `~`, 127 DEL), so a face now spans slots 0-132 (`first` 0, `count` 133); the map is identity for codes 0-31, and `map[128..132]` points at the extra slots.
+
+* **Cells.** Graphics are stored over the whole advance (glyph columns plus the gap), so `CF.colsOf(f, slot)` (not `gw`) is the width to draw or edit. Faces with an advance up to 8 use the 8-row Atari cell (rows `head..head+7`), larger faces the full cell. Every box and line piece reaches the cell edges, so lines join seamlessly cell to cell and row to row.
+* **Inverse video.** ATASCII 128-255 is not stored: it is the full-cell complement of the normal glyph, computed at draw time (`AG.inverse`, `CF.cellMask`; ACWriter style bit 8 does `eor #$1F`).
+* **Derivation.** Sizes below the 12x12 master use `derive()` for text, the graphics come from the procedure at the target cell size (hand-fixed so lines connect). Sizes 14-26 are derived up from the master scale-aware (`upGlyph`), graphics generated at that size; check them with `node scripts/craft-gfx-sheet.cjs` (writes `out/shots/fonts/craft-gfx-sheet.png`).
+* **Build.** `scripts/mkcraftfaces.cjs` writes `font/craft*.acf` (4-12 via the ACWriter set, 14-26 directly), `tools/acwriter/mkcraftfonts.cjs` the `.inc` files, `mkpgfont.cjs` the PAGE font; `node scripts/build-all.cjs` regenerates all of them and `--check` verifies them.
+* **TTF and other conversions.** `fontpipe.down()` installs the Craft graphics into every size of a converted font (a TTF has no Atari graphics), so a TTF-derived family keeps slots 0-31 and 128-132 from the Craft base. Pass `{ graphics: false }` to turn this off. XCF, BDF, TTF (our own export) and ACF round trips keep the slots.
+* **fontedit.** The slot grid shows slots 0-255 (graphics at 0-31 and 128-132); the editor grid, drawing, flood fill, mirror and preview use the slot's own column count (`NC()`), so a graphics glyph can be edited over its full advance. The size list contains 14-26 for a Craft family.
+
+### Which sizes the Atari app can load
+
+ACWriter (6502) builds in only the 4, 5, 6 faces (and the 8x8 `.FNT` / zfont for 2x zoom); 10 and 12 are xCWriter / print / web faces. **14-26 are not in the ACWriter build** (a 26 px face is 4 bytes x 26 rows x 133 glyphs = 13.8 KB, more than its RAM allows); they exist as `font/craft14.acf` ... `craft26.acf` for xCWriter, print and the web. The ACWriter memory budget is unchanged: the glyphs for codes 128-159 are the existing 1 KB SYM page (`tools/acwriter/sym.inc`, rows 5 bits wide, bit 4 leftmost), and `drawchar` (`word/text.inc`, label `dc6`) skips the 1-bit left shift for glyphs read from the SYM page so they use all five columns (the gap column too, which is what makes the bars touch).
+
+Limits: in ACWriter's 2x zoom and PAGE views only codes 32-127 are drawn (zfont / craftpg), so graphics show in the normal 1x view and print, not in zoom. The five extra symbols (slots 128-132) have no ACWriter code.
+
+### Mapping: CRFT, text, ATASCII, docx
+
+| Format | Graphics |
+|---|---|
+| ACWriter / CRFT document | graphic n (0-31) is byte 128+n; extra symbols map to `?` |
+| xCWriter document (Unicode) | the Unicode characters of the table above; the **Symbols...** button (next to the mode buttons) opens a picker that inserts them |
+| text, Markdown, RTF, HTML, docx | real Unicode (UTF-8 for text and md; docx/html/rtf as Unicode text); `craftexport` option `{ graphics: 'pua' }` keeps U+E080..U+E09F instead |
+| ATASCII export | the slot number (0-31) as the ATASCII byte |
+| import (text / docx / html ...) | the Unicode characters above become byte 128+n; U+E080..U+E09F also; any other character outside Latin-1 becomes `?` |
+
+Tests: `node scripts/craft-gfx-test.cjs` (set, all sizes, ACF2 row bytes, XCF/BDF/TTF round trips, TTF keeping the graphics, mapping), `node scripts/acwriter-gfx-diff.cjs` (pixel diff of a line of graphics: ACWriter in the emulator vs the xCWriter Atari view, 0 mismatching pixels).
