@@ -15,8 +15,10 @@
 (function () {
   const AC = typeof window !== 'undefined' ? (window.AC = window.AC || {}) : {};
   const PROTOCOL = 1;
-  const err = (name, message, code) => ({ name, message, code: code || 0 });
-  const fail = (name, message, code) => ({ ok: false, meta: {}, body: null, error: err(name, message, code) });
+  // code = protocol error number (docs/ARCH-TRANSPORT.md section 5); native = the backend's own number (relay X-AC-Err, HTTP status) when it has one.
+  const ERRORS = { OK: 0, Error: 1, NotFound: 2, Exists: 3, NotAllowed: 4, BadToken: 5, Unreachable: 6, Unsupported: 7, BadFrame: 8, BadChecksum: 9, TooLarge: 10, Timeout: 11, Busy: 12, BadVersion: 13, Aborted: 14, OutOfOrder: 15 };
+  const err = (name, message, native) => { const e = { name, message, code: ERRORS[name] == null ? ERRORS.Error : ERRORS[name] }; if (native) e.native = native; return e; };
+  const fail = (name, message, native) => ({ ok: false, meta: {}, body: null, error: err(name, message, native) });
   const okr = (meta, body) => ({ ok: true, meta: meta || {}, body: body || null, error: null });
   const bytes = (b) => (b == null ? new Uint8Array(0) : b instanceof Uint8Array ? b : b instanceof ArrayBuffer ? new Uint8Array(b) : new Uint8Array(b.buffer ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : b));
   const dec = (u) => new TextDecoder().decode(u);
@@ -257,7 +259,7 @@
   // Convenience: send and either return the reply or throw an Error whose .name is the error name.
   async function call(t, op, args, body) {
     const r = await t.send({ op, args: args || {}, body: body || null });
-    if (!r.ok) { const e = new Error(r.error.message); e.name = r.error.name; e.code = r.error.code; throw e; }
+    if (!r.ok) { const e = new Error(r.error.message); e.name = r.error.name; e.code = r.error.code; if (r.error.native) e.native = r.error.native; throw e; }
     return r;
   }
 

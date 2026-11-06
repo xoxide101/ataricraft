@@ -13,7 +13,7 @@ t.status();  t.on('message'|'status', fn);  await t.close();
 await AC.Transport.call(t, op, args, body);   // like send, but throws on error
 ```
 
-Reply: `{ ok, meta, body, error:{name, code, message} }`. `meta` is JSON, `body` is a `Uint8Array`. Error names: `NotFound`, `Exists`, `NotAllowed`, `BadToken`, `Unreachable`, `Unsupported`, `Error`. Backends never throw from `send`.
+Reply: `{ ok, meta, body, error:{name, code, message, native?} }`; `code` is the protocol error number (ARCH-TRANSPORT.md section 5), `native` the relay's own number when it has one (e.g. 167). `meta` is JSON, `body` is a `Uint8Array`. Error names: `NotFound`, `Exists`, `NotAllowed`, `BadToken`, `Unreachable`, `Unsupported`, `Error`. Backends never throw from `send`.
 
 ## Operations (protocol 1)
 

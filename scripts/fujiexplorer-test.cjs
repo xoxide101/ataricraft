@@ -115,6 +115,11 @@ const spawnRelay = (port, extra, env) => { const p = spawn('node', [ROOT + '/too
     ok(bt.status().state === 'error', 'wrong token: status error'); ok((await bt.send({ op: 'fs.list', args: { scheme: 'sd', path: '/' } })).error.name === 'BadToken', 'wrong token: BadToken');
     const dead = T.relay({ base: 'http://127.0.0.1:1', token: TOK }); await dead.open();
     ok((await dead.send({ op: 'fs.list', args: { scheme: 'sd', path: '/' } })).error.name === 'Unreachable', 'relay down: Unreachable');
+    { const T = require('../web/js/transport.js'), b = await bt.send({ op: 'fs.list', args: { scheme: 'sd', path: '/' } }), d = await dead.send({ op: 'fs.list', args: { scheme: 'sd', path: '/' } });
+      ok(w1.error.code === 4 && w1.error.native === 167, 'error.code is the protocol number (NotAllowed 4), relay 167 in native');
+      ok(b.error.code === 5 && b.error.native === 403, 'BadToken: code 5, native 403 (HTTP status)');
+      ok(d.error.code === 6, 'Unreachable: code 6');
+      ok(T.fail('NotAllowed', 'x', 167).error.native === 167 && T.fail('NotFound', 'x', 170).error.code === 2 && T.fail('Whatever', 'x').error.code === 1, 'fail(): protocol code from the name, relay number in native'); }
     // router
     const lb2 = T.loopback(); const em = T.loopback(); em.handle('emu.ping', () => ({ meta: { value: { booted: true } } }));
     const rt = T.router({ relay: lb2, emulator: em }); await rt.open();
