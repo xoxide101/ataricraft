@@ -123,7 +123,7 @@
   // reply = {ok, meta, body, error:{name,code,message}} as in web/js/transport.js -> {type: RES|ERR, payload}
   function encodeReply(r) {
     if (r.ok) { const mj = meta(r.meta); return { type: TYPE.RES, payload: U.concat([u16(0), u16(mj.length), mj, U.u8(r.body)]) }; }
-    const e = r.error || { name: 'Error', message: '' }, mj = meta({ name: e.name, message: e.message || '', native: e.code || undefined });
+    const e = r.error || { name: 'Error', message: '' }, mj = meta({ name: e.name, message: e.message || '', native: e.native != null ? e.native : (e.code && e.code !== errorCode(e.name) ? e.code : undefined) });
     return { type: TYPE.ERR, payload: U.concat([u16(errorCode(e.name)), u16(mj.length), mj]) };
   }
   function decodeReply(type, b) {

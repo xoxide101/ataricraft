@@ -35,6 +35,8 @@ All integers little-endian. `crc` covers every byte **after** the sync byte up t
 | 10 | len | payload |
 | 10+len | 2 or 4 | CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF), or CRC-32/IEEE if flag CRC32 |
 
+Decision (approved): **CRC-16/CCITT-FALSE is the default** frame checksum (cheap on a 6502); **CRC-32 is optional**, selected per frame by the CRC32 flag and offered in `sys.hello {crc32}`. `framing.cjs` encodes CRC-16 unless `crc32: true` is set; the tests cover both.
+
 Decoder rules: scan for `C7`; on bad version/CRC/length drop one byte and rescan (so garbage never stalls the stream); a damaged length that promises bytes that never come is abandoned when a later valid frame appears; never throws.
 
 ## 3. Chunking and reliability
@@ -76,7 +78,7 @@ Handshake: client sends `sys.hello {protocol, maxChunk, crc32}`; server replies 
 ## 6. Reconciliation with `transport.js`
 
 - `PROTOCOL = 1` is the same; **error names are identical** (NotFound, Exists, NotAllowed, BadToken, Unreachable, Unsupported, Error); the framing adds names from 8 up.
-- Today `error.code` holds the relay's native number (e.g. 167). On the wire `code` is the protocol number above and the native number travels as `error.native`. *Proposed:* make `transport.js` follow (code = protocol number, `native` = old value). Not done; no existing caller changes until approved.
+- **Done (approved):** `transport.js` replies carry `error.code` = the protocol number above (looked up from the name; unknown names are 1 `Error`) and the old relay number (`X-AC-Err` such as 167/170/201/146/151, or the HTTP status 403/404/5xx) in `error.native` when there is one. `call()` copies both onto the thrown Error. Framing carries `native` in the ERR meta, so a framed link and the HTTP relay report the same thing. Checked by `scripts/fujiexplorer-test.cjs` and `scripts/craftcore-test.cjs`.
 - `WRITE_OPS` / `isWrite` are reused unchanged by the loopback server.
 - The loopback in `transport.js` stays the cheap unframed stub; `tools/craftcore/loopback.cjs` is the framed one used by tests and for developing Atari-side code without hardware.
 
