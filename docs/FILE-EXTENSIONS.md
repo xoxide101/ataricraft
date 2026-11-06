@@ -9,7 +9,7 @@ Rule (decided): `xcw` for write, `xcs` for spreadsheet, `xcd` for database; ever
 | `.xcw` | Craft Word document (CRFT type `W`, [CRAFT-FORMAT.md](CRAFT-FORMAT.md)) | written by xCWriter, `craftimport`, EBookCraft; ACWriter reads and writes it when you type the name with the extension |
 | `.cwd` | old name of the same format | still read everywhere; ACWriter (6502) still adds it when you type no extension; the demo sample keeps it |
 | `.xcs` | Craft spreadsheet (type `S`) | format defined in `docs/XCCALC.md`; adapter `xcs` in the registry |
-| `.xcd` | Craft database (type `D`) | reserved the same way; format not defined yet |
+| `.xcd` | Craft database (type `D`) | implemented: [XCBASE.md](XCBASE.md) (binary plus JSON twin, adapter `adapter-xcd.cjs`) |
 | `.acf`, `.xcf` | Craft font (ACF2, [FONT.md](FONT.md)) | in use, same format under both names |
 | `.cdc`, `.dic` | spell-check dictionaries | in use |
 | `.fnt`, `.ovl` | ACWriter font and overlay files | in use |

@@ -18,7 +18,7 @@ Reference implementations: `tools/acwriter/word/file.inc` (6502 writer and reade
 |---|---|---|---|
 | ACWriter, xCWriter | `W` (0x57) | `.XCW` (old name `.CWD`, still read) | Craft Word document |
 | ACSpread | `S` (0x53) | `.XCS` | Craft spreadsheet: name reserved, format not defined yet |
-| ACDBase | `D` (0x44) | `.XCD` | Craft database: name reserved, format not defined yet |
+| ACDBase | `D` (0x44) | `.XCD` | Craft database: fixed-width payload, see [XCBASE.md](XCBASE.md) |
 
 The extension is a convention only. The type byte in the header decides. 8.3 names work on every DOS, C64 disk and modern OS. Decision: `xcw` for write, `xcs` for spreadsheet, `xcd` for database; everything else keeps its normal name (full list: [FILE-EXTENSIONS.md](FILE-EXTENSIONS.md)). `.XCW` fits the Atari 8.3 limit. xCWriter, `craftimport` and EBookCraft write `.xcw`; every reader accepts `.cwd` too. ACWriter itself (6502) still adds `.CWD` when you type a name without a dot (changing the assembly is deferred; type `H:NAME.XCW` to use the new name), and `D1:` when you type no device (`H:` and any other CIO device work too).
 
