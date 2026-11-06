@@ -89,7 +89,7 @@
       <div id="sizes" role="tablist" aria-label="Craft sizes 4-26 px"></div>
     </div>
     <nav id="tabs">
-      <button class="tabbtn on" data-tab="edit">Glyphs</button><button class="tabbtn" data-tab="family">Family</button><button class="tabbtn" data-tab="specimen">Specimen</button><button class="tabbtn" data-tab="atari">Atari</button><button class="tabbtn" data-tab="kern">Kerning</button><button class="tabbtn" data-tab="quality">Quality</button>
+      <button class="tabbtn on" data-tab="edit">Glyphs</button><button class="tabbtn" data-tab="family">Family</button><button class="tabbtn" data-tab="specimen">Specimen</button><button class="tabbtn" data-tab="atari">Atari</button><button class="tabbtn" data-tab="outline" title="Real outlines behind the pixels: points, curves, rasterize to any size">Outline</button><button class="tabbtn" data-tab="kern">Kerning</button><button class="tabbtn" data-tab="quality">Quality</button>
     </nav>
     <div id="views">
       <div class="view" id="v-edit">
@@ -117,7 +117,46 @@
           <div class="dim" id="metrics"></div>
         </div>
       </div>
-      <div class="view" id="v-family" hidden>
+      <div class="view" id="v-outline" hidden>
+        <div id="olmain">
+          <div id="oltools">
+            <button class="oltool on" data-otool="select" title="Select / move points and handles (V)">Select</button><button class="oltool" data-otool="pen" title="Pen: click = corner, drag = smooth point (P)">Pen</button><button class="oltool" data-otool="knife" title="Knife: add a point on a segment (K)">Knife</button><button class="oltool" data-otool="rect" title="Rectangle (R)">Rect</button><button class="oltool" data-otool="ellipse" title="Ellipse (O)">Ellipse</button>
+            <label title="Shapes and the pen add a hole (counter-clockwise)"><input id="olhole" type="checkbox"> hole</label><span class="sepv"></span>
+            <button id="olsmooth" title="Make selected points smooth (S)">Smooth</button><button id="olcorner" title="Make selected points corners (Shift+S)">Corner</button><button id="olcurve" title="Turn the segment after each selected point into a curve">Line&rarr;curve</button><button id="olline" title="Remove the handles of selected points">Curve&rarr;line</button><button id="oldel" title="Delete selected points (Del)">Delete</button><span class="sepv"></span>
+            <button id="olundo" title="Undo (Ctrl+Z)">Undo</button><button id="olredo" title="Redo (Ctrl+Shift+Z)">Redo</button><button id="olfit" title="Fit (F)">Fit</button><button id="olsel" title="Select all points (Ctrl+A)">Select all</button>
+          </div>
+          <div class="row"><b id="olglyph">-</b><label>Character <input id="olchar" size="6" placeholder="A or U+0041"></label><span id="olsrc" class="dim"></span><span class="sp"></span><span id="olpos" class="dim"></span></div>
+          <div id="olcvwrap"><canvas id="olcv"></canvas></div>
+          <div id="olstat" class="dim"></div>
+          <div class="dim">Wheel = zoom, Space+drag = pan, arrows nudge selected points (Shift = 10 units). Outline edits are saved in this browser; the pixel sizes only change when you press <b>Rasterize</b>.</div>
+        </div>
+        <div id="olside">
+          <details open><summary>Metrics (font units)</summary>
+            <div class="row"><label>ascender <input id="olasc" type="number" style="width:70px"></label><label>cap height <input id="olcap" type="number" style="width:70px"></label></div>
+            <div class="row"><label>x-height <input id="olxh" type="number" style="width:70px"></label><label>descender <input id="oldesc" type="number" style="width:70px"></label></div>
+            <div class="row"><label>advance <input id="oladv" type="number" style="width:70px"></label><label>left bearing <input id="ollsb" type="number" style="width:70px"></label><label>right bearing <input id="olrsb" type="number" style="width:70px"></label></div>
+            <div class="dim" id="olbbox"></div>
+          </details>
+          <details open><summary>Contours</summary><div id="olcont"></div>
+            <div class="row"><button id="olrev" title="Reverse the selected contours">Reverse</button><button id="olfix" title="Outer contours clockwise, holes counter-clockwise">Fix directions</button><button id="olfh">Flip H</button><button id="olfv">Flip V</button></div>
+            <div class="row"><label>Grid <input id="olgrid" type="number" value="10" min="1" style="width:56px"></label><label><input id="olsnap" type="checkbox"> snap</label><button id="olround">Round to grid</button></div>
+            <div class="row"><label>Tolerance <input id="olsimptol" type="number" value="2" min="0" style="width:56px"></label><button id="olsimp" title="Remove points that lie on a straight line">Simplify</button><button id="olrevert" title="Forget my edits of this glyph and reload it from the source">Revert glyph</button></div>
+          </details>
+          <details open><summary>Pixel layer</summary>
+            <div class="dim">Draws this outline into the pixel sizes with the hinting options of the Family source panel (threshold, snap, weight).</div>
+            <div class="row"><select id="olgl"><option value="one">this glyph</option><option value="all">all ASCII glyphs</option></select><select id="olsz"><option value="this">this size</option><option value="all">all sizes</option></select></div>
+            <div class="row"><label><input id="olovw" type="checkbox"> also overwrite overrides and locked sizes</label></div>
+            <div class="row"><button id="olraster" class="primary">Rasterize to pixel layer</button></div><div class="dim" id="olrinfo"></div>
+            <canvas id="olpv" width="420" height="190"></canvas>
+          </details>
+          <details open><summary>Export outlines</summary>
+            <div class="row"><label>Glyphs <select id="olset"><option value="ascii">ASCII</option><option value="latin1">Latin-1</option><option value="all">everything in the source</option></select></label></div>
+            <div class="row"><button id="olxttf" title="TrueType (quadratic glyf outlines)">TTF</button><button id="olxotf" title="OpenType with CFF cubic outlines">OTF</button><button id="olxwoff" title="WOFF 1 (tables stored, not compressed)">WOFF</button></div>
+            <div class="dim">Pixel-only fonts export as square contours, merged per glyph.</div>
+          </details>
+          <details><summary>History</summary><div id="ollog" class="dim"></div></details>
+        </div>
+      </div>      <div class="view" id="v-family" hidden>
         <div class="row"><button id="fbderive">Derive all (keeps locked)</button><button id="fbmissing">Create missing sizes</button><button id="fbforce" title="Also overwrite hand-edited sizes">Force re-derive everything</button></div>
         <div class="dim">One card per size: origin, lock, open or re-derive. Missing sizes can be created from the master with one click.</div>
         <div id="famcards" style="margin-top:8px"></div>
@@ -233,6 +272,7 @@
 <script src="js/fontedit/library.js"></script>
 <script src="js/fontedit/family.js"></script>
 <script src="js/fontedit/hint.js"></script>
+<script src="js/fontedit/outline.js"></script>
 <script src="js/fontedit/export.js"></script>
 <script src="js/fontedit/views.js"></script>
 <script src="js/fontedit/kern.js"></script>

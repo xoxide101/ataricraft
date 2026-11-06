@@ -21,6 +21,7 @@
 
   // every pushed edit of a glyph in a non-master size marks that glyph as an override
   const push0 = FE.push;
+  FE.pushRaw = push0;
   FE.push = (label, slots, meta) => {
     push0(label, slots, meta);
     if (slots && slots.length && st.tgt === 0 && st.f && !isMaster(st.f)) { const o = FE.ovrOf(); for (const s of slots) if (!CF.isGfxSlot(s)) o[s] = 1; save(); }
