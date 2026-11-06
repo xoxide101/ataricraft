@@ -98,7 +98,7 @@ function Stamp-Html($rel) {
     })
 }
 $stamped = @{}
-foreach ($h in 'xcwriter.html', 'fontedit.html') { $stamped[$h] = Stamp-Html $h }
+foreach ($h in 'xcwriter.html', 'fontedit.html', 'ebookcraft.html') { $stamped[$h] = Stamp-Html $h }
 
 # decide what needs copying (copy-newer: missing, different size, or older on the server)
 $todo = New-Object System.Collections.Generic.List[object]

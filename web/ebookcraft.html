@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EBookCraft - ebook reader and page converter</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<style>
+  :root{--bg:#1e2128;--bar:#14161a;--panel:#181b21;--line:#3a4150;--fg:#d8dce4;--dim:#8a93a3;--acc:#ff9d3a}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,'Segoe UI',sans-serif;display:flex;flex-direction:column}
+  header{background:var(--bar);padding:6px 14px;display:flex;gap:14px;align-items:center;flex:none}
+  header .logo{font-weight:700;font-size:18px;letter-spacing:.5px;color:var(--acc);white-space:nowrap}
+  header .logo i{color:#fff;font-style:normal}
+  header .docname{color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .docname b{color:var(--fg);font-weight:600}
+  button,select,input[type=text],input[type=number]{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:4px 10px;font:inherit}
+  button{cursor:pointer}button:hover{border-color:#5a6478}
+  button.on{background:var(--acc);color:#111;border-color:var(--acc)}
+  button:disabled{opacity:.4;cursor:default}
+  select{padding:4px 6px}
+  .seg{display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .seg button{border:0;border-radius:0;padding:5px 12px}
+  .seg button+button{border-left:1px solid var(--line)}
+  .tab{display:none;flex:1;min-height:0}
+  .tab.on{display:flex}
+  /* reader */
+  #side{width:300px;flex:none;background:var(--panel);border-right:1px solid #0c0d10;display:flex;flex-direction:column;min-height:0}
+  #side .seg{margin:8px;align-self:flex-start}
+  #sidebody{flex:1;overflow:auto;padding:0 8px 8px}
+  #sidebody .it{padding:5px 8px;border-radius:4px;cursor:pointer;color:var(--fg);font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis}
+  #sidebody .it:hover{background:#262b34}
+  #sidebody .it small{color:var(--dim);display:block}
+  #sidebody .empty{color:var(--dim);padding:8px}
+  #sidebody .srch{display:flex;gap:6px;margin-bottom:8px}#sidebody .srch input{flex:1;min-width:0}
+  #main{flex:1;display:flex;flex-direction:column;min-width:0}
+  #bar{background:var(--panel);padding:6px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #0c0d10}
+  #bar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  #stage{flex:1;min-height:0;display:flex;align-items:stretch;justify-content:center;position:relative;background:var(--stagebg,#2a2d34);padding:18px}
+  #paper{flex:1;max-width:var(--paperw,980px);position:relative;border-radius:4px;box-shadow:0 2px 18px #0008;background:var(--pbg,#faf8f2);color:var(--pfg,#1b1b1b);overflow:hidden;padding:36px 44px}
+  #view{position:absolute;inset:36px 44px;overflow:hidden}
+  #flow{height:100%;position:relative;font-family:var(--face,Georgia,serif);font-size:var(--fs,19px);line-height:1.55;column-gap:56px;transition:none}
+  #flow h1,#flow h2,#flow h3,#flow h4{margin:.2em 0 .6em;line-height:1.2;break-after:avoid}
+  #flow h1{font-size:1.6em}#flow h2{font-size:1.35em}#flow h3,#flow h4{font-size:1.15em}
+  #flow p{margin:0 0 .8em;text-align:justify;hyphens:auto;orphans:2;widows:2}
+  #flow p.li{padding-left:1.2em;text-indent:-1em}#flow p.li:before{content:'\2022 ';}
+  #flow p.quote{margin-left:1.5em;font-style:italic}
+  #flow pre{white-space:pre-wrap;font:.85em ui-monospace,Consolas,monospace;margin:0 0 .8em}
+  #flow hr{border:0;text-align:center;margin:1em 0}#flow hr:after{content:'* * *'}
+  #flow .hit{background:#ffd54f88;border-radius:3px}
+  #flow .img{color:#888;font-style:italic}
+  #foot{display:flex;gap:10px;align-items:center;padding:6px 14px;background:var(--bar);color:var(--dim);font-size:12px}
+  #foot input[type=range]{flex:1}
+  #atari{flex:1;display:none;align-items:center;justify-content:center;flex-direction:column;gap:8px;min-height:0;min-width:0}
+  #atari canvas{image-rendering:pixelated;background:#fff;box-shadow:0 2px 18px #0008;max-width:100%;max-height:calc(100% - 34px);aspect-ratio:320/192;min-height:0;object-fit:contain}
+  body.atariview #paper{display:none}body.atariview #atari{display:flex}
+  body.t-night{--pbg:#15171b;--pfg:#c9cdd4;--stagebg:#0d0e11}
+  body.t-sepia{--pbg:#f2e6cb;--pfg:#4a3a22;--stagebg:#3a3226}
+  #drop{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#000a;font-size:28px;z-index:9;pointer-events:none}
+  body.dragging #drop{display:flex}
+  #welcome{max-width:640px;margin:auto;padding:30px;text-align:center;color:var(--dim);line-height:1.6}
+  #welcome h2{color:var(--fg);margin:0 0 8px}
+  /* convert */
+  #conv{min-height:0}
+  #cform{width:380px;flex:none;background:var(--panel);border-right:1px solid #0c0d10;overflow:auto;padding:12px 14px}
+  #cform fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 10px;padding:6px 10px 8px}
+  #cform legend{color:var(--acc);font-size:12px;padding:0 6px}
+  #cform label{display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--fg)}
+  #cform label span{flex:1}
+  #cform input[type=number]{width:70px}
+  #cform .hint{color:var(--dim);font-size:12px;margin:2px 0 4px}
+  #cout{flex:1;overflow:auto;padding:14px 18px;min-width:0}
+  #files-list{border:1px dashed var(--line);border-radius:6px;padding:8px 10px;margin-bottom:10px;min-height:44px;color:var(--dim)}
+  #log{white-space:pre-wrap;font:12px ui-monospace,Consolas,monospace;color:var(--dim);background:#111318;border-radius:6px;padding:8px 10px;max-height:150px;overflow:auto;margin:10px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px;font-size:12px;color:var(--dim);overflow:hidden}
+  .card img{width:100%;image-rendering:pixelated;background:#fff;display:block;margin-bottom:4px}
+  .card b{color:var(--fg);font-weight:600}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+  .okc{color:#7fd67f}.warn{color:#ffb74d}
+  h3{margin:14px 0 6px;font-size:14px;color:var(--acc)}
+  textarea.ocrtxt{width:100%;height:220px;background:#111318;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:13px ui-monospace,Consolas,monospace}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">EBook<i>Craft</i></div>
+  <div class="seg" id="tabs"><button data-tab="reader" class="on">Reader</button><button data-tab="conv">Convert &amp; deploy</button></div>
+  <div class="docname" id="docname">no book open</div>
+  <button id="open">Open book...</button>
+  <input type="file" id="file" hidden accept=".epub,.txt,.text,.html,.htm,.xhtml,.fb2,.mobi,.azw,.azw3,.prc,.cwd,.docx,.rtf,.md,.pdf,.zip,.ebookcraft">
+</header>
+
+<div id="reader" class="tab on">
+  <div id="side">
+    <div class="seg" id="sidetabs"><button data-p="toc" class="on">Contents</button><button data-p="bm">Bookmarks</button><button data-p="find">Search</button><button data-p="shelf">Shelf</button></div>
+    <div id="sidebody"></div>
+  </div>
+  <div id="main">
+    <div id="bar">
+      <button id="prev" title="Previous page (Left / PageUp)">&#9664;</button><button id="next" title="Next page (Right / PageDown / Space)">&#9654;</button>
+      <div class="sep"></div>
+      <button id="fminus" title="Smaller text">A-</button><button id="fplus" title="Larger text">A+</button>
+      <select id="face" title="Font face"></select>
+      <div class="seg" id="theme"><button data-t="day" class="on">Day</button><button data-t="sepia">Sepia</button><button data-t="night">Night</button></div>
+      <div class="seg" id="colsel"><button data-c="1" class="on">1 col</button><button data-c="2">2 cols</button></div>
+      <div class="sep"></div>
+      <div class="seg" id="viewsel"><button data-v="hq" class="on">Page</button><button data-v="atari" title="64 x 23 text screen in the ACWriter 4x7 font, as the Atari viewer shows it">Atari view</button></div>
+      <button id="addbm" title="Bookmark this page (B)">&#9733; Bookmark</button>
+    </div>
+    <div id="stage">
+      <div id="paper"><div id="view"><div id="flow"></div></div></div>
+      <div id="atari"><canvas id="acv" width="320" height="192"></canvas><div class="row"><span id="ainfo" style="color:var(--dim)"></span></div></div>
+      <div id="drop">Drop a book here</div>
+    </div>
+    <div id="foot"><span id="pos">-</span><input type="range" id="slider" min="0" max="0" value="0"><span id="prog">0%</span></div>
+  </div>
+</div>
+
+<div id="conv" class="tab">
+  <div id="cform">
+    <fieldset><legend>Input</legend>
+      <div class="hint">A book (EPUB, TXT, HTML, FB2, MOBI, CWD, DOCX, RTF), a PDF (text layer and/or scanned pages) or page images (PNG, JPEG, BMP, PGM). Several images = several pages, in name order.</div>
+      <div class="row"><button id="cpick">Choose files...</button><button id="cfromreader" title="Use the book that is open in the reader">Use open book</button></div>
+      <input type="file" id="cfile" hidden multiple accept=".epub,.txt,.html,.htm,.fb2,.mobi,.azw,.azw3,.prc,.cwd,.docx,.rtf,.md,.pdf,.png,.jpg,.jpeg,.bmp,.pbm,.pgm,.ppm">
+    </fieldset>
+    <fieldset><legend>Text</legend>
+      <label><input type="checkbox" id="o-text" checked><span>Text (.txt, Craft .cwd)</span></label>
+      <label><input type="checkbox" id="o-ocr"><span>OCR scanned pages</span></label>
+      <div class="hint" id="ocrstate">Checking OCR add-on...</div>
+    </fieldset>
+    <fieldset><legend>Page images</legend>
+      <label><input type="checkbox" id="o-bw" checked><span>1-bit</span></label>
+      <label><input type="checkbox" id="o-g4"><span>4 gray (GR.15)</span></label>
+      <label><input type="checkbox" id="o-g16"><span>16 gray (GR.9)</span></label>
+      <label><input type="checkbox" id="o-g256"><span>256 gray</span></label>
+      <label><span>Dither</span><select id="o-dither"><option>atkinson</option><option>floyd</option><option>bayer4</option><option>bayer8</option><option>threshold</option></select></label>
+      <label><span>Contrast</span><input type="number" id="o-contrast" value="0" min="-100" max="100"></label>
+      <label><span>Brightness</span><input type="number" id="o-bright" value="0" min="-100" max="100"></label>
+      <label><input type="checkbox" id="o-auto"><span>Auto levels</span></label>
+      <label><input type="checkbox" id="o-deskew"><span>Deskew</span></label>
+      <label><input type="checkbox" id="o-crop"><span>Crop margins</span></label>
+      <label><input type="checkbox" id="o-atari" checked><span>Atari size (320/160/80 x 192)</span></label>
+      <label><input type="checkbox" id="o-print" checked><span>High resolution (print)</span></label>
+      <label><span>Print width px</span><input type="number" id="o-pw" value="1700" min="320" max="6000"></label>
+      <label><span>Atari screens across (scans)</span><input type="number" id="o-tiles" value="2" min="0" max="6"></label>
+    </fieldset>
+    <fieldset><legend>Atari outputs</legend>
+      <label><span>Viewer screen mode</span><select id="o-mode"><option value="gr8">GR.8 1-bit</option><option value="gr15">GR.15 4 gray</option><option value="gr9">GR.9 16 gray</option></select></label>
+      <label><input type="checkbox" id="o-atr" checked><span>Boot ATR viewer (all pages, no DOS)</span></label>
+      <label><input type="checkbox" id="o-xex" checked><span>.XEX viewer (3 pages)</span></label>
+      <label><input type="checkbox" id="o-td" checked><span>DOS 2 text disk (BOOK.TXT)</span></label>
+      <label><input type="checkbox" id="o-bundle" checked><span>Bundle .ebookcraft.zip</span></label>
+    </fieldset>
+    <button id="run" class="on" style="width:100%;padding:8px">Convert</button>
+  </div>
+  <div id="cout">
+    <div id="files-list">No input yet.</div>
+    <div id="log"></div>
+    <div id="results"></div>
+  </div>
+</div>
+
+<script src="js/xcwriter/core/xcw-data.js"></script>
+<script src="js/xcwriter/core/xcw-core.js"></script>
+<script>var AC = window.AC || {};</script>
+<script src="js/diskconv.js"></script>
+<script src="js/dosfs.js"></script>
+<script src="js/afmcore.js"></script>
+<script src="js/xcwriter/faces.js"></script>
+<script src="js/ebookcraft/ebc-base.js"></script>
+<script src="js/ebookcraft/ebc-image.js"></script>
+<script src="js/ebookcraft/ebc-pdf.js"></script>
+<script src="js/ebookcraft/ebc-book.js"></script>
+<script src="js/ebookcraft/ebc-viewer-data.js"></script>
+<script src="js/ebookcraft/ebc-atari.js"></script>
+<script src="js/ebookcraft/ebc-ocr.js"></script>
+<script src="js/ebookcraft/ebc-pack.js"></script>
+<script src="js/ebookcraft/ebc-reader.js"></script>
+<script src="js/ebookcraft/ebc-app.js"></script>
+</body>
+</html>
