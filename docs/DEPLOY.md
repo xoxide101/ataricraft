@@ -21,7 +21,7 @@ Always run `-WhatIf` first and review the list.
 
 ## What is copied (copy-newer, never delete, no `/MIR`)
 
-- the whole `web\` tree: `index.html`, `xcwriter.html`, `ebookcraft.html`, `fontedit.html`, `workbench.html`, `js\`, `js\xcwriter\*` (incl. `core\`), `js\fontedit\*`, `img\`, `ref\`, `library\` (disk images, craftapps, samples, fonts incl. `fonts\personal\`);
+- the whole `web\` tree: `index.html`, `tools.html` (Craft Tools hub, stamped like the other pages), `xcwriter.html`, `ebookcraft.html`, `fontedit.html`, `workbench.html`, `js\`, `js\xcwriter\*` (incl. `core\`), `js\fontedit\*`, `img\`, `ref\`, `library\` (disk images, craftapps, samples, fonts incl. `fonts\personal\`);
 - `web\library\fonts\local\` regenerated first by `node scripts\fontlist.cjs`: `manifest.json` (groups Craft faces / Shipped / Atari ROM / Personal), the shipped fonts from `font\`, the ROM charset extracted from the OS ROM, and `font_personal\` (Atari8bit.ttf, FONT.FNT, ...). Manifest URLs are relative, so the picker and the font editor find them under the subfolder;
 - ACWriter: the built `tools\acwriter\poc5.xex` as `library\craftapps\ACWriter\POC5.XEX`, `font\*` as `...\ACWriter\FONTS\`, personal fonts as `...\FONTS\PERSONAL\`, any `.cwd/.dic/.ovl/.fnt/.acf` next to the source, and the spell-check dictionaries `docs\samples\EN.CDC`, `EN8.CDC` and the demo `ACWRITER-DEMO.CWD` into the same `ACWriter\` folder (the main app lists `library\craftapps\*` by folder; xCWriter itself embeds the dictionary and demo in `xcw-data.js`, so it needs no extra files);
 - `roms\` (Altirra OS/BASIC) to `<server root>\roms\`, where the app probes `../roms/`.

@@ -56,9 +56,9 @@ const ctl = (...a) => execFileSync('node', [ROOT + '/tools/ctl.cjs', ...a], { en
   ctl('unmock');
 
   // panel renders
-  await p.evaluate(() => AC.InspectPanel.open());
-  await p.waitForTimeout(900);
-  const txt = await p.evaluate(() => document.body.innerText);
+  const pt = await p.context().newPage(); pt.on('pageerror', (e) => errs.push(e.message)); await pt.goto('http://127.0.0.1:' + PORT + '/tools.html'); await pt.evaluate(() => AC.InspectPanel.open());
+  await pt.waitForTimeout(2500);
+  const txt = await pt.evaluate(() => document.body.innerText);
   ok(/INSPECT/.test(txt) && /MEMLO/.test(txt), 'Inspect panel shows the RAM report');
   ok(errs.length === 0, 'no page errors', errs.slice(0, 3));
   await b.close(); relay.kill();

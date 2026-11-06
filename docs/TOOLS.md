@@ -13,6 +13,7 @@ Every tool in this repository, with a page that explains what it does, how to us
 | [Audio](tools/audio.md) | MIDIPLAY, MP3PLAY, converters |
 | [Disk and library](tools/disk-library.md) | lsdisk, imgtool, libscan, DB builders, apt, dospack, bankmon, xexboot, afm, tui |
 | [Craft and documents](tools/craft-tools.md) | Craft format tools, fonts, dictionaries, importers, web apps |
+| [Tools hub](TOOLSHUB.md) | `web/tools.html` Craft Tools & Workbench menu (BASIC, ASM, Inspect, Font, Workbench, Craft apps); link to the emulator tab `web/js/toolshub-*.js`, test `scripts/toolshub-test.cjs` |
 | Existing | [Workbench](WORKBENCH.md), [Inspect](INSPECT.md), [FujiNet](FUJINET.md), [DOS boot](DOSBOOT.md), [Fonts](FONT.md), [Import](IMPORT.md), [xCWriter](XCWRITER.md), [EBookCraft](EBOOKCRAFT.md) |
 | [FujiNet Explorer](FUJIEXPLORER.md) | `web/fujiexplorer.html`: browse TNFS/SD/FTP/PC folders, disk images, drives D1-D8, N:, P:, settings, DOS boot, without booting an Atari; [Transport layer](TRANSPORT.md) |
 | [xCBase](XCBASE.md) | `web/xcbase.html` database (grid, form, query, Atari view, `.xcd`/DBF/CSV/TSV/SQLite, report, mail merge, SQL gateway), engine `tools/dbcore.cjs`, gateway `tools/sqlgate/`, bundle `scripts/xcbase-sync-core.cjs`, tests `scripts/xcbase-*-test.cjs` |
