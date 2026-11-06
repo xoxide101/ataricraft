@@ -23,3 +23,4 @@ Every tool in this repository, with a page that explains what it does, how to us
 - Assembly: 6501-style 6502 in the Workbench assembler dialect (MADS-compatible); `.COM` builds in-repo are ours.
 - Browser tests (`scripts/*-test.cjs`) use Playwright and need ROMs from the untracked `software_n_roms/`.
 - Never committed: ROMs, commercial disk images, `font_personal/`, third-party binaries.
+| [ACCalc](ACCALC.md) | Atari-native 130XE spreadsheet (`tools/accalc`): .XCS load/save, BCD recalc via OS FP, hi-res grid |
