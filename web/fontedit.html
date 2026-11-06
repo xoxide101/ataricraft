@@ -29,6 +29,13 @@
     <button id="bxcf">xCWriter .xcf</button>
     <button id="bbdf">BDF bitmap font</button>
     <button id="bttf">TrueType (.ttf)</button>
+    <h4>Retro and other formats</h4>
+    <div class="row"><select id="xfmt" title="Bitmap charsets, PSF, PCF, GEM, EOT, WOFF, TTC">
+      <option value="atari-screen">Atari 8-bit .fnt (screen-code order)</option><option value="atari-atascii">Atari 8-bit .fnt (ATASCII order)</option><option value="atari-inv">Atari .fnt 2048 (with inverse half)</option>
+      <option value="c64">Commodore 64 charset (2048)</option><option value="c64h">Commodore 64 .64c (with load address)</option><option value="zx">ZX Spectrum (768)</option><option value="msx">MSX charset (2048)</option><option value="cpc">Amstrad CPC charset (2048)</option>
+      <option value="psf">PSF (Linux console)</option><option value="pcf">PCF (X11)</option><option value="gem">Atari ST / GEM .fnt</option><option value="raw">Raw cells (set size below)</option>
+      <option value="eot">EOT (web, wraps TTF)</option><option value="woff">WOFF (web, wraps TTF)</option><option value="ttc">TTC (all sizes of the family)</option></select></div>
+    <div class="row"><label>cell <input id="xcw" type="number" min="1" max="23" value="8" style="width:48px"> x <input id="xch" type="number" min="1" max="26" value="8" style="width:48px"></label><button id="bxfmt">Export</button></div>
     <h4>Whole family</h4>
     <button id="bfam">All files, one by one</button>
     <label class="dim">for <select id="bztarget"></select></label> <button id="bzip">Zip (all sizes, formats, kerning, manifest)</button>
@@ -47,6 +54,7 @@
     <input id="fsearch" type="search" placeholder="Search fonts..." style="width:100%">
     <div id="fchips"></div>
     <div id="flist" role="listbox"></div>
+<details class="rawopt"><summary class="dim" title="Binary charsets carry no header: tell the editor the cell size and character order">Raw / binary import options</summary><div class="row dim">Raw binary files: cell <input id="rawcw" type="number" min="1" max="23" value="8" style="width:44px"> x <input id="rawch" type="number" min="1" max="26" value="8" style="width:44px"> <select id="raworder"><option value="seq">in order from code 0</option><option value="atari-screen">Atari screen-code order</option><option value="atascii">ATASCII order</option><option value="c64-screen">C64 screen codes</option></select></div></details>
     <div class="row"><button id="bnew" title="A blank 12 px family to draw from scratch">+ New blank family</button><span id="fcount" class="dim"></span></div>
     <div id="imp" hidden>
       <b>Importing <span id="impname"></span></b>

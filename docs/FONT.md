@@ -253,6 +253,33 @@ The **Outline** tab edits the real outlines behind the pixels (`web/js/fontedit/
 - **Export**: TTF (quadratic glyf; cubic curves are approximated), OTF (CFF, no hints/subrs), WOFF 1 (tables stored). Pixel-only fonts export square contours merged per glyph (`toTtf({merge:true})`, round trip exact; also with `otf:true`). Output is checked by loading it as a `FontFace` in Chrome.
 - **Limits (honest)**: composites are flattened on load (no anchors / accent composition yet), no hinting instructions are written, WOFF is not compressed, WOFF2 stays Node-only (`tools/woff2.cjs`), rasterize covers ASCII 32-126, CFF2 is not read.
 - Tests: `scripts/fontedit-ui4-test.cjs`.
+### Format support (phase 5)
+
+`tools/fontformats.cjs` (browser: `XCW.FontPipe.Formats`) reads and writes the bitmap and retro formats; `tools/sfnt.cjs` and `tools/fontpipe.cjs` handle the outline formats. **Round-trip tested** means a test reads, writes and reads again and compares pixels (`scripts/fontformats-test.cjs` in Node, `scripts/fontedit-ui5-test.cjs` through the editor in Chrome from file://; others as named).
+
+| Format | Read | Write | Round-trip tested | Notes |
+|---|---|---|---|---|
+| Craft ACF2 / ACF1, XCF, family JSON | yes | ACF2, XCF, JSON | yes (`fontedit-test`, `fontlist-test`) | ACF1 is read only |
+| TTF (glyf, composites) | yes | yes | yes (`fontpipe-test`, `fontedit-ui4-test`) | outlines kept in the Outline tab |
+| OTF (CFF) | yes | yes | yes (`fontedit-ui4-test`) | writer: Type 2 charstrings, no hints; CFF2 not read |
+| TTC | yes (every font becomes a family) | yes (all sizes of a family) | yes | `ttcPack` / `ttcUnpack` |
+| WOFF 1 | yes | yes (tables stored, not compressed) | yes | |
+| WOFF2 | Node only (`tools/woff2.cjs`) | no | Node | needs Brotli; the browser says so |
+| EOT | yes (uncompressed, XOR-obfuscated) | yes (wraps the TTF) | yes | MicroType-compressed EOT is refused |
+| BDF | yes | yes | yes (`fontpipe-test`) | |
+| PCF | yes (either byte/bit order) | yes (minimal: no accelerator tables) | yes with our reader; other tools unverified | |
+| PSF 1 / PSF 2 | yes (unicode table ignored) | yes (PSF1 for 8-wide, else PSF2) | yes 8x8, 8x16, 12x12 | |
+| Atari 8-bit `.fnt` 1024 | yes, screen-code order or ATASCII order | yes, both orders; 2048 with inverse half | yes | the editor needs the order chosen in *Raw / binary import options* for ATASCII files |
+| Atari ROM / XEX / ATR charsets | ROM image (locally only) | - | yes (`fontedit-ui-test`) | ROMs are never committed |
+| Atari ST / GEM `.fnt` | yes (monospace, 1 form) | yes | own reader only; real GEM tools unverified | proportional GEM fonts use the widest cell |
+| C64 charset 2048 / `.64c` | yes (first 128 screen codes) | yes (+ inverse half, optional load address) | yes | maps screen codes to upper-case ASCII / graphics slots 128-191 |
+| ZX Spectrum 768 | yes (chars 32-127) | yes | yes | |
+| MSX / Amstrad CPC 2048 | yes | yes | yes | plain 256 x 8 byte tables |
+| Raw cells (any cell up to 23 x 26) | yes (cell size, order) | yes | yes 8x8, 8x16, 5x7, 12x12 | orders: sequential, Atari screen, ATASCII, C64 screen |
+| PNG sheet | yes | yes | yes (`fontedit-test`) | 16 x 16 cells |
+| SVG font, UFO, Windows `.fon`, EOT/WOFF2 writers | not yet | not yet | - | planned |
+
+Export lives in the Export menu (*Retro and other formats*); import is drag and drop or *Import font...*. Binary files carry no header, so the cell size and character order come from *Raw / binary import options* under the Fonts list.
 ## Font editor status (implemented / planned)
 
 | Area | State |
@@ -261,5 +288,5 @@ The **Outline** tab edits the real outlines behind the pixels (`web/js/fontedit/
 | Family registry, support flags, tree, group/split, first-run hint | implemented |
 | Pixel layer: hinting-lite, per-glyph/all re-render, overrides + diff, draggable guides, onion skin, ghost, kerning pairs + classes | implemented (phase 3) |
 | Outline layer: glyf/CFF/TTC contours, point editing, pen/knife/shapes, rasterize, TTF/OTF/WOFF export, pixel fonts as square contours | implemented (phase 4); anchors/composites, CFF2 planned |
-| Extra formats (PSF/PCF/FON/C64/ZX/MSX/raw...) with round-trip tests | planned (phase 5) |
+| Formats: PSF, PCF write, GEM, C64, ZX, MSX/CPC, raw, Atari orders, TTC, EOT, WOFF write, with round-trip tests | implemented (phase 5); SVG font, UFO, .fon, WOFF2 write planned |
 | Font manager (tags, collections, compare, duplicates) | planned (phase 6) |
