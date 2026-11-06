@@ -47,7 +47,10 @@ hn0b lda kk
 hn0k cmp #$0B
  bne hn0m
  jmp hspell
-hn0m jsr exkeys
+hn0m cmp #$14
+ bne hn0q
+ jmp hforce
+hn0q jsr exkeys
  bcc hn0n
  rts
 hn0n lda kk

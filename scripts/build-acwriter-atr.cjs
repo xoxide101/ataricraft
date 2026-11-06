@@ -7,4 +7,6 @@ const xex = new Uint8Array(fs.readFileSync(path.join(ROOT, 'tools/acwriter/poc5.
 fs.writeFileSync(path.join(ROOT, 'tools/acwriter/ACWRITER.COM'), xex);
 const atr = DC.xexToAtr(xex);
 fs.writeFileSync(path.join(ROOT, 'tools/acwriter/ACWRITER.ATR'), atr);
-console.log('ACWRITER.COM', xex.length, 'bytes; ACWRITER.ATR', atr.length, 'bytes');
+const VER = fs.readFileSync(path.join(ROOT, 'tools/acwriter/word/version.inc'), 'utf8').match(/'([\d.]+)'/)[1];
+fs.writeFileSync(path.join(ROOT, 'tools/acwriter/ACWRITER.VERSION.txt'), 'AC Writer ' + VER + '\n');
+console.log('AC Writer ' + VER + ': ACWRITER.COM', xex.length, 'bytes; ACWRITER.ATR', atr.length, 'bytes');

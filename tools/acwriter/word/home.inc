@@ -431,9 +431,15 @@ ptl dta l(pgt1),l(pgt2),l(pgt3)
 pth dta h(pgt1),h(pgt2),h(pgt3)
 pil dta l(pgi1),l(pgi2),l(pgi3)
 pih dta h(pgi1),h(pgi2),h(pgi3)
-pgt1 dta c' AC Writer 0.1    Start menu',b(0)
-pgt2 dta c' AC Writer 0.1    Help',b(0)
-pgt3 dta c' AC Writer 0.1    Convert / import',b(0)
+pgt1 dta c' AC Writer '
+ icl 'word/version.inc'
+ dta c'  Start menu',b(0)
+pgt2 dta c' AC Writer '
+ icl 'word/version.inc'
+ dta c'  Help',b(0)
+pgt3 dta c' AC Writer '
+ icl 'word/version.inc'
+ dta c'  Convert / import',b(0)
 pgi0 dta c'Needs 130XE 128K: no extended RAM found!',b(0)
 pgi1 dta c'Letter key, or Up/Down + Return.  T colours',b(0)
 pgi2 dta c'Up/Down scroll  Space page  B back  Esc return',b(0)

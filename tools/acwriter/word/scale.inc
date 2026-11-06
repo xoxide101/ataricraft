@@ -178,7 +178,10 @@ zg9 rts
 
 szchar ldy #0
  lda (tp),y
+ bit cumeas
+ bmi szc9
  jsr szdraw
+szc9
  lda gxl
  clc
  adc pit

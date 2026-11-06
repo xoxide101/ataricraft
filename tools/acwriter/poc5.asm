@@ -29,6 +29,9 @@ bsoff lda $D301
  icl 'word/msgs.inc'
  icl 'word/ovl.inc'
 SLA = *                        ; overlay slot: 12 pages shared by the edit, spell and page code (word/ovl.inc)
+ .if SLA+$0C00>DOC
+ .error "overlay slot overlaps the document"
+ .endif
  org SLA+$0C00
  .macro body
  dta b(1),c'ACWriter',b(1),c' hi-res page: 64 columns x 20 lines',b(13)
@@ -135,6 +138,7 @@ BFNT = $9800
  icl 'word/helpdoc.inc'
  org $1E93
  icl 'word/segx.inc'
+ icl 'word/cursor.inc'
  org DNM
  dta c'D1:EN.CDC',b($9B)
  org DNM2

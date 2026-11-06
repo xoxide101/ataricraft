@@ -809,18 +809,6 @@ pwst lda #0
  clc
  adc #1
  jsr putnum
- lda #<pws2
- ldx #>pws2
- jsr putstr
- lda cl
- ldx #1
-pws3 sec
- sbc pwlpp
- bcc pws4
- inx
- bne pws3
-pws4 txa
- jsr putnum
  lda #' '
  jsr putc
  ldx pwpap
@@ -846,8 +834,7 @@ pws4 txa
  jsr putc
  lda pwprm
  jsr putnum
- lda #0
- jsr putc
+ jsr stfin
  lda #<BUF
  sta tp
  lda #>BUF

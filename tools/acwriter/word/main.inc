@@ -103,6 +103,7 @@ stx1 lda #0
  jsr status
  lda #1
  jsr gopage
+ jsr cuinit
 
 loop
  lda #0
@@ -127,6 +128,7 @@ lhelp lda RTCLOK+2
 lc2 lda CH
  cmp #$FF
  bne lgot
+ jsr cuidle
  lda sd
  beq loop
  lda RTCLOK+2
@@ -143,6 +145,7 @@ lgot
  sta tm
  jsr getkey
 lgotk sta kk
+ jsr cuoff
  lda #0
  sta fl
  jsr hdl2

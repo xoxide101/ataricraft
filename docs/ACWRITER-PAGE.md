@@ -93,3 +93,12 @@ Two overlaps reported by `xex-overlap.cjs` were real corruption, not overlay reu
 ## Menu/status chrome face
 The zoom-view header and status lines (and the menu bar) still use the Atari OS text-mode charset. Switching them to the Standard face needs a second text blitter in the resident area (about 0.3 KB for the blitter plus a 768-byte charset in a bank); the resident area and overlay slot are full, so this is not done. Status: not implemented.
 
+
+## Cursor, redraw, status, fonts, version (0.1.5)
+
+- **Cursor**: `word/cursor.inc`. A 5x8 XOR block blinks via RTCLOK in text mode (only its own cell toggles); it stays on while keys are pressed or idle. PAGE and zoom use a static XOR cursor.
+- **No flicker**: typing/moving redraws the cursor line in place through the row buffer `RB` (`redrawcur`, `qrw`), never clearing first. Ruler and status rows also redraw in place. Full redraw only on scroll, reflow, join/delete line, menu close, or **Ctrl-T** (force redraw).
+- **Status**: `Ln/Col` updates on every move; bottom right shows `Pg n/m Lnn`. Text mode uses lines per page 54/58/72 (paper 0/1/2); PAGE mode wraps differently, so its numbers follow the page layout.
+- **Fonts**: text face defaults to Craft 5px (`font4.inc`), menus/status to Craft 6px (`font6.inc`); ROM remains selectable via Character > Font.
+- **Memory**: the overlay slot `SLA..SLA+$C00` must end at or below DOC (`$6400`), i.e. `SLA <= $5800` (asserted in `poc5.asm`). Cursor helpers live in free pools (`$0489`, `$06C0`, `$1F55`); keep `xex-overlap.cjs` clean.
+- **Version**: single source `word/version.inc`; shown on the start menu and Help; build script prints it and writes `ACWRITER.VERSION.txt`. Bump on every rebuild.

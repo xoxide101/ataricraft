@@ -91,9 +91,7 @@ rdraw lda #0
  sta tp+1
  lda #$FF
  sta rr
- jsr rowsetup
- jsr drawtext
- jmp hlr
+ jmp rdgo
 
 hlr
  lda iv
@@ -229,17 +227,14 @@ sf2 ldx th
  tax
  pla
  jsr putstr
-sf3 lda #0
- jsr putc
+sf3 jsr stfin
  lda #<BUF
  sta tp
  lda #>BUF
  sta tp+1
  lda #ROWS
  sta rr
- jsr rowsetup
- jsr drawtext
- jmp hls
+ jmp stgo
 
 s1 dta c'Ln ',b(0)
 s2 dta c' Col ',b(0)

@@ -71,7 +71,9 @@ helpdoc
  dta b(15),b(10),b(30),b(1),c'A C  W R I T E R',b(1),b(13)
  dta b(15),b(5),c'----------------------------------------------------------------',b(13)
  dta b(15),c'Word processor for the Atari 8-bit',b(13)
- dta b(15),c'Version 0.1 proof of concept',b(13)
+ dta b(15),c'Version '
+ icl 'word/version.inc'
+ dta c' proof of concept',b(13)
  dta b(13)
  dta b(7),b(28),b(31),c'    N   New document       ',b(31),b(13)
  dta b(7),b(28),b(31),c'    O   Open document      ',b(31),b(13)
