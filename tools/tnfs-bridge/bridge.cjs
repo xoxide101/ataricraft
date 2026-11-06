@@ -322,6 +322,8 @@ function persistentToken() {
   return t;
 }
 const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--allow-lan'), allowWrite: flag('--allow-write'), extra: {
+  // What this relay allows, so clients (FujiNet Explorer, docs/TRANSPORT.md) can grey out actions instead of failing.
+  '/net/caps': async () => ({ meta: {}, body: Buffer.from(JSON.stringify({ protocol: 1, tool: 'ataricraft-tnfs-bridge', allowWrite: flag('--allow-write'), allowLan: flag('--allow-lan'), sd: !!sdRoot, time: Date.now(), tzOffset: new Date().getTimezoneOffset() })) }),
   '/net/sd/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(sdList(a.path))) }),
   '/net/sd/file': async (a) => ({ meta: {}, body: sdFile(a.path) }),
   '/net/sd/put': async (a, body) => { sdPut(a.path, body, a.append); return { meta: {} }; },
