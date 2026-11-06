@@ -1620,9 +1620,9 @@ cfk                    ; keep the cached value of an unsupported function
  sta VSTK+1
  lda #4
  sta VSTK
-cf3 ldx #8
+cf3 ldx #5
  lda #0
-cf4 sta RECB+1,x
+cf4 sta RECB+4,x
  dex
  bpl cf4
  lda VSTK

@@ -267,17 +267,13 @@ mn8 lda #$9B
  rts
 xcs dta c'.XCS'
 
-save
- lda #5
- sta msg
- rts
-
  icl 'bank.inc'
  icl 'fpu.inc'
  icl 'view.inc'
  icl 'view2.inc'
  icl 'file.inc'
  icl 'calc.inc'
+ icl 'save.inc'
  icl '..\acwriter\zfont.inc'
 
  org $1600
