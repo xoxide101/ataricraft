@@ -38,9 +38,9 @@ const git = (a) => execSync('git ' + a, { cwd: ROOT, encoding: 'utf8' });
   p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => d.accept('0'));
   await p.goto('http://localhost:' + port + '/fontedit.html');
   await p.waitForFunction(() => window.FE);
-  await p.waitForFunction(() => document.querySelectorAll('#flist optgroup').length === 5);
+  await p.waitForFunction(() => document.querySelectorAll('#flist optgroup').length === 6);
   const labels = await p.$$eval('#flist optgroup', (g) => g.map((x) => x.label));
-  assert.deepStrictEqual(labels.map((l) => l.replace(/ \(none\)/, '')), ['Craft faces', 'Shipped', 'Atari ROM', 'Personal', 'Converted']);
+  assert.deepStrictEqual(labels.map((l) => l.replace(/ \(none\)/, '')), ['ACWriter / Craft fonts', 'Craft faces', 'Shipped', 'Atari ROM', 'Personal', 'Converted']);
   ok('library groups: ' + labels.join(', '));
 
   const load = async (name) => {
