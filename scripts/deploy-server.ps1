@@ -107,7 +107,8 @@ foreach ($it in $items) {
   $special = $stamped.ContainsKey($it.Rel) -or ($NoPersonal -and $it.Rel -eq 'library\fonts\local\manifest.json')
   if ($special) { continue }
   if (-not (Test-Path -LiteralPath $dst)) { $todo.Add($it); continue }
-  $d = Get-Item -LiteralPath $dst
+  $d = Get-Item -LiteralPath $dst -Force -ErrorAction SilentlyContinue
+  if (-not $d) { $todo.Add($it); continue }
   if ($d.Length -ne $it.Len -or $d.LastWriteTimeUtc -lt $it.Time.AddSeconds(-2)) { $todo.Add($it) }
 }
 $total = ($todo | Measure-Object Len -Sum).Sum
