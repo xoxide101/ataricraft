@@ -289,4 +289,4 @@ Export lives in the Export menu (*Retro and other formats*); import is drag and 
 | Pixel layer: hinting-lite, per-glyph/all re-render, overrides + diff, draggable guides, onion skin, ghost, kerning pairs + classes | implemented (phase 3) |
 | Outline layer: glyf/CFF/TTC contours, point editing, pen/knife/shapes, rasterize, TTF/OTF/WOFF export, pixel fonts as square contours | implemented (phase 4); anchors/composites, CFF2 planned |
 | Formats: PSF, PCF write, GEM, C64, ZX, MSX/CPC, raw, Atari orders, TTC, EOT, WOFF write, with round-trip tests | implemented (phase 5); SVG font, UFO, .fon, WOFF2 write planned |
-| Font manager (tags, collections, compare, duplicates) | planned (phase 6) |
+| Font manager (favourites, tags, collections, compare, coverage, duplicates, hand-off) | implemented (phase 6: Manager tab, tested by fontedit-ui6-test) |
