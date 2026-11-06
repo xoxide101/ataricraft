@@ -96,6 +96,8 @@ ovs2 sta $4000,y
  lda #$FF
  sta ovid
  rts
+; data sits after pwtix (craftpg_a.inc, $977B..$97DA)
+ org $97DB
 ovdp dta b(0)
 ovsp dta b($6A,$A9,$B1,$80)
 ovnp dta b([E.e_end-SLA+255]/256),b([S.e_end-SLA+255]/256),b([P.e_end-SLA+255]/256),b([Z.e_end-SLA+255]/256)
