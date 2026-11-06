@@ -18,7 +18,7 @@
     return Math.max(4, Math.min(48, Math.floor(Math.min(w / NC(), h / st.f.rows))));
   }
   const ES = () => st.zoom || fitES();
-  const guides = () => { const f = st.f; return [{ k: 'head', row: f.head, label: 'cap', col: COL.cap }, { k: 'xTop', row: f.xTop, label: 'x-height', col: COL.xh }, { k: 'base', row: f.base + 1, label: 'baseline', col: COL.base }]; };
+  const guides = () => { const f = st.f; return [{ k: 'head', row: f.head, label: 'cap/ascender', col: COL.cap }, { k: 'xTop', row: f.xTop, label: 'x-height', col: COL.xh }, { k: 'base', row: f.base + 1, label: 'baseline', col: COL.base }]; };
 
   // ---- drawing ---------------------------------------------------------------------------------------------------------
   function neighbourSize() {
@@ -43,6 +43,7 @@
     }
     ex.fillStyle = C.ink;
     for (let r = 0; r < f.rows; r++) for (let q = 0; q < nc; q++) if (CF.hasPx(f, g[r], q)) ex.fillRect(q * E, r * E, E, E);
+    if (FE.drawDiff) FE.drawDiff(ex, E, nc);
     if (st.showGrid && E >= 6) {
       ex.strokeStyle = C.grid; ex.lineWidth = 1; ex.beginPath();
       for (let q = 0; q <= nc; q++) { ex.moveTo(q * E + .5, 0); ex.lineTo(q * E + .5, ed.height); }
@@ -201,14 +202,14 @@
 
   // guide lines: drag the handles in the ruler
   rl.addEventListener('mousedown', (e) => {
-    const r = rl.getBoundingClientRect(), y = e.clientY - r.top, E = ES();
+    const r = rl.getBoundingClientRect(), y = (e.clientY - r.top) * rl.height / r.height, E = ES();
     const hit = guides().filter((gd) => Math.abs(gd.row * E - y) <= 9).sort((a, b) => Math.abs(a.row * E - y) - Math.abs(b.row * E - y))[0];
     if (!hit) return;
     FE.push('Move ' + hit.label + ' line', [], true); st.gdrag = hit.k; e.preventDefault();
   });
   window.addEventListener('mousemove', (e) => {
     if (!st.gdrag) return;
-    const r = rl.getBoundingClientRect(), f = st.f, row = Math.round((e.clientY - r.top) / ES());
+    const r = rl.getBoundingClientRect(), f = st.f, row = Math.round(((e.clientY - r.top) * rl.height / r.height) / ES());
     if (st.gdrag === 'head') f.head = Math.max(0, Math.min(f.xTop, row));
     else if (st.gdrag === 'xTop') f.xTop = Math.max(f.head, Math.min(f.base, row));
     else { f.base = Math.max(f.xTop, Math.min(f.rows - 1, row - 1)); f.desc = f.rows - f.base - 1; }
@@ -306,7 +307,7 @@
   function fromMaster() {
     const m = masterFont();
     if (!m || m === st.f) return FE.toast('This size is the master: there is nothing to derive from');
-    FE.editSlots('Derive from master', noGfx(FE.selSlots()), (g, s) => CF.deriveGlyph(m, st.f, m.glyphs[s] || new Array(m.rows).fill(0), { threshold: +$('dth').value, keepStems: $('dkeep').checked }));
+    FE.editSlots('Derive from master', noGfx(FE.selSlots()), (g, s) => CF.deriveGlyph(m, st.f, m.glyphs[s] || new Array(m.rows).fill(0), FE.hintOpts()));
     FE.toast('Re-derived ' + noGfx(FE.selSlots()).length + ' glyph(s) from the ' + m.adv + ' px master');
   }
   function copyToSize() {

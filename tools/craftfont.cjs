@@ -357,8 +357,13 @@ function setBpr(f, n) {
 // pixel with at least a quarter coverage that has no inked neighbour on either side, so one-pixel stems never vanish.
 // Upscaling (large sizes): the same band mapping, but each target pixel samples the source bilinearly and switches on at coverage 0.5, so a
 // one-pixel stem grows to the matching stem width instead of staying hair-thin.
+// Vertical bands that map onto each other. snapX adds the x-height line as a band edge so lowercase tops land on the target's x-height.
+function bandsOf(src, dst, opt) {
+  const ok = (f) => f.xTop > f.head && f.xTop <= f.base, x = opt.snapX && ok(src) && ok(dst);
+  return (f) => (x ? [[0, f.head], [f.head, f.xTop], [f.xTop, f.base + 1], [f.base + 1, f.rows]] : [[0, f.head], [f.head, f.base + 1], [f.base + 1, f.rows]]);
+}
 function upGlyph(src, dst, rows, opt) {
-  const bands = (f) => [[0, f.head], [f.head, f.base + 1], [f.base + 1, f.rows]], sb = bands(src), db = bands(dst), out = zeros(dst.rows), top = topBit(dst), th = opt.upThreshold ?? 0.5;
+  const bands = bandsOf(src, dst, opt), sb = bands(src), db = bands(dst), out = zeros(dst.rows), top = topBit(dst), th = opt.upThreshold ?? 0.5;
   let minx = src.gw, maxx = -1;
   for (const r of rows) for (let q = 0; q < src.gw; q++) if (hasPx(src, r, q)) { if (q < minx) minx = q; if (q > maxx) maxx = q; }
   const px = (y, x) => (y < 0 || x < 0 || y >= src.rows || x >= src.gw ? 0 : hasPx(src, rows[y], x) ? 1 : 0);
@@ -376,9 +381,9 @@ function upGlyph(src, dst, rows, opt) {
   return out;
 }
 
-function deriveGlyph(src, dst, rows, opt) {
+function deriveGlyphRaw(src, dst, rows, opt) {
   if (dst.rows > src.rows || (dst.gw > src.gw && dst.rows >= src.rows)) return upGlyph(src, dst, rows, opt);  const th = opt.threshold ?? 0.4, keep = opt.keepStems !== false;
-  const bands = (f) => [[0, f.head], [f.head, f.base + 1], [f.base + 1, f.rows]];
+  const bands = bandsOf(src, dst, opt);
   const sb = bands(src), db = bands(dst), out = zeros(dst.rows);
   // columns: a glyph whose ink already fits the target is moved, not resampled, so one-pixel stems stay one pixel wide
   let minx = src.gw, maxx = -1;
@@ -418,6 +423,23 @@ function deriveGlyph(src, dst, rows, opt) {
     let best = -1, br = 0, bq = 0;
     cov.forEach((row, r) => row.forEach((v, q) => { if (v > best) { best = v; br = r; bq = q; } }));
     out[br] |= top >>> bq;
+  }
+  return out;
+}
+
+// deriveGlyph = the resampler plus the hinting-lite steps: snapBase keeps a glyph that sat on the baseline on the baseline,
+// weight +1 thickens every horizontal run by a pixel, -1 trims the right pixel of runs of 3+ (stems of 1-2 pixels are kept).
+function deriveGlyph(src, dst, rows, opt) {
+  opt = opt || {};
+  let out = deriveGlyphRaw(src, dst, rows, opt);
+  if (opt.snapBase) {
+    let sb = -1; for (let r = Math.min(src.base, rows.length - 1); r >= 0; r--) { if (rows[r]) { sb = r; break; } }
+    let lr = -1; for (let r = out.length - 1; r >= 0; r--) if (out[r]) { lr = r; break; }
+    if (sb === src.base && lr >= 0 && Math.abs(lr - dst.base) === 1) { const d = dst.base - lr, o = out; out = o.map((_, r) => o[r - d] || 0); }
+  }
+  if (opt.weight) {
+    const mask = (((1 << dst.gw) - 1) << (8 * bprOf(dst) - dst.gw)) >>> 0;
+    out = out.map((v) => (opt.weight > 0 ? ((v | (v >>> 1)) & mask) >>> 0 : (v & ~(v & (v >>> 1) & (v >>> 2) & ~(v << 1)) & mask) >>> 0));
   }
   return out;
 }

@@ -66,8 +66,11 @@
         <div class="row"><label title="Fit the 8x8 size to the Atari grid"><input id="ttfnative" type="checkbox" checked> native 8x8 grid</label><label title="Render each size from the outline instead of deriving it from the master"><input id="ttfdirect" type="checkbox"> each size from outline</label></div>
         <div class="dim">Changing any of these re-renders all sizes from the TTF.</div>
       </div>
-      <div class="row"><label>derive threshold <input id="dth" type="number" step="0.05" min="0.05" max="0.95" value="0.5"></label><label><input id="dkeep" type="checkbox" checked> keep stems</label></div>
-      <div class="row"><button id="bderive" title="Re-derive every size from the master; locked and hand-edited sizes are kept">Derive all sizes</button><button id="bmissing">Create missing</button></div>
+      <div class="row"><label>derive threshold <input id="dth" type="number" step="0.05" min="0.05" max="0.95" value="0.5"></label>      <label title="A one-pixel stem never vanishes when scaled down"><input id="dkeep" type="checkbox" checked> snap stems</label></div>
+            <div class="row"><label title="Lowercase tops land exactly on the target x-height line"><input id="dsnapx" type="checkbox"> snap x-height</label><label title="Glyphs that sat on the baseline stay on it"><input id="dsnapb" type="checkbox" checked> snap baseline</label><label>weight <select id="dwt"><option value="-1">lighter</option><option value="0" selected>normal</option><option value="1">bolder</option></select></label></div>
+            <div class="row"><button id="bderive" title="Re-derive every size from the master; locked and hand-edited sizes are kept">Derive all sizes</button><button id="bmissing">Create missing</button></div>
+            <div class="row"><button id="brerall" title="Re-render every glyph of every derived size with the settings above. Glyphs you drew by hand (overrides) are kept unless you tick the box">Re-render all sizes</button><label><input id="brinc" type="checkbox"> overwrite overrides too</label></div>
+            <div class="row"><label title="Mark overrides: orange corner in the grid, green/red pixels in the editor where this size differs from a fresh derive"><input id="bdiff" type="checkbox"> highlight overrides</label><span id="ovrinfo" class="dim"></span></div>
       <div class="row"><button id="bmaster" title="Make this size the master of the family">Use this size as master</button><label><input id="flock" type="checkbox"> lock this size</label></div>
       <div id="hnote" class="dim"></div>
     </div>
@@ -164,6 +167,12 @@
         <p class="dim">Kerning pairs for this size (negative = closer). Kept in the autosave and in the family zip as kerning.json; ACF/XCF files have no kerning.</p>
         <div class="row"><input id="kl" maxlength="4" size="3" placeholder="A"><input id="kr" maxlength="4" size="3" placeholder="V"><input id="kv" type="number" min="-8" max="8" value="-1"><button id="kadd">Set pair</button><button id="kpre">Add classic pairs</button><button id="kclear">Clear</button></div>
         <div id="kerntbl"></div>
+        <details class="sec" id="kclasses"><summary>Kerning classes (groups of letters kerned together)</summary>
+          <div class="row"><input id="kcname" size="8" placeholder="class name"><select id="kcside"><option value="L">left side</option><option value="R">right side</option></select><input id="kcmem" size="14" placeholder="members e.g. AÀÁÂ"><button id="kcadd">Set class</button></div>
+          <div id="kclist" class="dim"></div>
+          <div class="row"><select id="kcl"></select><select id="kcr"></select><input id="kcv" type="number" min="-8" max="8" value="-1"><button id="kcpadd">Set class pair</button></div>
+          <div id="kcplist" class="dim"></div>
+        </details>
         <div class="row"><label>Zoom <select id="kz"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label></div>
         <textarea id="ktext" rows="2" style="width:100%"></textarea>
         <div class="dim">Black: no kerning. Red: with kerning.</div>
@@ -184,7 +193,7 @@
     <details class="sec" open><summary>Selection (batch)</summary>
       <div class="row"><button id="bsel" title="Select all glyphs shown">Select shown</button><button id="bsetnc">Show selection</button></div>
       <div class="row"><button id="bwplus" title="Embolden">Weight +</button><button id="bwminus">Weight -</button><button id="bshift">Shift by</button><input id="bdx" type="number" value="0" title="columns"><input id="bdy" type="number" value="0" title="rows"></div>
-      <div class="row"><button id="bfrommaster">Derive from master</button></div>
+      <div class="row"><button id="bfrommaster" title="Re-render the selected glyphs from the master with the hinting settings; clears their override flag">Re-render from master</button><button id="bovrmark" title="Keep these glyphs as they are when re-rendering all sizes">Mark override</button><button id="bovrclear">Clear override</button></div>
       <div class="row"><button id="bcpsize">Copy to size</button><select id="cpsize"></select></div>
     </details>
     <details class="sec"><summary>Reference ghost</summary>
@@ -223,6 +232,7 @@
 <script src="js/fontedit/editor.js"></script>
 <script src="js/fontedit/library.js"></script>
 <script src="js/fontedit/family.js"></script>
+<script src="js/fontedit/hint.js"></script>
 <script src="js/fontedit/export.js"></script>
 <script src="js/fontedit/views.js"></script>
 <script src="js/fontedit/kern.js"></script>

@@ -233,13 +233,23 @@ One font family is one registry entry, however many files it comes from. Shared 
 - **Honouring flags**: Export > "Zip for <target>" only contains flagged sizes (plus `family.manifest.json`); `tools/acwfaces.cjs` and `scripts/build-all.cjs` skip generating and overlaying `.inc` for faces flagged off for `acwriter-atari`. Limit: `tools/acwriter/mkcraftfonts.cjs` itself is unchanged and still builds every face locally.
 - Tests: `scripts/fontfamily-test.cjs` (registry, build) and `scripts/fontedit-ui2-test.cjs` (tree, flags, group/split, derive-on-click, hint).
 
+### Pixel layer (phase 3)
+
+A size other than the master is the **pixel layer** of the family: derived from the master by `CF.derive` and then editable by hand.
+
+- **Hinting-lite** (Family source panel; options of `CF.deriveGlyph`/`CF.derive`): `threshold`, *snap stems* (`keepStems`: a one-pixel stem never vanishes), *snap x-height* (`snapX`: the x-height line is a band edge, so lowercase tops land on the target x-height; useful at 14-26 px), *snap baseline* (`snapBase`: a glyph that sat on the baseline stays on it), *weight* lighter/normal/bolder (`weight` -1/0/+1: thin or thicken horizontal runs). Defaults reproduce the old output.
+- **Overrides**: a glyph you draw in a non-master size is an *override*. Overrides are kept in the editor (`f.ovr`, mirrored in localStorage `craft.ovr`; ACF/XCF have no field for it). *Re-render all sizes* re-derives every glyph of every derived size with the current settings and keeps overrides and locked sizes unless *overwrite overrides too* is ticked. *Re-render from master* (Selection panel) redoes only the selected glyphs, clears their flag and is one undo step. *Mark override* / *Clear override* set the flag by hand.
+- **Diff highlight** (*highlight overrides*): orange corner on override glyphs in the grid; in the editor green = a pixel you added, red ring = a pixel a fresh re-render would have.
+- **Guides**: cap/ascender, x-height and baseline are dragged in the ruler (the descender is the bottom of the cell and follows the baseline). **Onion skin** shows the neighbouring size, the **ghost** shows a reference TTF/OTF outline behind the pixels (opacity, scale, offset).
+- **Kerning**: pairs plus *classes* (left/right groups of letters with one value per class pair; an explicit pair wins). Editor-side only (autosave, `kerning.json` in the family zip).
+- Tests: `scripts/fontedit-ui3-test.cjs`. The hinting options live in `tools/craftfont.cjs`, so the generated bundle `web/js/xcwriter/core/xcw-core.js` was re-synced with `scripts/sync-xcwriter-core.cjs` (behaviour-neutral for xCWriter, which passes no options).
 ## Font editor status (implemented / planned)
 
 | Area | State |
 |---|---|
 | Unified Fonts list, size strip 4-26 + Atari 8x8, derive-on-click, file:// | implemented |
 | Family registry, support flags, tree, group/split, first-run hint | implemented |
-| Hinting-lite, per-glyph/all re-render, override diff, draggable guides, kerning classes | planned (phase 3) |
+| Pixel layer: hinting-lite, per-glyph/all re-render, overrides + diff, draggable guides, onion skin, ghost, kerning pairs + classes | implemented (phase 3) |
 | Outline layer (glyf/CFF contours, point editing, outline export) | planned (phase 4) |
 | Extra formats (PSF/PCF/FON/C64/ZX/MSX/raw...) with round-trip tests | planned (phase 5) |
 | Font manager (tags, collections, compare, duplicates) | planned (phase 6) |

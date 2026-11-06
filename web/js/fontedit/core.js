@@ -67,6 +67,8 @@
   // ---- render + autosave -------------------------------------------------------------------------------------------------
   FE.render = () => { for (const r of FE.renders) { try { r(); } catch (e) { console.error(e); } } };
   FE.changed = () => { st.dirty = true; FE.render(); schedAutosave(); };
+  // Settings of the derive step (threshold, hinting-lite); every derive in the editor goes through this.
+  FE.hintOpts = () => ({ threshold: +$('dth').value, keepStems: $('dkeep').checked, snapX: $('dsnapx') ? $('dsnapx').checked : false, snapBase: $('dsnapb') ? $('dsnapb').checked : true, weight: $('dwt') ? +$('dwt').value : 0 });
   const AUTO = 'craft.fontedit.autosave';
   let autoTimer = 0;
   function schedAutosave() { clearTimeout(autoTimer); autoTimer = setTimeout(FE.autosave, 700); }
