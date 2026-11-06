@@ -134,3 +134,8 @@ JavaScript reference: `node tools/craftdoc.cjs FILE.XCW` prints the plain text, 
 ## Versioning
 
 `version` is the major format version. Additions that older readers can safely ignore (new markers, reserved header bytes) do not change it. Anything else bumps it, and this document keeps every version.
+
+## Type S: spreadsheet (.xcs)
+
+A CRFT file with type byte S (0x53). Header: ux = cell count, cols = widest column, ows = last row (both capped at 255), length = payload bytes including the trailing CRC-16/CCITT-FALSE. The payload (mode, string pool, names, charts, sheets, cell records) is defined in docs/XCCALC.md. Reader: 	ools/xccalc/xcsformat.cjs; container adapter xcs.
+

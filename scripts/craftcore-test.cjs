@@ -151,8 +151,8 @@ async function main() {
   assert.ok(A.cwd.import(ft.bytes).losses('warn').length === 0, 'a document we write has a valid checksum');
   ok('cwd: loss report counts styles, markers, graphics, checksum; trailer kept; text -> CWD reports unmappable characters');
   assert.ok(A.detect(cw, 'LETTER.XCW') === A.cwd && A.detect(cw, 'LETTER') === A.cwd && A.detect(Uint8Array.of(1, 2, 3), 'x.xcw') === A.cwd && A.detect(Uint8Array.of(1, 2, 3), 'x.dat') === A.raw, 'xcw/cwd detected by header, and by extension as a weak hint');
-  assert.deepStrictEqual(['xcw', 'cwd', 'xcs', 'xcd'].map((e) => A.EXTENSIONS[e].adapter), ['cwd', 'cwd', null, null], 'xcw/cwd -> Craft Word adapter; xcs/xcd reserved');
-  assert.ok(A.EXTENSIONS.xcs.status === 'reserved' && A.EXTENSIONS.xcd.status === 'reserved');
+  assert.deepStrictEqual(['xcw', 'cwd', 'xcs', 'xcd'].map((e) => A.EXTENSIONS[e].adapter), ['cwd', 'cwd', 'xcs', null], 'xcw/cwd -> Craft Word adapter; xcs -> spreadsheet adapter; xcd reserved');
+  assert.ok(A.EXTENSIONS.xcs.status === 'implemented' && A.EXTENSIONS.xcd.status === 'reserved');
   assert.strictEqual(A.cwd.import(cw).manifest.name, 'doc.xcw', 'default name uses .xcw');
 
   // font
