@@ -11,7 +11,8 @@ const dir = R + 'web/library/fonts/craft/';
 fs.mkdirSync(dir, { recursive: true });
 const embed = {};
 for (const adv of [4, 5, 6]) {
-  const f = adv === 4 ? require('./font3_art.cjs').face() : CF.builtin(fnt, adv, adv === 5 ? f4 : null);
+  const built = adv === 4 ? require('./font3_art.cjs').face() : CF.builtin(fnt, adv, adv === 5 ? f4 : null);
+  const f = require('../acwfaces.cjs').override('craft' + adv, built);
   fs.writeFileSync(dir + 'craft' + adv + '.acf', CF.serialize(f));
   fs.writeFileSync(__dirname + '/craft' + adv + '.inc', CF.toInc(f, 'c' + adv));
   embed['craft' + adv] = CF.serialize(f).toString('base64');
