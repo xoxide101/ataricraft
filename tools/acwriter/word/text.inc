@@ -294,8 +294,11 @@ dcs sta v
  ora v
  sta v
 dc6 lda v
+ ldx gp+1
+ cpx #>SYM
+ beq dc6g
  asl
- sta v
+dc6g sta v
  lda style
  and #2
  beq dc7

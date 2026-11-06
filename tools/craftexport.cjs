@@ -2,7 +2,7 @@
 // Usage: node tools/craftexport.cjs FILE.XCW OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]
 // The format defaults to the output extension: .txt text, .atx atascii, .rtf, .htm/.html, .md.
 const fs = require('fs'), path = require('path');
-const { parse } = require('./craftdoc.cjs');
+const { parse } = require('./craftdoc.cjs'), AG = require('./atarigfx.cjs');
 
 const STYLE = { 1: 'b', 2: 'i', 3: 'u', 4: 'inv', 11: 'sup', 12: 'sub' };
 // Paragraphs of { align, bullet, runs: [{ t, b, i, u, sup, sub }] }; soft line breaks (14) are joined, hard (13) end the paragraph.
@@ -17,7 +17,7 @@ function model(payload, opt = {}) {
       else if (b === 15) p.align = 'c'; else if (b === 16) p.align = 'r'; else if (b === 17) p.align = 'j';
       else if (b === 19 || b === 20) p.bullet = true;
     } else {
-      const ch = b === 160 ? '\u00a0' : b === 173 ? '\u2011' : b >= 128 && b < 160 ? (opt.graphics ? String.fromCharCode(0xe000 + b) : '\u25a1') : String.fromCharCode(b);
+      const ch = b === 160 ? '\u00a0' : b === 173 ? '\u2011' : b >= 128 && b < 160 ? (opt.graphics === 'pua' ? String.fromCharCode(0xe000 + b) : String.fromCodePoint(require('./atarigfx.cjs').uniOfAcw(b))) : String.fromCharCode(b);
       const l = p.runs[p.runs.length - 1];
       if (l && l.b === on.b && l.i === on.i && l.u === (on.u | on.inv) && l.sup === on.sup && l.sub === on.sub) l.t += ch;
       else p.runs.push({ t: ch, b: on.b, i: on.i, u: on.u | on.inv, sup: on.sup, sub: on.sub });
@@ -65,10 +65,10 @@ function toMd(ps) {
   return ps.map((p) => (p.bullet ? '- ' : '') + p.runs.map((r) => { let t = r.t.replace(/([\\\\*_`])/g, '\\$1'); if (r.b && r.i) t = '***' + t + '***'; else if (r.b) t = '**' + t + '**'; else if (r.i) t = '*' + t + '*'; return t; }).join('')).join('\n\n');
 }
 
-// Craft text to ATASCII text: printable ASCII is kept, everything else becomes '?'. Lines end in $9B.
+// Craft text to ATASCII text: printable ASCII is kept, the Atari graphics (box drawing, suits, blocks...) become their ATASCII code 0-31, everything else becomes '?'. Lines end in $9B.
 function toAtascii(ps, cols) {
   const bytes = [];
-  for (const line of toText(ps, cols)) { for (const c of line) { const n = c.charCodeAt(0); bytes.push(n >= 32 && n < 127 ? n : 63); } bytes.push(0x9b); }
+  for (const line of toText(ps, cols)) { for (const c of line) { const n = c.codePointAt(0), g = AG.acwCodeOfUni(n); bytes.push(n >= 32 && n < 127 ? n : g >= 128 ? g - 128 : 63); } bytes.push(0x9b); }
   return Buffer.from(bytes);
 }
 
@@ -79,7 +79,7 @@ function exportDoc(buf, format, name = 'document', eol = 'crlf') {
   if (format === 'rtf') return Buffer.from(toRtf(ps), 'latin1');
   if (format === 'html') return Buffer.from(toHtml(ps, name), 'utf8');
   if (format === 'md') return Buffer.from(toMd(ps).replace(/\n/g, nl) + nl, 'utf8');
-  if (format === 'text') return Buffer.from(toText(ps, cols).join(nl) + nl, 'latin1');
+  if (format === 'text') { const s = toText(ps, cols).join(nl) + nl; return Buffer.from(s, /[^\u0000-\u00ff]/.test(s) ? 'utf8' : 'latin1'); }
   throw new Error('unknown format ' + format);
 }
 

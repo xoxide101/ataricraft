@@ -125,7 +125,8 @@ function insertFragment(paras, pos, frag) {
 function cleanParas(paras) {
   return paras.map((p) => ({ align: p.align, bullet: p.bullet, ...pickProps(p), runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
 }
-const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173); };
+const AG = require('./atarigfx.cjs');
+const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173) || AG.acwCodeOfUni(c) >= 0; };
 
 // page (tools/craftpage.cjs setup) switches wrapping from the profile's screen columns to the page's usable columns.
 function craftPayload(paras, profile = PROFILES.atari, page = null) {
@@ -378,7 +379,7 @@ function setParaSize(paras, a, b, size) { for (let p = a; p <= b; p++) { if (siz
 const CLASS_RX = [[/courier|consolas|mono|lucida console|monaco|menlo|typewriter/i, 'ATARIROM'], [/times|georgia|garamond|cambria|serif|palatino|book/i, '']];
 const sourceFace = (name, map) => (!name ? '' : name.startsWith('xcw:') ? name.slice(4) : map && map[name] !== undefined ? map[name] : (CLASS_RX.find(([rx]) => rx.test(name)) || [0, 'CRAFT8'])[1]);
 const ptToSize = (pt) => (pt <= 7 ? 4 : pt <= 9 ? 5 : pt <= 10 ? 6 : pt <= 12 ? 8 : pt <= 16 ? 10 : 12);
-const sizeToPt = (n) => ({ 4: 7, 5: 9, 6: 10, 8: 11, 10: 14, 12: 18 }[n] || 11);
+const sizeToPt = (n) => ({ 4: 7, 5: 9, 6: 10, 8: 11, 10: 14, 12: 18 }[n] || (n > 12 ? Math.round(n * 1.5) : 11));
 const DOCX_ROLE = { title: 'Title', h1: 'Heading1', h2: 'Heading2', h3: 'Heading3', cap: 'Caption' };
 const ROLE_OF = (id, name) => { const k = (name || id || '').toLowerCase().replace(/\s+/g, ''); return { title: 'title', heading1: 'h1', heading2: 'h2', heading3: 'h3', caption: 'cap' }[k] || ''; };
 
@@ -450,7 +451,7 @@ function suggest(dict, word, max = 6) {
 }
 
 module.exports = {
-  Page: P, Font: CF, FontPipe: require('./fontpipe.cjs'), PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
+  Page: P, Font: CF, Gfx: require('./atarigfx.cjs'), FontPipe: require('./fontpipe.cjs'), PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
   sectionAt, sectionBreak, removeSectionBreak, setSectionFont, setSectionFontRange, setRole, setParaSize, mapSourceFonts, sourceFace, ptToSize, sizeToPt,
   emptyPara, newDoc, clone, ptext, plain, toCells, fromCells, normalize, cmp, order, docEnd,
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,

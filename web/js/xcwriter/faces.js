@@ -13,13 +13,15 @@
   const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
   const notify = () => listeners.forEach((f) => f());
 
+  // ACWriter document byte 128..159 = Atari graphics 0..31 (docs/FONT.md); they fill the whole advance, so they are not centred like letters
+  const gfxSlot = (c) => (c >= 128 && c < 160 ? c - 128 : -1);
   function bitmapOf(f, code, mode) {
-    const rows = CF.render(f, code, mode || 0), px = new Uint8Array(f.adv * f.rows);
-    for (let y = 0; y < f.rows; y++) for (let x = 0; x < f.gw; x++) if (CF.hasPx(f, rows[y], x)) px[y * f.adv + x + (f.adv > f.gw + 1 ? 1 : 0)] = 1;
+    const gs = gfxSlot(code), rows = CF.render(f, gs >= 0 ? gs : code, mode || 0), px = new Uint8Array(f.adv * f.rows), cols = gs >= 0 ? Math.min(f.adv, CF.colsOf(f, gs)) : f.gw, off = gs < 0 && f.adv > f.gw + 1 ? 1 : 0;
+    for (let y = 0; y < f.rows; y++) for (let x = 0; x < cols; x++) if (CF.hasPx(f, rows[y], x)) px[y * f.adv + x + off] = 1;
     return { w: f.adv, h: f.rows, px };
   }
   function fntBitmap(buf, code) {
-    const o = screenCode(code) * 8, px = new Uint8Array(64);
+    const o = (gfxSlot(code) >= 0 ? gfxSlot(code) : screenCode(code)) * 8, px = new Uint8Array(64);
     for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if ((buf[o + y] >> (7 - x)) & 1) px[y * 8 + x] = 1;
     return { w: 8, h: 8, px };
   }
@@ -27,10 +29,10 @@
   // face.get(code, mode) -> bitmap | null (mode 0 normal, 1 superscript, 2 subscript)
   function setData(face, data) {
     face.data = data; face.cache = {};
-    if (data.fnt) { face.w = 8; face.h = 8; face.get = (c) => (c >= 32 && c <= 127 ? (face.cache[c] = face.cache[c] || fntBitmap(data.fnt, c)) : null); }
+    if (data.fnt) { face.w = 8; face.h = 8; face.get = (c) => (c >= 32 && c <= 127 || gfxSlot(c) >= 0 ? (face.cache[c] = face.cache[c] || fntBitmap(data.fnt, c)) : null); }
     else {
       const f = data.acf; face.w = f.adv; face.h = f.rows; face.base = f.base; face.font = f;
-      face.get = (c, m) => (c >= 32 && c <= 127 ? (face.cache[c + ':' + (m || 0)] = face.cache[c + ':' + (m || 0)] || bitmapOf(f, c, m)) : null);
+      face.get = (c, m) => (c >= 32 && c <= 127 || gfxSlot(c) >= 0 ? (face.cache[c + ':' + (m || 0)] = face.cache[c + ':' + (m || 0)] || bitmapOf(f, c, m)) : null);
     }
     face.state = 'ready'; face.ttf = null;
   }

@@ -72,8 +72,8 @@ for (const file of manifest) {
     // a glyph that already touches the cell top / bottom cannot be shifted by the sup / sub offset without clipping: source property
     if (a.supTried && a.supOk < a.supTried - 4 && +s >= 8 && a.capTop >= 2 && F.capRatio < 0.7 && !/Atari-Russian|Poppkorn/.test(name)) why.push('superscripts lost (' + a.supOk + '/' + a.supTried + ')');
     if (a.subTried && a.subOk < a.subTried - 4 - F.miss.length && +s >= 8 && a.capBottom + subDn < 12 && F.capRatio < 0.7) why.push('subscripts lost (' + a.subOk + '/' + a.subTried + ')');
-    if (a.capBottom >= 0 && !(a.capBottom >= 6 && a.capBottom <= 10)) why.push('baseline row ' + a.capBottom + ' outside 6..10');
-    if (a.capTop >= 0 && !(a.capTop <= 4) && F.capRatio >= 0.5) why.push('cap top row ' + a.capTop + ' too low');
+    if (a.capBottom >= 0 && !(a.capBottom >= 6 && a.capBottom <= Math.max(10, +s - 3))) why.push('baseline row ' + a.capBottom + ' outside 6..' + Math.max(10, +s - 3));
+    if (a.capTop >= 0 && !(a.capTop <= Math.max(4, Math.round(+s / 6))) && F.capRatio >= 0.5) why.push('cap top row ' + a.capTop + ' too low');
     if (a.xTop >= 0 && a.capTop >= 0 && a.xTop < a.capTop && !F.xTaller) why.push('x-height above cap height');
     if (F.desc && +s >= 8 && a.descBottom >= 0 && a.capBottom >= 0 && a.descBottom <= a.capBottom) why.push('descender lost (source has one)');    let worst = 0, advBad = 0;
     for (const [k, v] of Object.entries(row.paths)) { worst = Math.max(worst, v.frac); advBad += v.advBad; if (v.frac > MAX_FRAC) why.push(k + ' round trip diff ' + v.diff + ' px (' + (v.frac * 100).toFixed(2) + '%)'); if (v.advBad) why.push(k + ' advances changed for ' + v.advBad + ' glyphs'); }

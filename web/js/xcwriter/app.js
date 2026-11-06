@@ -249,6 +249,19 @@
     if (!frag) frag = text.replace(/\r\n?/g, '\n').split('\n').map((t) => ({ align: 'l', bullet: false, runs: t ? [{ t, b: 0, i: 0, u: 0, sup: 0, sub: 0 }] : [] }));
     replaceSel(sanitizeFrag(frag));
   };
+  // Atari graphics picker (docs/FONT.md): the 32 ATASCII graphics + 5 extra symbols, drawn from the Craft 12 face procedure, inserted as their Unicode characters
+  $('msym').onclick = () => {
+    const G = XCW.Gfx, sp = XCW.Font.SIZES[12], S = 3;
+    const cells = G.ENTRIES.map((e, i) => '<canvas width="' + sp.adv * S + '" height="' + sp.rows * S + '" data-i="' + i + '" style="background:#fff;border:1px solid #888;cursor:pointer;margin:2px" title="' + e.name + ' U+' + e.uni.toString(16).toUpperCase() + (e.slot < 32 ? ' (ACWriter code ' + (128 + e.slot) + ')' : ' (xCWriter, print and web only)') + '"></canvas>').join('');
+    modal('<h3>Atari graphics</h3><div class="dim">Click a symbol to insert it at the cursor. The 32 ATASCII graphics (and the 5 extra ones, dimmed) are Unicode box drawing, card suits, blocks, triangles and arrows; ACWriter shows the first 32 only.</div><div id="symgrid">' + cells + '</div><div class="acts"><button id="symclose">Close</button></div>');
+    for (const cv of $('dlg').querySelectorAll('canvas[data-i]')) {
+      const e = G.ENTRIES[+cv.dataset.i], r = G.raster(e, sp), x = cv.getContext('2d');
+      x.fillStyle = e.slot >= 128 ? '#999' : '#000';
+      for (let y = 0; y < r.length; y++) for (let q = 0; q < r[y].length; q++) if (r[y][q]) x.fillRect(q * S, y * S, S, S);
+      cv.onclick = () => { const ch = String.fromCodePoint(e.uni); closeModal(); XW.pasteData({ getData: (k) => (k === 'text/plain' ? ch : '') }); cur().focus(); };
+    }
+    $('symclose').onclick = closeModal;
+  };
   XW.copyData = (dt, cut) => {
     const s = sel(), [a, b] = XCW.order(s.a, s.f);
     if (!cmp(a, b)) return;

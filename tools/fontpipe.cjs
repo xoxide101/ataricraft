@@ -9,6 +9,8 @@ const CF = require('./craftfont.cjs');
 const SF = require('./sfnt.cjs');
 
 const SIZES = [12, 10, 8, 6, 5, 4];
+const BIG = CF.BIG_SIZES || [];
+const AG = require('./atarigfx.cjs');
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const zeros = (n) => new Array(n).fill(0);
 const bytes = (b) => (b instanceof Uint8Array ? b : new Uint8Array(b));
@@ -19,16 +21,18 @@ const baseName = (n) => String(n || 'font').replace(/^.*[\\/]/, '').replace(/\.[
 // ---- names and code space -----------------------------------------------------------------------------------------------------
 const ASCII_NAMES = 'space exclam quotedbl numbersign dollar percent ampersand quotesingle parenleft parenright asterisk plus comma hyphen period slash zero one two three four five six seven eight nine colon semicolon less equal greater question at A B C D E F G H I J K L M N O P Q R S T U V W X Y Z bracketleft backslash bracketright asciicircum underscore grave a b c d e f g h i j k l m n o p q r s t u v w x y z braceleft bar braceright asciitilde'.split(' ');
 const glyphName = (code) => (code >= 32 && code <= 126 ? ASCII_NAMES[code - 32] : 'atascii' + code.toString(16).padStart(2, '0'));
-// ASCII keeps its Unicode value; the Atari graphics (0-31) and 127-255 sit in the Private Use Area at U+E000 + code
-const uniOf = (code) => (code >= 32 && code <= 126 ? code : 0xe000 + code);
-const codeOfUni = (u) => (u >= 32 && u <= 126 ? u : u >= 0xe000 && u <= 0xe0ff ? u - 0xe000 : -1);
+// ASCII keeps its Unicode value; the Atari graphics (slots 0-31 and 128-132) get their real Unicode (box drawing U+2500.., suits U+2660.., blocks U+2580..,
+// see docs/FONT.md); any other code sits in the Private Use Area at U+E000 + code
+const uniOf = (code) => (code >= 32 && code <= 126 ? code : AG.uniOfCode(code) || 0xe000 + code);
+const codeOfUni = (u) => (u >= 32 && u <= 126 ? u : AG.codeOfUni(u) >= 0 ? AG.codeOfUni(u) : u >= 0xe000 && u <= 0xe0ff ? u - 0xe000 : -1);
+const colsFor = (f, code) => CF.colsOf(f, f.map[code]);
 
 // ---- glyph helpers --------------------------------------------------------------------------------------------------------------
 const rowsOf = (f, code) => CF.glyph(f, code);
 const hasInk = (g) => g.some((v) => v);
-function inkBox(f, g) {
-  let x0 = f.gw, x1 = -1, y0 = f.rows, y1 = -1;
-  for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) { if (q < x0) x0 = q; if (q > x1) x1 = q; if (r < y0) y0 = r; if (r > y1) y1 = r; }
+function inkBox(f, g, cols = f.gw) {
+  let x0 = cols, x1 = -1, y0 = f.rows, y1 = -1;
+  for (let r = 0; r < f.rows; r++) for (let q = 0; q < cols; q++) if (CF.hasPx(f, g[r], q)) { if (q < x0) x0 = q; if (q > x1) x1 = q; if (r < y0) y0 = r; if (r > y1) y1 = r; }
   return x1 < 0 ? null : { x0, x1, y0, y1, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 const codesOf = (f) => { const a = []; for (let c = 0; c < 256; c++) { const s = f.map[c]; if (s >= f.first && s < f.first + f.count) a.push(c); } return a; };
@@ -37,7 +41,7 @@ const advOf = (f, code) => f.advs[f.map[code]] || f.adv;
 // Per-glyph horizontal data. lsb/rsb in px of the advance: measured from the bitmap for fixed-pitch glyphs, centred for a glyph whose
 // advance was narrowed (proportional fonts). sh = how far the ink is moved left when the font is exported with proportional advances.
 function glyphMetrics(f, code) {
-  const g = rowsOf(f, code), box = inkBox(f, g), adv = advOf(f, code), slot = f.map[code];
+  const g = rowsOf(f, code), box = inkBox(f, g, colsFor(f, code)), adv = advOf(f, code), slot = f.map[code];
   const prop = !!(f.advs && f.advs[slot] && f.advs[slot] !== f.adv);
   if (!box) return { adv, lsb: 0, rsb: adv, ink: 0, sh: 0, prop };
   const lsb = prop ? Math.max(0, Math.floor((adv - box.w) / 2)) : box.x0;
@@ -73,9 +77,9 @@ function analyze(f) {
 function diffFonts(a, b) {
   let diff = 0, total = 0; const bad = [];
   for (let c = 0; c < 256; c++) {
-    const ga = rowsOf(a, c), gb = rowsOf(b, c); let d = 0;
-    for (let r = 0; r < Math.max(a.rows, b.rows); r++) for (let q = 0; q < Math.max(a.gw, b.gw); q++) {
-      const pa = q < a.gw && r < a.rows && CF.hasPx(a, ga[r] || 0, q), pb = q < b.gw && r < b.rows && CF.hasPx(b, gb[r] || 0, q);
+    const ga = rowsOf(a, c), gb = rowsOf(b, c), ca = colsFor(a, c), cb = colsFor(b, c); let d = 0;
+    for (let r = 0; r < Math.max(a.rows, b.rows); r++) for (let q = 0; q < Math.max(ca, cb); q++) {
+      const pa = q < ca && r < a.rows && CF.hasPx(a, ga[r] || 0, q), pb = q < cb && r < b.rows && CF.hasPx(b, gb[r] || 0, q);
       if (pa) total++;
       if (pa !== pb) d++;
     }
@@ -201,6 +205,8 @@ function down(input, name, opt = {}) {
     f.name = f.name.slice(0, 40);
   }
   for (const s of Object.keys(fam.sizes)) if (!want.includes(+s)) delete fam.sizes[s];
+  // A font file has no Atari graphics: every size keeps the Craft base set (slots 0-31, 128-132) so a converted font still shows them
+  if (opt.graphics !== false) for (const s of Object.keys(fam.sizes)) if (!AG.hasGfx(fam.sizes[s])) AG.install(fam.sizes[s]);
   return { fam, info: { kind: font.kind, pixel: unit ? unit : 0, upm: font.upm, glyphs: font.numGlyphs, family: font.family, metrics: sfntInfo(font), warnings } };
 }
 
@@ -263,7 +269,7 @@ function fromBdfText(textIn, opt = {}) {
             const byte = parseInt(hx.substr((x >> 3) * 2, 2) || '0', 16);
             if (!(byte & (0x80 >> (x & 7)))) continue;
             const q = cur.xo + x + sh;
-            if (y < 0 || y >= f.rows || q < 0 || q >= f.gw) { clipped++; continue; }
+            if (y < 0 || y >= f.rows || q < 0 || q >= colsFor(f, cur.enc)) { clipped++; continue; }
             g[y] |= CF.bitMask(f, q);
           }
         });
@@ -290,7 +296,7 @@ function toBdf(f) {
   o.push('STARTPROPERTIES 5', 'FAMILY_NAME "' + name + '"', 'PIXEL_SIZE ' + f.rows, 'FONT_ASCENT ' + (f.base + 1), 'FONT_DESCENT ' + (f.rows - f.base - 1), 'DEFAULT_CHAR 32', 'ENDPROPERTIES');
   o.push('CHARS ' + codes.length);
   for (const c of codes) {
-    const g = rowsOf(f, c), box = inkBox(f, g), m = glyphMetrics(f, c);
+    const g = rowsOf(f, c), box = inkBox(f, g, colsFor(f, c)), m = glyphMetrics(f, c);
     o.push('STARTCHAR ' + glyphName(c), 'ENCODING ' + c, 'SWIDTH ' + Math.round((m.adv * 1000) / f.rows) + ' 0', 'DWIDTH ' + m.adv + ' 0');
     if (!box) { o.push('BBX 0 0 0 0', 'BITMAP', 'ENDCHAR'); continue; }
     o.push('BBX ' + box.w + ' ' + box.h + ' ' + (box.x0 - m.sh) + ' ' + (f.base - box.y1), 'BITMAP');
@@ -312,13 +318,13 @@ function toTtf(f) {
   const box = (x0, y0, x1, y1) => [[x0, y0], [x0, y1], [x1, y1], [x1, y0]];
   glyphs.push({ unicode: [], adv: f.adv * PX, contours: [box(PX, 0, PX * 3, (f.base + 1) * PX)] });
   for (const c of codes) {
-    const g = rowsOf(f, c), m = glyphMetrics(f, c), cs = [];
+    const g = rowsOf(f, c), m = glyphMetrics(f, c), cs = [], cols = colsFor(f, c);
     if (m.sh) meta.sh[c] = m.sh;
     for (let r = 0; r < f.rows; r++) {
       let q = 0;
-      while (q < f.gw) {
+      while (q < cols) {
         if (!CF.hasPx(f, g[r], q)) { q++; continue; }
-        let e = q; while (e + 1 < f.gw && CF.hasPx(f, g[r], e + 1)) e++;
+        let e = q; while (e + 1 < cols && CF.hasPx(f, g[r], e + 1)) e++;
         cs.push(box((q - m.sh) * PX, (f.base - r) * PX, (e + 1 - m.sh) * PX, (f.base + 1 - r) * PX));
         q = e + 1;
       }
@@ -346,7 +352,7 @@ function fromTtfExport(input) {
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const [x, y] of poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
       const r = f.base - Math.round(y1 / PX) + 1;
-      for (let q = Math.round(x0 / PX) + sh; q < Math.round(x1 / PX) + sh; q++) if (r >= 0 && r < f.rows && q >= 0 && q < f.gw) g[r] |= CF.bitMask(f, q);
+      for (let q = Math.round(x0 / PX) + sh; q < Math.round(x1 / PX) + sh; q++) if (r >= 0 && r < f.rows && q >= 0 && q < colsFor(f, c)) g[r] |= CF.bitMask(f, q);
     }
     f.glyphs[f.map[c]] = g;
     const adv = Math.round(font.advance(id) / PX);
@@ -464,4 +470,4 @@ function roundtrip(input, name, opt = {}) {
   return res;
 }
 
-module.exports = { SIZES, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
+module.exports = { SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };

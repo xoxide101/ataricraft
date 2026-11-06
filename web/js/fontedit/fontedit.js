@@ -65,11 +65,13 @@
   const GS = 2;
   const cell = () => ({ w: (st.f.adv + 2) * GS, h: (st.f.rows + 2) * GS });
   const ES = 24;
+  // columns of a slot: the Atari graphics (slots 0-31, 128-132) fill the whole advance, letters only the glyph width
+  const NC = (slot) => CF.colsOf(st.f, slot === undefined ? st.slot : slot);
 
   function sizeCanvases() {
     const c = cell(), f = st.f;
     grid.width = c.w * 16; grid.height = c.h * 16;
-    ed.width = f.gw * ES; ed.height = f.rows * ES;
+    ed.width = NC() * ES; ed.height = f.rows * ES;
   }
 
   function drawGrid() {
@@ -82,21 +84,22 @@
       if (inl) { gx.fillStyle = '#1a2538'; gx.fillRect(x0, y0, c.w, c.h); }
       const g = f.glyphs[s];
       gx.fillStyle = '#e8eaee';
-      if (g) for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) gx.fillRect(x0 + GS + q * GS, y0 + GS + r * GS, GS, GS);
+      if (g) for (let r = 0; r < f.rows; r++) for (let q = 0; q < NC(s); q++) if (CF.hasPx(f, g[r], q)) gx.fillRect(x0 + GS + q * GS, y0 + GS + r * GS, GS, GS);
       if (s === st.slot) { gx.strokeStyle = '#ff9d3a'; gx.lineWidth = 2; gx.strokeRect(x0 + 1, y0 + 1, c.w - 2, c.h - 2); }
     }
   }
 
   function drawEdit() {
     const f = st.f, g = target(false);
+    if (ed.width !== NC() * ES) ed.width = NC() * ES;
     ex.fillStyle = '#0f1115'; ex.fillRect(0, 0, ed.width, ed.height);
     ex.fillStyle = COL.head + '44'; ex.fillRect(0, 0, ed.width, f.head * ES);
     ex.fillStyle = COL.desc + '44'; ex.fillRect(0, (f.base + 1) * ES, ed.width, (f.rows - f.base - 1) * ES);
     ex.strokeStyle = '#ffffff12'; ex.lineWidth = 1;
-    for (let q = 0; q <= f.gw; q++) { ex.beginPath(); ex.moveTo(q * ES + .5, 0); ex.lineTo(q * ES + .5, ed.height); ex.stroke(); }
+    for (let q = 0; q <= NC(); q++) { ex.beginPath(); ex.moveTo(q * ES + .5, 0); ex.lineTo(q * ES + .5, ed.height); ex.stroke(); }
     for (let r = 0; r <= f.rows; r++) { ex.beginPath(); ex.moveTo(0, r * ES + .5); ex.lineTo(ed.width, r * ES + .5); ex.stroke(); }
     ex.fillStyle = '#f2f4f8';
-    for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) ex.fillRect(q * ES + 1, r * ES + 1, ES - 1, ES - 1);
+    for (let r = 0; r < f.rows; r++) for (let q = 0; q < NC(); q++) if (CF.hasPx(f, g[r], q)) ex.fillRect(q * ES + 1, r * ES + 1, ES - 1, ES - 1);
     const line = (y, col) => { ex.fillStyle = col; ex.fillRect(0, y - 1, ed.width, 2); };
     line(f.head * ES, COL.cap); line(f.xTop * ES, COL.xh); line((f.base + 1) * ES, COL.base);
     const c = cur();
@@ -130,7 +133,7 @@
       let xo = 0;
       ln.forEach(([code, mode]) => {
         const g = CF.render(f, code, mode), i0 = xo; xo += advOf(code);
-        for (let r = 0; r < f.rows; r++) if (g[r]) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r], q)) px.fillRect((4 + i0 + q) * z, (y0 + r) * z, z, z);
+        for (let r = 0; r < f.rows; r++) if (g[r]) for (let q = 0; q < NC(f.map[code]); q++) if (CF.hasPx(f, g[r], q)) px.fillRect((4 + i0 + q) * z, (y0 + r) * z, z, z);
       });
     });
     hooks.forEach((h) => h());
@@ -154,8 +157,8 @@
 
   function paint(e, val) {
     const r = ed.getBoundingClientRect(), f = st.f;
-    const q = Math.floor(((e.clientX - r.left) / r.width) * f.gw), y = Math.floor(((e.clientY - r.top) / r.height) * f.rows);
-    if (q < 0 || y < 0 || q >= f.gw || y >= f.rows) return;
+    const q = Math.floor(((e.clientX - r.left) / r.width) * NC()), y = Math.floor(((e.clientY - r.top) / r.height) * f.rows);
+    if (q < 0 || y < 0 || q >= NC() || y >= f.rows) return;
     const g = target(true), bit = CF.bitMask(f, q);
     if (val === undefined) val = (g[y] & bit) ? 0 : 1; // first click decides draw / erase for the drag
     if (!!(g[y] & bit) === !!val) return val;
@@ -166,8 +169,8 @@
   }
   const cellAt = (e) => {
     const r = ed.getBoundingClientRect(), f = st.f;
-    const q = Math.floor(((e.clientX - r.left) / r.width) * f.gw), y = Math.floor(((e.clientY - r.top) / r.height) * f.rows);
-    return q < 0 || y < 0 || q >= f.gw || y >= f.rows ? null : [q, y];
+    const q = Math.floor(((e.clientX - r.left) / r.width) * NC()), y = Math.floor(((e.clientY - r.top) / r.height) * f.rows);
+    return q < 0 || y < 0 || q >= NC() || y >= f.rows ? null : [q, y];
   };
   const setPixel = (g, q, y, val) => { const bit = CF.bitMask(st.f, q); g[y] = val ? g[y] | bit : g[y] & ~bit; };
   const getPixel = (g, q, y) => CF.hasPx(st.f, g[y], q);
@@ -189,7 +192,7 @@
       if (from === !!val) return;
       while (stack.length) {
         const [q, y] = stack.pop(), k = y * 32 + q;
-        if (q < 0 || y < 0 || q >= f.gw || y >= f.rows || seen.has(k) || getPixel(g, q, y) !== from) continue;
+        if (q < 0 || y < 0 || q >= NC() || y >= f.rows || seen.has(k) || getPixel(g, q, y) !== from) continue;
         seen.add(k); setPixel(g, q, y, val); stack.push([q + 1, y], [q - 1, y], [q, y + 1], [q, y - 1]);
       }
     }

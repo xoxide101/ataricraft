@@ -19,14 +19,29 @@ const SIZES = {
   5: { adv: 5, gw: 4, rows: 12, head: 2, xTop: 4, base: 8, desc: 3, supUp: 2, subDown: 3, label: '5 px overview' },
   4: { adv: 4, gw: 3, rows: 12, head: 2, xTop: 4, base: 8, desc: 3, supUp: 2, subDown: 3, label: '4 px overview' },
 };
+// Large sizes (xCWriter, print, web; the Atari app cannot hold them): square cell of `size` rows, a gap of about an eighth of the advance.
+for (const s of [14, 16, 18, 20, 22, 24, 26]) {
+  const gap = Math.max(2, Math.round(s / 8)), head = Math.round(s / 6), desc = head, base = s - desc - 1, body = base - head + 1;
+  SIZES[s] = { adv: s, gw: s - gap, rows: s, head, xTop: head + Math.round(body * 0.25), base, desc, supUp: head, subDown: head, label: s + 'x' + s };
+}
+const BIG_SIZES = [14, 16, 18, 20, 22, 24, 26];
 // origin: 0 master (hand drawn / rasterised), 1 derived from the master, 2 hand-edited after deriving
 const ORIGIN = { master: 0, derived: 1, hand: 2 };
 
 // Rows are one byte (bit 7 = leftmost pixel) when the glyph is at most 8 px wide, otherwise two bytes (bit 15 = leftmost).
-const isWide = (f) => f.gw > 8;
-const topBit = (f) => (isWide(f) ? 0x8000 : 0x80);
-const bitMask = (f, q) => topBit(f) >> q;
-const fullMask = (f) => (isWide(f) ? 0xffff : 0xff) & ~((isWide(f) ? 0xffff : 0xff) >> f.gw);
+// ACF2 extension: faces wider than 16 px (and the 10 px face, whose Atari graphics fill the whole 10 px cell) store 2-3 bytes per row,
+// signalled by header flag 32 + a bytes-per-row byte. Older files have no flag and keep gw > 8 ? 2 : 1.
+const defBpr = (gw) => (gw > 16 ? 3 : gw > 8 ? 2 : 1);
+const bprOf = (f) => f.bpr || defBpr(f.gw);
+const isWide = (f) => bprOf(f) > 1;
+const topBit = (f) => 1 << (8 * bprOf(f) - 1);
+const bitMask = (f, q) => topBit(f) >>> q;
+const allBits = (f) => (bprOf(f) >= 4 ? 0xFFFFFFFF : (1 << (8 * bprOf(f))) - 1);
+const fullMask = (f) => (allBits(f) & ~(allBits(f) >>> f.gw)) >>> 0;
+const cellMask = (f) => (allBits(f) & ~(allBits(f) >>> f.adv)) >>> 0;
+// Atari graphics slots (0-31 and 128-132, tools/atarigfx.cjs) are drawn over the whole advance, not only the gw glyph columns
+const isGfxSlot = (slot) => (slot >= 0 && slot < 32) || (slot >= 128 && slot < 133);
+const colsOf = (f, slot) => (isGfxSlot(slot) ? Math.max(f.adv, f.gw) : f.gw);
 const hasPx = (f, row, q) => !!(row & bitMask(f, q));
 
 // Standard metrics: cell rows 0..11: 0-1 headroom, 2-8 capitals (cap line row 2, baseline row 8), x-height line row 4, 9-11 descender.
@@ -36,7 +51,7 @@ function create(opt = {}) {
     name: opt.name || 'Untitled', adv, gw: opt.gw || adv - 1, rows: opt.rows || ROWS, head: opt.head ?? HEAD, xTop: opt.xTop ?? XTOP,
     base: opt.base ?? BASE, desc: opt.desc ?? DESC, supUp: opt.supUp ?? 2, subDown: opt.subDown ?? 3,
     first: opt.first ?? 32, count: opt.count ?? 96, upper: 65, lower: 97,
-    origin: opt.origin ?? 0, locked: !!opt.locked, masterAdv: opt.masterAdv ?? 0,
+    origin: opt.origin ?? 0, locked: !!opt.locked, masterAdv: opt.masterAdv ?? 0, bpr: opt.bpr || 0,
     glyphs: [], map: [], sup: {}, sub: {}, advs: {},
   };
   for (let i = 0; i < 256; i++) { f.glyphs.push(zeros(f.rows)); f.map.push(i); }
@@ -75,7 +90,7 @@ function setCase(f, kind, slot) {
 
 function isDefaultMap(f) { return f.map.every((v, i) => v === i); }
 
-const rowBytes = (f, r) => (isWide(f) ? [(r >> 8) & 255, r & 255] : [r & 255]);
+const rowBytes = (f, r) => Array.from({ length: bprOf(f) }, (_, k) => (r >>> (8 * (bprOf(f) - 1 - k))) & 255);
 const glyphBytes = (f, g) => Buffer.from([].concat(...g.map((r) => rowBytes(f, r))));
 
 function serialize(f) {
@@ -85,10 +100,11 @@ function serialize(f) {
   for (const [kind, tab] of [[1, f.sup], [2, f.sub]]) for (const c of Object.keys(tab)) vars.push([+c, kind, tab[c]]);
   const advList = Object.keys(f.advs || {}).filter((k) => f.advs[k] && f.advs[k] !== f.adv).map(Number);
   const hasMeta = f.origin || f.locked || f.masterAdv;
-  const flags = (hasMap ? 1 : 0) | (vars.length ? 2 : 0) | (isWide(f) ? 4 : 0) | (hasMeta ? 8 : 0) | (advList.length ? 16 : 0);
+  const flags = (hasMap ? 1 : 0) | (vars.length ? 2 : 0) | (isWide(f) ? 4 : 0) | (hasMeta ? 8 : 0) | (advList.length ? 16 : 0) | (bprOf(f) !== defBpr(f.gw) ? 32 : 0);
   const head = Buffer.from([f.adv, f.gw, f.rows, f.head, f.xTop, f.base, f.desc, f.supUp & 255, f.subDown & 255, f.first, f.count & 255, flags, f.upper & 255, f.lower & 255, nm.length]);
   const parts = [Buffer.from(MAGIC2, 'latin1'), head, nm];
   if (hasMeta) parts.push(Buffer.from([f.origin & 255, f.locked ? 1 : 0, f.masterAdv & 255]));
+  if (flags & 32) parts.push(Buffer.from([bprOf(f)]));
   if (hasMap) parts.push(Buffer.from(f.map));
   for (let i = 0; i < f.count; i++) parts.push(glyphBytes(f, f.glyphs[f.first + i] || zeros(f.rows)));
   if (vars.length) {
@@ -114,8 +130,9 @@ function parse(buf) {
   const f = create({ adv, gw, rows, head, xTop, base, desc, supUp, subDown, first, count, name });
   f.upper = upper; f.lower = lower;
   if (flags & 8) { f.origin = b(); f.locked = !!b(); f.masterAdv = b(); }
-  const bpr = isWide(f) ? 2 : 1;
-  const rowsAt = () => { const o = []; for (let r = 0; r < rows; r++) { o.push(bpr === 2 ? (buf[p] << 8) | buf[p + 1] : buf[p]); p += bpr; } return o; };
+  if (flags & 32) f.bpr = b();
+  const bpr = bprOf(f);
+  const rowsAt = () => { const o = []; for (let r = 0; r < rows; r++) { let v = 0; for (let k = 0; k < bpr; k++) v = v * 256 + buf[p++]; o.push(v); } return o; };
   if (flags & 1) { for (let i = 0; i < 256; i++) f.map[i] = b(); }
   for (let i = 0; i < count; i++) f.glyphs[first + i] = rowsAt();
   if (flags & 2) {
@@ -162,9 +179,10 @@ const hex = (a, w = 2) => a.map((v) => v.toString(16).padStart(w, '0')).join('')
 const unhex = (s, w = 2) => (s.match(new RegExp('.{' + w + '}', 'g')) || []).map((h) => parseInt(h, 16));
 
 function toJson(f) {
-  const w = isWide(f) ? 4 : 2;
+  const w = bprOf(f) * 2;
   const o = { format: 'craft-font', version: 2, name: f.name, adv: f.adv, gw: f.gw, rows: f.rows, head: f.head, xTop: f.xTop, base: f.base, desc: f.desc,
     supUp: f.supUp, subDown: f.subDown, first: f.first, count: f.count, upper: f.upper, lower: f.lower, origin: f.origin, locked: f.locked, masterAdv: f.masterAdv, glyphs: {}, sup: {}, sub: {} };
+  if (f.bpr && f.bpr !== defBpr(f.gw)) o.bpr = f.bpr;
   if (!isDefaultMap(f)) o.map = f.map.slice();
   if (Object.keys(f.advs || {}).length) o.advs = Object.assign({}, f.advs);
   for (let i = 0; i < f.count; i++) o.glyphs[f.first + i] = hex(f.glyphs[f.first + i], w);
@@ -177,7 +195,7 @@ function fromJson(text) {
   const o = typeof text === 'string' ? JSON.parse(text) : text;
   if (o.format !== 'craft-font') throw new Error('not a craft-font JSON');
   const f = create(o);
-  const w = isWide(f) ? 4 : 2;
+  const w = bprOf(f) * 2;
   f.upper = o.upper ?? 65; f.lower = o.lower ?? 97;
   if (o.map) f.map = o.map.slice();
   if (o.advs) f.advs = Object.assign({}, o.advs);
@@ -195,7 +213,7 @@ function toInc(f, prefix = 'cf') {
   o += prefix + '_ADV = ' + f.adv + '\n' + prefix + '_GW = ' + f.gw + '\n' + prefix + '_ROWS = ' + f.rows + '\n' + prefix + '_HEAD = ' + f.head + '\n';
   o += prefix + '_XTOP = ' + f.xTop + '\n' + prefix + '_BASE = ' + f.base + '\n' + prefix + '_DESC = ' + f.desc + '\n';
   o += prefix + '_SUPUP = ' + f.supUp + '\n' + prefix + '_SUBDN = ' + f.subDown + '\n' + prefix + '_FIRST = ' + f.first + '\n' + prefix + '_COUNT = ' + f.count + '\n';
-  const wide = isWide(f);
+  const nb = bprOf(f);
   const plane = (name, fn) => {
     o += name + ':\n';
     for (let i = 0; i < f.count; i += 16) {
@@ -204,8 +222,7 @@ function toInc(f, prefix = 'cf') {
     }
   };
   for (let r = 0; r < f.rows; r++) {
-    plane(prefix + '_' + r, (g) => (wide ? ((g[r] || 0) >> 8) & 255 : (g[r] || 0) & 255));
-    if (wide) plane(prefix + '_' + r + 'L', (g) => (g[r] || 0) & 255);
+    for (let k = 0; k < nb; k++) plane(prefix + '_' + r + ['', 'L', 'M'][k], (g) => ((g[r] || 0) >>> (8 * (nb - 1 - k))) & 255);
   }
   o += prefix + '_map:\n';
   for (let i = 0; i < 256; i += 16) {
@@ -307,18 +324,30 @@ async function rasterTtf(b64, opt) {
     x.fillText(s, 0, 0);
     if (wt) { x.lineWidth = Math.abs(wt) * 0.12 * S; if (wt > 0) x.strokeText(s, 0, 0); }
     x.restore();
-    const d = x.getImageData(0, 0, c.width, c.height).data, g = zeros(rows), top = gw > 8 ? 0x8000 : 0x80, cv = [];
+    const d = x.getImageData(0, 0, c.width, c.height).data, g = zeros(rows), top = topBit(f), cv = [];
     let mx = 0;
     for (let r = 0; r < rows; r++) for (let q = 0; q < gw; q++) {
       let cov = 0;
       for (let v = 0; v < S; v++) for (let u = 0; u < S; u++) cov += d[((r * S + v) * c.width + q * S + u) * 4 + 3];
       cov /= 255 * S * S; cv.push(cov); if (cov > mx) mx = cov;
-      if (cov >= th - (wt < 0 ? wt * 0.08 : 0)) g[r] |= top >> q;
+      if (cov >= th - (wt < 0 ? wt * 0.08 : 0)) g[r] |= top >>> q;
     }
     // faint but real ink (thin underscore, hyphen) must not vanish: keep its strongest pixels
-    if (!g.some((v) => v) && mx > 0.05) for (let i = 0; i < cv.length; i++) if (cv[i] >= mx * 0.6) g[(i / gw) | 0] |= top >> (i % gw);
+    if (!g.some((v) => v) && mx > 0.05) for (let i = 0; i < cv.length; i++) if (cv[i] >= mx * 0.6) g[(i / gw) | 0] |= top >>> (i % gw);
     f.glyphs[a] = g;
   }
+  return f;
+}
+
+// Changes the bytes per row of every glyph (pixels stay in the same columns).
+function setBpr(f, n) {
+  const old = bprOf(f), d = 8 * (n - old);
+  if (!d) return f;
+  const mv = (g) => g.map((r) => (d > 0 ? r * 2 ** d : Math.floor(r / 2 ** -d)));
+  f.glyphs = f.glyphs.map(mv);
+  for (const k of Object.keys(f.sup)) f.sup[k] = mv(f.sup[k]);
+  for (const k of Object.keys(f.sub)) f.sub[k] = mv(f.sub[k]);
+  f.bpr = n;
   return f;
 }
 
@@ -326,8 +355,29 @@ async function rasterTtf(b64, opt) {
 // Band-wise downscale of a font into another size: headroom, cap-line-to-baseline and descender bands each map onto the target's
 // band, columns map ink width onto ink width. A target pixel is on when its coverage reaches `threshold`; `keepStems` also keeps a
 // pixel with at least a quarter coverage that has no inked neighbour on either side, so one-pixel stems never vanish.
+// Upscaling (large sizes): the same band mapping, but each target pixel samples the source bilinearly and switches on at coverage 0.5, so a
+// one-pixel stem grows to the matching stem width instead of staying hair-thin.
+function upGlyph(src, dst, rows, opt) {
+  const bands = (f) => [[0, f.head], [f.head, f.base + 1], [f.base + 1, f.rows]], sb = bands(src), db = bands(dst), out = zeros(dst.rows), top = topBit(dst), th = opt.upThreshold ?? 0.5;
+  let minx = src.gw, maxx = -1;
+  for (const r of rows) for (let q = 0; q < src.gw; q++) if (hasPx(src, r, q)) { if (q < minx) minx = q; if (q > maxx) maxx = q; }
+  const px = (y, x) => (y < 0 || x < 0 || y >= src.rows || x >= src.gw ? 0 : hasPx(src, rows[y], x) ? 1 : 0);
+  const sw = src.gw / dst.gw;
+  for (let r = 0; r < dst.rows; r++) {
+    const bi = db.findIndex(([a, b]) => r >= a && r < b), [da, dbb] = db[bi], [sa, sbb] = sb[bi];
+    const sy = sa + ((r + 0.5 - da) / (dbb - da)) * (sbb - sa) - 0.5, y0 = Math.floor(sy), fy = sy - y0;
+    for (let q = 0; q < dst.gw; q++) {
+      const sx = (q + 0.5) * sw - 0.5, x0 = Math.floor(sx), fx = sx - x0;
+      const v = px(y0, x0) * (1 - fx) * (1 - fy) + px(y0, x0 + 1) * fx * (1 - fy) + px(y0 + 1, x0) * (1 - fx) * fy + px(y0 + 1, x0 + 1) * fx * fy;
+      if (v >= th) out[r] |= top >>> q;
+    }
+  }
+  if (maxx >= 0 && !out.some((v) => v)) out[dst.head] |= top;
+  return out;
+}
+
 function deriveGlyph(src, dst, rows, opt) {
-  const th = opt.threshold ?? 0.4, keep = opt.keepStems !== false;
+  if (dst.rows > src.rows || (dst.gw > src.gw && dst.rows >= src.rows)) return upGlyph(src, dst, rows, opt);  const th = opt.threshold ?? 0.4, keep = opt.keepStems !== false;
   const bands = (f) => [[0, f.head], [f.head, f.base + 1], [f.base + 1, f.rows]];
   const sb = bands(src), db = bands(dst), out = zeros(dst.rows);
   // columns: a glyph whose ink already fits the target is moved, not resampled, so one-pixel stems stay one pixel wide
@@ -360,14 +410,14 @@ function deriveGlyph(src, dst, rows, opt) {
     for (let q = 0; q < dst.gw; q++) {
       const v = cov[r][q];
       const lone = keep && v >= 0.25 && (q === 0 || cov[r][q - 1] < th) && (q === dst.gw - 1 || cov[r][q + 1] < th);
-      if (v >= th || lone) out[r] |= top >> q;
+      if (v >= th || lone) out[r] |= top >>> q;
     }
   }
   // A glyph with ink never derives to nothing: switch on the cell with the most coverage.
   if (rows.some((v) => v) && !out.some((v) => v)) {
     let best = -1, br = 0, bq = 0;
     cov.forEach((row, r) => row.forEach((v, q) => { if (v > best) { best = v; br = r; bq = q; } }));
-    out[br] |= top >> bq;
+    out[br] |= top >>> bq;
   }
   return out;
 }
@@ -377,7 +427,9 @@ function derive(master, size, opt = {}) {
   const spec = SIZES[size]; if (!spec) throw new Error('unknown size ' + size);
   const f = create(Object.assign({}, spec, { name: master.name.replace(/ \d+x\d+.*$/, '') + ' ' + spec.label.split(' ')[0], first: master.first, count: master.count, origin: ORIGIN.derived, masterAdv: master.adv }));
   f.map = master.map.slice(); f.upper = master.upper; f.lower = master.lower;
-  for (let s = 0; s < 256; s++) if (master.glyphs[s] && master.glyphs[s].some((v) => v)) f.glyphs[s] = deriveGlyph(master, f, master.glyphs[s], opt);
+  const AG = require('./atarigfx.cjs'), gfx = AG.hasGfx(master) && opt.graphics !== false;
+  for (let s = 0; s < 256; s++) if (!(gfx && AG.isGfxSlot(s)) && master.glyphs[s] && master.glyphs[s].some((v) => v)) f.glyphs[s] = deriveGlyph(master, f, master.glyphs[s], opt);
+  if (gfx) AG.install(f);
   for (const [k, tab, out] of [[1, master.sup, f.sup], [2, master.sub, f.sub]]) for (const c of Object.keys(tab)) out[c] = deriveGlyph(master, f, tab[c], opt);
   return f;
 }
@@ -545,7 +597,7 @@ function toFnt(f) {
   const out = Buffer.alloc(1024);
   for (let a = 0; a < 128; a++) {
     const sc = a < 32 ? a + 64 : a < 96 ? a - 32 : a, g = f.glyphs[f.map[a]] || zeros(f.rows);
-    for (let i = 0; i < 8; i++) out[sc * 8 + i] = ((g[f.head + i] || 0) >> (isWide(f) ? 8 : 0)) & 255;
+    for (let i = 0; i < 8; i++) out[sc * 8 + i] = ((g[f.head + i] || 0) >> (8 * (bprOf(f) - 1))) & 255;
   }
   return out;
 }
@@ -571,4 +623,4 @@ function fromSheet(data, w, h, opt = {}) {
   return f;
 }
 
-module.exports = { builtinWide, create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, fromPcf, toFnt, toSheet, fromSheet, setPx };
+module.exports = { builtinWide, create, createSize, glyph, render, shift, place, setCase, slotOf, serialize, parse, fromAcf1, acf1Sizes, toJson, fromJson, toInc, builtin, fromFnt, rasterTtf, derive, deriveGlyph, familyNew, familyDerive, familyToJson, familyFromJson, markEdited, isWide, topBit, bitMask, fullMask, cellMask, bprOf, defBpr, setBpr, isGfxSlot, colsOf, BIG_SIZES, hasPx, SIZES, ORIGIN, isDefaultMap, METRICS: { ROWS, HEAD, XTOP, BASE, DESC }, MAGIC2, clamp, flipV, rotate, fromBdf, fromPcf, toFnt, toSheet, fromSheet, setPx };

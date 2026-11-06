@@ -71,12 +71,12 @@
     if (cell.u) px(ctx, x, y + lh - 1, cw, 1, ink);
   }
   function drawCell(x, y, cell, ink, cw, face, lh) {
-    const code = cell.ch.charCodeAt(0), f = face && code >= 32 && code <= 127 ? XFACE.use(face) : null, bm = f && f.get(code, cell.sup ? 1 : cell.sub ? 2 : 0);
+    const code = cell.ch.charCodeAt(0), f = face && (code >= 32 && code <= 127 || code >= 128 && code < 160) ? XFACE.use(face) : null, bm = f && f.get(code, cell.sup ? 1 : cell.sub ? 2 : 0);
     if (bm) { drawBitmap(x, y, cell, ink, cw, bm, lh || LH); return; }
-    const rows = glyph(code), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(4, cw);
+    const gfx = code >= 128 && code < 160, rows = glyph(code), dy = cell.sup ? -1 : cell.sub ? 1 : 0, bw = Math.min(gfx ? 5 : 4, cw);
     for (let r = 0; r < rows.length && r < 8; r++) {
       const sh = cell.i && r < 3 ? 1 : 0, bits = rows[r];
-      for (let c = 0; c < bw; c++) if (bits & (8 >> c)) { px(ctx, x + c + sh, y + r + dy, 1, 1, ink); if (cell.b && cw > 3) px(ctx, x + c + sh + 1, y + r + dy, 1, 1, ink); }
+      for (let c = 0; c < bw; c++) if (bits & ((gfx ? 16 : 8) >> c)) { px(ctx, x + c + sh, y + r + dy, 1, 1, ink); if (cell.b && cw > (gfx ? 4 : 3)) px(ctx, x + c + sh + 1, y + r + dy, 1, 1, ink); }
     }
     if (cell.u) px(ctx, x, y + 7, cw, 1, ink);
   }
