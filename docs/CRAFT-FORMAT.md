@@ -127,7 +127,7 @@ JavaScript reference: `node tools/craftdoc.cjs FILE.XCW` prints the plain text, 
 ## Known limits of version 1
 
 - No object list yet (only text paragraphs). Art, lines and boxes will arrive as a new section after the text stream, flagged in `flags`.
-- Page setup (paper, pitch, margins, tab stops, font name) is an optional trailer after the payload, flagged by `flags` bit 1; see [PAGE.md](PAGE.md). Without it the editor uses its defaults.
+- Page setup (paper, pitch, margins, tab stops, font name) is an optional trailer after the payload, flagged by `flags` bit 1; see [PAGE.md](PAGE.md). Trailer tags: 1 page setup, 2/3 resolved faces (read by ACWriter), 4 section starts and fonts, 5 style table (Title, Heading 1-3, Caption), 6 per-paragraph role/size/font, 7 document default font. Readers skip unknown tags, so tags 4-7 are invisible to older readers and to ACWriter. Without it the editor uses its defaults.
 - The Atari build keeps its low-memory tables at 0x0500-0x14FF, so a disk DOS that lives there will clash. The emulator's `H:` device and bare-metal CIO work; relocating the tables for stock DOS is planned.
 - The checksum is a plain sum. Version 2 may move to CRC-16.
 

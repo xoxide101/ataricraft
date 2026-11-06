@@ -295,7 +295,7 @@ function toModel(buf, name, opts = {}) {
   const fmt = opts.format || detect(buf, name);
   const O = require('./officeread.cjs');
   const req = (n) => require('./import-' + n + '.cjs').read;
-  const office = (f) => (b) => { const o = f(b); const r = o.map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; }); r.mixedFonts = o.mixedFonts || 0; return r; };
+  const office = (f) => (b) => { const o = f(b); const r = o.map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; }); r.mixedFonts = o.mixedFonts || 0; r.docInfo = o.docInfo; return r; };
   const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx),
     letterperfect: office(req('letterperfect')), paperclip: office(req('paperclip')), firstxlent: office(req('firstxlent')), textwizard: office(req('textwizard')), bankstreet: office(req('bankstreet')) };
   const prev = cfg.unicode; cfg.unicode = !!opts.unicode;
@@ -304,9 +304,9 @@ function toModel(buf, name, opts = {}) {
     if (fmt === 'craft' && opts.allowCraft) paras = require('./craftexport.cjs').model(require('./craftdoc.cjs').parse(buf).payload, { graphics: true });
     else if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
     else paras = importers[fmt](buf);
-    const mixedFonts = paras.mixedFonts || 0;
+    const mixedFonts = paras.mixedFonts || 0, docInfo = paras.docInfo;
     while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
-    return { format: fmt, paras, mixedFonts };
+    return { format: fmt, paras, mixedFonts, docInfo };
   } finally { cfg.unicode = prev; }
 }
 
@@ -323,7 +323,7 @@ function cutAtLine(bytes, max) {
 function convert(buf, name, opts = {}) {
   const cols = opts.page ? require('./craftpage.cjs').usableCols(opts.page) : opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
-  if (opts.page) opts = { ...opts, page: { ...opts.page, fonts: require('./craftpage.cjs').fontRecords(paras, opts.page.font) } };
+  if (opts.page) opts = { ...opts, page: require('./craftpage.cjs').embed(paras, opts.page) };
   let bytes = layout(paras, opts.page || cols), truncated = false, dropped = 0;
   const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
   if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }

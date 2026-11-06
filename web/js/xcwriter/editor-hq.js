@@ -20,7 +20,7 @@
   }
   function readPara(el) {
     const p = { align: ({ c: 'c', r: 'r', j: 'j' })[el.dataset.a] || 'l', bullet: el.classList.contains('bul') || el.nodeName === 'LI', runs: [] };
-    if (el.dataset.font) p.font = el.dataset.font;
+    if (el.dataset.font) p.font = el.dataset.font; if (el.dataset.sec) p.sec = true; if (el.dataset.sf) p.sf = el.dataset.sf; if (el.dataset.role) p.role = el.dataset.role; if (el.dataset.size) p.size = +el.dataset.size;
     const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     for (let n; (n = w.nextNode());) {
       const t = n.nodeValue.replace(/[\r\n\u200b]/g, '');
@@ -47,7 +47,7 @@
         if (r.u) s = '<u>' + s + '</u>'; if (r.i) s = '<i>' + s + '</i>'; if (r.b) s = '<b>' + s + '</b>';
         h += s;
       }
-      return '<p' + (p.align !== 'l' ? ' data-a="' + p.align + '"' : '') + (p.font ? ' data-font="' + esc(p.font) + '"' : '') + (p.bullet ? ' class="bul"' : '') + '>' + (h || '<br>') + '</p>';
+      return '<p' + (p.align !== 'l' ? ' data-a="' + p.align + '"' : '') + (p.font ? ' data-font="' + esc(p.font) + '"' : '') + (p.sec ? ' data-sec="1"' : '') + (p.sf ? ' data-sf="' + esc(p.sf) + '"' : '') + (p.role ? ' data-role="' + esc(p.role) + '"' : '') + (p.size ? ' data-size="' + p.size + '"' : '') + (p.bullet ? ' class="bul"' : '') + '>' + (h || '<br>') + '</p>';
     }).join('');
     applyFaces();
   }

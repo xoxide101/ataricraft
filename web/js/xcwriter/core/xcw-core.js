@@ -182,6 +182,23 @@ const KIND_NAME = ['l', 'c', 'r'];
 const TRAILER_MAGIC = 'CPG1';
 const FLAG_TRAILER = 0x02;
 
+// Style roles (docs/FONT.md "Styles"): '' is Body. Cell sizes that exist as Craft faces (craft4 .. craft12).
+const ROLES = ['', 'title', 'h1', 'h2', 'h3', 'cap'];
+const ROLE_LABEL = { '': 'Body', title: 'Title', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', cap: 'Caption' };
+const SIZES = [4, 5, 6, 8, 10, 12];
+const ALIGN_CODE = { l: 0, c: 1, r: 2, j: 3 };
+const ALIGN_NAME = ['l', 'c', 'r', 'j'];
+const fname = (s) => String(s || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32);
+function cleanStyles(st) {
+  const o = {};
+  for (const r of ROLES) {
+    const s = st && st[r]; if (!s || typeof s !== 'object') continue;
+    const c = { face: fname(s.face), size: SIZES.includes(+s.size) ? +s.size : 0, b: s.b ? 1 : 0, i: s.i ? 1 : 0, align: ALIGN_CODE[s.align] !== undefined ? s.align : '', space: Math.max(0, Math.min(3, Math.round(+s.space) || 0)) };
+    if (c.face || c.size || c.b || c.i || c.align || c.space) o[r] = c;
+  }
+  return o;
+}
+
 // Whole columns that fit across the paper (a small epsilon keeps 8.5 x 12 = 102 exact).
 const paperCols = (paper, pitch) => Math.floor(PAPERS[paper].w * pitch + 1e-6);
 const paperLines = (paper) => Math.floor(PAPERS[paper].h * LPI + 1e-6);
@@ -204,7 +221,12 @@ function normalize(p) {
   const seen = new Set();
   o.tabs = (o.tabs || []).map((t) => ({ pos: Math.round(+t.pos), kind: KIND_CODE[t.kind] !== undefined ? t.kind : 'l' }))
     .filter((t) => t.pos >= 0 && t.pos < pc && !seen.has(t.pos) && seen.add(t.pos)).sort((a, b) => a.pos - b.pos).slice(0, 24);
-  o.font = String(o.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32);
+  o.font = fname(o.font); o.dfont = fname(o.dfont); o.styles = cleanStyles(o.styles);
+  const sq = new Set(), pq = new Set();
+  o.secs = (Array.isArray(o.secs) ? o.secs : []).map((r) => ({ p: Math.max(0, Math.min(65535, Math.round(+r.p) || 0)), font: fname(r.font) }))
+    .filter((r) => !sq.has(r.p) && sq.add(r.p)).sort((a, b) => a.p - b.p).slice(0, 120);
+  o.pp = (Array.isArray(o.pp) ? o.pp : []).map((r) => ({ p: Math.max(0, Math.min(65535, Math.round(+r.p) || 0)), role: ROLES.includes(r.role) ? r.role : '', size: SIZES.includes(+r.size) ? +r.size : 0, font: fname(r.font) }))
+    .filter((r) => (r.role || r.size || r.font) && !pq.has(r.p) && pq.add(r.p)).sort((a, b) => a.p - b.p).slice(0, 4000);
   const fs = new Set();
   o.fonts = (Array.isArray(o.fonts) ? o.fonts : []).map((r) => ({ p: Math.max(0, Math.min(65535, Math.round(+r.p) || 0)), font: String(r.font || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32) }))
     .filter((r) => !fs.has(r.p) && fs.add(r.p)).sort((a, b) => a.p - b.p).slice(0, 64);
@@ -215,12 +237,72 @@ function normalize(p) {
 // paragraph start, so a font can never change in the middle of a line.
 function fontRecords(paras, docFont = '') {
   const out = []; let cur = docFont || '';
-  paras.forEach((p, i) => { let f = p.font || docFont || ''; if (!f && cur) f = 'ROM'; if (f !== cur) { out.push({ p: i, font: f }); cur = f; } });
+  paras.forEach((p, i) => { let f = p.font || docFont || ''; if (f === 'ROM') f = ''; if (!f && cur) f = 'ROM'; if (f !== cur) { out.push({ p: i, font: f }); cur = f; } });
   return out;
 }
 function applyFonts(paras, page) {
   const recs = (page && page.fonts) || []; let cur = (page && page.font) || '', k = 0;
   paras.forEach((p, i) => { while (k < recs.length && recs[k].p <= i) cur = recs[k++].font; if (cur && cur !== 'ROM') p.font = cur; else delete p.font; });
+  return paras;
+}
+
+// ---- sections, roles, sizes (docs/FONT.md "Styles and sections") --------------------------------------------------------------------
+// Paragraph properties: sec (a section starts here; paragraph 0 always does), sf (that section's font), role ('' body, title, h1..h3, cap),
+// size (cell size override) and font (explicit override; 'ROM' forces the standard face). Precedence, lowest to highest:
+// document default (page.dfont) < section font < style of the role (page.styles[role], face and size) < paragraph font/size.
+// Every resolved face is one face per paragraph, so a line never mixes faces or sizes.
+function withSize(face, size) {
+  size = +size; if (!SIZES.includes(size)) return face || '';
+  if (!face || face === 'ROM') return '';
+  const m = /^(craft)(\d+)$/i.exec(face); return m ? m[1] + size : face;
+}
+const faceSize = (face) => { const m = /^craft(\d+)$/i.exec(face || ''); return m ? +m[1] : 0; };
+// Faces of all paragraphs: [{ face, role, sec }] (face '' = standard, sec = index of the section the paragraph is in).
+function resolve(paras, page) {
+  const st = (page && page.styles) || {}, dfont = (page && (page.dfont || page.font)) || '';
+  let sec = '', n = -1;
+  return paras.map((p, i) => {
+    if (i === 0 || p.sec) { sec = p.sf || ''; n++; }
+    const s = st[p.role || ''] || null;
+    let face = p.font || (s && s.face) || sec || dfont || '';
+    const size = p.size || (p.font ? 0 : s && s.size) || 0;
+    if (size) face = withSize(face, size);
+    if (face === 'ROM') face = '';
+    return { face, role: p.role || '', sec: n, style: s };
+  });
+}
+// Sections as [{ start, end (inclusive), font (section font), face (face of its first paragraph) }]
+function sections(paras, page) {
+  const r = resolve(paras, page), out = [];
+  paras.forEach((p, i) => { if (i === 0 || p.sec) out.push({ start: i, end: i, font: p.sf || '', face: r[i].face }); else out[out.length - 1].end = i; });
+  return out;
+}
+// Model -> page record: structure (tags 4..7) plus the resolved faces as the plain font records (tags 2/3) that ACWriter reads.
+function embed(paras, page) {
+  const pg = { ...(page || {}) }, dfont = pg.dfont || pg.font || '';
+  pg.dfont = dfont;
+  const r = resolve(paras, { ...pg, dfont });
+  pg.secs = []; pg.pp = [];
+  paras.forEach((p, i) => {
+    if (i === 0 ? p.sf : p.sec) pg.secs.push({ p: i, font: p.sf || '' });
+    if (p.role || p.size || p.font) pg.pp.push({ p: i, role: p.role || '', size: p.size || 0, font: p.font || '' });
+  });
+  pg.font = r.length ? r[0].face : ''; pg.fonts = [];
+  let cur = pg.font;
+  r.forEach((x, i) => { if (x.face !== cur) { pg.fonts.push({ p: i, font: x.face || 'ROM' }); cur = x.face; } });
+  return pg;
+}
+// Page record -> model: new files carry structure; old ones (tags 2/3 only) become explicit per-paragraph faces.
+function extract(paras, page) {
+  const pg = page || {};
+  if (pg.secs && pg.secs.length || pg.pp && pg.pp.length || pg.styles && Object.keys(pg.styles).length || pg.dfont) {
+    for (const p of paras) { delete p.sec; delete p.sf; delete p.role; delete p.size; delete p.font; }
+    for (const s of pg.secs || []) { const p = paras[s.p]; if (!p) continue; if (s.p) p.sec = true; if (s.font) p.sf = s.font; }
+    for (const q of pg.pp || []) { const p = paras[q.p]; if (!p) continue; if (q.role) p.role = q.role; if (q.size) p.size = q.size; if (q.font) p.font = q.font; }
+    pg.font = pg.dfont || ''; pg.dfont = ''; pg.fonts = [];
+    return paras;
+  }
+  applyFonts(paras, pg); pg.font = ''; pg.fonts = [];
   return paras;
 }
 
@@ -279,6 +361,11 @@ function toTrailer(page) {
   rec.push(1, d.length, ...d);
   if (p.font) { const f = Buffer.from(p.font, 'latin1'); rec.push(2, f.length, ...f); }
   for (const r of p.fonts) { const f = Buffer.from(r.font, 'latin1'); rec.push(3, 2 + f.length, r.p & 255, r.p >> 8, ...f); }
+  // tags 4..7: sections, styles, paragraph roles/sizes/overrides, document default font (older readers skip them)
+  for (const r of p.secs) { const f = Buffer.from(r.font, 'latin1'); rec.push(4, 2 + f.length, r.p & 255, r.p >> 8, ...f); }
+  for (const role of ROLES) { const s = p.styles[role]; if (!s) continue; const f = Buffer.from(s.face, 'latin1'); rec.push(5, 5 + f.length, ROLES.indexOf(role), (s.b ? 1 : 0) | (s.i ? 2 : 0), s.align ? ALIGN_CODE[s.align] : 255, s.size, s.space, ...f); }
+  for (const r of p.pp) { const f = Buffer.from(r.font, 'latin1'); rec.push(6, 4 + f.length, r.p & 255, r.p >> 8, ROLES.indexOf(r.role), r.size, ...f); }
+  if (p.dfont) { const f = Buffer.from(p.dfont, 'latin1'); rec.push(7, f.length, ...f); }
   return Buffer.concat([Buffer.from(TRAILER_MAGIC, 'latin1'), Buffer.from(rec)]);
 }
 
@@ -294,12 +381,16 @@ function fromTrailer(buf) {
       raw.tabs = []; for (let k = 0; k < d[6] && 7 + k * 2 + 1 < d.length; k++) raw.tabs.push({ pos: d[7 + k * 2], kind: KIND_NAME[d[8 + k * 2]] || 'l' });
     } else if (tag === 2) raw.font = d.toString('latin1');
     else if (tag === 3 && len >= 2) (raw.fonts = raw.fonts || []).push({ p: d[0] | (d[1] << 8), font: d.toString('latin1', 2) });
+    else if (tag === 4 && len >= 2) (raw.secs = raw.secs || []).push({ p: d[0] | (d[1] << 8), font: d.toString('latin1', 2) });
+    else if (tag === 5 && len >= 5 && ROLES[d[0]] !== undefined) (raw.styles = raw.styles || {})[ROLES[d[0]]] = { b: d[1] & 1, i: (d[1] >> 1) & 1, align: d[2] < 4 ? ALIGN_NAME[d[2]] : '', size: d[3], space: d[4], face: d.toString('latin1', 5) };
+    else if (tag === 6 && len >= 4 && ROLES[d[2]] !== undefined) (raw.pp = raw.pp || []).push({ p: d[0] | (d[1] << 8), role: ROLES[d[2]], size: d[3], font: d.toString('latin1', 4) });
+    else if (tag === 7) raw.dfont = d.toString('latin1');
     at += 2 + len;
   }
   return normalize(raw);
 }
 
-module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer, fontRecords, applyFonts };
+module.exports = { PAPERS, PITCHES, LPI, FLAG_TRAILER, defaults, normalize, info, usableCols, paperCols, paperLines, stops, expandTabs, toTrailer, fromTrailer, fontRecords, applyFonts, ROLES, ROLE_LABEL, SIZES, withSize, faceSize, resolve, sections, embed, extract };
 
 });
 __def("craftfont.cjs", function (module, exports, require) {
@@ -2256,7 +2347,7 @@ function toModel(buf, name, opts = {}) {
   const fmt = opts.format || detect(buf, name);
   const O = require('./officeread.cjs');
   const req = (n) => require('./import-' + n + '.cjs').read;
-  const office = (f) => (b) => { const o = f(b); const r = o.map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; }); r.mixedFonts = o.mixedFonts || 0; return r; };
+  const office = (f) => (b) => { const o = f(b); const r = o.map((p) => { p.runs.forEach((r) => { r.t = clean(r.t); }); return p; }); r.mixedFonts = o.mixedFonts || 0; r.docInfo = o.docInfo; return r; };
   const importers = { atascii: fromAtascii, text: fromText, rtf: fromRtf, html: fromHtml, md: fromMd, doc: office(O.readDoc), docx: office(O.readDocx),
     letterperfect: office(req('letterperfect')), paperclip: office(req('paperclip')), firstxlent: office(req('firstxlent')), textwizard: office(req('textwizard')), bankstreet: office(req('bankstreet')) };
   const prev = cfg.unicode; cfg.unicode = !!opts.unicode;
@@ -2265,9 +2356,9 @@ function toModel(buf, name, opts = {}) {
     if (fmt === 'craft' && opts.allowCraft) paras = require('./craftexport.cjs').model(require('./craftdoc.cjs').parse(buf).payload, { graphics: true });
     else if (!importers[fmt]) throw new Error(fmt === 'craft' ? 'already a Craft document' : 'unknown format ' + fmt);
     else paras = importers[fmt](buf);
-    const mixedFonts = paras.mixedFonts || 0;
+    const mixedFonts = paras.mixedFonts || 0, docInfo = paras.docInfo;
     while (paras.length && !paras[paras.length - 1].runs.some((r) => r.t.trim())) paras.pop();
-    return { format: fmt, paras, mixedFonts };
+    return { format: fmt, paras, mixedFonts, docInfo };
   } finally { cfg.unicode = prev; }
 }
 
@@ -2284,7 +2375,7 @@ function cutAtLine(bytes, max) {
 function convert(buf, name, opts = {}) {
   const cols = opts.page ? require('./craftpage.cjs').usableCols(opts.page) : opts.cols || 64;
   const { format, paras } = toModel(buf, name, opts);
-  if (opts.page) opts = { ...opts, page: { ...opts.page, fonts: require('./craftpage.cjs').fontRecords(paras, opts.page.font) } };
+  if (opts.page) opts = { ...opts, page: require('./craftpage.cjs').embed(paras, opts.page) };
   let bytes = layout(paras, opts.page || cols), truncated = false, dropped = 0;
   const max = Math.min(opts.max || ATARI_DOC, MAXPAYLOAD);
   if (bytes.length > max) { const cut = cutAtLine(bytes, max); dropped = bytes.length - cut.length; bytes = cut; truncated = true; }
@@ -2327,6 +2418,31 @@ function unzip(buf, want) {
 
 const xmlDecode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : +e.slice(1)) : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
 
+// Font of a run/style: the w:cs="xcw:ID" hint written by xCWriter's exporter (an exact Craft face) wins over the Word font name.
+function fontKey(rpr) {
+  const x = /<w:rFonts[^>]*w:cs="xcw:([^"]*)"/.exec(rpr); if (x) return [x[0], 'xcw:' + x[1]];
+  return /<w:rFonts[^>]*w:ascii="([^"]+)"/.exec(rpr);
+}
+
+// Style table of a .docx (word/styles.xml): { def: { font, size }, styles: { styleId: { name, font, size } } }, with basedOn resolved.
+function docxStyles(buf) {
+  const sx = unzip(buf, 'word/styles.xml'), out = { def: { font: '', size: 0 }, styles: {} };
+  if (!sx) return out;
+  const xml = sx.toString('utf8'), rp = (s) => ({ font: (fontKey(s) || [])[1] || '', size: +((/<w:sz w:val="(\d+)"/.exec(s) || [])[1] || 0) / 2 });
+  const dd = /<w:rPrDefault>[\s\S]*?<\/w:rPrDefault>/.exec(xml); if (dd) out.def = rp(dd[0]);
+  const raw = {};
+  for (const m of xml.matchAll(/<w:style [^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g)) {
+    const nm = /<w:name w:val="([^"]+)"/.exec(m[2]), bo = /<w:basedOn w:val="([^"]+)"/.exec(m[2]);
+    raw[m[1]] = { name: nm ? nm[1] : m[1], based: bo ? bo[1] : '', ...rp((/<w:rPr>[\s\S]*?<\/w:rPr>/.exec(m[2]) || [''])[0]) };
+  }
+  for (const id of Object.keys(raw)) {
+    let font = raw[id].font, size = raw[id].size, b = raw[id].based, n = 0;
+    while ((!font || !size) && b && raw[b] && n++ < 8) { font = font || raw[b].font; size = size || raw[b].size; b = raw[b].based; }
+    out.styles[id] = { name: raw[id].name, font, size };
+  }
+  return out;
+}
+
 function readDocx(buf) {
   const x = unzip(buf, 'word/document.xml'); if (!x) throw new Error('word/document.xml not found');
   const xml = x.toString('utf8'); const out = [];
@@ -2336,6 +2452,8 @@ function readDocx(buf) {
     const ppr = (/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(ps) || [''])[0];
     const jc = /<w:jc w:val="(\w+)"/.exec(ppr); if (jc) p.align = { center: 'c', right: 'r', both: 'j' }[jc[1]] || 'l';
     if (/<w:numPr>/.test(ppr)) p.bullet = true;
+    const sid = /<w:pStyle w:val="([^"]+)"/.exec(ppr); if (sid) p.styleId = sid[1];
+    if (/<w:sectPr[ >]/.test(ppr)) p.sectEnd = true;
     for (const rm of ps.matchAll(/<w:r[ >][\s\S]*?<\/w:r>/g)) {
       const r = rm[0], rpr = (/<w:rPr>[\s\S]*?<\/w:rPr>/.exec(r) || [''])[0];
       const va = /<w:vertAlign w:val="(\w+)"/.exec(rpr);
@@ -2344,8 +2462,10 @@ function readDocx(buf) {
       for (const tm of r.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>|<w:noBreakHyphen\/>/g)) t += tm[1] !== undefined ? xmlDecode(tm[1]) : tm[0] === '<w:tab/>' ? '    ' : tm[0] === '<w:br/>' ? ' ' : '-';
       if (t) {
         p.runs.push({ t, ...st });
-        const fm = /<w:rFonts[^>]*w:ascii="([^"]+)"/.exec(rpr);
+        const fm = fontKey(rpr);
         if (fm && t.trim()) { p.fc = p.fc || {}; p.fc[fm[1]] = (p.fc[fm[1]] || 0) + t.length; }
+        const sz = /<w:sz w:val="(\d+)"/.exec(rpr);
+        if (sz && t.trim()) { p.zc = p.zc || {}; p.zc[+sz[1] / 2] = (p.zc[+sz[1] / 2] || 0) + t.length; }
       }
     }
     return p;
@@ -2363,8 +2483,13 @@ function readDocx(buf) {
     out.push(row);
   }
   let mixed = 0;
-  for (const p of out) { if (!p.fc) continue; const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]); if (e.length > 1) mixed++; p.srcFont = e[0][0]; delete p.fc; }
+  const top = (o) => { const e = Object.entries(o).sort((a, b) => b[1] - a[1]); return e.length ? e[0][0] : ''; };
+  for (const p of out) {
+    if (p.zc) { p.srcSize = +top(p.zc); delete p.zc; }
+    if (!p.fc) continue; const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]); if (e.length > 1) mixed++; p.srcFont = e[0][0]; delete p.fc;
+  }
   out.mixedFonts = mixed;
+  out.docInfo = docxStyles(buf);
   return out;
 }
 
@@ -2893,6 +3018,7 @@ const P = require('./craftpage.cjs');
 const CF = require('./craftfont.cjs');
 
 const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
+const CARRY = ['font', 'role', 'size'];  // paragraph properties kept across edits; sec/sf (section start) follow the paragraph that holds them
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
 
 const PROFILES = {
@@ -2911,6 +3037,8 @@ function toCells(p) {
   for (const r of p.runs) for (const ch of r.t.split('')) c.push({ ch, b: r.b ? 1 : 0, i: r.i ? 1 : 0, u: r.u ? 1 : 0, sup: r.sup ? 1 : 0, sub: r.sub ? 1 : 0 });
   return c;
 }
+const pickProps = (p) => { const o = {}; for (const k of CARRY.concat(['sec', 'sf'])) if (p[k]) o[k] = p[k]; return o; };
+const noSec = (p) => { delete p.sec; delete p.sf; return p; };
 function fromCells(cells, like) {
   const runs = [];
   for (const c of cells) {
@@ -2919,7 +3047,7 @@ function fromCells(cells, like) {
     else runs.push({ t: c.ch, b: c.b, i: c.i, u: c.u, sup: c.sup, sub: c.sub });
   }
   const o = { align: like ? like.align : 'l', bullet: like ? !!like.bullet : false, runs };
-  if (like && like.font) o.font = like.font;
+  if (like) for (const k of CARRY.concat(['sec', 'sf'])) if (like[k]) o[k] = like[k];
   return o;
 }
 // fill in missing style keys and merge equal neighbours (importers leave keys out)
@@ -2940,9 +3068,9 @@ function insertText(paras, pos, text, st) {
   const head = cells.slice(0, pos.o), tail = cells.slice(pos.o), src = paras[pos.p];
   if (parts.length === 1) { paras[pos.p] = fromCells(head.concat(mkc(parts[0]), tail), src); return { p: pos.p, o: pos.o + parts[0].length }; }
   const np = [fromCells(head.concat(mkc(parts[0])), src)];
-  for (let k = 1; k < parts.length - 1; k++) np.push(fromCells(mkc(parts[k]), src));
+  for (let k = 1; k < parts.length - 1; k++) np.push(noSec(fromCells(mkc(parts[k]), src)));
   const last = parts[parts.length - 1];
-  np.push(fromCells(mkc(last).concat(tail), src));
+  np.push(noSec(fromCells(mkc(last).concat(tail), src)));
   paras.splice(pos.p, 1, ...np);
   return { p: pos.p + parts.length - 1, o: last.length };
 }
@@ -2984,7 +3112,7 @@ function getFragment(paras, a, b) {
   const out = [];
   for (let p = a.p; p <= b.p; p++) {
     const cells = toCells(paras[p]);
-    out.push(fromCells(cells.slice(p === a.p ? a.o : 0, p === b.p ? b.o : cells.length), paras[p]));
+    out.push(noSec(fromCells(cells.slice(p === a.p ? a.o : 0, p === b.p ? b.o : cells.length), paras[p])));
   }
   return out;
 }
@@ -3002,7 +3130,7 @@ function insertFragment(paras, pos, frag) {
 
 // ---- Craft text / Atari fit --------------------------------------------------
 function cleanParas(paras) {
-  return paras.map((p) => ({ align: p.align, bullet: p.bullet, ...(p.font ? { font: p.font } : {}), runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
+  return paras.map((p) => ({ align: p.align, bullet: p.bullet, ...pickProps(p), runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
 }
 const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173); };
 
@@ -3019,7 +3147,7 @@ function fit(paras, profile = PROFILES.atari, page = null) {
 // Craft document file from the model. Cuts at the last line end that fits `limit` (ACWriter's document area).
 function toCwd(paras, opt = {}) {
   const prof = opt.profile || PROFILES.atari, limit = opt.limit || prof.docLimit;
-  if (opt.page) opt = { ...opt, page: { ...opt.page, fonts: P.fontRecords(paras, opt.page.font) } };
+  if (opt.page) opt = { ...opt, page: P.embed(paras, opt.page) };
   let bytes = craftPayload(paras, prof, opt.page), truncated = false, dropped = 0;
   if (bytes.length > limit) {
     let cut = limit; while (cut > 0 && bytes[cut - 1] !== 13 && bytes[cut - 1] !== 14) cut--;
@@ -3093,9 +3221,14 @@ function openDoc(buf, name, opt = {}) {
   if (fmt === 'doc') notes.push('Legacy .doc: text only, formatting is not read');
   if (r.format === 'bankstreet' && buf[0] === 0x96) notes.push('Took the first document on the disk image');
   if (r.mixedFonts) notes.push(r.mixedFonts + ' paragraph(s) mix fonts on one line; Craft allows one font per line, so the dominant font is used for the whole line');
-  const page = r.format === 'craft' ? D.parse(buf).h.page : null;
+  let page = r.format === 'craft' ? D.parse(buf).h.page : null;
+  if (!page && r.paras.some((p) => p.srcFont || p.srcFace || p.srcSize || p.styleId)) {
+    const m = mapSourceFonts(r.paras, r.docInfo, opt);
+    if (m.styles || m.dfont || r.paras.some((p) => p.sf || p.sec || p.font || p.role)) page = P.normalize({ dfont: m.dfont, styles: m.styles });
+  }
+  stripSource(r.paras);
   const model = normalize(r.paras);
-  if (page) P.applyFonts(model, page);
+  if (page && r.format === 'craft') P.extract(model, page);
   return { format: r.format, paras: model, notes, page };
 }
 
@@ -3127,7 +3260,7 @@ function dropReport(paras, fmt) {
   if (fmt === 'atascii' && n.nonascii) out.push(n.nonascii + ' non-ASCII character(s) become ? for ATASCII');
   if (fmt === 'cwd') {
     for (const w of atariWarnings(paras)) out.push(w);
-    out.push('font, size and line spacing are not stored in a .xcw');
+    out.push('typefaces (per document, section, style or paragraph) are stored; ACWriter shows them in PAGE zoom (8x8 faces, at most 4 loaded fonts / 8 changes); style sizes other than the 8x8 cell and line spacing are kept for xCWriter and docx only');
   }
   return out;
 }
@@ -3174,31 +3307,118 @@ function zipStore(files) {
   return Buffer.concat([...parts, cdir, end]);
 }
 const xEsc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ue000-\uf8ff]/g, '\u25a1');
+// Faces -> Word names (inverse of the import map); w:cs="xcw:ID" carries the exact face id, Word ignores it for Latin text.
+const docxName = (face) => (!face ? 'Times New Roman' : face === 'ATARIROM' ? 'Courier New' : 'Arial');
+const rfonts = (face) => '<w:rFonts w:ascii="' + docxName(face) + '" w:hAnsi="' + docxName(face) + '" w:cs="xcw:' + face.replace(/[^A-Za-z0-9_-]/g, '') + '"/>';
+const szTag = (face) => (P.faceSize(face) ? '<w:sz w:val="' + sizeToPt(P.faceSize(face)) * 2 + '"/>' : '');
 function toDocx(paras, opt = {}) {
   const font = (opt.font || 'Calibri').replace(/[<>&"]/g, ''), half = Math.round((opt.size || 11) * 2);
+  const page = opt.page ? P.normalize(opt.page) : null, res = P.resolve(paras, page);
+  const fonted = !!page && (res.some((r) => r.face) || paras.some((p) => p.role) || Object.keys(page.styles).length > 0 || page.dfont);
   let body = '';
-  for (const p of paras) {
-    const jc = { c: 'center', r: 'right', j: 'both' }[p.align];
-    body += '<w:p><w:pPr>' + (p.bullet ? '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>' : '') + (jc ? '<w:jc w:val="' + jc + '"/>' : '') + '</w:pPr>';
+  paras.forEach((p, pi) => {
+    const jc = { c: 'center', r: 'right', j: 'both' }[p.align], face = res[pi].face;
+    const sect = pi + 1 < paras.length && paras[pi + 1].sec ? '<w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>' : '';
+    body += '<w:p><w:pPr>' + (p.role ? '<w:pStyle w:val="' + DOCX_ROLE[p.role] + '"/>' : '') + (p.bullet ? '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>' : '') + (jc ? '<w:jc w:val="' + jc + '"/>' : '') + sect + '</w:pPr>';
     for (const r of p.runs) {
       if (!r.t) continue;
-      const rpr = (r.b ? '<w:b/>' : '') + (r.i ? '<w:i/>' : '') + (r.u ? '<w:u w:val="single"/>' : '') + (r.sup ? '<w:vertAlign w:val="superscript"/>' : r.sub ? '<w:vertAlign w:val="subscript"/>' : '');
+      const rpr = (fonted ? rfonts(face) : '') + (r.b ? '<w:b/>' : '') + (r.i ? '<w:i/>' : '') + (r.u ? '<w:u w:val="single"/>' : '') + (r.sup ? '<w:vertAlign w:val="superscript"/>' : r.sub ? '<w:vertAlign w:val="subscript"/>' : '') + (fonted ? szTag(face) : '');
       body += '<w:r>' + (rpr ? '<w:rPr>' + rpr + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + xEsc(r.t) + '</w:t></w:r>';
     }
     body += '</w:p>';
+  });
+  let roleStyles = '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>';
+  if (page) for (const role of P.ROLES) {
+    const s = page.styles[role]; if (!role || !s) continue;
+    const f = s.size ? P.withSize(s.face, s.size) : s.face;
+    roleStyles += '<w:style w:type="paragraph" w:styleId="' + DOCX_ROLE[role] + '"><w:name w:val="' + P.ROLE_LABEL[role].toLowerCase() + '"/><w:basedOn w:val="Normal"/><w:rPr>' + rfonts(f) + (s.b ? '<w:b/>' : '') + (s.i ? '<w:i/>' : '') + szTag(f) + '</w:rPr></w:style>';
   }
-  const H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const defRpr = (fonted && page && page.dfont ? rfonts(page.dfont) : '<w:rFonts w:ascii="' + font + '" w:hAnsi="' + font + '" w:cs="' + font + '"/>') + (page && page.dfont && szTag(page.dfont) ? szTag(page.dfont) : '<w:sz w:val="' + half + '"/>');  const H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
   const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   return zipStore([
     ['[Content_Types].xml', H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>'],
     ['_rels/.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/officeDocument" Target="word/document.xml"/></Relationships>'],
     ['word/_rels/document.xml.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + R + '/styles" Target="styles.xml"/><Relationship Id="rId2" Type="' + R + '/numbering" Target="numbering.xml"/></Relationships>'],
-    ['word/styles.xml', H + '<w:styles ' + W + '><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="' + font + '" w:hAnsi="' + font + '" w:cs="' + font + '"/><w:sz w:val="' + half + '"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>'],
+    ['word/styles.xml', H + '<w:styles ' + W + '><w:docDefaults><w:rPrDefault><w:rPr>' + defRpr + '</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' + roleStyles + '</w:styles>'],
     ['word/numbering.xml', H + '<w:numbering ' + W + '><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="\u2022"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>'],
     ['word/document.xml', H + '<w:document ' + W + '><w:body>' + body + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>'],
   ]);
 }
 
+// ---- fonts by level: sections, roles, sizes (docs/FONT.md "Styles and sections") -----------------------------------------------------------
+// Edit operations on the model; the precedence rules live in craftpage.cjs resolve().
+function sectionAt(paras, p) { return P.sections(paras).find((s) => p >= s.start && p <= s.end) || { start: 0, end: paras.length - 1, font: '' }; }
+// Starts a new section at pos (splitting the paragraph unless pos is already at a paragraph start). The new section inherits the font of
+// the section it was cut from unless `font` is given. Returns the caret position of the new section's first paragraph.
+function sectionBreak(paras, pos, font) {
+  const cur = sectionAt(paras, pos.p), inherit = paras[cur.start].sf || '';
+  let at = pos;
+  if (pos.o > 0 || !pos.p) { if (!pos.p && !pos.o) return pos; at = insertText(paras, pos, '\n'); }
+  const q = paras[at.p]; q.sec = true;
+  const f = font === undefined ? inherit : font;
+  if (f) q.sf = f; else delete q.sf;
+  return { p: at.p, o: 0 };
+}
+function removeSectionBreak(paras, p) { if (p > 0) { delete paras[p].sec; delete paras[p].sf; } }
+// Section font for the whole section containing paragraph p; with `force` the paragraphs' own face overrides are dropped too.
+function setSectionFont(paras, p, font, force) {
+  const s = sectionAt(paras, p);
+  if (font) paras[s.start].sf = font; else delete paras[s.start].sf;
+  if (force) for (let k = s.start; k <= s.end; k++) delete paras[k].font;
+  return s;
+}
+function setSectionFontRange(paras, a, b, font) { for (let p = a; p <= b; p++) { const s = sectionAt(paras, p); setSectionFont(paras, p, font, true); p = s.end; } }
+// Applies a role to paragraphs a..b. The face and size follow the style live; bold, italic and alignment are copied in once.
+function setRole(paras, a, b, role, styles) {
+  const st = (styles && styles[role]) || null;
+  for (let p = a; p <= b; p++) {
+    if (role) paras[p].role = role; else delete paras[p].role;
+    if (!st) continue;
+    if (st.align) paras[p].align = st.align;
+    for (const k of ['b', 'i']) if (st[k]) { const cells = toCells(paras[p]); cells.forEach((c) => { c[k] = 1; }); paras[p] = fromCells(cells, paras[p]); }
+  }
+}
+function setParaSize(paras, a, b, size) { for (let p = a; p <= b; p++) { if (size) paras[p].size = size; else delete paras[p].size; } }
+
+// Word <-> Craft font names. Craft has the Craft family in six cell sizes (the only sized one), the standard face, the Atari ROM face and user faces,
+// so the default import map is by class: serif -> standard, monospace -> Atari ROM, everything else -> the Craft family; and overridable (opts.fontMap: { 'Source Font': 'FACEID' }); a w:cs="xcw:ID" attribute (written by toDocx) wins.
+const CLASS_RX = [[/courier|consolas|mono|lucida console|monaco|menlo|typewriter/i, 'ATARIROM'], [/times|georgia|garamond|cambria|serif|palatino|book/i, '']];
+const sourceFace = (name, map) => (!name ? '' : name.startsWith('xcw:') ? name.slice(4) : map && map[name] !== undefined ? map[name] : (CLASS_RX.find(([rx]) => rx.test(name)) || [0, 'CRAFT8'])[1]);
+const ptToSize = (pt) => (pt <= 7 ? 4 : pt <= 9 ? 5 : pt <= 10 ? 6 : pt <= 12 ? 8 : pt <= 16 ? 10 : 12);
+const sizeToPt = (n) => ({ 4: 7, 5: 9, 6: 10, 8: 11, 10: 14, 12: 18 }[n] || 11);
+const DOCX_ROLE = { title: 'Title', h1: 'Heading1', h2: 'Heading2', h3: 'Heading3', cap: 'Caption' };
+const ROLE_OF = (id, name) => { const k = (name || id || '').toLowerCase().replace(/\s+/g, ''); return { title: 'title', heading1: 'h1', heading2: 'h2', heading3: 'h3', caption: 'cap' }[k] || ''; };
+
+// Source fonts/sizes/styles -> face ids on the model. Body paragraphs: a section font per run of equal faces (new sections at w:sectPr
+// breaks, or where the face changes when the file has none); role paragraphs: the style table from styles.xml, per paragraph overrides
+// only where a paragraph differs from its style.
+function mapSourceFonts(paras, info, opts = {}) {
+  const map = opts.fontMap, I2 = info || { def: {}, styles: {} };
+  const eff = (p, st) => {
+    let face = sourceFace(p.srcFont || (st && st.font) || I2.def.font || '', map);
+    const pt = p.srcSize || (st && st.size) || I2.def.size || 0;
+    return pt ? P.withSize(face, ptToSize(pt)) : face;
+  };
+  const styles = {}, roleOf = (p) => (p.styleId && I2.styles[p.styleId] ? ROLE_OF(p.styleId, I2.styles[p.styleId].name) : '');
+  for (const id of Object.keys(I2.styles)) {
+    const r = ROLE_OF(id, I2.styles[id].name); if (!r || styles[r]) continue;
+    const s = I2.styles[id]; styles[r] = { face: sourceFace(s.font, map), size: s.size ? ptToSize(s.size) : 0 };
+  }
+  const explicit = paras.some((p) => p.sectEnd), dfont = I2.def.font || I2.def.size ? eff({}, null) : '';
+  let start = 0, secFace = null;
+  const setSec = (face) => { secFace = face; if (face !== dfont) paras[start].sf = face || 'ROM'; else delete paras[start].sf; };
+  paras.forEach((p, i) => {
+    if (explicit && i > 0 && paras[i - 1].sectEnd) { p.sec = true; start = i; secFace = null; }
+    const role = roleOf(p); if (role) { p.role = role; return; }
+    const face = eff(p, I2.styles[p.styleId] || null);
+    if (secFace === null) setSec(face);
+    else if (!explicit && face !== secFace) { p.sec = true; start = i; setSec(face); }
+    else if (face !== secFace) p.font = face || 'ROM';
+  });
+  const res = P.resolve(paras, { styles, dfont });
+  paras.forEach((p, i) => { if (p.role) { const face = eff(p, I2.styles[p.styleId] || null); if (face !== res[i].face) p.font = face || 'ROM'; } });
+  return { styles: Object.keys(styles).length ? styles : null, dfont };
+}function stripSource(paras) { for (const p of paras) { delete p.srcFont; delete p.srcSize; delete p.styleId; delete p.sectEnd; } }
 // ---- spelling (docs/DICTIONARY.md) -----------------------------------------------
 const isLetter = (ch) => !!ch && /\p{L}/u.test(ch);
 function spellCheck(dict, paras, ignore) {
@@ -3238,6 +3458,7 @@ function suggest(dict, word, max = 6) {
 
 module.exports = {
   Page: P, Font: CF, FontPipe: require('./fontpipe.cjs'), PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
+  sectionAt, sectionBreak, removeSectionBreak, setSectionFont, setSectionFontRange, setRole, setParaSize, mapSourceFonts, sourceFace, ptToSize, sizeToPt,
   emptyPara, newDoc, clone, ptext, plain, toCells, fromCells, normalize, cmp, order, docEnd,
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,
   cleanParas, charOk, craftPayload, fit, toCwd, atariLines, atariWarnings,

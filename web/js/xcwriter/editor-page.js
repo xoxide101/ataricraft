@@ -102,19 +102,19 @@
   // standard paragraphs wrap on the page columns; a paragraph in another face is re-wrapped to as many of its own cells as fit the
   // usable width, then every line gets its height and page (variable-height pagination).
   function relayout() {
-    const pg = XW.page || P.normalize({}), i = P.info(pg), base = XCW.atariLines(XW.doc, undefined, pg), out = [];
+    const pg = XW.page || P.normalize({}), i = P.info(pg), base = XCW.atariLines(XW.doc, undefined, pg), out = [], RF = P.resolve(XW.doc, pg);
     for (let a = 0; a < base.length;) {
       let b = a; while (b < base.length && base[b].p === base[a].p) b++;
-      const p = base[a].p, d = faceDims((XW.doc[p] && XW.doc[p].font) || '');
-      if (Math.abs(d.cw - CELL[i.pitch]) < 1e-6) for (let q = a; q < b; q++) out.push(Object.assign(base[q], { cw: d.cw, h: d.h, uc: i.usable }));
+      const p = base[a].p, d = faceDims((RF[p] && RF[p].face) || ''), sp = RF[p] && RF[p].style ? RF[p].style.space : 0;
+      if (Math.abs(d.cw - CELL[i.pitch]) < 1e-6) for (let q = a; q < b; q++) out.push(Object.assign(base[q], { cw: d.cw, h: d.h, uc: i.usable, sp }));
       else {
         const uc = Math.max(1, Math.floor((i.usable * CELL[i.pitch]) / d.cw));
-        for (const l of XCW.atariLines([XW.doc[p]], { ...XCW.PROFILES.atari, cols: uc }, null)) out.push(Object.assign(l, { p, cw: d.cw, h: d.h, uc, cells: l.cells.map((c) => Object.assign(c, { p })) }));
+        for (const l of XCW.atariLines([XW.doc[p]], { ...XCW.PROFILES.atari, cols: uc }, null)) out.push(Object.assign(l, { p, cw: d.cw, h: d.h, uc, sp, cells: l.cells.map((c) => Object.assign(c, { p })) }));
       }
       a = b;
     }
     let y = 0, k = 0; const room = i.textLines * LH;
-    for (const l of out) { if (y > 0 && y + l.h > room) { k++; y = 0; } l.pg = k; l.ty = y; y += l.h; }
+    for (const l of out) { const gap = l.first && l.sp && y > 0 ? l.sp * LH : 0; if (y > 0 && y + gap + l.h > room) { k++; y = 0; } else y += gap; l.pg = k; l.ty = y; y += l.h; }
     npages = k + 1; lines = out;
   }
   function posToLC(pos) {
@@ -188,11 +188,12 @@
       for (let d = 0; d < gh; d += 4) { px(ctx, gx - 1, gy + d, 1, 2, gc); px(ctx, gx + gw, gy + d, 1, 2, gc); }
     }
     const [s, e] = cmp(anchor, caret) <= 0 ? [anchor, caret] : [caret, anchor], has = cmp(s, e) !== 0, cl = posToLC(caret);
+    const RF = P.resolve(XW.doc, XW.page || {});
     for (let li = 0; li < lines.length; li++) {
       const l = lines[li], y = lineY(g, li);
       if (y * S - oy > cv.height) break;
       if ((y + l.h) * S - oy < 0) continue;
-      const xs = xpx(l), face = (XW.doc[l.p] && XW.doc[l.p].font) || '', x0 = PAD + i.left * g.cw;
+      const xs = xpx(l), face = (RF[l.p] && RF[l.p].face) || '', x0 = PAD + i.left * g.cw;
       if (l.bullet && l.first) drawCell(x0, y, { ch: '*', b: 1, i: 0, u: 0, sup: 0, sub: 0 }, th.ink, l.cw, face, l.h);
       l.cells.forEach((c, k) => {
         const x = x0 + xs[k], here = { p: l.p, o: l.o0 + k };
@@ -204,7 +205,7 @@
       if (blink && !has && li === cl.li) px(ctx, x0 + xs[cl.k], y, 1, l.h, th.ink);
     }
     drawRuler(g); drawNav(g); info(g);
-    const pf = (XW.doc[caret.p] && XW.doc[caret.p].font) || '', fs = $('pgfont');
+    const pf = (XW.doc[caret.p] && (P.resolve(XW.doc, XW.page || {})[caret.p] || {}).face) || '', fs = $('pgfont');
     if (fs.value !== pf && [...fs.options].some((o) => o.value === pf)) fs.value = pf;
     const f = XCW.fit(XW.doc, undefined, XW.page || P.normalize({}));
     XW.atariInfo(f);

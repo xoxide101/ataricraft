@@ -19,6 +19,31 @@ function unzip(buf, want) {
 
 const xmlDecode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : +e.slice(1)) : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
 
+// Font of a run/style: the w:cs="xcw:ID" hint written by xCWriter's exporter (an exact Craft face) wins over the Word font name.
+function fontKey(rpr) {
+  const x = /<w:rFonts[^>]*w:cs="xcw:([^"]*)"/.exec(rpr); if (x) return [x[0], 'xcw:' + x[1]];
+  return /<w:rFonts[^>]*w:ascii="([^"]+)"/.exec(rpr);
+}
+
+// Style table of a .docx (word/styles.xml): { def: { font, size }, styles: { styleId: { name, font, size } } }, with basedOn resolved.
+function docxStyles(buf) {
+  const sx = unzip(buf, 'word/styles.xml'), out = { def: { font: '', size: 0 }, styles: {} };
+  if (!sx) return out;
+  const xml = sx.toString('utf8'), rp = (s) => ({ font: (fontKey(s) || [])[1] || '', size: +((/<w:sz w:val="(\d+)"/.exec(s) || [])[1] || 0) / 2 });
+  const dd = /<w:rPrDefault>[\s\S]*?<\/w:rPrDefault>/.exec(xml); if (dd) out.def = rp(dd[0]);
+  const raw = {};
+  for (const m of xml.matchAll(/<w:style [^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g)) {
+    const nm = /<w:name w:val="([^"]+)"/.exec(m[2]), bo = /<w:basedOn w:val="([^"]+)"/.exec(m[2]);
+    raw[m[1]] = { name: nm ? nm[1] : m[1], based: bo ? bo[1] : '', ...rp((/<w:rPr>[\s\S]*?<\/w:rPr>/.exec(m[2]) || [''])[0]) };
+  }
+  for (const id of Object.keys(raw)) {
+    let font = raw[id].font, size = raw[id].size, b = raw[id].based, n = 0;
+    while ((!font || !size) && b && raw[b] && n++ < 8) { font = font || raw[b].font; size = size || raw[b].size; b = raw[b].based; }
+    out.styles[id] = { name: raw[id].name, font, size };
+  }
+  return out;
+}
+
 function readDocx(buf) {
   const x = unzip(buf, 'word/document.xml'); if (!x) throw new Error('word/document.xml not found');
   const xml = x.toString('utf8'); const out = [];
@@ -28,6 +53,8 @@ function readDocx(buf) {
     const ppr = (/<w:pPr>[\s\S]*?<\/w:pPr>/.exec(ps) || [''])[0];
     const jc = /<w:jc w:val="(\w+)"/.exec(ppr); if (jc) p.align = { center: 'c', right: 'r', both: 'j' }[jc[1]] || 'l';
     if (/<w:numPr>/.test(ppr)) p.bullet = true;
+    const sid = /<w:pStyle w:val="([^"]+)"/.exec(ppr); if (sid) p.styleId = sid[1];
+    if (/<w:sectPr[ >]/.test(ppr)) p.sectEnd = true;
     for (const rm of ps.matchAll(/<w:r[ >][\s\S]*?<\/w:r>/g)) {
       const r = rm[0], rpr = (/<w:rPr>[\s\S]*?<\/w:rPr>/.exec(r) || [''])[0];
       const va = /<w:vertAlign w:val="(\w+)"/.exec(rpr);
@@ -36,8 +63,10 @@ function readDocx(buf) {
       for (const tm of r.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\/>|<w:noBreakHyphen\/>/g)) t += tm[1] !== undefined ? xmlDecode(tm[1]) : tm[0] === '<w:tab/>' ? '    ' : tm[0] === '<w:br/>' ? ' ' : '-';
       if (t) {
         p.runs.push({ t, ...st });
-        const fm = /<w:rFonts[^>]*w:ascii="([^"]+)"/.exec(rpr);
+        const fm = fontKey(rpr);
         if (fm && t.trim()) { p.fc = p.fc || {}; p.fc[fm[1]] = (p.fc[fm[1]] || 0) + t.length; }
+        const sz = /<w:sz w:val="(\d+)"/.exec(rpr);
+        if (sz && t.trim()) { p.zc = p.zc || {}; p.zc[+sz[1] / 2] = (p.zc[+sz[1] / 2] || 0) + t.length; }
       }
     }
     return p;
@@ -55,8 +84,13 @@ function readDocx(buf) {
     out.push(row);
   }
   let mixed = 0;
-  for (const p of out) { if (!p.fc) continue; const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]); if (e.length > 1) mixed++; p.srcFont = e[0][0]; delete p.fc; }
+  const top = (o) => { const e = Object.entries(o).sort((a, b) => b[1] - a[1]); return e.length ? e[0][0] : ''; };
+  for (const p of out) {
+    if (p.zc) { p.srcSize = +top(p.zc); delete p.zc; }
+    if (!p.fc) continue; const e = Object.entries(p.fc).sort((a, b) => b[1] - a[1]); if (e.length > 1) mixed++; p.srcFont = e[0][0]; delete p.fc;
+  }
   out.mixedFonts = mixed;
+  out.docInfo = docxStyles(buf);
   return out;
 }
 

@@ -200,10 +200,10 @@
   window.XFACE = {
     faces, order, init, load, faceId, ttfOf, hqFont, fold,
     list: () => order.map((id) => faces[id]),
-    get: (id) => (id ? faces[id] || null : null),
+    get: (id) => (id ? faces[id] || faces[String(id).toUpperCase()] || null : null),
     // starts loading and returns the face once its bitmaps are ready (null before that)
     css: (id) => hqFamilies[id] || '',
-    use(id) { const f = id && faces[id]; if (!f) return null; if (f.state === 'new') load(f); return f.state === 'ready' ? f : null; },
+    use(id) { const f = id && (faces[id] || faces[String(id).toUpperCase()]); if (!f) return null; if (f.state === 'new') load(f); return f.state === 'ready' ? f : null; },
     onChange(fn) { listeners.push(fn); },
     nib(id, code) { const f = this.use(id), bm = f && f.get(code); if (!bm) return null; const k = id + ':n' + code; return (f.cache[k] = f.cache[k] || foldNib(bm)); },
     b8(id, code) { const f = this.use(id), bm = f && f.get(code); if (!bm) return null; const k = 'b8:' + code; return (f.cache[k] = f.cache[k] || fold(bm, 8, 8)); },

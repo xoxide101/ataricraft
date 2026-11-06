@@ -11,7 +11,7 @@
     get(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
   };
-  const NOTES = ['Font, size and line spacing are not stored in a .xcw (ACWriter has one font)', 'Bullets show as * with a 2 column indent'];
+  const NOTES = ['Typefaces and styles are stored in a .xcw; ACWriter shows 8x8 faces in PAGE zoom (4 fonts, 8 changes). Sizes other than 8x8 and line spacing stay in xCWriter/docx', 'Bullets show as * with a 2 column indent'];
 
   const XW = window.XW = {
     doc: XCW.newDoc(), mode: 'hq', name: 'Untitled', id: null, dirty: false, docVer: 0, warnVer: -1, warns: [],
@@ -116,8 +116,54 @@
   XW.setFont = (name) => {
     const s = sel(), [a, b] = XCW.order(s.a, s.f);
     snapshot(true);
-    for (let p = a.p; p <= b.p; p++) { if (name) XW.doc[p].font = name; else delete XW.doc[p].font; }
+    for (let p = a.p; p <= b.p; p++) {
+      if (name) XW.doc[p].font = name; else { delete XW.doc[p].font; if (XW.page && XCW.Page.resolve(XW.doc, XW.page)[p].face) XW.doc[p].font = 'ROM'; }
+    }
     XW.dirty = true; refresh(s);
+  };
+  // ---------- styles and sections (docs/FONT.md): default < section font < role style < paragraph font/size ----------
+  const SZ = XCW.Page.SIZES, RL = XCW.Page.ROLES, RLAB = XCW.Page.ROLE_LABEL;
+  const DEF_STYLES = { title: { size: 12, b: 1, align: 'c', space: 1 }, h1: { size: 10, b: 1, space: 1 }, h2: { size: 8, b: 1, space: 1 }, h3: { size: 8, i: 1 }, cap: { size: 6, i: 1 } };
+  function ensurePage() {
+    if (!XW.page) XW.page = XCW.Page.normalize({});
+    if (!Object.keys(XW.page.styles || {}).length) XW.page.styles = JSON.parse(JSON.stringify(DEF_STYLES));
+    return XW.page;
+  }
+  const faceOpts = (blank) => '<option value="">' + blank + '</option><option value="ROM">Standard (ACWriter 4x7)</option>' + [...$('pgfont').options].filter((o) => o.value).map((o) => '<option value="' + o.value + '">' + esc(o.textContent) + '</option>').join('') + [...$('pgfont').querySelectorAll('optgroup')].map((g) => '').join('');
+  const sizeOpts = (auto) => '<option value="0">' + auto + '</option>' + SZ.map((z) => '<option value="' + z + '">' + z + ' px cell</option>').join('');
+  const faceNote = (f) => (!f || f === 'ROM' ? 'Standard face: one size (4x7 cell).' : /^craft\d+$/i.test(f) ? 'Craft faces exist in every cell size: ' + SZ.join('/') + '.' : f + ' has a single size; a size choice leaves it unchanged.');
+  XW.styleUi = function () {
+    const s = sel(), [a, b] = XCW.order(s.a, s.f), para = XW.doc[Math.min(a.p, XW.doc.length - 1)]; if (!para) return;
+    const RF = XCW.Page.resolve(XW.doc, XW.page || {}), secs = XCW.Page.sections(XW.doc, XW.page || {});
+    $('pgrole').innerHTML = RL.map((r) => '<option value="' + r + '">' + RLAB[r] + '</option>').join(''); $('pgrole').value = para.role || '';
+    $('pgsize').innerHTML = sizeOpts('Auto'); $('pgsize').value = String(para.size || 0);
+    const cur = $('secfont').value; $('secfont').innerHTML = faceOpts('Document default'); const sec = secs.find((q) => a.p >= q.start && a.p <= q.end) || secs[0];
+    $('secfont').value = sec ? sec.font : '';
+    $('seclist').innerHTML = secs.map((q, i) => '<option value="' + q.start + '"' + (q === sec ? ' selected' : '') + '>' + (i + 1) + '/' + secs.length + ': ' + esc(q.font === 'ROM' ? 'Standard' : q.font || 'document default') + ' (para ' + (q.start + 1) + (q.end > q.start ? '-' + (q.end + 1) : '') + ')</option>').join('');
+    $('sizenote').textContent = faceNote(RF[a.p] && RF[a.p].face) + (RF[a.p] && RF[a.p].role ? '' : '');
+    void cur;
+  };
+  const doStyle = (fn) => { const s = sel(), [a, b] = XCW.order(s.a, s.f); snapshot(true); ensurePage(); fn(a, b); XW.dirty = true; XW.useFaces(); refresh(s); XW.styleUi(); };
+  $('pgrole').onchange = () => doStyle((a, b) => XCW.setRole(XW.doc, a.p, b.p, $('pgrole').value, XW.page.styles));
+  $('pgsize').onchange = () => doStyle((a, b) => XCW.setParaSize(XW.doc, a.p, b.p, +$('pgsize').value));
+  $('secfont').onchange = () => doStyle((a, b) => XCW.setSectionFontRange(XW.doc, a.p, b.p, $('secfont').value));
+  $('secbrk').onclick = () => {
+    const s = sel(), [a] = XCW.order(s.a, s.f); snapshot(true); ensurePage();
+    const np = XCW.sectionBreak(XW.doc, a); XW.dirty = true; refresh({ a: np, f: np }); XW.styleUi(); toast('New section starts at paragraph ' + (np.p + 1) + ' (inherits the font)');
+  };
+  $('seclist').onchange = () => { const p = +$('seclist').value, pos = { p, o: 0 }; cur().load(XW.doc, { a: pos, f: pos }); cur().focus(); XW.styleUi(); };
+  $('pgstyles').onclick = () => {
+    ensurePage(); const pg = XW.page, st = pg.styles;
+    const row = (r) => { const q = st[r] || {}; return '<tr><td>' + RLAB[r] + '</td><td><select data-r="' + r + '" data-k="face">' + faceOpts('Follow section') + '</select></td><td><select data-r="' + r + '" data-k="size">' + sizeOpts('Auto') + '</select></td><td><input type="checkbox" data-r="' + r + '" data-k="b"></td><td><input type="checkbox" data-r="' + r + '" data-k="i"></td><td><select data-r="' + r + '" data-k="align"><option value="">-</option><option value="l">L</option><option value="c">C</option><option value="r">R</option><option value="j">J</option></select></td><td><input type="number" min="0" max="3" data-r="' + r + '" data-k="space" style="width:48px"></td></tr>'; };
+    modal('<h3>Styles</h3><label>Document default font</label><select id="sdf">' + faceOpts('Standard (ACWriter 4x7)') + '</select><div class="dim">Order of precedence: default &lt; section font &lt; style &lt; paragraph font/size. A line never mixes faces or sizes. ' + faceNote('craft8') + '</div><table style="width:100%;margin-top:8px"><tr><th></th><th>Face</th><th>Size</th><th>B</th><th>I</th><th>Align</th><th>Space</th></tr>' + RL.filter((r) => r).map(row).join('') + '</table><div class="row"><button id="scancel">Cancel</button><button id="sok" class="primary">OK</button></div>');
+    $('sdf').value = pg.dfont || pg.font || '';
+    for (const e of $('dlg').querySelectorAll('[data-r]')) { const q = st[e.dataset.r] || {}, v = q[e.dataset.k]; if (e.type === 'checkbox') e.checked = !!v; else e.value = v === undefined ? (e.dataset.k === 'size' ? '0' : '') : String(v); }
+    $('scancel').onclick = closeModal;
+    $('sok').onclick = () => {
+      const s = sel(); snapshot(true); const ns = {};
+      for (const e of $('dlg').querySelectorAll('[data-r]')) { const r = e.dataset.r, k = e.dataset.k; ns[r] = ns[r] || {}; const v = e.type === 'checkbox' ? (e.checked ? 1 : 0) : e.value; if (k === 'size' || k === 'space') ns[r][k] = +v || 0; else if (e.type === 'checkbox') ns[r][k] = v; else if (v) ns[r][k] = v; }
+      pg.dfont = $('sdf').value; pg.font = ''; pg.styles = ns; XW.dirty = true; closeModal(); XW.useFaces(); refresh(s); XW.styleUi();
+    };
   };
   function setAlign(al) {
     const s = sel(), [a, b] = XCW.order(s.a, s.f);
@@ -153,11 +199,12 @@
     const para = XW.doc[Math.min(a.p, XW.doc.length - 1)];
     if (para) {
       for (const al of ['l', 'c', 'r', 'j']) $('tb-' + al).classList.toggle('on', para.align === al); $('tb-bul').classList.toggle('on', !!para.bullet);
-      const fs = $('pgfont'), pf = para.font || ''; if (fs.value !== pf && [...fs.options].some((o) => o.value === pf)) fs.value = pf;
+      const fs = $('pgfont'), pf = (XCW.Page.resolve(XW.doc, XW.page || {})[Math.min(a.p, XW.doc.length - 1)] || {}).face || ''; if (fs.value !== pf && [...fs.options].some((o) => o.value === pf)) fs.value = pf;
+      if (XW.mode === 'page' && XW.styleUi) XW.styleUi();
     }
   }
   // load the faces a document uses as soon as it is opened, so every view can draw them
-  XW.useFaces = () => { for (const p of XW.doc) if (p.font) XFACE.use(p.font); };
+  XW.useFaces = () => { for (const r of XCW.Page.resolve(XW.doc, XW.page || {})) if (r.face) XFACE.use(r.face); };
   XFACE.onChange(() => { XW.useFaces(); updateTools(); });
   for (const k of KEYS) $('tb-' + k).onmousedown = (e) => { e.preventDefault(); toggle(k); };
   for (const al of ['l', 'c', 'r', 'j']) $('tb-' + al).onmousedown = (e) => { e.preventDefault(); setAlign(al); };

@@ -85,9 +85,10 @@
     px(0, 0, 320, 192, th.bg); px(0, 0, 320, 8, th.bar);
     text(' ACWriter PAGE 2x zoom', 0, 0, th.bt);
     const [s, e] = cmp(anchor, caret) <= 0 ? [anchor, caret] : [caret, anchor], has = cmp(s, e) !== 0;
+    const RF = XCW.Page.resolve(XW.doc, XW.page || {});
     for (let r = 0; r < 9; r++) {
       const li = top2 + r; if (li >= lines.length) break;
-      const l = lines[li], xs = cols(l), y = 16 + r * 16, face = XW.doc[l.p] && XW.doc[l.p].font;
+      const l = lines[li], xs = cols(l), y = 16 + r * 16, face = RF[l.p] && RF[l.p].face;
       l.cells.forEach((c, k) => {
         const col = lx + xs[k] - pwx; if (col < 0 || col >= 20) return;
         const x = col * 16, here = { p: l.p, o: l.o0 + k }, on = has && cmp(here, s) >= 0 && cmp(here, e) < 0 || (!has && li === cl.li && k === cl.k && blink);
