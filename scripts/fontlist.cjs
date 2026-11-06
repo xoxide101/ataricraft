@@ -58,6 +58,14 @@ function build() {
   });
   groups.push({ id: 'personal', label: 'Personal', fonts: personal });
 
+  // fonts converted by scripts/fontpipe.cjs --install (gitignored): one entry per family, its largest size
+  const conv = path.join(local, 'converted'), best = {};
+  for (const f of rd(conv).filter((x) => /\.acf$/i.test(x))) {
+    const m = /^(.*?)(?:-(\d+))?\.acf$/i.exec(f), s = +m[2] || 0;
+    if (!best[m[1]] || s > best[m[1]].s) best[m[1]] = { s, f };
+  }
+  groups.push({ id: 'converted', label: 'Converted', fonts: Object.keys(best).sort().map((k) => ({ name: best[k].f, url: 'library/fonts/local/converted/' + best[k].f, label: k + (best[k].s ? ' (' + best[k].s + ' px)' : '') })) });
+
   fs.writeFileSync(path.join(local, 'manifest.json'), JSON.stringify({ generated: new Date().toISOString(), groups }, null, 1));
   return groups;
 }

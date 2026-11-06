@@ -15,7 +15,7 @@ const git = (a) => execSync('git ' + a, { cwd: ROOT, encoding: 'utf8' });
   fs.mkdirSync(ROOT + '/out', { recursive: true });
   const groups = require('./fontlist.cjs').build();
   const names = (id) => groups.find((g) => g.id === id).fonts.map((f) => f.name);
-  assert.ok(names('shared').includes('craft6.acf'));
+  assert.ok(names('craft').includes('craft6.acf'));
   ok('shipped group lists ' + names('shared').length + ' fonts');
   const havePersonal = fs.existsSync(ROOT + '/font_personal/FONT.FNT');
   const haveRom = names('rom').length === 1;
@@ -38,9 +38,9 @@ const git = (a) => execSync('git ' + a, { cwd: ROOT, encoding: 'utf8' });
   p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => d.accept('0'));
   await p.goto('http://localhost:' + port + '/fontedit.html');
   await p.waitForFunction(() => window.FE);
-  await p.waitForFunction(() => document.querySelectorAll('#flist optgroup').length === 3);
+  await p.waitForFunction(() => document.querySelectorAll('#flist optgroup').length === 5);
   const labels = await p.$$eval('#flist optgroup', (g) => g.map((x) => x.label));
-  assert.deepStrictEqual(labels.map((l) => l.replace(/ \(none\)/, '')), ['Shipped', 'Atari ROM', 'Personal']);
+  assert.deepStrictEqual(labels.map((l) => l.replace(/ \(none\)/, '')), ['Craft faces', 'Shipped', 'Atari ROM', 'Personal', 'Converted']);
   ok('library groups: ' + labels.join(', '));
 
   const load = async (name) => {

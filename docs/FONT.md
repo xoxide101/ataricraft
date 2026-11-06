@@ -107,3 +107,40 @@ ACWriter (Character > Font) loads `.FNT` 8x8 charsets into bank 3; xCWriter's Pa
 * **Diff view:** each glyph (33..126) is rastered as Page view draws it (red) and as the 8x8 ACWriter glyph (blue), grey = both; glyphs differing by at least the threshold (default 10 %) are outlined and listed. `FE.val.diff()` returns the list and per-glyph fractions.
 * **Per-glyph metrics:** ink width, left/right bearing and advance. An advance override is stored in `advs` (ACF2 flag 16: trailing `u8 n, n x (slot, adv)`; JSON `advs`); proportional preview uses it.
 * **Send to ACWriter** writes `NAME.FNT` (8 px) or `NAME.ACF` to H: through `FujiNet.emu.hostWrite`, or over BroadcastChannel `xcwriter` to an open emulator tab. **Use in xCWriter** stores the font in `craft.userfonts`. **Set as master** makes the current size the master for **Derive smaller** (locked and hand-edited sizes are kept).
+
+
+## Font pipeline (down and up)
+
+One shared module, `tools/fontpipe.cjs` (+ `tools/sfnt.cjs`, a TrueType/OpenType/WOFF reader, rasteriser and TTF writer). Plain bytes in and out, no
+fs/DOM, no build step: Node requires it, and the xCWriter bundle exposes it as `XCW.FontPipe` (`scripts/sync-xcwriter-core.cjs`).
+
+**DOWN** (high-res to Atari): TTF / OTF (TrueType and CFF) / WOFF -> a size family 12x12 (master), 10x12, 8x8, 6, 5, 4 px. The master is rasterised by the
+same rules as the editor (`CF.rasterTtf`: caps fill the cap rows, baseline = bottom of H, glyph squeezed to the cell, threshold/weight/hint); proportional
+advances are kept in `advs`. The other sizes are `CF.familyDerive`. Pixel fonts (an em of 6-10 whole pixels, e.g. Atari8bit.ttf, PressStart2P) are
+detected and sampled on their own grid for the 8x8 size, so they come out bit-exact. WOFF2 is not supported (Brotli): convert to WOFF/TTF first.
+
+**UP** (Atari to general): ROM charset (`ATARIXL.ROM` 16 KB at $2000, 10 KB OS-B ROM at $0800, screen-code order, sanity-checked), 1 KB `.fnt`, `.acf`
+(ACF2), BDF, PCF, JSON, XCF, or a TTF we wrote. Output: `.acf` per size, `.xcf`, `.bdf`, `.ttf`, `.fnt` (8 px). Sizes below the source's own are derived.
+
+**XCF** (`.xcf`, JSON, a superset of `craft-family`): `{format:'xcf', version:1, name, family, style, master, source, hires, sizes:{"12":{...craft-font JSON...,
+info:{"<code>":{n,u,adv,lsb,rsb,ink}}, metrics:{cap,xHeight,baseline,descender,headroom}}}}`. `info` carries the glyph name, Unicode, advance, left/right bearing
+and ink box per code; bearings are derived (measured for fixed-pitch glyphs, centred for proportional ones). Readers that only know `craft-family` ignore the extras.
+
+**Export that survives**: BDF carries a `COMMENT ACFM {json}` line, TTF carries an `ACFM` table with the same model; ink is drawn as pixel-square contours
+(100 units per pixel; ASCII at its Unicode, other codes at U+E000+code) and DWIDTH/advance hold the proportional advance. Re-importing our own BDF/TTF is
+exact; foreign BDF/TTF files go through the normal import.
+
+**CLI**: `node scripts/fontpipe.cjs down|up|roundtrip <file> [--size 12,8|all] [--out DIR|file.ext] [--formats acf,xcf,bdf,ttf,fnt,json] [--threshold n] [--weight n] [--hint] [--direct] [--name N] [--install]`.
+`--install` writes into `web/library/fonts/local/converted/` (gitignored) and rebuilds the manifest: the font then shows under **Converted** in xCWriter's picker
+and the editor's Font library. `roundtrip` prints per size the pixel and advance diff of every export path (exit 1 over `--max`, default 0.5%).
+
+**Font editor** (`web/fontedit.html`): Open handles XCF, ROM images and our BDF/TTF through the pipeline; **Export XCF / BDF / TTF** use `XCW.FontPipe.files`.
+
+**Test**: `node scripts/fontpipe-test.cjs [--all]` runs every font in `font/`, `font_personal/`, `web/library/fonts(+atari)` and every ROM charset through
+down/up and each export, asserting: glyph count (every source glyph with ink has ink), case, sub/superscripts, cap/x-height/baseline/descender rows,
+advances preserved and a round-trip pixel diff <= 0.5% of cells (the exports are lossless, so 0 is expected). Report: `out/fontpipe-report.txt`
+(score table, fail list, notes). `--all` adds `web/library/fonts/personal/` as an informational stress run (only lossless-export failures are fatal there:
+symbol-only, caps-only and PC GRX `.FNT` fonts legitimately trip the glyph checks). `node scripts/fontpipe-sheet.cjs` renders `out/fontpipe-sheet.png`.
+
+**Known limits**: WOFF2; BDF/PCF cells larger than 12x12 are clipped (warning); smaller sources cannot be enlarged (only derived downward); bearings are
+derived, not stored per glyph; source glyphs that do not exist stay blank (Kidpixies.ttf lacks `% + < = > ^ _ ` { | } ~`); Kidpixies12.fnt has no descenders.

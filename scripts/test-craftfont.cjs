@@ -8,7 +8,7 @@ const ok = (m) => { n++; console.log('ok  ' + m); };
 
 // metrics + built-ins
 for (const adv of [4, 5, 6]) {
-  const f = CF.parse(fs.readFileSync(R + 'web/library/fonts/craft/craft' + adv + '.acf'));
+  const f = CF.parse(fs.readFileSync(R + 'font/craft' + adv + '.acf'));
   assert.strictEqual(f.adv, adv); assert.strictEqual(f.gw, adv - 1); assert.strictEqual(f.rows, 12);
   assert.deepStrictEqual([f.head, f.xTop, f.base, f.desc, f.supUp, f.subDown], [2, 4, 8, 3, 2, 3]);
   const rowsUsed = (ch) => { const g = CF.glyph(f, ch.charCodeAt(0)); return g.map((b, i) => (b ? i : -1)).filter((i) => i >= 0); };
@@ -27,7 +27,7 @@ for (const adv of [4, 5, 6]) {
 }
 
 // case locations (map), variants, shift
-const f = CF.parse(fs.readFileSync(R + 'web/library/fonts/craft/craft5.acf'));
+const f = CF.parse(fs.readFileSync(R + 'font/craft5.acf'));
 const A = CF.glyph(f, 65).slice(), a = CF.glyph(f, 97).slice();
 CF.setCase(f, 'upper', 160); CF.setCase(f, 'lower', 192);
 assert.deepStrictEqual(f.glyphs[160], A); assert.deepStrictEqual(f.glyphs[192], a);

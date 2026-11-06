@@ -379,6 +379,14 @@
     for (let i = 0; i < sh.data.length; i++) { const v = sh.data[i] ? 0 : 255; im.data.set([v, v, v, 255], i * 4); }
     c.putImageData(im, 0, 0); canvasPng(cv, fname() + '.sheet.png');
   };
+  function pipeExport(ext) {
+    const FP = XCW.FontPipe, fam = st.fam || CF.familyNew(st.f), size = st.f.adv, base = fname();
+    const only = ext === 'xcf' ? fam : { sizes: { [size]: st.f }, master: size, name: fam.name };
+    const out = FP.files(only, base, { formats: [ext] }), names = Object.keys(out);
+    const n = names.find((k) => k.endsWith('.' + ext)); download(n, out[n], ext === 'xcf' ? 'application/json' : 'application/octet-stream');
+    toast(ext.toUpperCase() + ' exported: ' + n);
+  }
+  $('bxcf').onclick = () => pipeExport('xcf'); $('bbdf').onclick = () => pipeExport('bdf'); $('bttf').onclick = () => pipeExport('ttf');
   $('bprev').onclick = () => canvasPng(pv, fname() + '.preview.png');
   async function sheetFromPng(bytes, name) {
     const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
@@ -392,6 +400,11 @@
 
   async function openBytes(bytes, name) {
     const buf = Buffer.from(bytes), magic = buf.toString('latin1', 0, 4);
+    const kind = XCW.FontPipe.detect(bytes, name);
+    if (kind === 'xcf' || kind === 'rom' || (kind === 'bdf' && /ACFM/.test(buf.toString('latin1', 0, 4096))) || (kind === 'ttf' && buf.toString('latin1', 0, 600).includes('ACFM'))) {
+      const r = XCW.FontPipe.load(bytes, name, {}), f = r.fam.sizes[r.fam.master];
+      setFont(f, r.fam); return toast(kind.toUpperCase() + ' imported (pipeline): ' + Object.keys(r.fam.sizes).join(', ') + ' px');
+    }
     if (buf[0] === 0x89 && magic.slice(1) === 'PNG') { const f = await sheetFromPng(bytes, name.replace(/\.[^.]+$/, '')); setFont(f); return toast('PNG sheet imported as ' + CF.SIZES[f.adv].label); }
     if (buf.toString('latin1', 0, 9) === 'STARTFONT') { const f = CF.fromBdf(buf.toString('latin1'), { name: name.replace(/\.[^.]+$/, ''), size: +$('ttfadv').value !== 12 ? +$('ttfadv').value : 0 }); setFont(f); return toast('BDF imported as ' + CF.SIZES[f.adv].label); }
     if (buf[0] === 0x1f && buf[1] === 0x8b) {

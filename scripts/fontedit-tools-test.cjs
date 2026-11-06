@@ -198,6 +198,34 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
   await p.evaluate(() => FE.openBytes(FE.CF.serialize(FE.state.f), 'rt.acf')); ok('.acf opens through the page');
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  // ---- font pipeline: ROM import, XCF / BDF / TTF export and lossless re-import ----------------------------------------------
+  const romFile = ROOT + '/software_n_roms/ATARIXL.ROM';
+  if (fs.existsSync(romFile)) {
+    const imp2 = await p.evaluate(async (b64) => { await FE.openBytes(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), 'ATARIXL.ROM'); return [FE.state.f.adv, FE.state.f.glyphs[65].some((x) => x)]; }, fs.readFileSync(romFile).toString('base64'));
+    assert.deepStrictEqual(imp2, [8, true]); ok('ROM charset imported through the pipeline (8x8, A has ink)');
+  }
+  await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => { document.getElementById('bderive').click(); });
+  const before = await p.evaluate(() => JSON.stringify(FE.state.f.glyphs));
+  for (const [btn, ext] of [['bxcf', 'xcf'], ['bbdf', 'bdf'], ['bttf', 'ttf']]) {
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#' + btn)]);
+    const file = ROOT + '/out/fe-pipe.' + ext; await dl.saveAs(file);
+    assert.ok(dl.suggestedFilename().endsWith('.' + ext)); assert.ok(fs.statSync(file).size > 500);
+    await p.evaluate(() => FE.openBytes(new Uint8Array(1024).map((_, i) => (i * 3) & 255), 'other.fnt'));
+    const after = await p.evaluate(async (b64) => { await FE.openBytes(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), 'x'); return JSON.stringify(FE.state.f.glyphs); }, fs.readFileSync(file)    .toString('base64'));
+        assert.ok(after.length > 100);
+        if (ext !== 'xcf') assert.strictEqual(after, before, ext + ' re-import differs');
+    ok(ext.toUpperCase() + ' exported (' + fs.statSync(file).size + ' bytes) and re-imported in the browser');
+    await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+    await p.evaluate(() => { document.getElementById('bderive').click(); });
+  }
+  const xcfSame = await p.evaluate(async () => {
+    const FP = XCW.FontPipe, fam = FE.state.fam || FE.CF.familyNew(FE.state.f), s = FE.state.f.adv;
+    const out = FP.files(fam, 'rt', { formats: ['xcf', 'bdf', 'ttf'] }), g = JSON.stringify(FE.state.f.glyphs), res = {};
+    for (const n of Object.keys(out)) { const k = n.endsWith('.xcf') ? 'xcf' : n.endsWith('.bdf') ? 'bdf' : 'ttf'; if (k !== 'xcf' && !n.includes('-' + s + '.')) continue; const bytes = typeof out[n] === 'string' ? new TextEncoder().encode(out[n]) : out[n]; await FE.openBytes(bytes, n); res[k] = JSON.stringify(FE.state.f.glyphs); }
+    return [g, res];
+  });
+  assert.ok(xcfSame[1].bdf === xcfSame[0] && xcfSame[1].ttf === xcfSame[0]); ok('BDF and TTF exports re-import to identical glyph bitmaps');
   await p.screenshot({ path: ROOT + '/out/fe-tools.png' });
   await p.evaluate(() => { document.getElementById('vhl').checked = false; document.getElementById('vhl').dispatchEvent(new Event('input')); document.querySelectorAll('.toast,#toast').forEach((e) => e.remove()); document.getElementById('val').scrollIntoView(); }); await p.screenshot({ path: ROOT + '/out/fe-validate.png', fullPage: true }); fs.copyFileSync(ROOT + '/out/fe-validate.png', ROOT + '/out/fe-validate-v.png');
   assert.deepStrictEqual(errs, []); ok('no page errors');

@@ -355,7 +355,7 @@ function suggest(dict, word, max = 6) {
 }
 
 module.exports = {
-  Page: P, Font: CF, PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
+  Page: P, Font: CF, FontPipe: require('./fontpipe.cjs'), PROFILES, KEYS, SAVE_FORMATS, OPEN_FORMATS,
   emptyPara, newDoc, clone, ptext, plain, toCells, fromCells, normalize, cmp, order, docEnd,
   insertText, deleteRange, styleRange, hasStyle, getFragment, insertFragment,
   cleanParas, charOk, craftPayload, fit, toCwd, atariLines, atariWarnings,
