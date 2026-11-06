@@ -34,13 +34,13 @@
       if (cmd === 0x53) { const st = [0, 0, 0x1e, 0]; for (let i = 0; i < len; i++) m[data + i] = st[i] || 0; return C; }
       if (cmd !== 0x57) return N;
       const raw = m.slice(data, data + len), end = raw.indexOf(0x9b);
-      this.add(end < 0 ? raw : raw.subarray(0, end), String.fromCharCode(aux & 255));
+      this.add(end < 0 ? raw : raw.subarray(0, end), String.fromCharCode(aux & 255), end >= 0);
       return C;
     },
 
-    add(bytes, mode) {
+    add(bytes, mode, e) {
       if (!this.rom) this.grabRom();
-      this.lines.push({ b: Uint8Array.from(bytes), m: mode === 'D' || mode === 'S' ? mode : 'N' });
+      this.lines.push({ b: Uint8Array.from(bytes), m: mode === 'D' || mode === 'S' ? mode : 'N', e: !!e });
       if (this.lines.length > MAXLINES) this.lines.splice(0, this.lines.length - MAXLINES);
       if (this.onChange) this.onChange();
       this.dirty();
