@@ -31,3 +31,7 @@ web/library/fonts/personal/
 # generated font lists / extracted ROM charset, and the user's own downloaded fonts: never committed
 web/library/fonts/local/
 font_personal/
+
+# EBookCraft optional OCR add-on (tesseract.js, installed by scripts/ebookcraft-install-ocr.cjs)
+tools/ebookcraft/ocr/
+web/js/ebookcraft/ocr/
