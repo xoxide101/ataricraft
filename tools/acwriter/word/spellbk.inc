@@ -162,6 +162,7 @@ bkc_sel
  asl
  asl
  ora tmp
+ eor #$80
  sta tmp
  lda sv_t
  and #3
