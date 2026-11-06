@@ -1553,6 +1553,11 @@ calccell
  lda ec
  sta qc
  jsr rdrec
+ lda RECB
+ cmp #3
+ beq ccok
+ rts
+ccok
  ldx #9
 cc0 lda RECB+1,x
  sta OLDV,x

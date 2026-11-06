@@ -302,7 +302,13 @@ db1 lda #30
 db2 jmp db_txt
 db_ent
  lda #0
- sta di
+ ldx elen
+ cpx #36
+ bcc db_e1
+ txa
+ sec
+ sbc #35
+db_e1 sta di
 db3 lda di
  cmp elen
  bcs db4
@@ -385,6 +391,7 @@ MSGS
  dta c'Heap full',b(0)
  dta c'File name:',b(0)
  dta c'Formula error',b(0)
+ dta c'Too many formulas',b(0)
 
 drawall
  jsr layout
