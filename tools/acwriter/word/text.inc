@@ -281,8 +281,6 @@ dcm cmp #$FF
  lda #0
  beq dcs
 dcm2 tay
- lda (gp),y
- jmp dcs
 dcn lda (gp),y
 dcs sta v
  lda style
@@ -293,12 +291,11 @@ dcs sta v
  lsr
  ora v
  sta v
-dc6 lda v
- ldx gp+1
+dc6 ldx gp+1
  cpx #>SYM
  beq dc6g
- asl
-dc6g sta v
+ asl v
+dc6g
  lda style
  and #2
  beq dc7

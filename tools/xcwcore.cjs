@@ -121,11 +121,11 @@ function insertFragment(paras, pos, frag) {
   return { p: pos.p + frag.length - 1, o: lc.length };
 }
 
+const AG = require('./atarigfx.cjs');
 // ---- Craft text / Atari fit --------------------------------------------------
 function cleanParas(paras) {
   return paras.map((p) => ({ align: p.align, bullet: p.bullet, ...pickProps(p), runs: p.runs.map((r) => ({ ...r, t: I.clean(r.t.replace(/\t/g, '    ')) })) }));
 }
-const AG = require('./atarigfx.cjs');
 const charOk = (ch) => { const c = ch.codePointAt(0); return (c >= 32 && c < 127) || c === 160 || (c >= 161 && c <= 255 && c !== 173) || AG.acwCodeOfUni(c) >= 0; };
 
 // page (tools/craftpage.cjs setup) switches wrapping from the profile's screen columns to the page's usable columns.
@@ -176,7 +176,7 @@ function atariWarnings(paras, profile = PROFILES.atari) {
   const TL = ['\u2018', '\u2019', '\u201c', '\u201d', '\u2013', '\u2014', '\u2026', '\u2022', '\u20ac', '\u2122', '\u00ad'];
   for (const p of paras) for (const r of p.runs) for (const ch of r.t) {
     if (ch === '\t') { tabs++; continue; }
-    if (charOk(ch) || (ch.codePointAt(0) >= 0xe080 && ch.codePointAt(0) <= 0xe09f)) continue;
+    if (charOk(ch) || (ch.codePointAt(0) >= 0xe080 && ch.codePointAt(0) <= 0xe09f) || (ch.codePointAt(0) >= 0x80 && ch.codePointAt(0) <= 0x9f)) continue; // 0x80-0x9f: Atari graphics as CRFT bytes
     seen.set(ch, (seen.get(ch) || 0) + 1);
     if (TL.includes(ch)) translit++; else lost++;
   }
