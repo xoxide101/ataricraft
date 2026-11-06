@@ -252,6 +252,31 @@
     return st;
   };
 
+  // FTP: N:FTP://[user:pass@]host[:port]/path through the relay (plain FTP, passive mode). Reads: file (mode 4), directory (6/7).
+  // Writes (8 write, 9 append) and rename/delete/mkdir/rmdir need a relay started with --allow-write; data is sent on close.
+  protocols.ftp = (u, o, net) => {
+    const st = { raw: false, rx: new Uint8Array(0), eof: true, err: ERR.OK };
+    if (!net.ftpFile) return { fail: ERR.NOT_IMPL };
+    const cred = { host: u.host, port: u.port || 21, user: u.user || o.user || '', pass: u.pass || o.pass || '' };
+    const code = (e) => (e && e.code === ERR.DENIED ? ERR.DENIED : ERR.NOT_FOUND);
+    if (o.aux1 === 8 || o.aux1 === 9) {
+      const parts = [];
+      st.writeOnly = true;
+      st.write = (b) => { parts.push(Uint8Array.from(b)); return ERR.OK; };
+      st.closeFn = () => {
+        const n = parts.reduce((s, p) => s + p.length, 0), all = new Uint8Array(n);
+        let at = 0; for (const p of parts) { all.set(p, at); at += p.length; }
+        return net.ftpPut(cred, u.path, all, o.aux1 === 9);
+      };
+      return st;
+    }
+    try {
+      if (o.aux1 === 6 || o.aux1 === 7) st.rx = dirText(net.ftpList(cred, u.path || '/'), o.filter);
+      else { try { st.rx = net.ftpFile(cred, u.path); } catch (e) { if (e.code === ERR.DENIED) throw e; const q = resolvePath((d) => net.ftpList(cred, d), u.path); if (q === u.path) throw e; st.rx = net.ftpFile(cred, q); } }
+    } catch (e) { return { fail: code(e) }; }
+    st.write = () => ERR.READ_ONLY;
+    return st;
+  };
   const JSON_FLAGS = { remap: 1, intl: 2, sgml: 4, ascii: 16 };
 
   class Unit {
@@ -445,15 +470,15 @@
             if (op === 'rename' && parts.length !== 2) { u.err = ERR.BAD_SPEC; return E; }
             const url = parseUrl(fixSpec(parts[0], u.prefix, false));
             if (!url) { u.err = ERR.BAD_SPEC; return E; }
-            if (url.scheme !== 'tnfs' && url.scheme !== 'sd') { u.err = ERR.NOT_IMPL; return E; }
-            if (url.scheme === 'tnfs' ? !dev.net.tnfsOp : !dev.net.sdOp) { u.err = ERR.NOT_IMPL; return E; }
+            if (url.scheme !== 'tnfs' && url.scheme !== 'sd' && url.scheme !== 'ftp') { u.err = ERR.NOT_IMPL; return E; }
+            if (url.scheme === 'tnfs' ? !dev.net.tnfsOp : url.scheme === 'ftp' ? !dev.net.ftpOp : !dev.net.sdOp) { u.err = ERR.NOT_IMPL; return E; }
             let to = '';
             if (op === 'rename') {
               const t = parts[1].replace(/^N\d*:/i, '').trim();
               const dir = url.path.replace(/[^/]*$/, '');
               to = /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? (parseUrl(t) || {}).path || '' : t.startsWith('/') ? t : dir + t;
             }
-            const e = url.scheme === 'sd' ? dev.net.sdOp(op, url.path, to) : dev.net.tnfsOp(url.host + (url.port ? ':' + url.port : ''), op, url.path, to);
+            const e = url.scheme === 'ftp' ? dev.net.ftpOp({ host: url.host, port: url.port || 21, user: url.user || u.user, pass: url.pass || u.pass }, op, url.path, to) : url.scheme === 'sd' ? dev.net.sdOp(op, url.path, to) : dev.net.tnfsOp(url.host + (url.port ? ':' + url.port : ''), op, url.path, to);
             u.err = e || ERR.OK;
             return e && e !== ERR.OK ? E : C;
           }
@@ -513,6 +538,10 @@
       tnfsFile(host, path) { const r = j('/net/tnfs/file', { host, path }); if (r.err) throw new Error('tnfs'); return r.body; },
       tnfsPut(host, path, data, append) { const r = j('/net/tnfs/put', { host, path, append: !!append }, data); return r.err || ERR.OK; },
       tnfsOp(host, op, path, to) { const r = j('/net/tnfs/op', { host, op, path, to }); return r.err || ERR.OK; },
+      ftpList(c, path) { const r = j('/net/ftp/list', Object.assign({ path }, c)); if (r.err) throw Object.assign(new Error('ftp'), { code: r.err }); return JSON.parse(dec(r.body)); },
+      ftpFile(c, path) { const r = j('/net/ftp/file', Object.assign({ path }, c)); if (r.err) throw Object.assign(new Error('ftp'), { code: r.err }); return r.body; },
+      ftpPut(c, path, data, append) { const r = j('/net/ftp/put', Object.assign({ path, append: !!append }, c), data); return r.err || ERR.OK; },
+      ftpOp(c, op, path, to) { const r = j('/net/ftp/op', Object.assign({ op, path, to }, c)); return r.err || ERR.OK; },
       sdList(path) { const r = j('/net/sd/list', { path }); if (r.err) throw new Error('sd'); return JSON.parse(dec(r.body)); },
       sdFile(path) { const r = j('/net/sd/file', { path }); if (r.err) throw new Error('sd'); return r.body; },
       sdPut(path, data, append) { const r = j('/net/sd/put', { path, append: !!append }, data); return r.err || ERR.OK; },

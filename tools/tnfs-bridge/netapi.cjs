@@ -91,6 +91,7 @@ function create(opts) {
     let url = new URL(a.url), method = a.method || 'GET';
     if (url.hostname === 'diag.ataricraft') return diag(url);
     if (!/^https?:$/.test(url.protocol)) return { err: ERR.GENERAL };
+    if (/^(PUT|DELETE|PATCH)$/i.test(method) && !opts.allowWrite) return { err: ERR.DENIED };
     const headers = Object.assign({}, a.headers);
     for (let hop = 0; hop < 6; hop++) {
       await resolve(url.hostname);
@@ -190,6 +191,15 @@ function create(opts) {
 
   const routes = { '/net/http': http, '/net/tcp/open': tcpOpen, '/net/tcp/listen': tcpListen, '/net/tcp/accept': tcpAccept, '/net/tcp/read': tcpRead, '/net/tcp/write': tcpWrite, '/net/tcp/close': close, '/net/udp/open': udpOpen, '/net/udp/read': udpRead, '/net/udp/send': udpSend, '/net/udp/close': close };
   Object.assign(routes, opts.extra || {});
+
+  // FTP (N:FTP://): reads are always allowed, writes (STOR/APPE, MKD, RMD, DELE, RNFR/RNTO) need allowWrite (--allow-write).
+  const ftp = require('./ftp.cjs'), ftpApi = { resolve };
+  const ftpArgs = (a) => ({ host: String(a.host || ''), port: +a.port || 21, user: a.user || '', pass: a.pass || '', path: String(a.path || '/'), to: String(a.to || ''), op: a.op, append: !!a.append });
+  const needWrite = () => { if (!opts.allowWrite) throw Object.assign(new Error('writes need --allow-write'), { code: ERR.DENIED }); };
+  routes['/net/ftp/list'] = async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(await ftp.ops.list(ftpApi, ftpArgs(a)))) });
+  routes['/net/ftp/file'] = async (a) => ({ meta: {}, body: await ftp.ops.file(ftpApi, ftpArgs(a), MAX_BODY) });
+  routes['/net/ftp/put'] = async (a, body) => { needWrite(); await ftp.ops.put(ftpApi, ftpArgs(a), body); return { meta: {} }; };
+  routes['/net/ftp/op'] = async (a) => { needWrite(); await ftp.ops.op(ftpApi, ftpArgs(a)); return { meta: {} }; };
 
   async function handle(rq, rs, pathname) {
     const given = Buffer.from(String(rq.headers['x-ac-token'] || ''));

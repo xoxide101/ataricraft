@@ -321,7 +321,7 @@ function persistentToken() {
   try { fs.writeFileSync(tokenFile, t + '\n', { mode: 0o600 }); } catch (e) {}
   return t;
 }
-const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--allow-lan'), extra: {
+const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--allow-lan'), allowWrite: flag('--allow-write'), extra: {
   '/net/sd/list': async (a) => ({ meta: {}, body: Buffer.from(JSON.stringify(sdList(a.path))) }),
   '/net/sd/file': async (a) => ({ meta: {}, body: sdFile(a.path) }),
   '/net/sd/put': async (a, body) => { sdPut(a.path, body, a.append); return { meta: {} }; },

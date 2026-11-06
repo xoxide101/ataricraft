@@ -2186,7 +2186,7 @@
       document.querySelectorAll('.side .box[data-tab]').forEach((b) => { b.style.display = b.dataset.tab === 'none' ? '' : b.dataset.tab === t ? '' : 'none'; });
       localStorage.setItem('ac.sidetab', t);
     };
-    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'insp' ? AC.InspectPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : b.dataset.t === 'xcw' ? window.open('xcwriter.html', '_blank') : b.dataset.t === 'ebc' ? window.open('ebookcraft.html', '_blank') : show(b.dataset.t)); });
+    document.querySelectorAll('#sidetabs button').forEach((b) => { b.onclick = () => (b.dataset.t === 'wafm' ? AC.WebAfm.open() : b.dataset.t === 'basic' ? AC.BasicPanel.open() : b.dataset.t === 'asm' ? AC.AsmPanel.open() : b.dataset.t === 'font' ? AC.FontPanel.open() : b.dataset.t === 'insp' ? AC.InspectPanel.open() : b.dataset.t === 'wb' ? window.open('workbench.html', '_blank') : b.dataset.t === 'xcw' ? window.open('xcwriter.html', '_blank') : b.dataset.t === 'ebc' ? window.open('ebookcraft.html', '_blank') : b.dataset.t === 'pdf' ? window.open('pdfview.html', '_blank') : show(b.dataset.t)); });
     const t0 = localStorage.getItem('ac.sidetab');
     show(['sys', 'drv', 'fm', 'net', 'dbg'].includes(t0) ? t0 : 'sys');
   }
@@ -4473,6 +4473,8 @@
   const VERSION = '8.1', BUILD = '2026-11-04';
   { const h = $('appver'); if (h) { h.title = `Ataricraft v${VERSION}, built ${BUILD}`; h.querySelector('small').textContent = `v${VERSION} · ${BUILD}`; } console.log(`Ataricraft v${VERSION} (${BUILD})`); }
   AC.Inspect.attach(() => S.emu);
+  // pdfview.html posts a program here (works from file:// too, where window.opener is cross-origin)
+  window.addEventListener('message', (e) => { const d = e.data; if (d && d.type === 'ac-boot' && (e.origin === location.origin || e.origin === 'null') && typeof d.name === 'string' && d.bytes instanceof Uint8Array && d.bytes.length < 1 << 20) AC.Inspect.load(d.name, d.bytes); });
   window.ataricraft = {
     inspect: AC.Inspect, remote: AC.Remote,
     version: `${VERSION} (${BUILD})`,
@@ -4498,8 +4500,6 @@
       inject: injectRoms,
       handlers: () => Object.keys(ROM_HANDLERS),
     },
-    boot: async (o) => { if (o && o.model) $('model').value = o.model; if (o && o.tv) $('tv').value = o.tv; if (o && o.basic != null) $('basic').checked = !!o.basic; return boot(); },
-    screenshot: (o) => shot((o && o.scale) || 2, o && o.format),
     // Boots a dosboot.json record; images = {D1: Uint8Array, ...} already fetched for its media slots.
     bootRecord: async (rec, images) => {
       const m = rec.machine || {};
@@ -4521,6 +4521,8 @@
       if (ok !== false && rec.boot && rec.boot.autorun) setTimeout(() => window.ataricraft.type(rec.boot.autorun + '\r'), 3000);
       return ok;
     },
+    boot: async (o) => { if (o && o.model) $('model').value = o.model; if (o && o.tv) $('tv').value = o.tv; if (o && o.basic != null) $('basic').checked = !!o.basic; return boot(); },
+    screenshot: (o) => shot((o && o.scale) || 2, o && o.format),
     screenText: () => S.emu.screenText(),
     type: (text) => pasteText(text),
     copyText: () => S.emu.screenText(),
