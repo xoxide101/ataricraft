@@ -16,6 +16,44 @@
   const bad = (code, msg) => { throw new ContainerError(code, msg); };
   const blobInfo = (b) => ({ size: b.length, sha256: U.sha256hex(b), crc32: U.crc32(b) });
 
+  function zipStore(files) {
+    const names = [...files.keys()].sort((a, b) => (a === 'manifest.json' ? -1 : b === 'manifest.json' ? 1 : a < b ? -1 : a > b ? 1 : 0));
+    const parts = [], cen = []; let off = 0;
+    for (const name of names) {
+      const nb = U.enc(name), d = U.u8(files.get(name)), crc = U.crc32(d);
+      const lh = new Uint8Array(30), lv = new DataView(lh.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true); lv.setUint16(12, 0x21, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, d.length, true); lv.setUint32(22, d.length, true); lv.setUint16(26, nb.length, true);
+      const ch = new Uint8Array(46), cv = new DataView(ch.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(14, 0x21, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, d.length, true); cv.setUint32(24, d.length, true); cv.setUint16(28, nb.length, true); cv.setUint32(42, off, true);
+      parts.push(lh, nb, d); cen.push(ch, nb); off += 30 + nb.length + d.length;
+    }
+    const cdir = U.concat(cen), end = new Uint8Array(22), ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, names.length, true); ev.setUint16(10, names.length, true); ev.setUint32(12, cdir.length, true); ev.setUint32(16, off, true);
+    return U.concat([...parts, cdir, end]);
+  }
+
+  function unzipStored(b) {
+    let e = b.length - 22;
+    while (e >= 0 && !(b[e] === 0x50 && b[e + 1] === 0x4b && b[e + 2] === 5 && b[e + 3] === 6)) e--;
+    if (e < 0) bad('BadMagic', 'not a ZIP file (no end record)');
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), n = dv.getUint16(e + 10, true), files = new Map();
+    let p = dv.getUint32(e + 16, true);
+    for (let i = 0; i < n; i++) {
+      if (p + 46 > b.length || dv.getUint32(p, true) !== 0x02014b50) bad('Truncated', 'ZIP central directory is damaged');
+      const method = dv.getUint16(p + 10, true), crc = dv.getUint32(p + 16, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true);
+      const name = U.dec(b.subarray(p + 46, p + 46 + nl));
+      if (method !== 0) bad('Unsupported', 'ZIP entry ' + name + ' is compressed; Craft Containers use stored entries (re-save with "store" or let Craft write it)');
+      const ds = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true);
+      if (ds + csize > b.length) bad('Truncated', 'ZIP entry ' + name + ' lies outside the file');
+      const d = b.slice(ds, ds + csize);
+      if (U.crc32(d) !== crc) bad('BadChecksum', 'ZIP entry ' + name + ' fails its CRC-32');
+      files.set(name, d); p += 46 + nl + xl + cl;
+    }
+    return files;
+  }
+
   class Container {
     constructor(manifest, blobs) { this.manifest = manifest; this.blobs = blobs || new Map(); }
 
@@ -134,6 +172,12 @@
       return new Container(m, blobs);
     }
 
+    // ---- ZIP form (the normal file form, .zip): stored (uncompressed) entries, DOS date 1980-01-01 so the bytes are deterministic; opens in any unzip tool. ----
+    toZip() { return zipStore(this.toFiles()); }
+    static fromZip(bytes) { return Container.fromFiles(unzipStored(U.u8(bytes))); }
+    // Either file form: a ZIP (PK) or the compact CCNT form.
+    static open(bytes) { bytes = U.u8(bytes); return bytes[0] === 0x50 && bytes[1] === 0x4b ? Container.fromZip(bytes) : Container.parse(bytes); }
+
     // ---- folder form: {'manifest.json', 'original/<name>', 'derived/<id>'} as a Map of path -> bytes (used by the Archive lane) ----
     toFiles() {
       const f = new Map(), m = JSON.parse(JSON.stringify(this.manifest));
@@ -156,7 +200,7 @@
   // adapters: {import(bytes, opts) -> Container, export(container) -> Uint8Array}. Returns {ok, identical, firstDiff, sizeIn, sizeOut, container, exported, losses}.
   function roundTrip(adapter, bytes, opts) {
     bytes = U.u8(bytes);
-    const c = Container.parse(Container.prototype.serialize.call(adapter.import(bytes, opts))); // through the file form, as a real transfer would
+    const c = Container.open(adapter.import(bytes, opts).toZip()); // through the ZIP file form, as a real transfer would
     const out = U.u8(adapter.export(c));
     const d = U.firstDiff(bytes, out);
     return { ok: c.verify().ok && d < 0, identical: d < 0, firstDiff: d, sizeIn: bytes.length, sizeOut: out.length, container: c, exported: out, losses: c.losses() };

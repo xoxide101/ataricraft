@@ -14,7 +14,7 @@ const KEYS = ['b', 'i', 'u', 'sup', 'sub'];
 const KEYNAME = { b: 'bold', i: 'italic', u: 'underline', sup: 'superscript', sub: 'subscript' };
 
 const PROFILES = {
-  atari: { id: 'atari', name: 'Atari 8-bit (ACWriter)', cols: 64, rows: 20, docLimit: 11264, payloadMax: I.MAXPAYLOAD, pixelW: 320, pixelH: 192, pitch: 5, lineH: 8, ext: 'CWD' },
+  atari: { id: 'atari', name: 'Atari 8-bit (ACWriter)', cols: 64, rows: 20, docLimit: 11264, payloadMax: I.MAXPAYLOAD, pixelW: 320, pixelH: 192, pitch: 5, lineH: 8, ext: 'XCW' },
 };
 
 // ---- model basics ----------------------------------------------------------
@@ -186,7 +186,7 @@ function atariWarnings(paras, profile = PROFILES.atari) {
 
 // ---- formats -----------------------------------------------------------------
 const SAVE_FORMATS = [
-  { id: 'cwd', label: 'Craft document (.CWD)', ext: 'cwd', mime: 'application/octet-stream' },
+  { id: 'cwd', label: 'Craft document (.xcw)', ext: 'xcw', mime: 'application/octet-stream' },
   { id: 'text', label: 'Plain text (.txt)', ext: 'txt', mime: 'text/plain' },
   { id: 'atascii', label: 'ATASCII text (EOL $9B)', ext: 'atx', mime: 'application/octet-stream' },
   { id: 'rtf', label: 'Rich Text (.rtf)', ext: 'rtf', mime: 'application/rtf' },
@@ -195,12 +195,12 @@ const SAVE_FORMATS = [
   { id: 'docx', label: 'Word (.docx)', ext: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
 ];
 const OPEN_FORMATS = [
-  { id: 'auto', label: 'Auto-detect' }, { id: 'craft', label: 'Craft document (.CWD)' }, { id: 'text', label: 'Plain text' }, { id: 'atascii', label: 'ATASCII / AtariWriter text' },
+  { id: 'auto', label: 'Auto-detect' }, { id: 'craft', label: 'Craft document (.xcw / .cwd)' }, { id: 'text', label: 'Plain text' }, { id: 'atascii', label: 'ATASCII / AtariWriter text' },
   { id: 'rtf', label: 'Rich Text (.rtf)' }, { id: 'html', label: 'HTML' }, { id: 'md', label: 'Markdown' }, { id: 'docx', label: 'Word .docx' }, { id: 'doc', label: 'Word 97-2003 .doc (text only)' },
   { id: 'letterperfect', label: 'Letter Perfect (Atari)' }, { id: 'paperclip', label: 'PaperClip (Atari)' }, { id: 'firstxlent', label: 'First XLEnt Word Processor (Atari)' },
   { id: 'textwizard', label: 'Text Wizard (Atari)' }, { id: 'bankstreet', label: 'Bank Street Writer (Atari, text file or ATR image)' },
 ];
-const FMT_NAME = { cwd: 'CWD', text: 'plain text', atascii: 'ATASCII', rtf: 'RTF', html: 'HTML', md: 'Markdown', docx: 'DOCX' };
+const FMT_NAME = { cwd: 'XCW', text: 'plain text', atascii: 'ATASCII', rtf: 'RTF', html: 'HTML', md: 'Markdown', docx: 'DOCX' };
 
 // Importers that can only be chosen by hand: detect() returns 'text' or 'atascii' for them.
 function openDoc(buf, name, opt = {}) {
@@ -245,7 +245,7 @@ function dropReport(paras, fmt) {
   if (fmt === 'atascii' && n.nonascii) out.push(n.nonascii + ' non-ASCII character(s) become ? for ATASCII');
   if (fmt === 'cwd') {
     for (const w of atariWarnings(paras)) out.push(w);
-    out.push('font, size and line spacing are not stored in a .CWD');
+    out.push('font, size and line spacing are not stored in a .xcw');
   }
   return out;
 }

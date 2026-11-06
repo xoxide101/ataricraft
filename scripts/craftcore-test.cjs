@@ -73,6 +73,19 @@ async function main() {
   assert.throws(() => c0.addDerived('upper.txt', U.enc('x')), ContainerError);
   ok('container: deterministic file form, damage detection, verify, schema checks, folder form');
 
+  // ZIP file form (.zip with manifest.json): deterministic, stored entries, damage detected, readable as a plain zip
+  {
+    const z = c1.toZip(); assert.ok(U.equals(z, c1.toZip()), 'zip is deterministic');
+    assert.strictEqual(z[0], 0x50); assert.strictEqual(z[1], 0x4b);
+    const c2 = Container.fromZip(z); assert.ok(c2.verify().ok); assert.ok(U.equals(c2.toZip(), z), 'zip -> container -> zip is identical');
+    assert.ok(U.equals(c2.serialize(), c1.serialize()), 'same content as the CCNT form');
+    assert.ok(U.equals(Container.open(z).toZip(), z) && U.equals(Container.open(bin).serialize(), bin), 'open() takes either form');
+    assert.strictEqual(U.dec(z.subarray(30, 43)), 'manifest.json', 'manifest.json is the first entry');
+    for (const pos of [60, 200, Math.floor(z.length / 2)]) { const x = z.slice(); x[pos] ^= 1; assert.throws(() => Container.fromZip(x), ContainerError, 'zip damage at ' + pos); }
+    assert.throws(() => Container.fromZip(z.subarray(0, z.length - 40)), ContainerError);
+    ok('container: ZIP file form (stored, deterministic, CRC-checked, opens with any unzip tool)');
+  }
+
   // ---------------------------------------------------------------- round trips with real files
   const samples = {
     atr90: ['archive/blank/mydos_90K.atr', 'atr'], atr180: ['archive/blank/mydos_180K.atr', 'atr'], atrSdfs: ['archive/blank/sdfs_180K.atr', 'atr'],
@@ -137,6 +150,10 @@ async function main() {
   const ft = A.cwd.fromText('Line one\nCaf\u00e9 \u20ac5\n'); assert.strictEqual(ft.lost.length, 1);
   assert.ok(A.cwd.import(ft.bytes).losses('warn').length === 0, 'a document we write has a valid checksum');
   ok('cwd: loss report counts styles, markers, graphics, checksum; trailer kept; text -> CWD reports unmappable characters');
+  assert.ok(A.detect(cw, 'LETTER.XCW') === A.cwd && A.detect(cw, 'LETTER') === A.cwd && A.detect(Uint8Array.of(1, 2, 3), 'x.xcw') === A.cwd && A.detect(Uint8Array.of(1, 2, 3), 'x.dat') === A.raw, 'xcw/cwd detected by header, and by extension as a weak hint');
+  assert.deepStrictEqual(['xcw', 'cwd', 'xcs', 'xcd'].map((e) => A.EXTENSIONS[e].adapter), ['cwd', 'cwd', null, null], 'xcw/cwd -> Craft Word adapter; xcs/xcd reserved');
+  assert.ok(A.EXTENSIONS.xcs.status === 'reserved' && A.EXTENSIONS.xcd.status === 'reserved');
+  assert.strictEqual(A.cwd.import(cw).manifest.name, 'doc.xcw', 'default name uses .xcw');
 
   // font
   const fc = A.acf.import(rd('font/craft5.acf'), { created: FIXED });
@@ -249,6 +266,7 @@ async function main() {
   lb.handle('fs.read', () => { const e = new Error('no such file'); e.name = 'NotFound'; throw e; });
   lb.handle('fs.write', () => ({ meta: { written: true } }));
   const ls = await lb.send({ op: 'fs.list', args: { path: '/x' } }); assert.deepStrictEqual(ls.meta.value[0].name, '/x');
+  { const e1 = F.encodeReply({ ok: false, error: { name: 'NotAllowed', message: 'm', code: 4, native: 167 } }), e2 = F.encodeReply({ ok: false, error: { name: 'NotAllowed', message: 'm', code: 4 } }); assert.strictEqual(F.decodeReply(e1.type, e1.payload).error.native, 167); assert.strictEqual(F.decodeReply(e2.type, e2.payload).error.native, undefined); }
   const nf = await lb.send({ op: 'fs.read', args: { path: '/nope' } }); assert.deepStrictEqual([nf.ok, nf.error.name, nf.error.code], [false, 'NotFound', 2]);
   assert.strictEqual((await lb.send({ op: 'nothing.here' })).error.name, 'Unsupported');
   lb.handle('boom', () => { throw new Error('kaput'); }); const bm = await lb.send({ op: 'boom' }); assert.deepStrictEqual([bm.ok, bm.error.name, bm.error.message], [false, 'Error', 'kaput']);

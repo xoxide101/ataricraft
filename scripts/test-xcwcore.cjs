@@ -24,6 +24,7 @@ const rejoin = (ps) => X.normalize(ps).map((p) => ({ ...p, runs: p.runs })); // 
 // CWD: model -> file -> model -> file is byte-identical, styles preserved
 const doc = sample();
 const cwd = X.save(doc, 'cwd').bytes;
+assert.strictEqual(X.save(doc, 'cwd').ext, 'xcw', 'Craft Word saves as .xcw');
 const back = X.openDoc(cwd, 'a.cwd');
 assert.strictEqual(back.format, 'craft');
 assert.deepStrictEqual(X.save(back.paras, 'cwd').bytes, cwd);

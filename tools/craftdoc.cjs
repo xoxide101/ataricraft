@@ -1,5 +1,5 @@
 // Reference reader for Craft documents (docs/CRAFT-FORMAT.md).
-// Usage: node tools/craftdoc.cjs FILE.CWD [--text | --json]
+// Usage: node tools/craftdoc.cjs FILE.XCW [--text | --json]
 // Validates the header and checksum, then prints the plain text (default), or the parsed header and paragraphs as JSON.
 const fs = require('fs');
 
@@ -40,7 +40,7 @@ function paragraphs(payload) {
 
 if (require.main === module) {
   const [file, mode] = process.argv.slice(2);
-  if (!file) { console.error('usage: node tools/craftdoc.cjs FILE.CWD [--text|--json]'); process.exit(2); }
+  if (!file) { console.error('usage: node tools/craftdoc.cjs FILE.XCW [--text|--json]'); process.exit(2); }
   const { h, payload } = parse(fs.readFileSync(file));
   if (!h.checksumOk) console.error('warning: checksum mismatch');
   const ps = paragraphs(payload);

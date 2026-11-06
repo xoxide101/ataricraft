@@ -117,11 +117,11 @@
   }
   const cwd = {
     name: 'cwd',
-    detect: (b, n) => (b.length >= 16 && U.dec(b.subarray(0, 4)) === 'CRFT' ? 0.95 : ext(n) === 'cwd' ? 0.3 : 0),
+    detect: (b, n) => (b.length >= 16 && U.dec(b.subarray(0, 4)) === 'CRFT' ? 0.95 : /^(xcw|cwd)$/.test(ext(n)) ? 0.3 : 0),
     import(bytes, o) {
       o = o || {}; bytes = U.u8(bytes);
       const p = cwdParse(bytes);
-      const c = make('doc.cwd', o.name || 'doc.cwd', bytes, Object.assign({ mediaType: 'application/x-craft-word' }, o));
+      const c = make('doc.cwd', o.name || 'doc.xcw', bytes, Object.assign({ mediaType: 'application/x-craft-word' }, o));
       c.addDerived('header.json', jbytes(p.h), { kind: 'craft.header', mediaType: 'application/json', from: 'original', tool: 'cwd-import' });
       c.addDerived('payload.bin', p.payload, { kind: 'craft.payload', from: 'original', tool: 'cwd-import' });
       if (p.trailer.length) c.addDerived('trailer.bin', p.trailer, { kind: 'craft.trailer', from: 'original', tool: 'cwd-import' });
@@ -155,7 +155,7 @@
   // ------------------------------------------------------------------ ACF2 (docs/FONT.md)
   const acf = {
     name: 'acf',
-    detect: (b, n) => (b.length >= 4 && U.dec(b.subarray(0, 4)) === 'ACF2' ? 0.95 : ext(n) === 'acf' ? 0.3 : 0),
+    detect: (b, n) => (b.length >= 4 && U.dec(b.subarray(0, 4)) === 'ACF2' ? 0.95 : /^(acf|xcf)$/.test(ext(n)) ? 0.3 : 0),
     import(bytes, o) {
       o = o || {}; bytes = U.u8(bytes);
       if (!FONT) throw new Error('tools/craftfont.cjs is not available');
@@ -170,11 +170,21 @@
   };
 
   const ADAPTERS = { atr, cwd, acf, raw };
+  // Craft file extensions (docs/FILE-EXTENSIONS.md). The adapter id 'cwd' (container type) is the Craft Word adapter; .xcw is its name, .cwd the legacy alias.
+  // xcs and xcd are reserved: no adapter yet, so detection falls back to raw.
+  const EXTENSIONS = {
+    xcw: { adapter: 'cwd', kind: 'word', status: 'implemented', description: 'Craft Word document' },
+    cwd: { adapter: 'cwd', kind: 'word', status: 'legacy alias of xcw', description: 'Craft Word document (old name, still read)' },
+    xcs: { adapter: null, kind: 'spreadsheet', status: 'reserved', description: 'Craft spreadsheet' },
+    xcd: { adapter: null, kind: 'database', status: 'reserved', description: 'Craft database' },
+    acf: { adapter: 'acf', kind: 'font', status: 'implemented', description: 'Craft font (ACF2)' },
+    xcf: { adapter: 'acf', kind: 'font', status: 'implemented', description: 'Craft font (same format as .acf)' },
+  };
   // best adapter for these bytes (never null: raw is the fallback)
   const detect = (bytes, filename) => {
     bytes = U.u8(bytes); let best = raw, s = raw.detect();
     for (const a of Object.values(ADAPTERS)) { if (a === acf && !FONT) continue; const v = a.detect(bytes, filename); if (v > s) { best = a; s = v; } }
     return best;
   };
-  return { ADAPTERS, detect, atr, cwd, acf, raw, cwdText };
+  return { ADAPTERS, EXTENSIONS, detect, atr, cwd, acf, raw, cwdText };
 });
