@@ -1,0 +1,66 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 1330 >>
+stream
+BT /F1 28 Tf 72 720 Td (Ataricraft PDF test, page 1) Tj ET
+BT /F2 12 Tf 72 690 Td (High resolution rendering: this line is set in Times at twelve points.) Tj ET
+BT /F1 6 Tf 72 670 Td (Tiny six point text for HiDPI checks: the quick brown fox jumps over the lazy dog 0123456789) Tj ET
+BT /F1 12 Tf 72 640 Td (Atari 8-bit computers have a 6502 CPU, ANTIC, GTIA and POKEY.) Tj ET
+0 0 0 RG 2 w 72 500 m 300 500 l S 0.8 0 0 rg 72 380 120 80 re f 0 0.4 0.9 rg 220 380 120 80 re f 0 0 0 RG 0.25 w 72 300 m 340 300 l S 72 301 m 340 301 l S 72 302 m 340 302 l S 72 303 m 340 303 l S 72 304 m 340 304 l S 72 305 m 340 305 l S 72 306 m 340 306 l S 72 307 m 340 307 l S 72 308 m 340 308 l S 72 309 m 340 309 l S 72 310 m 340 310 l S 72 311 m 340 311 l S 72 312 m 340 312 l S 72 313 m 340 313 l S 72 314 m 340 314 l S 72 315 m 340 315 l S 72 316 m 340 316 l S 72 317 m 340 317 l S 72 318 m 340 318 l S 72 319 m 340 319 l S 72 320 m 340 320 l S 72 321 m 340 321 l S 72 322 m 340 322 l S 72 323 m 340 323 l S 72 324 m 340 324 l S 72 325 m 340 325 l S 72 326 m 340 326 l S 72 327 m 340 327 l S 72 328 m 340 328 l S 72 329 m 340 329 l S 72 330 m 340 330 l S 72 331 m 340 331 l S 72 332 m 340 332 l S 72 333 m 340 333 l S 72 334 m 340 334 l S 72 335 m 340 335 l S 72 336 m 340 336 l S 72 337 m 340 337 l S 72 338 m 340 338 l S 72 339 m 340 339 l S
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 188 >>
+stream
+BT /F1 28 Tf 72 720 Td (Page 2: search target) Tj ET
+BT /F2 12 Tf 72 690 Td (The word Zanzibar appears once on this page.) Tj ET
+BT /F2 12 Tf 72 670 Td (And POKEY appears here too.) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 560 >>
+stream
+BT /F1 28 Tf 72 720 Td (Page 3) Tj ET
+BT /F2 12 Tf 72 690 Td (Last page. Atari again: ANTIC and GTIA.) Tj ET
+0 0 0 RG 1 w 456 400 m 306 400 l S 435.9038105676658 475 m 306 400 l S 381 529.9038105676658 m 306 400 l S 306 550 m 306 400 l S 231.00000000000003 529.9038105676658 m 306 400 l S 176.0961894323342 475 m 306 400 l S 156 400 m 306 400 l S 176.09618943233417 325.00000000000006 m 306 400 l S 230.99999999999994 270.0961894323342 m 306 400 l S 306 250 m 306 400 l S 381 270.0961894323342 m 306 400 l S 435.90381056766574 324.99999999999994 m 306 400 l S
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000197 00000 n 
+0000000269 00000 n 
+0000000405 00000 n 
+0000001786 00000 n 
+0000001922 00000 n 
+0000002160 00000 n 
+0000002297 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+2908
+%%EOF

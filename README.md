@@ -216,3 +216,6 @@ The library folders may sit directly in `web/` beside `index.html` (software/, r
 
 ## RAM bank test
 The **RAM bank test** box runs a 6502 program (built in `js/memtest.js`) on the emulated Atari. It walks every PORTB bank-select combination, counts the real 16 KB banks (130XE 4, Rambo/Compy 16, 576K 32, 1088K 64), then fills and verifies every bank with an address/bank pattern and its inverse. It reboots the machine into the test; press Reset afterwards. $5000-$57FF is skipped (Self-Test ROM).
+
+
+See [docs/TOOLS.md](docs/TOOLS.md) for the index of all tools, [docs/PDFVIEW.md](docs/PDFVIEW.md) for the PDF viewer.
