@@ -4547,6 +4547,11 @@
     peek: (a, l) => S.emu.peek(a, l), poke: (a, b) => S.emu.poke(a, b),
     readDisk: (n) => fsBytes(n),
     mountDisk: (n, name, bytes) => S.emu.mountDisk(n, name, bytes), bootFile: (name, bytes) => AC.Inspect.load(name, bytes),
+    // used by FujiNet Explorer (web/js/fxhost.js): same effect as inserting a disk with the drive buttons
+    fxMount: (n, name, bytes) => { if (!S.emu || !S.emu.mountDisk(n, name, bytes)) return false; S.disks[n] = { name, bytes }; S.dirty[n] = false; S.pend[n] = false; $('d' + n).textContent = name; return true; },
+    fxEject: (n) => { if (!S.emu) return false; S.emu.ejectDisk(n); if (S.emu.diskPaths) delete S.emu.diskPaths[n]; delete S.disks[n]; delete S.dirty[n]; delete S.pend[n]; $('d' + n).textContent = 'empty'; $('f' + n).value = ''; return true; },
+    fxMove: (from, to) => { moveDisk(from, to); return true; },
+    fxDisks: () => [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ drive: n, name: S.disks[n] ? S.disks[n].name : '', size: S.disks[n] ? S.disks[n].bytes.length : 0 })),
     insertCart: (slot, name, bytes) => S.emu.insertCart(slot, name, bytes), cartTypes: (kb) => S.emu.cartTypes(kb),
     setCartType: (slot, t) => S.emu.setCartType(slot, t), ejectCart: (slot) => S.emu.ejectCart(slot), ejectDisk: (n) => S.emu.ejectDisk(n),
     snapshot: () => S.emu.snapshot(), restore: (s) => { S.emu.restore(s); draw(); },

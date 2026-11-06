@@ -13,6 +13,7 @@ Every tool in this repository, with a page that explains what it does, how to us
 | [Disk and library](tools/disk-library.md) | lsdisk, imgtool, libscan, DB builders, apt, dospack, bankmon, xexboot, afm, tui |
 | [Craft and documents](tools/craft-tools.md) | Craft format tools, fonts, dictionaries, importers, web apps |
 | Existing | [Workbench](WORKBENCH.md), [Inspect](INSPECT.md), [FujiNet](FUJINET.md), [DOS boot](DOSBOOT.md), [Fonts](FONT.md), [Import](IMPORT.md), [xCWriter](XCWRITER.md), [EBookCraft](EBOOKCRAFT.md) |
+| [FujiNet Explorer](FUJIEXPLORER.md) | `web/fujiexplorer.html`: browse TNFS/SD/FTP/PC folders, disk images, drives D1-D8, N:, P:, settings, DOS boot, without booting an Atari; [Transport layer](TRANSPORT.md) |
 
 ## Conventions
 
