@@ -22,6 +22,7 @@ const DERIVED = [
   { step: 'acwriter', files: ['tools/acwriter/craft4.inc', 'tools/acwriter/craft5.inc', 'tools/acwriter/craft6.inc', 'tools/acwriter/zfont.inc', 'tools/acwriter/craftpg.inc', 'tools/acwriter/craftpg_a.inc', 'tools/acwriter/craftpg_b.inc', 'web/js/fontedit/builtin-fonts.js', 'tools/acwriter/poc5.lst'], tracked: true, from: 'tools/acwriter/mk*.cjs, then font/build/*.inc overlay' },
   { step: 'acwriter', files: ['tools/acwriter/poc5.xex'], tracked: false, from: 'MADS (out/mads/mads.exe) on tools/acwriter/poc5.asm' },
   { step: 'acwriter', files: ['web/library/fonts/craft'], tracked: false, from: 'tools/acwriter/mkcraftfonts.cjs' },
+  { step: 'xccalc', files: ['web/js/xccalc/core/xcc-core.js', 'web/js/xccalc/core/xcc-data.js'], tracked: true, from: 'tools/calccore.cjs, tools/xccalc/*.cjs (bundle list in sync-xccalc-core.cjs), tools/acwriter/font4.json' },
 ];
 // Hand-editable in place: created when missing, never overwritten, only validated.
 const IN_PLACE = ['font/craft8.fnt', 'font/craft10.acf', 'font/craft12.acf', 'font/craft4.acf', 'font/craft5.acf', 'font/craft6.acf'];
@@ -81,6 +82,7 @@ function validateOverrides() {
 
 function build() {
   step('xcwriter bundle', 'scripts/sync-xcwriter-core.cjs');
+  step('xccalc bundle', 'scripts/sync-xccalc-core.cjs');
   validateOverrides();
   const rawFaces = !fail.length && step('craft faces (font/*.acf created when missing)', 'scripts/mkcraftfaces.cjs');
   void rawFaces;

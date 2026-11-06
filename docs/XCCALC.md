@@ -78,3 +78,18 @@ Every importer and exporter returns a loss report of `{code, severity, count, de
 * `node scripts/calc-engine-test.cjs`: 63 engine checks (functions, deps, cycles, BCD).
 * `node scripts/calc-format-test.cjs`: 36 checks (binary and JSON round trips in both modes, damage detection, CSV, XLSX, ODS, HTML, adapter).
 * `node scripts/calc-excel-test.cjs`: drives real Excel through COM. 86 formulas give the same result in Excel; an Excel-saved workbook imports and recalculates to Excel's values; formats and styles agree. Skips when Excel is missing.
+
+## Web app
+
+web/xccalc.html is the browser spreadsheet, styled like xCWriter. Open it from the home page (xCCalc tab) or directly.
+
+* Grid: canvas with virtual scrolling (65536 rows, 256 columns), formula bar, name box (cell, range or defined name), shift/drag selection, whole row/column selection, column resize (double-click the edge to fit), Ctrl+arrow jumps, fill down/right (Ctrl+D / Ctrl+R), undo/redo, bold/italic/underline, alignment, number formats, sheet tabs.
+* Clipboard: copy/cut/paste as tab-separated text, so Excel ranges paste straight in.
+* Charts: bar, line and pie from a selected range, drawn in 1 bit (320x192) with hatch fills; the PNG button exports a 1-bit PNG at 960x576. Charts are stored in the .xcs.
+* Atari view: the sheet drawn at 320x192 with 64 columns of 5-pixel characters and the ACWriter 4x7 font, plus a report of what would not fit (sheets over 4, cells over 65535, .xcs over 65535 bytes, rows over 255, functions ACCalc lacks, non-Latin-1 text, IEEE versus BCD). The screen geometry is an assumption until ACCalc is specified.
+* Files: open and save .xcs, CSV, TSV, XLSX, ODS; export HTML. Opening and saving show the loss report.
+* Right-click menu: cut, copy, paste, clear, fill, style, charts, Clear undo history and Clear history (recent list, save format, undo; open documents and settings stay).
+* Bundle: 
+ode scripts/sync-xccalc-core.cjs builds web/js/xccalc/core/xcc-core.js and xcc-data.js from the engine (--check verifies; scripts/build-all.cjs runs it).
+* Test: 
+ode scripts/xccalc-test.cjs (Playwright and Chrome; uses out/xccalc/excel-saved.xlsx from the Excel test when present); screenshots go to out/xccalc/web-*.png.

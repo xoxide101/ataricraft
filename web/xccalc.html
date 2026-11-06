@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>xCCalc - eXtreme Craft Calc</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<style>
+  :root{--bg:#1e2128;--bar:#14161a;--panel:#181b21;--line:#3a4150;--fg:#d8dce4;--dim:#8a93a3;--acc:#ff9d3a}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,'Segoe UI',sans-serif;display:flex;flex-direction:column}
+  header{background:var(--bar);padding:6px 14px;display:flex;gap:14px;align-items:center;flex:none}
+  header .logo{font-weight:700;font-size:18px;letter-spacing:.5px;color:var(--acc);cursor:pointer;white-space:nowrap}
+  header .logo i{color:#fff;font-style:normal}
+  header .docname{color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .docname b{color:var(--fg);font-weight:600}
+  button,select,input[type=text],input[type=number]{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:4px 10px;font:inherit}
+  button{cursor:pointer}button:hover{border-color:#5a6478}
+  button.on{background:var(--acc);color:#111;border-color:var(--acc)}
+  button:disabled{opacity:.4;cursor:default}
+  select{padding:4px 6px}
+  .seg{display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .seg button{border:0;border-radius:0;padding:5px 12px}
+  .seg button+button{border-left:1px solid var(--line)}
+  #toolbar{background:var(--panel);padding:6px 14px;display:none;gap:6px;align-items:center;flex-wrap:wrap;flex:none;border-bottom:1px solid #0c0d10}
+  body.s-editor #toolbar{display:flex}
+  #toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  #toolbar button{min-width:30px;padding:4px 8px}
+  #toolbar .tface{display:inline-flex;gap:6px;align-items:center;color:var(--dim);font-size:12px}
+  #fbarrow{display:none;background:var(--panel);padding:4px 14px;gap:8px;align-items:center;flex:none;border-bottom:1px solid #0c0d10}
+  body.s-editor.m-sheet #fbarrow{display:flex}
+  #namebox{width:84px;text-align:center}
+  #fx{color:var(--acc);font-style:italic;font-family:Georgia,serif}
+  #fbar{flex:1;font-family:Consolas,monospace}
+  .screen{display:none;flex:1;min-height:0}
+  body.s-home #home,body.s-help #help{display:block;overflow:auto}
+  body.s-editor #editor{display:flex;flex-direction:column}
+  #home{padding:40px 20px}
+  .hero{max-width:860px;margin:0 auto}
+  .hero h1{font-size:54px;margin:0;letter-spacing:1px}
+  .hero h1 b{color:var(--acc)}.hero h1 span{color:#fff}
+  .hero .tag{color:var(--dim);margin:2px 0 22px;font-size:16px}
+  .hero .acts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px}
+  .hero .acts button{padding:10px 20px;font-size:15px}
+  .hero .acts button.p{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  .hero h3{margin:18px 0 8px;color:var(--dim);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:1px}
+  #recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+  #recent .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+  #recent .card:hover{border-color:var(--acc)}
+  #recent .card b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #recent .card small,.dim{color:var(--dim)}
+  .drop{border:2px dashed #4a5160;border-radius:8px;padding:16px;text-align:center;color:var(--dim);margin-top:22px}
+  body.dragging{outline:3px dashed var(--acc);outline-offset:-6px}
+  #stage{flex:1;min-height:0;display:flex;background:#2b2f38;position:relative}
+  #gwrap{flex:1;min-width:0;position:relative;display:flex;flex-direction:column}
+  body.m-atari #gwrap,body.m-sheet #atwrap{display:none}
+  #gscroll{flex:1;min-height:0;overflow:auto;position:relative;background:#fff}
+  #gsizer{position:relative}
+  #gcanvas{position:sticky;top:0;left:0;display:block;outline:none;cursor:cell}
+  #ced{position:absolute;display:none;z-index:5;border:2px solid var(--acc);border-radius:0;background:#fff;color:#111;padding:0 3px;font-family:inherit;outline:none;margin:0}
+  #atwrap{flex:1;min-width:0;padding:16px;overflow:auto;display:flex;gap:16px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+  #atcanvas{width:800px;height:480px;image-rendering:pixelated;background:#000;display:block;border:6px solid #111;border-radius:10px;max-width:100%;outline:none}
+  #atside{width:320px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:13px}
+  #atside h4{margin:0 0 6px;color:var(--acc);font-size:13px;text-transform:uppercase;letter-spacing:1px}
+  .meter{height:14px;background:#0d0f12;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin:4px 0}
+  .meter i{display:block;height:100%;background:#4bbf6b}.meter.warn i{background:#e0a030}.meter.over i{background:#e5483c}
+  #warns{margin:8px 0 0;padding-left:16px;color:#f0c070}#warns:empty::before{content:'No warnings: ACCalc will open this as it is.';color:#7fd08a;margin-left:-16px}
+  #chpanel{width:360px;flex:none;background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:10px;display:none}
+  body.charts #chpanel{display:block}
+  body.m-atari #chpanel{display:none}
+  #chpanel h4{margin:0 0 8px;color:var(--acc);font-size:13px;text-transform:uppercase;letter-spacing:1px}
+  .chart{background:#111;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:12px}
+  .chart canvas{width:100%;image-rendering:pixelated;display:block;background:#fff}
+  .chart .row{display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap}
+  .chart .row b{flex:1;min-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #tabsbar{background:var(--bar);display:none;gap:2px;align-items:flex-end;padding:0 10px;flex:none;border-top:1px solid #0c0d10;min-height:30px}
+  body.s-editor #tabsbar{display:flex}
+  #tabs{display:flex;gap:2px;overflow-x:auto}
+  .chbox{margin-bottom:12px;border:1px solid var(--line);border-radius:6px;padding:6px}.chimg{width:100%;image-rendering:pixelated;background:#fff;display:block;margin-top:6px}.chbar button{margin-left:4px}.muted{color:var(--dim);font-size:12px}
+.rec{padding:6px 10px;cursor:pointer;border-radius:4px}.rec:hover{background:#232730}
+#meter{height:8px;background:#232730;border-radius:4px;overflow:hidden}#meter div{height:100%;background:var(--acc)}#warns{color:#f0c070;font-size:13px}#warns .ok{color:#7fd08a;list-style:none}
+.tab{padding:5px 14px;background:#232730;border:1px solid var(--line);border-top:0;border-radius:0 0 6px 6px;cursor:pointer;white-space:nowrap;color:var(--dim)}
+  .tab.on{background:#2b2f38;color:var(--fg);border-color:var(--acc);border-top:2px solid var(--acc)}
+  #tabadd{border-radius:50%;padding:0 8px;margin:3px 6px}
+  #status{background:var(--bar);color:var(--dim);padding:4px 14px;display:flex;gap:18px;flex:none;font-size:12px}
+  #status b{color:var(--fg);font-weight:500}
+  #status .sp{flex:1}
+  #help{padding:30px 20px}#help .doc{max-width:820px;margin:0 auto;line-height:1.55}
+  #help h2{color:var(--acc)}#help h3{margin-top:22px}#help code,#help kbd{background:#0d0f12;border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px Consolas,monospace}
+  #help table{border-collapse:collapse}#help td,#help th{border:1px solid var(--line);padding:4px 10px;text-align:left}
+  #modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
+  #modal.on{display:flex}
+  .dlg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;width:min(560px,94vw);max-height:90vh;overflow:auto}
+  .dlg h3{margin:0 0 12px;color:var(--acc)}
+  .dlg label{display:block;margin:10px 0 4px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .dlg select,.dlg input[type=text],.dlg input[type=number]{width:100%}
+  .dlg .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  .dlg ul.rep{margin:10px 0 0;padding-left:18px;color:#f0c070;font-size:13px}
+  .dlg ul.rep.none{color:#7fd08a;list-style:none;padding:0}
+  #ctx{position:fixed;background:#1b1e25;border:1px solid var(--line);border-radius:6px;padding:4px 0;min-width:190px;z-index:60;display:none;box-shadow:0 6px 20px #000a}
+  #ctx div{padding:5px 14px;cursor:pointer}#ctx div:hover{background:var(--acc);color:#111}#ctx hr{border:0;border-top:1px solid var(--line);margin:3px 0}#ctx .dis{color:var(--dim);cursor:default}#ctx .dis:hover{background:none;color:var(--dim)}
+  #toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#000d;color:#fff;padding:8px 16px;border-radius:8px;display:none;z-index:70;max-width:80vw}
+</style>
+</head>
+<body class="s-home m-sheet">
+<header>
+  <span class="logo" id="logo" title="Home">x<i>CCalc</i></span>
+  <span class="docname" id="docname"></span>
+  <div class="seg" id="modeseg" title="Spreadsheet: the full grid. Atari view: what ACCalc shows at 320x192 and what will not fit.">
+    <button id="msh" class="on">Spreadsheet</button><button id="mat">Atari view</button>
+  </div>
+  <button id="bhome">Home</button><button id="bopen">Open</button><button id="bsave">Save</button><button id="bhelp">Help</button>
+</header>
+
+<div id="toolbar">
+  <button id="tb-b" title="Bold (Ctrl+B)"><b>B</b></button><button id="tb-i" title="Italic (Ctrl+I)"><i>I</i></button><button id="tb-u" title="Underline (Ctrl+U)"><u>U</u></button>
+  <span class="sep"></span>
+  <button id="tb-al" title="Align left">L</button><button id="tb-ac" title="Centre">C</button><button id="tb-ar" title="Align right">R</button><button id="tb-aa" title="Automatic alignment (numbers right, text left)">Auto</button>
+  <span class="sep"></span>
+  <select id="numfmt" title="Number format"></select>
+  <span class="sep"></span>
+  <button id="tb-undo" title="Undo (Ctrl+Z)">&#8630;</button><button id="tb-redo" title="Redo (Ctrl+Y)">&#8631;</button>
+  <button id="tb-fd" title="Fill down (Ctrl+D)">Fill &darr;</button><button id="tb-fr" title="Fill right (Ctrl+R)">Fill &rarr;</button>
+  <span class="sep"></span>
+  <button id="tb-chart" title="Insert a chart from the selected cells">Chart</button><button id="tb-charts" title="Show or hide the charts panel">Charts</button>
+  <span class="sep"></span>
+  <label class="tface" title="Number mode stored in the file. BCD is the Atari 6-byte format (10 digits, 1E-99..1E+98)">Numbers <select id="nummode"><option value="ieee">IEEE double</option><option value="bcd">Atari BCD</option></select></label>
+  <label class="tface">Font <select id="fontsel" title="Grid font (system fonts and Craft fonts)"></select></label>
+  <select id="sizesel" title="Grid text size"></select>
+</div>
+<div id="fbarrow"><input type="text" id="namebox" title="Cell, or type a range / defined name and press Enter" spellcheck="false"><span id="fx">fx</span><input type="text" id="fbar" spellcheck="false" autocomplete="off"></div>
+
+<section class="screen" id="home">
+  <div class="hero">
+    <h1><b>x</b><span>CCalc</span></h1>
+    <div class="tag">xCCalc &ndash; eXtreme Craft Calc. One spreadsheet for every Craft machine; ACCalc opens what you save here. Works offline; nothing leaves this page.</div>
+    <div class="acts"><button class="p" id="hnew">New spreadsheet</button><button id="hopen">Open&hellip;</button><button id="hdemo">Open the demo</button><button id="hhelp">Help</button></div>
+    <h3>Recent spreadsheets</h3>
+    <div id="recent"></div>
+    <div class="drop">Drop a file anywhere: .XCS, CSV, TSV, text, Excel .xlsx, OpenDocument .ods</div>
+  </div>
+</section>
+
+<section class="screen" id="editor">
+  <div id="stage">
+    <div id="gwrap">
+      <div id="gscroll"><div id="gsizer"><canvas id="gcanvas" tabindex="0"></canvas></div><input type="text" id="ced" spellcheck="false" autocomplete="off"></div>
+    </div>
+    <div id="atwrap">
+      <canvas id="atcanvas" width="320" height="192" tabindex="0"></canvas>
+      <div id="atside">
+        <h4>Fits in ACCalc</h4>
+        <div id="fittext"></div><div class="meter" id="meter"><i></i></div>
+        <div class="dim">320x192 1-bit screen, ACWriter 4x7 font at a 5 px pitch (64 columns, 24 lines). Arrow keys move the cursor.</div>
+        <h4 style="margin-top:14px">Warnings</h4><ul id="warns"></ul>
+      </div>
+    </div>
+    <div id="chpanel"><h4>Charts</h4><div id="chlist"></div></div>
+  </div>
+</section>
+
+<section class="screen" id="help"><div class="doc" id="helpdoc"></div></section>
+
+<div id="tabsbar"><div id="tabs"></div><button id="tabadd" title="Add a sheet">+</button></div>
+<div id="status"><span id="st-sel"></span><span id="st-sum"></span><span class="sp"></span><span id="st-mode"></span></div>
+<div id="modal"><div class="dlg" id="dlg"></div></div>
+<div id="ctx"></div>
+<div id="toast"></div>
+<input type="file" id="filein" multiple style="display:none">
+
+<script src="js/xccalc/core/xcc-data.js"></script>
+<script src="js/xccalc/core/xcc-core.js"></script>
+<script src="js/xcwriter/core/xcw-core.js"></script>
+<script src="js/xcwriter/faces.js"></script>
+<script src="js/xccalc/app.js"></script>
+<script src="js/xccalc/grid.js"></script>
+<script src="js/xccalc/views.js"></script>
+<script src="js/xccalc/boot.js"></script>
+</body>
+</html>
