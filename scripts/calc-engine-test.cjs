@@ -1,0 +1,54 @@
+'use strict';
+// Engine tests: node scripts/calc-engine-test.cjs
+const C = require('../tools/calccore.cjs');
+let fail = 0, n = 0;
+const eq = (a, b, m) => { n++; const A = C.isErr(a) ? a.err : a; if (A !== b && !(typeof A === 'number' && typeof b === 'number' && Math.abs(A - b) < 1e-9)) { fail++; console.log('FAIL', m, 'got', A, 'want', b); } };
+function sheet(mode) { const w = new C.Workbook({ mode }); return w; }
+const w = sheet('ieee');
+const put = (ref, t) => w.input(0, ref, t);
+const val = (ref) => w.getA1(0, ref);
+put('A1', '1'); put('A2', '2'); put('A3', '3'); put('A4', '=SUM(A1:A3)'); put('B1', '=A4*2');
+eq(val('A4'), 6, 'sum'); eq(val('B1'), 12, 'dep');
+put('A1', '10'); eq(val('A4'), 15, 'incremental'); eq(val('B1'), 30, 'chain');
+put('C1', '=C2'); put('C2', '=C1'); eq(val('C1'), '#CIRC!', 'cycle'); put('C2', '5'); eq(val('C1'), 5, 'cycle broken');
+put('D1', '=1/0'); eq(val('D1'), '#DIV/0!', 'div0'); put('D2', '=IFERROR(D1,7)'); eq(val('D2'), 7, 'iferror');
+put('E1', '=IF(A1>5,"big","small")'); eq(val('E1'), 'big', 'if');
+put('E2', '="a"&"b"&1'); eq(val('E2'), 'ab1', 'concat');
+put('E3', '=LEFT("hello",2)&RIGHT("hello",3)&MID("hello",2,2)'); eq(val('E3'), 'hello'.slice(0, 2) + 'llo' + 'el', 'strfn');
+put('F1', '=ROUND(2.345,2)'); eq(val('F1'), 2.35, 'round');
+put('F2', '=-2^2'); eq(val('F2'), 4, 'unary pow'); put('F3', '=50%+1'); eq(val('F3'), 1.5, 'pct');
+put('G1', 'a'); put('G2', 'b'); put('G3', 'c'); put('H1', '1'); put('H2', '2'); put('H3', '3');
+put('I1', '=VLOOKUP("b",G1:H3,2,FALSE)'); eq(val('I1'), 2, 'vlookup');
+put('I2', '=INDEX(H1:H3,MATCH("c",G1:G3,0))'); eq(val('I2'), 3, 'index/match');
+put('I3', '=HLOOKUP(2,A1:C2,2)'); put('I4', '=SUMIF(H1:H3,">1")'); eq(val('I4'), 5, 'sumif'); put('I5', '=COUNTIF(G1:G3,"b")'); eq(val('I5'), 1, 'countif');
+put('J1', '=Sheet2!A1'); eq(val('J1'), '#REF!', 'bad sheet');
+w.addSheet('Data'); w.input(1, 'A1', '42'); put('J1', '=Data!A1+1'); eq(val('J1'), 43, 'xsheet'); w.input(1, 'A1', '1'); eq(val('J1'), 2, 'xsheet incr');
+w.setName('total', 'Sheet1!A4'); put('K1', '=total*2'); eq(val('K1'), 2 * 15 * 1 === 30 ? 30 : 0, 'name'); put('A2', '5'); eq(val('K1'), (10 + 5 + 3) * 2, 'name dep');
+eq(C.shiftFormula('SUM(A1:B2)+$C$3+Data!D4', 1, 2), 'SUM(C2:D3)+$C$3+Data!F5', 'shift');
+put('L1', '12%'); eq(val('L1'), 0.12, 'pct input'); eq(w.display(0, 0, 11), '12%', 'pct disp');
+put('L2', '$1,234.5'); eq(w.display(0, 1, 11), '$1,234.50', 'currency');
+put('L3', '2026-11-06'); eq(w.display(0, 2, 11), '2026-11-06', 'date');
+eq(C.fmtNumber(1234567.891, '#,##0.00'), '1,234,567.89', 'fmt'); eq(C.fmtNumber(-0.5, '0.0%'), '-50.0%', 'fmt neg pct'); eq(C.fmtNumber(12345, '0.00E+00'), '1.23E+04', 'sci');
+eq(C.fmtNumber(46000.5, 'yyyy-mm-dd hh:mm'), '2025-12-09 12:00', 'datetime');
+put('M1', '=TEXT(3.14159,"0.00")'); eq(val('M1'), '3.14', 'TEXT');
+// incremental: a long chain recalculates without recursion issues and only dirty cells
+const big = sheet('ieee'); big.batch(() => { big.input(0, 'A1', '1'); for (let r = 1; r < 5000; r++) big.input(0, 'A' + (r + 1), '=A' + r + '+1'); });
+eq(big.getA1(0, 'A5000'), 5000, 'chain 5000'); big.stats.evaluated = 0; big.input(0, 'A1', '2'); eq(big.getA1(0, 'A5000'), 5001, 'chain recalc');
+let ev1 = big.stats.evaluated; big.input(0, 'A4999', '=1'); eq(big.stats.evaluated - ev1 <= 2 + 1, true, 'dirty only dependents');
+// BCD mode
+const b = sheet('bcd'); const bp = (r, t) => b.input(0, r, t);
+bp('A1', '0.1'); bp('A2', '0.2'); bp('A3', '=A1+A2'); eq(b.getA1(0, 'A3'), 0.3, 'bcd exact 0.1+0.2'); eq(w.getA1(0, 'A3') !== undefined, true, 'x');
+bp('B1', '=1/3'); eq(b.getA1(0, 'B1'), 0.3333333333, 'bcd 1/3 (10 digits at odd exponent)');
+bp('B2', '=2/3'); eq(b.getA1(0, 'B2'), 0.6666666667, 'bcd 2/3');
+bp('B3', '=1/3*3'); eq(b.getA1(0, 'B3'), 1, 'bcd 1/3*3');
+bp('B4', '=123456789012'); eq(b.getA1(0, 'B4'), 123456789000, 'bcd 12 digits -> 10');
+bp('B5', '=100000000/3'); eq(b.getA1(0, 'B5'), 33333333.33, 'bcd even-exponent 9 digits');
+bp('B6', '=1E98'); eq(b.getA1(0, 'B6'), '#NUM!', 'bcd overflow'); bp('B7', '=1E-100'); eq(b.getA1(0, 'B7'), 0, 'bcd underflow');
+bp('B8', '=SUM(A1:A2)'); eq(b.getA1(0, 'B8'), 0.3, 'bcd sum');
+bp('B9', '=2^10'); eq(b.getA1(0, 'B9'), 1024, 'bcd pow');
+const hex = (x) => Buffer.from(C.bcdEncode(x)).toString('hex');
+eq(hex(1), '400100000000', 'bcd bytes 1'); eq(hex(10), '401000000000', 'bcd bytes 10'); eq(hex(100), '410100000000', 'bcd bytes 100');
+eq(hex(0.5), '3f5000000000', 'bcd bytes .5'); eq(hex(-1), 'c00100000000', 'bcd bytes -1'); eq(hex(0.1), '3f1000000000', 'bcd bytes .1'); eq(hex(3.14159265), '400314159265', 'bcd bytes pi');
+for (const x of [1, 10, 0.5, -123.456, 1e50, 9.99999999e97, 1e-99, 33333333.33, 0.3333333333]) eq(C.bcdDecode(C.bcdEncode(x)), x, 'bcd roundtrip ' + x);
+console.log(fail ? fail + ' of ' + n + ' FAILED' : 'ok ' + n + ' checks');
+process.exit(fail ? 1 : 0);
