@@ -17,7 +17,7 @@
     st.slot = f.map[65] === undefined ? 65 : f.map[65];
     $('name').value = f.name; $('supup').value = f.supUp; $('subdn').value = f.subDown;
     $('upslot').value = f.map[65]; $('lowslot').value = f.map[97];
-    sizeCanvases(); renderAll(); refreshFam();
+    sizeCanvases(); renderAll(); refreshFam(); updateAcwBar();
   }
 
   // ---- family: master + derived sizes -------------------------------------------------------------------------------
@@ -371,7 +371,7 @@
   $('binc').onclick = () => { exportAcf(); download(fname() + '.inc', CF.toInc(st.f, 'cf'), 'text/plain'); };
   $('bopen').onclick = () => $('file').click();
   $('bnew').onclick = () => { setFont(CF.createSize(+$('ttfadv').value, { name: 'New font' })); toast('Blank ' + CF.SIZES[st.f.adv].label + ' font'); };
-  $('bfnt').onclick = () => { if (st.f.gw > 8) return toast('Atari charsets are 8 px: derive the 8x8 size first'); download(fname() + '.fnt', CF.toFnt(st.f), 'application/octet-stream'); };
+  $('bfnt').onclick = () => { const f = atari8(); if (!f) return toast('Atari charsets are 8 px: derive the 8x8 size first'); download(fname() + '.fnt', CF.toFnt(f), 'application/octet-stream'); toast('Exported ' + fname() + '.fnt (1024 bytes, 8x8, screen-code order)'); };
   const canvasPng = (cv, name) => cv.toBlob((bl) => { const a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = name; document.body.appendChild(a); a.click(); a.remove(); });
   $('bpng').onclick = () => {
     const sh = CF.toSheet(st.f), cv = document.createElement('canvas'); cv.width = sh.w; cv.height = sh.h;
@@ -398,20 +398,13 @@
   }
   $('builtin').onchange = () => setFont(CF.parse(b64ToBuf(window.CRAFT_FONTS[$('builtin').value])));
 
-  async function openBytes(bytes, name) {
+  async function openBytesLegacy(bytes, name) {
     const buf = Buffer.from(bytes), magic = buf.toString('latin1', 0, 4);
-    const kind = XCW.FontPipe.detect(bytes, name);
-    if (kind === 'xcf' || kind === 'rom' || (kind === 'bdf' && /ACFM/.test(buf.toString('latin1', 0, 4096))) || (kind === 'ttf' && buf.toString('latin1', 0, 600).includes('ACFM'))) {
-      const r = XCW.FontPipe.load(bytes, name, {}), f = r.fam.sizes[r.fam.master];
-      setFont(f, r.fam); return toast(kind.toUpperCase() + ' imported (pipeline): ' + Object.keys(r.fam.sizes).join(', ') + ' px');
-    }
     if (buf[0] === 0x89 && magic.slice(1) === 'PNG') { const f = await sheetFromPng(bytes, name.replace(/\.[^.]+$/, '')); setFont(f); return toast('PNG sheet imported as ' + CF.SIZES[f.adv].label); }
-    if (buf.toString('latin1', 0, 9) === 'STARTFONT') { const f = CF.fromBdf(buf.toString('latin1'), { name: name.replace(/\.[^.]+$/, ''), size: +$('ttfadv').value !== 12 ? +$('ttfadv').value : 0 }); setFont(f); return toast('BDF imported as ' + CF.SIZES[f.adv].label); }
     if (buf[0] === 0x1f && buf[1] === 0x8b) {
       const raw = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
       return openBytes(new Uint8Array(raw), name.replace(/\.gz$/i, ''));
     }
-    if (buf.length > 8 && buf.readUInt32LE(0) === 0x70636601) { const f = CF.fromPcf(buf, { name: name.replace(/\.[^.]+$/, ''), size: +$('ttfadv').value !== 12 ? +$('ttfadv').value : 0 }); setFont(f); return toast('PCF imported as ' + CF.SIZES[f.adv].label); }
     if (magic === 'ACF2') return setFont(CF.parse(buf));
     if (magic === 'ACF1') {
       const sizes = CF.acf1Sizes(buf);
@@ -419,22 +412,167 @@
       if (sizes.length > 1) idx = Math.max(0, Math.min(sizes.length - 1, parseInt(prompt('This legacy .acf has ' + sizes.length + ' sizes:\n' + sizes.map((s, i) => i + ': ' + s.W + 'x' + s.H).join('\n') + '\nUse which?', '0'), 10) || 0));
       const f = CF.fromAcf1(buf, idx); f.name = name; return setFont(f);
     }
-    if (buf[0] === 0x7b) {
-      const txt = buf.toString('utf8');
-      if (/"format":\s*"craft-family"/.test(txt)) { const fam = CF.familyFromJson(txt); return setFont(fam.sizes[fam.master], fam); }
-      return setFont(CF.fromJson(txt));
-    }
-    const isSfnt = buf.length > 4 && (buf.readUInt32BE(0) === 0x00010000 || ['OTTO', 'true', 'wOFF', 'wOF2'].includes(magic));
-    if (!isSfnt && (buf.length === 1024 || buf.length === 2048 || /\.fnt$/i.test(name))) {
-      const f = CF.fromFnt(buf, { name: name.replace(/\.[^.]+$/, '') }); setFont(f); return toast('Atari charset imported as 8 px; 8x8 glyphs, descender rows used by g j p q y');
-    }
-    const f = await CF.rasterTtf(buf.toString('base64'), { size: +$('ttfadv').value, threshold: +$('ttfth').value, weight: +$('ttfw').value, hint: $('ttfh').checked, name: name.replace(/\.[^.]+$/, '').slice(0, 40) });
-    setFont(f); toast('TTF converted to ' + CF.SIZES[f.adv].label + '; tune the glyphs, derive the smaller sizes, then save');
+    throw new Error('unrecognised font file (' + name + ')');
   }
+
+  // ---- import through the shared pipeline (XCW.FontPipe, tools/fontpipe.cjs) ---------------------------------------------------
+  const baseOf = (n) => String(n).replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
+  const sizeWanted = () => (+$('ttfadv').value !== 12 ? +$('ttfadv').value : 0);
+  function ttfOpts(name) {
+    return { name: baseOf(name).slice(0, 40), threshold: +$('ttfth').value, weight: +$('ttfw').value, hint: $('ttfh').checked, baseline: +$('ttfbl').value || 0, noGrid: !$('ttfnative').checked, direct: $('ttfdirect').checked };
+  }
+  // the whole family at its sizes, one row of sample text per size
+  function drawImpPreview(fam) {
+    const cv = $('impprev'), c = cv.getContext('2d'), z = 2, text = 'Hamburgefonstiv, gypsy jug: 0123 ABC xyz', sizes = Object.keys(fam.sizes).map(Number).sort((a, b) => b - a);
+    const adv = (f, code) => f.advs[f.map[code]] || f.adv;
+    const W = Math.max(...sizes.map((s) => [...text].reduce((n, ch) => n + adv(fam.sizes[s], ch.charCodeAt(0)), 0))) + 8;
+    cv.width = W * z; cv.height = sizes.reduce((h, s) => h + fam.sizes[s].rows + 3, 4) * z;
+    c.fillStyle = '#f6f3ea'; c.fillRect(0, 0, cv.width, cv.height); c.fillStyle = '#16181c';
+    let y = 2;
+    for (const s of sizes) {
+      const f = fam.sizes[s]; let x = 4;
+      for (const ch of text) { const code = ch.charCodeAt(0), g = CF.glyph(f, code); for (let r = 0; r < f.rows; r++) for (let q = 0; q < f.gw; q++) if (CF.hasPx(f, g[r] || 0, q)) c.fillRect((x + q) * z, (y + r) * z, z, z); x += adv(f, code); }
+      y += f.rows + 3;
+    }
+  }
+  function showImport(r, name) {
+    $('imp').hidden = false; $('impname').textContent = name;
+    const i = r.info || {};
+    $('impinfo').textContent = (i.pixel ? ' - pixel-grid font, sampled natively as 8x8 (grid ' + i.pixel + ' units)' : ' - outline font scaled to the cell') + ', sizes ' + Object.keys(r.fam.sizes).join(', ') + ' px, ' + (i.glyphs || '?') + ' glyphs' + (i.warnings && i.warnings.length ? '; ' + i.warnings.join('; ') : '');
+    drawImpPreview(r.fam);
+  }
+  function convertTtf(bytes, name) {
+    st.src = { bytes, name };
+    const r = XCW.FontPipe.load(bytes, name, ttfOpts(name));
+    const want = +$('ttfadv').value, f = r.fam.sizes[want] || r.fam.sizes[r.fam.master];
+    setFont(f, r.fam); showImport(r, name); keepFamily();
+    toast('Converted ' + name + ' through the pipeline: ' + Object.keys(r.fam.sizes).join(', ') + ' px; change a setting to convert again');
+  }
+  for (const id of ['ttfadv', 'ttfth', 'ttfw', 'ttfh', 'ttfbl', 'ttfnative', 'ttfdirect']) $(id).addEventListener('change', () => { if (st.src && !$('imp').hidden) convertTtf(st.src.bytes, st.src.name); });
+  $('impkeep').onclick = () => { $('imp').hidden = true; st.src = null; };
+
+  async function openBytes(bytes, name) {
+    const buf = Buffer.from(bytes), FP = XCW.FontPipe, kind = FP.detect(bytes, name);
+    if (buf[0] === 0x1f && buf[1] === 0x8b || (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG')) return openBytesLegacy(bytes, name);
+    const acfm = (kind === 'bdf' && /ACFM/.test(buf.toString('latin1', 0, 4096))) || (kind === 'ttf' && buf.toString('latin1', 0, 600).includes('ACFM'));
+    if ((kind === 'ttf' || kind === 'woff') && !acfm) return convertTtf(bytes, name);
+    if (kind === 'woff2') throw new Error('WOFF2 is not supported; convert to WOFF or TTF first');
+    st.src = null; $('imp').hidden = true;
+    if (kind === 'rom-nocharset') throw new Error('this ROM image has no Atari character set at the standard location');
+    if (['xcf', 'rom', 'fnt', 'bdf', 'pcf', 'family', 'ttf'].includes(kind)) {
+      const r = FP.load(bytes, name, { name: baseOf(name).slice(0, 40), size: sizeWanted() });
+      const f = r.fam.sizes[r.fam.master];
+      setFont(f, r.fam); keepFamily();
+      const what = { rom: 'Atari ROM charset (8x8, screen-code order)', fnt: 'Atari charset (.fnt, 8x8, screen-code order)' }[kind] || kind.toUpperCase();
+      return toast(what + ' imported (pipeline): ' + Object.keys(r.fam.sizes).join(', ') + ' px');
+    }
+    if (kind === 'json') { const f = CF.fromJson(buf.toString('utf8')); return setFont(f); }
+    return openBytesLegacy(bytes, name);
+  }
+
+  // ---- My fonts: imported families persist in this browser (localStorage craft.myfonts) --------------------------------------
+  const MY = 'craft.myfonts';
+  const myFonts = () => { try { return JSON.parse(localStorage.getItem(MY) || '{}'); } catch (e) { return {}; } };
+  function keepFamily(quiet) {
+    try {
+      const fam = st.fam || CF.familyNew(st.f), name = (fam.name || st.f.name || 'font').slice(0, 40), m = myFonts();
+      m[name] = XCW.FontPipe.toXcf(fam, {});
+      localStorage.setItem(MY, JSON.stringify(m)); fillMy(); return name;
+    } catch (e) { if (!quiet) toast('Could not keep the font in this browser: ' + e.message); return null; }
+  }
+  $('bkeep').onclick = () => { const n = keepFamily(); if (n) toast('"' + n + '" is in My fonts (library list, this browser)'); };
+  function fillMy() {
+    const sel = $('flist'); let og = sel.querySelector('optgroup[data-my]');
+    const m = myFonts(), names = Object.keys(m);
+    if (!names.length) { if (og) og.remove(); return; }
+    if (!og) { og = document.createElement('optgroup'); og.dataset.my = '1'; og.label = 'My fonts (this browser)'; const a = sel.querySelector('optgroup[data-acw]'); (a || sel.options[0]).after(og); }
+    og.innerHTML = '';
+    for (const n of names.sort()) { const o = document.createElement('option'); o.value = 'my:' + n; o.textContent = n; og.appendChild(o); }
+  }
+
+  // ---- ACWriter / Craft fonts: the faces ACWriter and xCWriter really use (tools/acwfaces.cjs) -----------------------------------
+  const acwFaces = () => window.ACW_FACES || [];
+  st.acw = new Map();
+  function openAcw(id) {
+    const meta = acwFaces().find((x) => x.id === id); if (!meta) throw new Error('unknown ACWriter face ' + id);
+    st.src = null; $('imp').hidden = true; st.acw = new Map();
+    if (id === 'zfont') { const f = CF.parse(b64ToBuf(meta.acf)); st.acw.set(f, id); st.fam = null; return setFont(f); }
+    const fam = { format: 'craft-family', version: 1, name: 'ACWriter Craft faces', master: 12, sizes: {} };
+    for (const x of acwFaces()) {
+      if (x.id === 'zfont') continue;
+      const f = CF.parse(b64ToBuf(x.acf)); f.origin = x.adv === 12 ? CF.ORIGIN.master : CF.ORIGIN.hand; f.masterAdv = x.adv === 12 ? 0 : 12;
+      fam.sizes[x.adv] = f; st.acw.set(f, x.id);
+    }
+    setFont(fam.sizes[meta.adv], fam);
+  }
+  function fillAcw() {
+    const sel = $('flist'), og = document.createElement('optgroup'); og.dataset.acw = '1'; og.label = 'ACWriter / Craft fonts';
+    for (const x of acwFaces()) { const o = document.createElement('option'); o.value = 'acw:' + x.id; o.textContent = x.label + (x.override ? ' (edited)' : ''); og.appendChild(o); }
+    sel.options[0].after(og);
+  }
+  function updateAcwBar() {
+    const bar = $('acwbar'), id = st.acw && st.acw.get(st.f), m = acwFaces().find((x) => x.id === id);
+    if (!m) { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.innerHTML = '<b>ACWriter face ' + m.id + '</b><span>' + m.used + '</span><span style="color:var(--dim)">source: ' + m.src + '</span>' +
+      '<button id="bacwsave" title="Write this face back to its source (needs node scripts/fontedit-server.cjs; otherwise downloads the file to put in font/overrides/)">Save to ACWriter source</button>' +
+      '<button id="bacwreset" title="Remove the edit; the face is built from its source again (needs the local server)">Reset to built face</button>';
+    $('bacwsave').onclick = saveAcw; $('bacwreset').onclick = resetAcw;
+  }
+  async function saveAcw() {
+    const id = st.acw.get(st.f), m = acwFaces().find((x) => x.id === id), acf = exportAcf();
+    let r;
+    try { r = await (await fetch('/__acwface/' + id, { method: 'POST', body: acf })).json(); } catch (e) { r = { ok: false, msg: e.message }; }
+    if (r.ok) { m.acf = Buffer.from(acf).toString('base64'); m.override = true; toast('Saved ' + id + ' to ' + r.where + '. Rebuild ACWriter (mkcraftfonts / mkzoomfont) to use it'); return { ok: true, where: r.where }; }
+    download(id + '.acf', acf); toast('No write-back server (' + r.msg + '): downloaded ' + id + '.acf - put it in font/overrides/ (or run node scripts/fontedit-server.cjs)');
+    return { ok: false, downloaded: true, msg: r.msg, size: acf.length };
+  }
+  async function resetAcw() {
+    const id = st.acw.get(st.f);
+    try { const r = await (await fetch('/__acwface/' + id, { method: 'DELETE' })).json(); if (!r.ok) throw new Error(r.msg); } catch (e) { toast('Reset needs the local server: ' + e.message); return { ok: false }; }
+    const mod = await (await fetch('js/fontedit/acw-faces.js', { cache: 'no-store' })).text(); // refreshed list
+    const faces = JSON.parse(mod.replace(/^[^]*?window\.ACW_FACES = /, '').replace(/;\s*$/, ''));
+    window.ACW_FACES = faces; openAcw(id); toast(id + ' is built from its source again'); return { ok: true };
+  }
+
+  // ---- Atari charset view: the 8x8 glyphs in ROM order (screen code) or ATASCII, normal and inverse -------------------------------
+  const atari8 = () => (st.f.adv === 8 ? st.f : st.fam && st.fam.sizes[8]);
+  const atCv = $('atcv'), atX = atCv.getContext('2d'), AZ = 2;
+  const atCode = (i) => ($('atlay').value === 'screen' ? (i < 64 ? i + 32 : i < 96 ? i - 64 : i) : i); // screen code index -> ATASCII code
+  function drawAtari() {
+    const f = atari8(), halves = $('atinv').checked ? 2 : 1;
+    atCv.width = 16 * 10 * AZ * halves + (halves - 1) * 8 * AZ; atCv.height = 8 * 10 * AZ;
+    atX.fillStyle = '#101216'; atX.fillRect(0, 0, atCv.width, atCv.height);
+    $('atinfo').textContent = f ? (f === st.f ? '' : 'using the 8x8 size of this family') : 'no 8x8 size in this font: derive it first';
+    if (!f) return;
+    for (let h = 0; h < halves; h++) for (let i = 0; i < 128; i++) {
+      const code = $('atlay').value === 'screen' ? atCode(i) : i, g = f.glyphs[f.map[code]] || [];
+      const x0 = h * (16 * 10 + 8) * AZ + (i % 16) * 10 * AZ, y0 = ((i / 16) | 0) * 10 * AZ;
+      if (h) { atX.fillStyle = '#e8eaee'; atX.fillRect(x0, y0, 10 * AZ, 10 * AZ); }
+      atX.fillStyle = h ? '#101216' : '#e8eaee';
+      for (let r = 0; r < 8; r++) for (let q = 0; q < 8; q++) if (CF.hasPx(f, g[f.head + r] || 0, q)) atX.fillRect(x0 + (1 + q) * AZ, y0 + (1 + r) * AZ, AZ, AZ);
+      if (f === st.f && f.map[code] === st.slot) { atX.strokeStyle = '#ff9d3a'; atX.lineWidth = 2; atX.strokeRect(x0 + 1, y0 + 1, 10 * AZ - 2, 10 * AZ - 2); }
+    }
+  }
+  hooks.push(drawAtari);
+  $('atlay').onchange = $('atinv').onchange = drawAtari;
+  atCv.addEventListener('mousedown', (e) => {
+    const f = atari8(); if (!f) return;
+    const r = atCv.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * atCv.width, y = ((e.clientY - r.top) / r.height) * atCv.height;
+    const half = $('atinv').checked && x >= (16 * 10 + 8) * AZ ? 1 : 0, col = Math.floor((x - half * (16 * 10 + 8) * AZ) / (10 * AZ)), row = Math.floor(y / (10 * AZ));
+    const i = row * 16 + col; if (col < 0 || col > 15 || i < 0 || i > 127) return;
+    if (f !== st.f) setFont(f, st.fam);
+    st.slot = st.f.map[$('atlay').value === 'screen' ? atCode(i) : i]; renderAll();
+  });
+  $('brom').onclick = async () => {
+    try { const r = await fetch('library/fonts/local/atarirom.fnt'); if (!r.ok) throw new Error('HTTP ' + r.status); await openBytes(new Uint8Array(await r.arrayBuffer()), 'Atari ROM charset.fnt'); }
+    catch (e) { toast('ROM charset not found in the library (' + e.message + '): choose ATARIXL.ROM or a .fnt file'); $('file').click(); }
+  };
 
   // Font library (manifest from scripts/fontlist.cjs); personal fonts only exist on this machine.
   async function loadLibrary() {
     const sel = $('flist');
+    fillAcw(); fillMy();
     let man;
     try { man = await (await fetch('library/fonts/local/manifest.json', { cache: 'no-store' })).json(); } catch (e) { sel.options[0].textContent = 'Font library (run node scripts/fontlist.cjs)'; return; }
     for (const g of man.groups) {
@@ -444,7 +582,11 @@
   }
   $('flist').onchange = async () => {
     const url = $('flist').value; if (!url) return;
-    try { const r = await fetch(url); await openBytes(new Uint8Array(await r.arrayBuffer()), url.split('/').pop()); } catch (e) { toast('Cannot open: ' + e.message); }
+    try {
+      if (url.startsWith('acw:')) openAcw(url.slice(4));
+      else if (url.startsWith('my:')) { const x = myFonts()[url.slice(3)]; await openBytes(new TextEncoder().encode(x), url.slice(3) + '.xcf'); }
+      else { const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); await openBytes(new Uint8Array(await r.arrayBuffer()), url.split('/').pop()); }
+    } catch (e) { toast('Cannot open: ' + e.message); }
     $('flist').value = '';
   };
   loadLibrary();
@@ -454,6 +596,6 @@
     $('file').value = '';
   };
 
-  window.FE = { hooks, fname, sendToAcwriter, useInXcwriter, acwriterFile, toast, state: st, setFont, openBytes, exportAcf, render: renderAll, CF, select: (s) => { st.slot = s; renderAll(); } };
+  window.FE = { hooks, fname, sendToAcwriter, useInXcwriter, acwriterFile, toast, state: st, setFont, openBytes, openAcw, saveAcw, resetAcw, keepFamily, myFonts, exportAcf, render: renderAll, CF, select: (s) => { st.slot = s; renderAll(); } };
   setFont(CF.parse(b64ToBuf(window.CRAFT_FONTS.craft6)));
 })();

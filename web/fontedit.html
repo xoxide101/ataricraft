@@ -31,6 +31,8 @@
   .vpanes canvas{border:1px solid var(--line);background:#fff}#vd{border:1px solid var(--line)}#vdl{font-size:12px;color:var(--dim);margin-top:4px;max-width:1030px;word-break:break-word}
   .legend span{display:inline-block;margin-right:12px;font-size:12px}
   .legend i{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px}
+  #acwbar{background:#2a2216;border-bottom:1px solid var(--acc);padding:5px 14px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}#acwbar[hidden],#imp[hidden]{display:none}
+  #imp{background:#1b2a22;border-bottom:1px solid #58c878;padding:5px 14px;font-size:13px}#impprev{background:#f6f3ea;border:1px solid var(--line);margin-top:4px;max-width:100%}
   .toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#14161a;border:1px solid var(--acc);padding:8px 16px;border-radius:6px}
 </style>
 </head>
@@ -39,6 +41,7 @@
   <span class="logo">Craft <i>Font Editor</i></span>
   <select id="builtin" title="Built-in fonts"><option value="craft6">Built-in: Craft 6 px (10 cpi)</option><option value="craft5">Built-in: Craft 5 px (12 cpi)</option><option value="craft4">Built-in: Craft 4 px (17 cpi)</option></select>
   <select id="flist" title="Font library: shipped (font/), Atari ROM and Personal (font_personal/, never committed). Run node scripts/fontlist.cjs to refresh."><option value="">Font library...</option></select>
+  <button id="brom" title="Load the original Atari OS character set (ROM charset, 1024 bytes, 8x8)">Atari ROM charset</button>
   <button id="bnew" title="Start a blank font at the size chosen in the TTF list">New</button>
   <button id="bopen">Open font / TTF / BDF / PCF / XCF / ROM / PNG...</button>
   <input type="file" id="file" accept=".acf,.json,.ttf,.otf,.woff,.woff2,.fnt,.bdf,.pcf,.gz,.png,.xcf,.rom" hidden>
@@ -46,6 +49,9 @@
   <label title="Coverage that turns a pixel on">threshold <input type="number" id="ttfth" min="0.1" max="0.9" step="0.05" value="0.3"></label>
   <label title="Bolder (+) or lighter (-) strokes">weight <input type="number" id="ttfw" min="-2" max="3" step="1" value="0"></label>
   <label title="Stretch so the x-height lands on whole rows"><input type="checkbox" id="ttfh" checked> hint</label>
+  <label title="Rows to move the glyphs down (+) or up (-) from the font's own baseline">baseline <input type="number" id="ttfbl" min="-3" max="3" step="1" value="0"></label>
+  <label title="Pixel fonts (Atari8bit.ttf ...) are sampled on their own pixel grid as a native 8x8 charset"><input type="checkbox" id="ttfnative" checked> native 8x8 grid</label>
+  <label title="Rasterise every size from the outlines instead of deriving the smaller ones from the 12x12 master"><input type="checkbox" id="ttfdirect"> each size from outline</label>
   <span id="famrow">
   <select id="fsize" title="Sizes of this family"></select>
   <label title="A locked size is never overwritten by Derive"><input type="checkbox" id="flock"> lock</label>
@@ -59,9 +65,11 @@
   <button id="bsave">Save .acf</button><button id="bjson">Save .json</button><button id="binc">Save .inc</button>
   <button id="bfnt" title="Atari 1K charset (8 px fonts)">Export .fnt</button><button id="bpng" title="16 x 16 sheet of all glyph cells (re-importable)">Export PNG sheet</button><button id="bprev" title="The preview text as a PNG">Export preview</button>
   <button id="bxcf" title="XCF: the whole family with names, Unicode, advances, bearings and metrics (docs/FONT.md)">Export XCF</button><button id="bbdf" title="BDF of this size; lossless when re-imported here">Export BDF</button><button id="bttf" title="TrueType (pixel-square outlines) of this size; lossless when re-imported here">Export TTF</button>
-  <button id="bsend" title="Write the font into the emulator H: device (FujiNet.emu.hostWrite) as NAME.FNT (8 px) or NAME.ACF; the main page (index.html) must be open and booted in this browser">Send to ACWriter</button><button id="buse" title="Add the font to the font list of xCWriter (shared in this browser: localStorage craft.userfonts)">Use in xCWriter</button>
+  <button id="bkeep" title="Store the whole font family in this browser (My fonts group of the library)">Keep in My fonts</button><button id="bsend" title="Write the font into the emulator H: device (FujiNet.emu.hostWrite) as NAME.FNT (8 px) or NAME.ACF; the main page (index.html) must be open and booted in this browser">Send to ACWriter</button><button id="buse" title="Add the font to the font list of xCWriter (shared in this browser: localStorage craft.userfonts)">Use in xCWriter</button>
   <span id="info"></span>
 </header>
+<div id="acwbar" hidden></div>
+<div id="imp" hidden><b>Converted from <span id="impname"></span></b> <span id="impinfo"></span> <button id="impkeep" title="Close this panel and keep the converted font (change a setting above to convert again)">Keep</button><div><canvas id="impprev"></canvas></div></div>
 <main>
   <div class="col">
     <h3>Glyph slots (click to edit)</h3>
@@ -106,6 +114,9 @@
           <label>advance</label><input type="number" id="gmadv" min="1" max="16" title="Advance of this glyph (the font advance unless set); stored in the file, used by the proportional preview">
           <button id="gmtrim" title="Move the ink to the left edge (left bearing 0)">Trim left</button><button id="gmreset" title="Use the font advance for this glyph">Reset advance</button>
         </div>
+        <h3>Atari charset view <span style="text-transform:none">(8x8, as the Atari draws it)</span></h3>
+        <div class="row"><label>Order <select id="atlay"><option value="screen">Screen code (ROM / .fnt order)</option><option value="atascii">ATASCII</option></select></label><label><input type="checkbox" id="atinv" checked> inverse video half</label><span id="atinfo" style="color:var(--dim);font-size:12px"></span></div>
+        <canvas id="atcv" style="border:1px solid var(--line);cursor:pointer"></canvas>
         <h3>Preview (real line spacing)</h3>
         <textarea id="sample" spellcheck="false">The quick brown fox jumps over the lazy dog.
 Hamburgefonstiv, gypsy jug: ^{up}super and _{down}sub 0123456789
@@ -141,6 +152,7 @@ QUICK BROWN FOX; (pqyjg) "descenders" [2px head, 3px tail]</textarea>
 <script src="js/xcwriter/core/xcw-core.js"></script>
 <script src="js/fontedit/builtin-fonts.js"></script>
 <script src="js/xcwriter/faces.js"></script>
+<script src="js/fontedit/acw-faces.js"></script>
 <script src="js/fontedit/fontedit.js"></script>
 <script src="js/fontedit/validate.js"></script>
 </body>

@@ -144,3 +144,16 @@ symbol-only, caps-only and PC GRX `.FNT` fonts legitimately trip the glyph check
 
 **Known limits**: WOFF2; BDF/PCF cells larger than 12x12 are clipped (warning); smaller sources cannot be enlarged (only derived downward); bearings are
 derived, not stored per glyph; source glyphs that do not exist stay blank (Kidpixies.ttf lacks `% + < = > ^ _ ` { | } ~`); Kidpixies12.fnt has no descenders.
+## Font editor: pipeline, Atari workflows, ACWriter faces
+
+All import/export in `web/fontedit.html` goes through `XCW.FontPipe` (xcf, bdf, pcf, ttf/woff, 1K/2K `.fnt`, ROM images, ACF, family JSON); only PNG sheets, gz, ACF1/2 and json use the legacy loader.
+
+**TTF -> Atari.** Opening a TTF converts it at once (name = file name) and shows a panel with a per-size preview. Controls re-convert live: size (`TTF -> ...` select), threshold, weight, hint, **baseline** (rows shifted), **native 8x8 grid** (pixel-grid fonts such as Atari8bit.ttf are sampled natively), **each size from outline**. Converted fonts are stored in "My fonts (this browser)" (localStorage `craft.myfonts`, XCF text) and appear in the picker; "Keep in My fonts" stores the current one explicitly.
+
+**Atari originals.** "Atari ROM charset" loads the 1K charset of the ATARIXL ROM; ROM images and `.fnt` (1024 bytes) open via Open font. The *Atari charset view* shows the 8x8 glyphs in screen-code (ROM / .fnt) or ATASCII order with an inverse-video half; click a cell to edit that glyph. `Export .fnt` writes 1024 bytes (screen-code order) from the 8x8 size of the family.
+
+**ACWriter / Craft fonts** (first picker group): craft4 (Standard/PAGE), craft5, craft6, craft8, craft10, craft12 (master) and zfont (zoom). Opening one loads the family with sizes 4/5/6/8/10/12 (zfont is single); craft4 shows its super/sub variants. "Save to ACWriter source" POSTs to `node scripts/fontedit-server.cjs [port]` (serves `web/` and the write-back API, `/__acwface`): craft8/10/12 are written in place (`font/craft8.fnt`, `font/craft10.acf`, `font/craft12.acf`); craft4/5/6/zfont go to `font/overrides/<id>.acf`. `font/build/*.inc` and `web/js/fontedit/acw-faces.js` are regenerated (`node scripts/acw-faces.cjs`). Without the server the file is downloaded instead. "Reset to built face" removes the override. Registry: `tools/acwfaces.cjs`.
+
+**Integration still needed in `tools/acwriter/*` (not touched):** in `mkcraftfonts.cjs` wrap each built face for adv 4/5/6 with `require('../acwfaces.cjs').override('craft' + adv, f)` before serialize/toInc; in `mkzoomfont.cjs` use `acwfaces.zfontInc(acwfaces.override('zfont', face))`. `mkpgfont.cjs` follows via craft4.inc. Or copy the generated `font/build/*.inc`; with no overrides they are byte-identical to `tools/acwriter/*.inc`.
+
+Tests: `node scripts/fontedit-ui-test.cjs` (real Chrome clicks, screenshots `out/fe-ui-*.png`).

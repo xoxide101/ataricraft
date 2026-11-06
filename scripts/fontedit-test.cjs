@@ -65,13 +65,13 @@ const ok = (m) => console.log('ok  ' + m);
   ok('legacy ACF1 (2 sizes) opens, size 0 chosen');
   await p.selectOption('#ttfadv', '6');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
-  await p.waitForFunction(() => FE.state.f.name === 'arial', null, { timeout: 20000 });
+  await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'arial', null, { timeout: 20000 });
   assert.deepStrictEqual(await p.evaluate(() => [FE.state.f.rows, FE.state.f.adv]), [12, 6]);
 
   // TTF -> 12x12 master -> derived 8x8 and 4 px; locked / hand-edited sizes survive a re-derive
   await p.selectOption('#ttfadv', '12');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/ariblk.ttf');
-  await p.waitForFunction(() => FE.state.f.name === 'ariblk', null, { timeout: 20000 });
+  await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'ariblk', null, { timeout: 20000 });
   await p.click('#bderive');
   const fam = await p.evaluate(() => {
     const out = {};
@@ -92,7 +92,7 @@ const ok = (m) => console.log('ok  ' + m);
   ok('TTF -> 12x12 master -> derived 10/8/6/5/4 px: 94 glyphs each, none empty; hand-edited and locked sizes survive re-derive');
   await p.selectOption('#ttfadv', '6');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
-  await p.waitForFunction(() => FE.state.f.name === 'arial', null, { timeout: 20000 });
+  await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'arial', null, { timeout: 20000 });
   await p.evaluate(() => FE.select(72));
   await p.fill('#sample', 'Hamburgefonstiv gypsy quick fox\nSuper^{2} and sub_{2} (jpqy)');
   await p.screenshot({ path: ROOT + '/out/fe-3-ttf.png' });

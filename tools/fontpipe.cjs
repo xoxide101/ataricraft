@@ -122,6 +122,7 @@ function rasterFont(input, size, opt = {}) {
   const info = sfntInfo(font), capRows = base - head + 1, sc = capRows / info.capH;
   const nW = info.nAdv * sc, thEff = th - wt * 0.08;
   let sy = 1;
+  const bl = opt.baseline || 0; // rows to move the glyphs down (+) or up (-) from the font's own baseline
   if (opt.hint) { const xH = info.xH * sc; sy = Math.max(1, Math.round(xH)) / xH; }
   const f = CF.create(Object.assign({}, spec, { name: (opt.name || font.family || 'Font').slice(0, 40), masterAdv: size === 12 ? 0 : 12 }));
   const nId = font.gidFor(110), refAdv = nId ? font.advance(nId) : info.nAdv;
@@ -131,7 +132,7 @@ function rasterFont(input, size, opt = {}) {
     if (!id && a !== 32) continue;
     const rawUnits = id ? font.advance(id) : refAdv * 0.5, raw = Math.max(0.01, rawUnits * sc), gx = Math.min((gw * 0.92) / nW, gw / raw);
     const tx = Math.max(0, (gw - raw * gx) / 2);
-    const polys = id ? font.outline(id).map((p) => p.map(([x, y]) => [tx + x * sc * gx, base + 1 - (y - info.bl) * sc * sy])) : [];
+    const polys = id ? font.outline(id).map((p) => p.map(([x, y]) => [tx + x * sc * gx, base + 1 + bl - (y - info.bl) * sc * sy])) : [];
     const cov = SF.coverage(polys, gw, rows, 8), g = zeros(rows), top = CF.topBit(f);
     let mx = 0;
     for (let r = 0; r < rows; r++) for (let q = 0; q < gw; q++) { const c = cov[r * gw + q]; if (c > mx) mx = c; if (c >= thEff) g[r] |= top >> q; }
