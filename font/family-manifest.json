@@ -1,0 +1,111 @@
+{
+ "format": "craft-family-manifest",
+ "version": 1,
+ "targets": {},
+ "families": [
+  {
+   "id": "craft-sans",
+   "name": "Craft Sans",
+   "kind": "craft",
+   "source": {
+    "type": "pixel-master",
+    "size": 12,
+    "file": "font/craft12.acf"
+   },
+   "tags": [
+    "shipped",
+    "craft"
+   ],
+   "styles": [
+    {
+     "style": "regular",
+     "sizes": {
+      "4": {
+       "origin": "hand",
+       "source": "font/overrides/craft4.acf"
+      },
+      "5": {
+       "origin": "hand",
+       "source": "font/overrides/craft5.acf"
+      },
+      "6": {
+       "origin": "hand",
+       "source": "font/overrides/craft6.acf"
+      },
+      "8": {
+       "origin": "hand",
+       "source": "font/craft8.fnt"
+      },
+      "10": {
+       "origin": "hand",
+       "source": "font/craft10.acf"
+      },
+      "12": {
+       "origin": "master",
+       "source": "font/craft12.acf"
+      },
+      "14": {
+       "origin": "derived",
+       "source": "font/craft14.acf"
+      },
+      "16": {
+       "origin": "derived",
+       "source": "font/craft16.acf"
+      },
+      "18": {
+       "origin": "derived",
+       "source": "font/craft18.acf"
+      },
+      "20": {
+       "origin": "derived",
+       "source": "font/craft20.acf"
+      },
+      "22": {
+       "origin": "derived",
+       "source": "font/craft22.acf"
+      },
+      "24": {
+       "origin": "derived",
+       "source": "font/craft24.acf"
+      },
+      "26": {
+       "origin": "derived",
+       "source": "font/craft26.acf"
+      }
+     },
+     "graphics": true,
+     "coverage": [
+      "ascii",
+      "atari-graphics"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "craft-zoom",
+   "name": "Craft Zoom",
+   "kind": "craft",
+   "source": {
+    "type": "pixel-master",
+    "size": 8
+   },
+   "tags": [
+    "shipped",
+    "zoom"
+   ],
+   "styles": [
+    {
+     "style": "zoom",
+     "sizes": {
+      "8": {
+       "origin": "hand",
+       "source": "tools/craft8art.cjs"
+      }
+     },
+     "graphics": true,
+     "coverage": []
+    }
+   ]
+  }
+ ]
+}

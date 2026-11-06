@@ -81,13 +81,18 @@
     FE.toast(ext.toUpperCase() + ' exported: ' + n);
   }
   // all sizes in every format, the kerning table and a README, in one zip
-  FE.familyZip = () => {
-    const fam = st.fam, base = longName(), files = [];
+  FE.familyZip = (target) => {
+    const fam0 = st.fam, base = longName(), files = [];
+    // 'for <target>': only the sizes the registry flags for that app or machine
+    const fam = target ? Object.assign({}, fam0, { sizes: Object.fromEntries(Object.entries(fam0.sizes).filter(([k]) => FE.targetOn(+k, target, fam0))) }) : fam0;
+    if (!Object.keys(fam.sizes).length) throw new Error('no size of this family is flagged for ' + target);
+    if (!fam.sizes[fam.master]) fam.master = +Object.keys(fam.sizes)[0];
     const out = FP.files(fam, base, { formats: ['acf', 'bdf', 'ttf', 'json', 'xcf'] });
     for (const [n, d] of Object.entries(out)) files.push([base + '/' + n, typeof d === 'string' ? Buffer.from(d, 'utf8') : Buffer.from(d)]);
-    const f8 = FE.atari8(false); if (f8) files.push([base + '/' + base + '8.fnt', Buffer.from(CF.toFnt(f8))]);
+    files.push([base + '/family.manifest.json', Buffer.from(FE.manifestJson())]);
+    const f8 = (!target || FE.targetOn(8, target, fam0)) && FE.atari8(false); if (f8) files.push([base + '/' + base + '8.fnt', Buffer.from(CF.toFnt(f8))]);
     if (Object.keys(st.kern).length) files.push([base + '/kerning.json', Buffer.from(JSON.stringify(st.kern, null, 1))]);
-    files.push([base + '/README.txt', Buffer.from('Craft font family "' + fam.name + '"\nSizes: ' + Object.keys(fam.sizes).join(', ') + ' px (master ' + fam.master + ')\nMade with the Craft Font Editor (docs/FONT.md).\n.acf = Craft ACF2, .bdf/.ttf = lossless pixel exports, .xcf = whole family, .fnt = Atari 1K charset (8x8).\n')]);
+    files.push([base + '/README.txt', Buffer.from('Craft font family "' + fam.name + '"\nSizes' + (target ? ' for ' + target : '') + ': ' + Object.keys(fam.sizes).join(', ') + ' px (master ' + fam.master + ')\nMade with the Craft Font Editor (docs/FONT.md).\n.acf = Craft ACF2, .bdf/.ttf = lossless pixel exports, .xcf = whole family, .fnt = Atari 1K charset (8x8).\n')]);
     return { name: base + '.zip', zip: Buffer.from(XCW.zipStore(files)), count: files.length };
   };
   FE.specimenPng = () => { if (!FE.specimenCanvas) return null; const cv = FE.specimenCanvas(); canvasPng(cv, longName() + '.specimen.png'); return cv; };
@@ -109,7 +114,8 @@
     $('bprev').onclick = () => canvasPng($('preview'), fname() + '.preview.png');
     $('bxcf').onclick = () => pipeExport('xcf'); $('bbdf').onclick = () => pipeExport('bdf'); $('bttf').onclick = () => pipeExport('ttf');
     $('bfam').onclick = () => download(longName() + '.family.json', CF.familyToJson(st.fam), 'application/json');
-    $('bzip').onclick = () => { const r = FE.familyZip(); download(r.name, r.zip, 'application/zip'); FE.toast('Family zip: ' + r.count + ' files, ' + Object.keys(st.fam.sizes).length + ' sizes'); };
+    $('bzip').onclick = () => { try { const r = FE.familyZip($('bztarget').value); download(r.name, r.zip, 'application/zip'); FE.toast('Family zip: ' + r.count + ' files'); } catch (e) { FE.toast(e.message); } };
+    $('bmanifest').onclick = () => download(longName() + '.manifest.json', FE.manifestJson(), 'application/json');
     $('bspec').onclick = () => FE.specimenPng();
     $('bsend').onclick = FE.sendToAcwriter; $('buse').onclick = () => { try { FE.useInXcwriter(); } catch (e) { FE.toast(e.message); } };
   });

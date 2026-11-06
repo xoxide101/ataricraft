@@ -31,7 +31,8 @@
     <button id="bttf">TrueType (.ttf)</button>
     <h4>Whole family</h4>
     <button id="bfam">All files, one by one</button>
-    <button id="bzip">Zip (all sizes, formats, kerning)</button>
+    <label class="dim">for <select id="bztarget"></select></label> <button id="bzip">Zip (all sizes, formats, kerning, manifest)</button>
+<button id="bmanifest" title="craft-family-manifest JSON: sizes, origins, support flags per app">Family manifest (.json)</button>
     <h4>Other programs</h4>
     <button id="bsend">Send to ACWriter</button>
     <button id="buse">Use in xCWriter</button>
@@ -70,8 +71,16 @@
       <div class="row"><button id="bmaster" title="Make this size the master of the family">Use this size as master</button><label><input id="flock" type="checkbox"> lock this size</label></div>
       <div id="hnote" class="dim"></div>
     </div>
+    <h3 title="Family &gt; Style &gt; Size, with the apps and machines each size is used by">Family tree</h3>
+    <div class="sec" style="padding:8px">
+      <div id="tree"></div>
+      <div class="row"><select id="mergewith" title="Fold another family (e.g. craft5.acf imported on its own) into this one"></select><button id="bmerge">Group as family</button></div>
+      <div class="row"><button id="bsplit" title="Make the selected size its own family">Split this size out</button></div>
+      <details class="sec"><summary>Add an app or machine</summary><div class="row"><input id="tkey" placeholder="name, e.g. C64" size="10"><input id="tsizes" placeholder="sizes e.g. 8 or all" size="10"><button id="badddt">Add</button></div></details>
+    </div>
   </aside>
   <section id="center">
+    <div id="hint" hidden><b>First time here?</b> <span>1. Pick a font family on the left. 2. Pick a size above: dashed sizes are not made yet, click one to create it from the family master. 3. Click a glyph, then draw in the big grid. Press <kbd>?</kbd> for shortcuts.</span> <button id="hintx">Got it</button></div>
     <div id="fambar">
       <div id="famhead"><h2 id="famtitle">Craft</h2><span id="famsub" class="dim"></span></div>
       <div id="sizes" role="tablist" aria-label="Craft sizes 4-26 px"></div>
@@ -208,10 +217,12 @@
 <script src="js/xcwriter/faces.js"></script>
 <script src="js/fontedit/acw-faces.js"></script>
 <script src="js/fontedit/craft-big.js"></script>
+<script src="js/fontedit/fontfamily.js"></script>
 <script src="js/fontedit/core.js"></script>
 <script src="js/fontedit/glyphs.js"></script>
 <script src="js/fontedit/editor.js"></script>
 <script src="js/fontedit/library.js"></script>
+<script src="js/fontedit/family.js"></script>
 <script src="js/fontedit/export.js"></script>
 <script src="js/fontedit/views.js"></script>
 <script src="js/fontedit/kern.js"></script>

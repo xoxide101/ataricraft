@@ -215,3 +215,31 @@ Limits: in ACWriter's 2x zoom and PAGE views only codes 32-127 are drawn (zfont 
 | import (text / docx / html ...) | the Unicode characters above become byte 128+n; U+E080..U+E09F also; any other character outside Latin-1 becomes `?` |
 
 Tests: `node scripts/craft-gfx-test.cjs` (set, all sizes, ACF2 row bytes, XCF/BDF/TTF round trips, TTF keeping the graphics, mapping), `node scripts/acwriter-gfx-diff.cjs` (pixel diff of a line of graphics: ACWriter in the emulator vs the xCWriter Atari view, 0 mismatching pixels).
+## Family registry (`craft-family-manifest`)
+
+One font family is one registry entry, however many files it comes from. Shared module: `web/js/fontedit/fontfamily.js` (browser and Node; `tools/fontfamily.cjs` adds file load/save). Shipped manifest: `font/family-manifest.json` (families `craft-sans`, `craft-zoom`); user changes live in the browser in `localStorage` `craft.manifest`.
+
+```json
+{ "format": "craft-family-manifest", "version": 1,
+  "targets": { "my-machine": { "label": "My machine", "sizes": [8] } },
+  "families": [ { "id": "craft-sans", "name": "Craft Sans", "tags": [],
+    "styles": [ { "id": "regular", "style": "regular",
+      "sizes": { "8": { "origin": "derived", "source": "craft8.acf", "flags": { "acwriter-atari": true } } } } ] } ] }
+```
+
+- **id** is a slug (`craft-sans`), **name** the display name; **style** regular/bold/italic/zoom/...; each **size** has an **origin** (`outline`, `master`, `derived`, `hand`, `imported`) and the source file(s).
+- **Support flags** per target app/machine. Built-in targets: `acwriter-atari` (sizes 4,5,6,8), `xcwriter` (all), `print` (all), `zoom` (size 8, style zoom). A size gets the target's default automatically; an explicit `flags[target]` boolean overrides it (tree checkbox, right-click resets to default). A new machine is data only: add it to `targets` (editor: *Add an app or machine*), no code change.
+- **Editor**: the *Family tree* panel shows Family > Style > Size with one checkbox column per target; *Group as family* folds another family's sizes in, *Split this size out* does the reverse. Old groups ("Craft faces", "My fonts", "ACWriter / Craft fonts") are views over the same registry.
+- **Honouring flags**: Export > "Zip for <target>" only contains flagged sizes (plus `family.manifest.json`); `tools/acwfaces.cjs` and `scripts/build-all.cjs` skip generating and overlaying `.inc` for faces flagged off for `acwriter-atari`. Limit: `tools/acwriter/mkcraftfonts.cjs` itself is unchanged and still builds every face locally.
+- Tests: `scripts/fontfamily-test.cjs` (registry, build) and `scripts/fontedit-ui2-test.cjs` (tree, flags, group/split, derive-on-click, hint).
+
+## Font editor status (implemented / planned)
+
+| Area | State |
+|---|---|
+| Unified Fonts list, size strip 4-26 + Atari 8x8, derive-on-click, file:// | implemented |
+| Family registry, support flags, tree, group/split, first-run hint | implemented |
+| Hinting-lite, per-glyph/all re-render, override diff, draggable guides, kerning classes | planned (phase 3) |
+| Outline layer (glyf/CFF contours, point editing, outline export) | planned (phase 4) |
+| Extra formats (PSF/PCF/FON/C64/ZX/MSX/raw...) with round-trip tests | planned (phase 5) |
+| Font manager (tags, collections, compare, duplicates) | planned (phase 6) |

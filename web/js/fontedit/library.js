@@ -330,7 +330,7 @@
     const id = st.acw.get(st.f);
     try { const r = await (await fetch('/__acwface/' + id, { method: 'DELETE' })).json(); if (!r.ok) throw new Error(r.msg); } catch (e) { FE.toast('Reset needs the local server: ' + e.message); return { ok: false }; }
     const mod = await (await fetch('js/fontedit/acw-faces.js', { cache: 'no-store' })).text();
-    window.ACW_FACES = JSON.parse(mod.replace(/^[^]*?window\.ACW_FACES = /, '').replace(/;\s*$/, ''));
+    (0, eval)(mod);
     entries.get('craft').fam = null; entries.get('zfont') && (entries.get('zfont').fam = null);
     await FE.openAcw(id); FE.toast(id + ' is built from its source again'); return { ok: true };
   };
