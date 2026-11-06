@@ -152,7 +152,26 @@ rdb
  lda rpos
  cmp rlen
  bcc rd2
+ ldx #3
+rb1 lda t1,x
+ pha
+ dex
+ bpl rb1
+ lda w16
+ pha
+ lda w16+1
+ pha
  jsr refill
+ pla
+ sta w16+1
+ pla
+ sta w16
+ ldx #0
+rb2 pla
+ sta t1,x
+ inx
+ cpx #4
+ bne rb2
 rd2 ldx rpos
  lda IOBUF,x
  inc rpos

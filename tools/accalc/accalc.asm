@@ -127,7 +127,10 @@ nk3 cmp #$13
  bne nk4
  lda #'S'
  jmp askname
-nk4
+nk4 cmp #$12
+ bne nkx
+ jsr recalc
+ jmp drawall
 nkx rts
 nkdn lda cr
  cmp #NROWS-1
@@ -274,6 +277,7 @@ save
  icl 'view.inc'
  icl 'view2.inc'
  icl 'file.inc'
+ icl 'calc.inc'
  icl '..\acwriter\zfont.inc'
 
  org $1600
