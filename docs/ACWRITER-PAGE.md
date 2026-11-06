@@ -62,7 +62,7 @@ Two overlaps reported by `xex-overlap.cjs` were real corruption, not overlay reu
 
 ## Not done / limits (honest list)
 
-* The font table follows paragraph numbers only for Return and for a Backspace that joins paragraphs. Cut/paste, find/replace, import and New do not renumber or reset it.
+* The font table follows paragraph numbers for Return, a joining Backspace, Cut/Paste of whole paragraphs, find/replace (paragraph count never changes; replacement text cannot hold a paragraph end), failed and successful Open and New (a CRFT file without font tags, a text file import, and New reset the table; a failed Open keeps it). Tested by `scripts/acwriter-fontpara.cjs` and `scripts/acwriter-fontfind.cjs`; `scripts/acwriter-facereload.cjs` covers save/reload with several typefaces. Find/replace starts at the cursor, so a replace from the middle of a document leaves earlier matches alone.
 * Per-block fonts show only in the 2x view; the 1x PAGE view uses the 4 px face.
 * No alignment, indent, bullet, bold/italic/underline rendering in PAGE mode (text only), and none in the 2x view either. Sub-script descenders are clipped.
 * Centre/right tab stops only affect the ruler.
