@@ -16,11 +16,12 @@
 
   function px(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
   function drawCell(x, y, cell, ink) {
-    const rows = glyph(cell.ch.charCodeAt(0));
+    const code = cell.ch.charCodeAt(0), gfx = code >= 128 && code < 160, rows = glyph(code);
     const dy = cell.sup ? -1 : cell.sub ? 1 : 0;
     for (let r = 0; r < rows.length && r < 8; r++) {
       const sh = cell.i && r < 3 ? 1 : 0, bits = rows[r];
-      for (let c = 0; c < 4; c++) if (bits & (8 >> c)) { px(x + c + sh, y + r + dy, 1, 1, ink); if (cell.b) px(x + c + sh + 1, y + r + dy, 1, 1, ink); }
+      // Atari graphics (codes 128..159) are 5 px wide rows, bit 4 = leftmost: they touch the next cell (word/text.inc drawchar skips the shift for them)
+      for (let c = 0; c < (gfx ? 5 : 4); c++) if (bits & ((gfx ? 16 : 8) >> c)) { if (!gfx || c + sh < 5) px(x + c + sh, y + r + dy, 1, 1, ink); if (cell.b && (!gfx || c + sh + 1 < 5)) px(x + c + sh + 1, y + r + dy, 1, 1, ink); }
     }
     if (cell.u) px(x, y + 7, 5, 1, ink);
   }
@@ -67,7 +68,7 @@
   // ACWriter's default 2x face is the Craft 8x8 (word/zoom.inc zfont, font\craft8.fnt); paragraphs with a font use their own 8x8 face
   function glyph8(face, ch) {
     const c = ch.charCodeAt(0);
-    if (c < 32 || c > 127) return null;
+    if ((c < 32 || c > 127) && !(c >= 128 && c < 160)) return null;
     const id = face || 'CRAFT8';
     const f = XFACE.use(id) || XFACE.use('ATARIROM');
     return (f && XFACE.b8(f.id, c)) || null;

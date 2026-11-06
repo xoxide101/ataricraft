@@ -15,10 +15,10 @@ const KIND_NAME = ['l', 'c', 'r'];
 const TRAILER_MAGIC = 'CPG1';
 const FLAG_TRAILER = 0x02;
 
-// Style roles (docs/FONT.md "Styles"): '' is Body. Cell sizes that exist as Craft faces (craft4 .. craft12).
+// Style roles (docs/FONT.md "Styles"): '' is Body. Cell sizes that exist as Craft faces (craft4 .. craft26).
 const ROLES = ['', 'title', 'h1', 'h2', 'h3', 'cap'];
 const ROLE_LABEL = { '': 'Body', title: 'Title', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', cap: 'Caption' };
-const SIZES = [4, 5, 6, 8, 10, 12];
+const SIZES = [4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]; // 14-26 are xCWriter / print / web only (docs/FONT.md)
 const ALIGN_CODE = { l: 0, c: 1, r: 2, j: 3 };
 const ALIGN_NAME = ['l', 'c', 'r', 'j'];
 const fname = (s) => String(s || '').replace(/[^\x20-\x7e]/g, '').slice(0, 32);

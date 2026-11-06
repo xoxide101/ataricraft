@@ -23,9 +23,22 @@ function art(f, text) {
   }
   return out.join('\n');
 }
+// Large sizes (14-26 px, xCWriter / print / web; too big for the Atari app) are derived from the font/craft12.acf master when missing.
+function ensureBig(force) {
+  const m = CF.parse(fs.readFileSync(path.join(root, 'font', 'craft12.acf'))), made = [];
+  for (const s of CF.BIG_SIZES) {
+    const fn = 'craft' + s + '.acf';
+    if (!force && fs.existsSync(path.join(root, 'font', fn))) continue;
+    const d = CF.derive(m, s, {}); d.name = 'Craft ' + s + 'x' + s;
+    fs.writeFileSync(path.join(root, 'font', fn), CF.serialize(d)); made.push(fn);
+  }
+  return made;
+}
 function ensure() {
-  const { m, d10, d8 } = build();
-  return [write('craft12.acf', CF.serialize(m)), write('craft10.acf', CF.serialize(d10)), write('craft8.fnt', CF.toFnt(d8))];
+  const { m, d10, d8 } = build(), AF = require('../tools/acwfaces.cjs');
+  const w = [write('craft12.acf', CF.serialize(AF.withGfx(m))), write('craft10.acf', CF.serialize(AF.withGfx(d10))), write('craft8.fnt', CF.toFnt(AF.withGfx(d8)))];
+  AF.upgradeFiles(); ensureBig(force);
+  return w;
 }
 if (require.main === module) {
   const w = ensure();
@@ -33,4 +46,4 @@ if (require.main === module) {
   console.log('craft12/10/8 written:', w.join(','));
   if (process.argv.includes('--art')) for (const f of [m, d10, d8]) console.log(f.name + '\n' + art(f, process.argv[process.argv.indexOf('--art') + 1] || 'Handgxy 09'));
 }
-module.exports = { build, art, ensure };
+module.exports = { build, art, ensure, ensureBig };

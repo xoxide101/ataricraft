@@ -31,7 +31,7 @@ function paragraphs(payload) {
       if (STYLE[b]) { on[STYLE[b]] = !on[STYLE[b]]; cur.runs.push({ at: cur.text.length, style: STYLE[b], on: !!on[STYLE[b]] }); }
       else cur.markers.push(b);
     } else if (b === 160) cur.text += '\u00a0';
-    else if (b >= 128 && b < 160) cur.text += '\ufffd';
+    else if (b >= 128 && b < 160) cur.text += String.fromCodePoint(require('./atarigfx.cjs').uniOfAcw(b));
     else cur.text += String.fromCharCode(b);
   }
   if (cur.text || cur.markers.length) out.push(cur);

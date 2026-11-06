@@ -1,9 +1,8 @@
 // Builds the extended glyph table (codes 128..255, 8 bytes each, 4-bit rows with bit 3 = leftmost pixel)
-// and writes sym.inc. 128..159 are Atari graphics, 160..255 are Latin-1 (160 and 173 are handled in code).
+// and writes sym.inc. 128..159 are the Atari graphics (5-bit rows, see below), 160..255 are Latin-1 (160 and 173 are handled in code).
 // Usage: node tools/acwriter/mksym.cjs [dump]
 const fs = require('fs');
 const base = require('./font4.json');
-const atari = fs.readFileSync(__dirname + '/../../web/library/fonts/personal/Altered Chrome/Atari8/Altered Chrome.fnt');
 
 const parse = (rows) => {
   const r = rows.map((s) => parseInt(s.replace(/#/g, '1').replace(/\./g, '0'), 2));
@@ -14,19 +13,15 @@ const ch = (c) => base[c.charCodeAt(0) - 32].slice();
 
 const glyphs = new Array(128).fill(null).map(() => [0, 0, 0, 0, 0, 0, 0, 0]);
 
-// Atari graphics: internal codes 64..95, eight columns squeezed to four
+// Atari graphics 128..159 = ATASCII 0..31, taken from the Craft 5 px face (tools/atarigfx.cjs, drawn from scratch, no ROM data).
+// Unlike the letters these rows are 5 bits wide: bit 4 = leftmost pixel .. bit 0 = the gap column, so lines and blocks touch the next cell.
+// drawchar (word/text.inc) does not shift rows of codes 128..159 (they sit in page $0C of the SYM table).
+const c5 = require('../acwfaces.cjs').load('craft5'), CF = require('../craftfont.cjs');
 for (let a = 0; a < 32; a++) {
-  let r = Array.from(atari.slice((a + 64) * 8, (a + 64) * 8 + 8));
-  r = r[7] !== 0 && r[0] === 0 ? r.slice(1, 8) : r.slice(0, 7);
-  r = r.map((b) => {
-    const px = [];
-    for (let c = 0; c < 8; c++) px.push((b >> (7 - c)) & 1);
-    return (px[0] | px[1]) << 3 | (px[2] | px[3]) << 2 | (px[4] | px[5]) << 1 | (px[6] | px[7]);
-  });
-  r.push(0);
+  const g = c5.glyphs[a], r = [];
+  for (let y = 0; y < 8; y++) { let v = 0; for (let q = 0; q < 5; q++) if (CF.hasPx(c5, g[c5.head + y] || 0, q)) v |= 16 >> q; r.push(v); }
   glyphs[a] = r;
 }
-
 const acc2 = { acute: [2, 4], grave: [4, 2], circ: [6, 9], diaer: [9, 0], tilde: [5, 10], ring: [6, 6] };
 const acc1 = { acute: 2, grave: 4, circ: 6, diaer: 9, tilde: 5, ring: 6 };
 function accented(b, kind) {

@@ -14,6 +14,8 @@ for (const l of src) {
   const b = /^\s*\.byte\s+(.*)$/.exec(l);
   if (b && cur !== null) planes[cur].push(...b[1].split(',').map(s => +s.trim()));
 }
+// craft4.inc holds slots 0..132 (Atari graphics + ASCII); PAGE mode keeps codes 32..127 only
+if (planes[0].length === 133) for (let r = 0; r < 12; r++) planes[r] = planes[r].slice(32, 128);
 for (let r = 0; r < 12; r++) if (planes[r].length !== 96) throw new Error('plane ' + r + ' has ' + planes[r].length);
 for (let r = 0; r < 12; r++) for (const v of planes[r]) if (v & 0x1f) throw new Error('glyph wider than 3 px in plane ' + r);
 const tix = new Array(96).fill(0), tl = [];

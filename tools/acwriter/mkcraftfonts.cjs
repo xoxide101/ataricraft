@@ -1,5 +1,6 @@
 // Builds the built-in Craft fonts (docs/FONT.md) from the Atari 8x8 font + the hand-tuned 4x7 glyphs:
 //   web/library/fonts/craft/craft4.acf (4 px advance, 3 px glyph), craft5.acf (5 / 4), craft6.acf (6 / 5)
+//   (slots 0-132: the Atari graphics + ASCII 32-127)
 //   tools/acwriter/craft5.inc, craft6.inc, craft4.inc (6502 planes, prefix c4 / c5 / c6)
 // Usage: node tools/acwriter/mkcraftfonts.cjs
 const fs = require('fs');
@@ -12,7 +13,7 @@ fs.mkdirSync(dir, { recursive: true });
 const embed = {};
 for (const adv of [4, 5, 6]) {
   const built = adv === 4 ? require('./font3_art.cjs').face() : CF.builtin(fnt, adv, adv === 5 ? f4 : null);
-  const f = require('../acwfaces.cjs').override('craft' + adv, built);
+  const AF = require('../acwfaces.cjs'), f = AF.override('craft' + adv, AF.withGfx(built)); // with the Atari graphics (tools/atarigfx.cjs)
   fs.writeFileSync(dir + 'craft' + adv + '.acf', CF.serialize(f));
   fs.writeFileSync(__dirname + '/craft' + adv + '.inc', CF.toInc(f, 'c' + adv));
   embed['craft' + adv] = CF.serialize(f).toString('base64');

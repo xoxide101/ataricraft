@@ -34,7 +34,8 @@ const TRANSLIT = { '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"', '
 function toCraft(ch) {
   if (TRANSLIT[ch] !== undefined) return TRANSLIT[ch] === '\xad' ? String.fromCharCode(173) : TRANSLIT[ch];
   const c = ch.codePointAt(0);
-  if (c >= 0xe080 && c <= 0xe09f) return String.fromCharCode(c - 0xe000); // Atari graphics block (craftexport model {graphics})
+  if (c >= 0xe080 && c <= 0xe09f) return String.fromCharCode(c - 0xe000); // Atari graphics block (craftexport model {graphics:'pua'})
+  const ag = require('./atarigfx.cjs').acwCodeOfUni(c); if (ag >= 0) return String.fromCharCode(ag); // real Unicode: box drawing, suits, blocks (docs/FONT.md)
   if (c === 9) return '    ';
   if (c >= 32 && c < 127) return ch;
   if (c === 0xa0) return String.fromCharCode(160);
