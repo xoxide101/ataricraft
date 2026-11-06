@@ -289,7 +289,7 @@ xr11 lda #0
 
 ; keys with no selection; carry set = handled
 exkeys lda kk
- ldx #9
+ ldx #11
 xk1 cmp exkt,x
  beq xk2
  dex
@@ -304,9 +304,9 @@ xk3 lda exjh,x
  lda exjl,x
  pha
  rts
-exkt dta b(1),b(4),b(5),b(6),b(7),b(12),b(16),b(18),b(19),b(25)
-exjl dta l(exhome-1),l(excut-1),l(exend-1),l(exfind-1),l(exnext-1),l(exgoto-1),l(expaste-1),l(exrepl-1),l(exmark-1),l(excopy-1)
-exjh dta h(exhome-1),h(excut-1),h(exend-1),h(exfind-1),h(exnext-1),h(exgoto-1),h(expaste-1),h(exrepl-1),h(exmark-1),h(excopy-1)
+exkt dta b(1),b(4),b(5),b(6),b(7),b(12),b(16),b(18),b(19),b(25),b(14),b(15)
+exjl dta l(exhome-1),l(excut-1),l(exend-1),l(exfind-1),l(exnext-1),l(exgoto-1),l(expaste-1),l(exrepl-1),l(exmark-1),l(excopy-1),l(exsgn-1),l(exsgp-1)
+exjh dta h(exhome-1),h(excut-1),h(exend-1),h(exfind-1),h(exnext-1),h(exgoto-1),h(expaste-1),h(exrepl-1),h(exmark-1),h(excopy-1),h(exsgn-1),h(exsgp-1)
 
 ; command table hook: commands other than cut/copy/paste/mark end the selection
 excx ldx ed_on
@@ -777,5 +777,392 @@ exrepm lda #<exrm1
  jmp putstr
 exrm1 dta c'Replaced ',b(0)
 exrm2 dta c' time(s).',b(0)
+
+; ---------------------------------------------------------------- document segments (word/segx.inc)
+; ^N next segment (a new empty one after the last), ^B previous. Segment i sits in extended bank 4+i while another is in DOC.
+; Needs a 256K+ machine (sv_nb > 4); at most 5 segments so the file length stays within the 16 bit CRFT field.
+sgmx lda sv_xe
+ beq sgm0
+ lda sv_nb
+ sec
+ sbc #4
+ bcc sgm0
+ cmp #6
+ bcc sgm1
+ lda #5
+sgm1 rts
+sgm0 lda #0
+ rts
+
+sgstash lda sg_c
+ clc
+ adc #4
+ tax
+ lda #0
+ jmp sg_x
+
+sgfetch lda sg_c
+ clc
+ adc #4
+ tax
+ lda #1
+ jmp sg_x
+
+exsgn jsr sgmx
+ sta sg_mx
+ bne sn0
+ lda #46
+ sta cmsg
+ rts
+sn0 lda sg_n
+ bne sn1
+ lda #1
+ sta sg_n
+sn1 lda sg_c
+ clc
+ adc #1
+ cmp sg_n
+ bcc sn2
+ lda sg_n
+ cmp sg_mx
+ bcc sn3
+ lda #46
+ sta cmsg
+ rts
+sn3 jsr sgstash
+ inc sg_n
+ inc sg_c
+ lda #0
+ sta DOC
+ lda #<DOC
+ sta dend
+ lda #>DOC
+ sta dend+1
+ jmp sgfin
+sn2 pha
+ jsr sgstash
+ pla
+ sta sg_c
+ jsr sgfetch
+ jmp sgfin
+
+exsgp lda sg_n
+ cmp #2
+ bcc sp0
+ lda sg_c
+ bne sp1
+sp0 lda #47
+ sta cmsg
+ rts
+sp1 jsr sgstash
+ dec sg_c
+ jsr sgfetch
+
+; fresh view of the segment now in DOC; the status line shows "Segment i of n"
+sgfin lda #0
+ sta cl
+ sta cc
+ sta top
+ sta anyv
+ sta fpn
+ jsr scan
+ lda sg_c
+ clc
+ adc #'1'
+ sta exm45+8
+ lda sg_n
+ clc
+ adc #'0'
+ sta exm45+13
+ lda #2
+ sta fl
+ lda #45
+ sta cmsg
+ rts
+
+; Save a segmented document: one CRFT file, the segments back to back (the font table is not stored for these).
+sgsave jsr sgstash
+ lda #0
+ sta sg_i
+ sta sg_tl
+ sta sg_th
+ sta sg_cl
+ sta sg_ch
+sv1 lda sg_i
+ clc
+ adc #4
+ tax
+ lda #1
+ jsr sg_x
+ jsr fcsum
+ lda sg_cl
+ clc
+ adc fcs
+ sta sg_cl
+ lda sg_ch
+ adc fcs+1
+ sta sg_ch
+ lda dend
+ clc
+ adc sg_tl
+ sta sg_tl
+ lda dend+1
+ adc sg_th
+ sta sg_th
+ lda sg_tl
+ sec
+ sbc #<DOC
+ sta sg_tl
+ lda sg_th
+ sbc #>DOC
+ sta sg_th
+ inc sg_i
+ lda sg_i
+ cmp sg_n
+ bcc sv1
+ jsr mkhdr
+ lda sg_tl
+ sta HDR+8
+ lda sg_th
+ sta HDR+9
+ lda sg_cl
+ sta HDR+14
+ lda sg_ch
+ sta HDR+15
+ lda #8
+ jsr fopen
+ cpy #$80
+ bcs sver
+ lda #16
+ sta fln
+ lda #0
+ sta fln+1
+ sta sg_i
+ lda #11
+ ldx #<HDR
+ ldy #>HDR
+ jsr fblk
+ cpy #$80
+ bcs sver
+sv2 lda sg_i
+ clc
+ adc #4
+ tax
+ lda #1
+ jsr sg_x
+ lda dend
+ sec
+ sbc #<DOC
+ sta fln
+ lda dend+1
+ sbc #>DOC
+ sta fln+1
+ ora fln
+ beq sv3
+ lda #11
+ ldx #<DOC
+ ldy #>DOC
+ jsr fblk
+ cpy #$80
+ bcs sver
+sv3 inc sg_i
+ lda sg_i
+ cmp sg_n
+ bcc sv2
+ jsr pwsave
+ cpy #$80
+ bcs sver
+ jsr fclose
+ lda #6
+ bne sv9
+sver sty fer
+ jsr fclose
+ lda #8
+sv9 pha
+ jsr sgfetch
+ jsr scan
+ lda #2
+ sta fl
+ pla
+ sta cmsg
+ rts
+
+; Load a CRFT file longer than DOC: read it in pieces cut after the last hard return, one piece per segment.
+sgload jsr sgmx
+ sta sg_mx
+ bne sl0
+ jmp sl_bad
+sl0 lda #0
+ sta sg_n
+ sta sg_c
+ sta sg_cl
+ sta sg_ch
+ lda HDR+8
+ sta sg_tl
+ lda HDR+9
+ sta sg_th
+ lda #<DOC
+ sta dst
+ lda #>DOC
+ sta dst+1
+sl1 lda #0
+ sec
+ sbc dst
+ sta fln
+ lda #$8C
+ sbc dst+1
+ sta fln+1
+ lda sg_th
+ cmp fln+1
+ bcc sl_r
+ bne sl_w
+ lda sg_tl
+ cmp fln
+ bcs sl_w
+sl_r lda sg_tl
+ sta fln
+ lda sg_th
+ sta fln+1
+sl_w lda fln
+ ora fln+1
+ beq sl_nr
+ lda #7
+ ldx dst
+ ldy dst+1
+ jsr fblk
+ cpy #$80
+ bcc sl_nr
+ jmp sl_io
+sl_nr lda sg_tl
+ sec
+ sbc fln
+ sta sg_tl
+ lda sg_th
+ sbc fln+1
+ sta sg_th
+ lda dst
+ clc
+ adc fln
+ sta dend
+ lda dst+1
+ adc fln+1
+ sta dend+1
+ lda sg_tl
+ ora sg_th
+ beq sl_en2
+ lda dend
+ sta sp
+ sta tp
+ lda dend+1
+ sta sp+1
+ sta tp+1
+sl2 lda tp
+ bne sl3
+ lda tp+1
+ cmp #>DOC
+ bne sl3
+ jmp sl_bad
+sl3 dec16 tp
+ ldy #0
+ lda (tp),y
+ cmp #13
+ bne sl2
+ inc16 tp
+ lda tp
+ sta src
+ sta dend
+ sta sl_pl
+ lda tp+1
+ sta src+1
+ sta dend+1
+ sta sl_ph
+ ldy #0
+ lda (tp),y
+ sta sl_b
+ jsr sl_fin
+ bcc sl6
+ jmp sl_bad
+sl6 lda sl_pl
+ sta src
+ lda sl_ph
+ sta src+1
+ ldy #0
+ lda sl_b
+ sta (src),y
+ lda #<DOC
+ sta dst
+ lda #>DOC
+ sta dst+1
+sl4 lda src
+ cmp sp
+ bne sl5
+ lda src+1
+ cmp sp+1
+ bne sl5
+ jmp sl1
+sl_en2 jmp sl_end
+sl5 ldy #0
+ lda (src),y
+ sta (dst),y
+ inc16 src
+ inc16 dst
+ jmp sl4
+sl_end jsr sl_fin
+ bcs sl_bad
+ lda sg_cl
+ cmp HDR+14
+ bne sl_cs
+ lda sg_ch
+ cmp HDR+15
+ bne sl_cs
+ lda #0
+ sta sg_c
+ jsr sgfetch
+ lda #1
+ sta sg_ok
+ rts
+sl_cs lda #2
+ bne sl_x
+sl_io lda #3
+ sty fer
+ bne sl_x
+sl_bad lda #0
+sl_x sta sg_ok
+ lda #0
+ sta DOC
+ sta sg_n
+ sta sg_c
+ lda #<DOC
+ sta dend
+ lda #>DOC
+ sta dend+1
+ rts
+
+; terminate, checksum and park the piece in bank 4+sg_n; carry set when there is no bank left
+sl_fin lda sg_n
+ cmp sg_mx
+ bcs sl_fe
+ ldy #0
+ tya
+ sta (dend),y
+ jsr fcsum
+ lda sg_cl
+ clc
+ adc fcs
+ sta sg_cl
+ lda sg_ch
+ adc fcs+1
+ sta sg_ch
+ lda sg_n
+ clc
+ adc #4
+ tax
+ lda #0
+ jsr sg_x
+ inc sg_n
+ clc
+ rts
+sl_fe sec
+ rts
 
 ; prompt texts (exprl/exprh) live in msgs.inc (resident)

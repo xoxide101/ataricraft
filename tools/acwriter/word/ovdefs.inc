@@ -53,7 +53,23 @@ fz8    = $07E2
 fzp    = $07E3               ; paragraph of the line being drawn
 fzf    = $07E4               ; font slot of that line
 sv_nb  = $07E5               ; extended banks found at startup (bk_cnt)
-SWB  = $1380                 ; spell: word, 24 letter codes (a=1..z=26, apostrophe=27)
+; document segments (word/segx.inc, docs/ACWRITER-PAGE.md): segment i lives in bank 4+i while another one is in DOC
+sg_n   = $07E6               ; segments (0 = one plain document)
+sg_c   = $07E7               ; segment now in DOC
+sg_ok  = $07E8               ; result of a segmented load: 1 ok, 2 checksum, 3 i/o error
+sgbk   = $07E9
+sgd    = $07EA
+sgp    = $07EB
+sg_tl  = $07EC               ; 16 bit total / remaining length
+sg_th  = $07ED
+sg_cl  = $07EE               ; 16 bit checksum
+sg_ch  = $07EF
+sg_i   = $07F0
+sl_b   = $07F1               ; tail byte hidden by a segment terminator while it is parked
+sl_pl  = $07F2
+sl_ph  = $07F3
+sg_mx  = $07F4               ; most segments this machine can hold
+SWB  = $1380                  ; spell: word, 24 letter codes (a=1..z=26, apostrophe=27)
 DNM  = $1450                 ; dictionary file name, 0x9B ended
 ISB  = $9B00                 ; session ignore list: 32 entries x 4 byte hash
 SGB  = $9B80                 ; suggestions: 5 x 25 bytes (length + codes)

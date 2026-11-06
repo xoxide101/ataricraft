@@ -65,15 +65,20 @@ ovs0 lda ovdp
  sta NMIEN
  lda PORTB
  sta ovpb
-ovs3 lda ovpb
+ovs3 ldy #0
+ovs1 lda $A100,y
+ sta LDB,y
+ iny
+ bne ovs1
+ lda ovpb
  and #$E3
  ora #$08
  sta PORTB
  ldy #0
-ovs1 lda $A100,y
+ovs5 lda LDB,y
 ovs2 sta $4000,y
  iny
- bne ovs1
+ bne ovs5
  lda ovpb
  sta PORTB
  inc ovs1+2
@@ -92,6 +97,6 @@ ovs2 sta $4000,y
  sta ovid
  rts
 ovdp dta b(0)
-ovsp dta b($A1,$A9,$B1,$80)
+ovsp dta b($6A,$A9,$B1,$80)
 ovnp dta b([E.e_end-SLA+255]/256),b([S.e_end-SLA+255]/256),b([P.e_end-SLA+255]/256),b([Z.e_end-SLA+255]/256)
 ovbp dta b(0,0,0,0)

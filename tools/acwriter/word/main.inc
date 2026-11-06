@@ -65,6 +65,8 @@ stn jsr mktab
  sta sv_on
  sta sv_dl
  sta sv_ni
+ sta sg_n
+ sta sg_c
  ldx #39
 mied sta $14C0,x
  dex

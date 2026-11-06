@@ -100,12 +100,20 @@ o_fjoin ovstub Z.fjoin,3
 ; New document / text import: forget the per-paragraph fonts (kept out of line so earlier routines keep their addresses)
 hnew2 lda #0
  sta fpn
+ sta sg_n
+ sta sg_c
  jmp scan
 fbm2 lda #0
  sta fpn
  sta fns
+ sta sg_n
+ sta sg_c
  jmp doimport
 o_fclip ovstub Z.fclip,3
+o_sgsave ovstub E.sgsave,0
+o_sgload ovstub E.sgload,0
+exsgn ovstub E.exsgn,0
+exsgp ovstub E.exsgp,0
 ; the key handler plus fixcc, then the font table realignment after Cut / Paste
 hdl2 jsr handle
  lda ed_dn

@@ -86,7 +86,7 @@ hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),
 
 ; Overlay images are assembled to run at SLA but stored page aligned in the display-buffer area ($A100..), where
 ; the startup code copies them into bank 2 (ovstage); the screen buffer is cleared after that.
- org $A100
+ org $6A00
  org r:SLA
  .local E
  icl 'word/edit.inc'
@@ -126,5 +126,7 @@ BFNT = $9800
 
  org $1500
  icl 'word/helpdoc.inc'
+ org $1E93
+ icl 'word/segx.inc'
  icl 'word/spellbk.inc'
  run start

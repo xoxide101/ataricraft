@@ -114,7 +114,11 @@ fz_df8b cmp #3
 fz_df8c jmp doimport
 
 dosave
- jsr mkhdr
+ lda sg_n
+ cmp #2
+ bcc fz_dsn
+ jmp o_sgsave
+fz_dsn jsr mkhdr
  lda #8
  jsr fopen
  cpy #$80
@@ -205,8 +209,9 @@ fz_dl8 dex
  jmp fbad
 fz_dl8b lda HDR+9
  cmp #>($9000-DOC)
- bcs fbig
- sta fln+1
+ bcc fz_dl8c
+ jmp fz_dlbg
+fz_dl8c sta fln+1
  lda HDR+8
  sta fln
  ora fln+1
@@ -221,6 +226,8 @@ fz_dl8b lda HDR+9
 fz_dl2 lda #0
  sta fpn
  sta fns
+ sta sg_n
+ sta sg_c
  lda #<DOC
  clc
  adc fln
@@ -264,6 +271,28 @@ fz_dl4 jsr scan
 
 fbj jmp fbad
 
+; longer than DOC: the extended-RAM segments take it (E overlay, sg_ok = 1 loaded, 2 bad checksum, 3 i/o error)
+fz_dlbg lda #0
+ sta sg_ok
+ jsr o_sgload
+ lda sg_ok
+ cmp #1
+ beq fz_dlm
+ cmp #2
+ beq fbj
+ cmp #3
+ bne fz_dlf
+ ldy fer
+ jmp fer1
+fz_dlf jmp fbig
+fz_dlm lda HDR+6
+ and #2
+ beq fz_dlm1
+ jsr pwload
+fz_dlm1 lda #0
+ sta fpn
+ sta fns
+ beq fz_dl3
 ; not a CRFT file: read it again as plain text / ATASCII
 fbm jsr fclose
  jmp fbm2
