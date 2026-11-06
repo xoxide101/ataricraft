@@ -28,3 +28,7 @@ Naming: web/Windows `xC<Name>`, Atari `AC<Name>` (existing ACWriter/xCWriter). "
 ## Checklist for a new tool
 
 1. Format spec in `docs/` with a round-trip test fixture. 2. Import/export adapter in the Container. 3. Transport ops it needs. 4. Companion plan (memory budget, UI) with the same file. 5. Row added to this table.
+
+### ACCalc (Atari spreadsheet companion)
+
+Stage 4 of the Craft spreadsheet family. 130XE 128K app (`tools/accalc`) that reads/writes the compact `.XCS` binary, stores cells in extended banks, recalculates with Atari BCD-6 (OS FP ROM) and matches `calccore` atari-bcd mode. Details and limits: [ACCALC.md](ACCALC.md).
