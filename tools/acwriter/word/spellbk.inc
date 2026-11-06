@@ -1,13 +1,6 @@
-; Dictionary table access for the spell checker. Lives at $9300, outside the $4000-$7FFF window of the
-; 130XE extended bank, so it stays visible while the bank is switched in. Interrupts are masked
-; (NMIEN off) while the bank is mapped because the code at $4000-$4BFF is hidden then.
-
- org DNM
- dta c'D1:EN.CDC',b($9B)
- org DNM2
- dta c'H:EN.CDC',b($9B)
-
- org $9300
+; Dictionary table access for the spell checker. Lives in the resident code below $4000, outside the
+; $4000-$7FFF window of the 130XE extended bank, so it stays visible while the bank is switched in.
+; Interrupts are masked (NMIEN off) while the bank is mapped because the code at $4000-$4BFF is hidden then.
 
 ; A = byte at table offset sv_bo (16 bit)
 bk_get

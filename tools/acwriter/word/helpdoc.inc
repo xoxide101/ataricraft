@@ -66,8 +66,8 @@ helpdoc
  dta b(0)
 
 ; line 0 is the logo; entries start at line EL0, each 12 scanlines tall at double width
-  org SLA+$0C00
-homedoc
+; the home and convert pages are image 4 of the overlay manager (expanded by poc5.asm), shown from the slot
+ .macro homebody
  dta b(15),b(10),b(30),b(1),c'A C  W R I T E R',b(1),b(13)
  dta b(15),b(5),c'----------------------------------------------------------------',b(13)
  dta b(15),c'Word processor for the Atari 8-bit',b(13)
@@ -83,7 +83,8 @@ homedoc
  dta b(7),b(28),b(31),c'    Q   Quit               ',b(31),b(13)
  dta b(0)
 
-convdoc
+ .endm
+ .macro convbody
  dta b(15),b(7),b(28),b(1),c'CONVERT / IMPORT',b(1),b(13)
  dta b(13)
  dta c'Reads a plain text or ATASCII file and turns it into an',b(13)
@@ -103,3 +104,4 @@ convdoc
  dta c'  node tools/craftimport.cjs INPUT OUTPUT.CWD',b(13)
  dta c'Then press E to edit the result.',b(13)
  dta b(0)
+ .endm

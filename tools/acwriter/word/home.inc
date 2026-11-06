@@ -64,7 +64,14 @@ gp1 pla
  lda #1
  sta anyv
 pgshow
- ldx hmode
+ lda sv_xe
+ beq pgsh0
+ lda #4
+ cmp ovid
+ beq pgsh0
+ sta ovrq
+ jsr ovlsw
+pgsh0 ldx hmode
  lda pgl-1,x
  pha
  lda pgh-1,x
@@ -418,8 +425,8 @@ paj_l dta l(pa_new-1),l(pa_open-1),l(pa_save-1),l(pa_sas-1),l(pa_conv-1),l(pa_he
 paj_h dta h(pa_new-1),h(pa_open-1),h(pa_save-1),h(pa_sas-1),h(pa_conv-1),h(pa_help-1),h(pa_edit-1),h(pa_quit-1)
 hkeys dta c'NOSACHEQ'
 
-pgl dta l(homedoc),l(helpdoc),l(convdoc)
-pgh dta h(homedoc),h(helpdoc),h(convdoc)
+pgl dta l(H.homedoc),l(helpdoc),l(H.convdoc)
+pgh dta h(H.homedoc),h(helpdoc),h(H.convdoc)
 ptl dta l(pgt1),l(pgt2),l(pgt3)
 pth dta h(pgt1),h(pgt2),h(pgt3)
 pil dta l(pgi1),l(pgi2),l(pgi3)
