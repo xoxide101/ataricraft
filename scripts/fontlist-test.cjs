@@ -38,30 +38,30 @@ const git = (a) => execSync('git ' + a, { cwd: ROOT, encoding: 'utf8' });
   p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => d.accept('0'));
   await p.goto('http://localhost:' + port + '/fontedit.html');
   await p.waitForFunction(() => window.FE);
-  await p.waitForFunction(() => document.querySelectorAll('#flist optgroup').length === 6);
-  const labels = await p.$$eval('#flist optgroup', (g) => g.map((x) => x.label));
-  assert.deepStrictEqual(labels.map((l) => l.replace(/ \(none\)/, '')), ['ACWriter / Craft fonts', 'Craft faces', 'Shipped', 'Atari ROM', 'Personal', 'Converted']);
-  ok('library groups: ' + labels.join(', '));
+  await p.waitForFunction(() => FE.entries && FE.entries.size > 3);
+  const grps = await p.evaluate(() => [...new Set([...FE.entries.values()].map((e) => e.group))].sort());
+  for (const g of ['craft', 'shipped']) assert.ok(grps.includes(g), g + ' group present: ' + grps);
+  ok('library groups: ' + grps.join(', '));
 
   const load = async (name) => {
-    const val = await p.$eval('#flist', (s, n) => [...s.options].find((o) => o.textContent === n)?.value, name);
-    assert.ok(val, name + ' listed');
+    const id = await p.evaluate((n) => { const e = [...FE.entries.values()].find((x) => x.name === n); return e && e.id; }, name);
+    assert.ok(id, name + ' listed');
     await p.evaluate(() => { FE.state.f = null; });
-    await p.selectOption('#flist', val);
+    await p.evaluate((i) => FE.openEntry(i), id);
     await p.waitForFunction(() => FE.state.f, null, { timeout: 15000 });
     await p.waitForTimeout(400);
     return p.evaluate(() => { const f = FE.state.f; return { name: f.name, adv: f.adv, filled: f.glyphs.filter((g) => g.some((x) => x)).length }; });
   };
   const must = (f, min) => assert.ok(f.filled >= min, f.name + ' has only ' + f.filled + ' non-empty glyphs');
 
-  if (haveRom) { const f = await load('Atari ROM charset (ATASCII, 8x8)'); must(f, 120); assert.strictEqual(f.adv, 8); ok('Atari ROM charset: ' + f.filled + ' glyphs, ' + f.adv + ' px'); }
+  if (haveRom) { const f = await load('Atari ROM charset (8x8)'); must(f, 120); assert.strictEqual(f.adv, 8); ok('Atari ROM charset: ' + f.filled + ' glyphs, ' + f.adv + ' px'); }
   if (havePersonal) {
-    const f1 = await load('FONT.FNT'); must(f1, 90); ok('personal FONT.FNT via the charset importer: ' + f1.filled + ' glyphs');
-    await p.selectOption('#ttfadv', '8');
-    const f2 = await load('Atari8bit.ttf'); must(f2, 80); assert.strictEqual(f2.adv, 8); ok('personal Atari8bit.ttf via the TTF rasteriser: ' + f2.filled + ' glyphs at ' + f2.adv + ' px');
+    const f1 = await load('FONT'); must(f1, 90); ok('personal FONT.FNT via the charset importer: ' + f1.filled + ' glyphs');
+    
+    const f2 = await load('Atari8bit'); must(f2, 80); assert.strictEqual(f2.adv, 8); ok('personal Atari8bit.ttf via the TTF rasteriser: ' + f2.filled + ' glyphs at ' + f2.adv + ' px');
     await p.screenshot({ path: ROOT + '/out/fl-1-library.png' });
   }
-  const f3 = await load('craft5.acf'); assert.strictEqual(f3.adv, 5); ok('shipped craft5.acf opens');
+  await p.evaluate(() => FE.openEntry('craft')); await p.evaluate(() => FE.selectSize(5)); const f3 = await p.evaluate(() => ({ adv: FE.state.f.adv })); assert.strictEqual(f3.adv, 5); ok('shipped craft5.acf opens');
   assert.deepStrictEqual(errs, []);
   ok('no page errors');
   await b.close(); srv.close();

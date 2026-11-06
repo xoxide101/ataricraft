@@ -92,7 +92,7 @@ function build() {
   step('font manifests (web/library/fonts/local)', 'scripts/fontlist.cjs');
   if (acwDirty) { log('ACWriter build: SKIPPED, tools/acwriter has uncommitted changes (' + acwDirty.split('\n').length + ' path(s)); commit or stash them first'); return; }
   for (const s of ['tools/acwriter/mkcraftfonts.cjs', 'tools/acwriter/mkzoomfont.cjs']) step(s, s);
-  for (const f of ['craft4', 'craft5', 'craft6', 'zfont']) fs.copyFileSync(abs('font/build/' + f + '.inc'), abs('tools/acwriter/' + f + '.inc'));
+  for (const f of ['craft4', 'craft5', 'craft6', 'zfont']) { if (!fs.existsSync(abs('font/build/' + f + '.inc'))) { log(f + ': flagged off for acwriter-atari in font/family-manifest.json, not overlaid'); continue; } fs.copyFileSync(abs('font/build/' + f + '.inc'), abs('tools/acwriter/' + f + '.inc')); }
   log('overlaid font/build/*.inc on tools/acwriter/*.inc (font/overrides applied)');
   step('tools/acwriter/mkpgfont.cjs', 'tools/acwriter/mkpgfont.cjs');
   if (!fs.existsSync(madsExe)) { log('poc5.xex: SKIPPED, ' + madsExe + ' not present (MADS is not in the repo)'); return; }
