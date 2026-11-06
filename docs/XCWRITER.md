@@ -61,6 +61,7 @@ Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md
 - **Tab key** inserts spaces up to the next stop; centre and right stops act as left stops while typing (they are honoured as real centre/right alignment only when text with tab characters is imported or laid out through `Page.expandTabs`).
 - The page (and its tab stops) is saved into the `.xcw` trailer from any mode once the document has one; opening an `.xcw`/`.cwd` that has a trailer restores it. In Atari matching mode the view still wraps at 64 columns.
 
+**Styles and sections (Page view bar):** *Style* (Body, Title, Heading 1-3, Caption), *Size* (Auto or 4/5/6/8/10/12 with a note on the sizes the current face has), *Section font*, *Section break*, *Section* list (jump, one entry per section), *Styles...* (document default font and the style table). The Typeface picker is the paragraph override. Precedence default < section < style < paragraph, see [FONT.md](FONT.md#styles-and-sections-xcwriter-acwriter). Everything is undoable, saved in the `.xcw` (`.cwd` still opens), and written to / read from docx. Test: `node scripts/xcwriter-sections-test.cjs` (screenshots `out/shots/sections/xcw-*.png`).
 Test: `node scripts/xcwriter-page-test.cjs` (screenshots `out/xcwp-*.png`). Not verified: other browsers (only Chrome), high-DPI displays (devicePixelRatio is handled but only tested at 1).
 
 ### Right-click menus and Clear history

@@ -167,6 +167,14 @@
         <select id="pgzoom" title="Zoom"></select>
         <select id="pgkind" title="Tab stop type added by clicking the ruler"><option value="l">L left tab</option><option value="c">C centre tab</option><option value="r">R right tab</option></select>
         <button id="pgsetup" title="Paper size, pitch, margins, tab stops">Page setup...</button>
+        <span class="sep"></span>
+        <label class="tface" title="Role style of the selected paragraphs. Face and size follow the style (Styles...), a paragraph font or size overrides it">Style <select id="pgrole"></select></label>
+        <label class="tface" title="Cell size of the selected paragraphs. Auto follows the style. Only the Craft faces have all sizes">Size <select id="pgsize"></select></label>
+        <label class="tface" title="Font of the whole section the cursor is in (lower priority than a style or paragraph font)">Section font <select id="secfont"></select></label>
+        <button id="secbrk" title="Start a new section at the cursor; it inherits this section's font">Section break</button>
+        <label class="tface" title="Sections of this document: pick one to jump to it">Section <select id="seclist"></select></label>
+        <button id="pgstyles" title="Edit the document default font and the Title / Heading / Body / Caption styles">Styles...</button>
+        <span id="sizenote" class="dim"></span>
         <span id="pgfit"></span>
       </div>
       <canvas id="pgruler" title="Click: add a tab stop. Drag a tab or a margin marker to move it. Double-click a tab to remove it."></canvas>
