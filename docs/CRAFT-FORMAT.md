@@ -16,11 +16,11 @@ Reference implementations: `tools/acwriter/word/file.inc` (6502 writer and reade
 
 | App | Type byte | Extension | Meaning |
 |---|---|---|---|
-| ACWriter | `W` (0x57) | `.CWD` | Craft Word Document |
-| ACSpread | `S` (0x53) | `.CSP` | reserved, not yet defined |
-| ACDBase | `D` (0x44) | `.CDB` | reserved, not yet defined |
+| ACWriter, xCWriter | `W` (0x57) | `.XCW` (old name `.CWD`, still read) | Craft Word document |
+| ACSpread | `S` (0x53) | `.XCS` | Craft spreadsheet: name reserved, format not defined yet |
+| ACDBase | `D` (0x44) | `.XCD` | Craft database: name reserved, format not defined yet |
 
-The extension is a convention only. The type byte in the header decides. 8.3 names work on every DOS, C64 disk and modern OS. On Atari the app adds `.CWD` when you type a name without a dot, and `D1:` when you type no device (`H:` and any other CIO device work too).
+The extension is a convention only. The type byte in the header decides. 8.3 names work on every DOS, C64 disk and modern OS. Decision: `xcw` for write, `xcs` for spreadsheet, `xcd` for database; everything else keeps its normal name (full list: [FILE-EXTENSIONS.md](FILE-EXTENSIONS.md)). `.XCW` fits the Atari 8.3 limit. xCWriter, `craftimport` and EBookCraft write `.xcw`; every reader accepts `.cwd` too. ACWriter itself (6502) still adds `.CWD` when you type a name without a dot (changing the assembly is deferred; type `H:NAME.XCW` to use the new name), and `D1:` when you type no device (`H:` and any other CIO device work too).
 
 ## Header (16 bytes, offset 0)
 
@@ -41,7 +41,7 @@ The payload starts at offset 16 and runs for `length` bytes. A file shorter than
 
 The checksum is deliberately weak and cheap so a 1 MHz 6502 can compute it while saving. It catches truncation and sector damage, not malice. A mismatch means "damaged"; a reader may still offer to open the text.
 
-Example (the start of `ACWRITER-DEMO.CWD`):
+Example (the start of `ACWRITER-DEMO.CWD`, the sample keeps its old name):
 
 ```
 43 52 46 54  01  57  00  00   D2 05  2D 00  40  14  32 F2
@@ -115,12 +115,12 @@ Writer: build the payload, compute the checksum, write the 16-byte header then t
 
 Reader: check magic, version, type, `length`; read `length` bytes; verify the checksum; then interpret the stream. Never assume the end of file equals the end of the payload.
 
-JavaScript reference: `node tools/craftdoc.cjs FILE.CWD` prints the plain text, `--json` prints header, paragraphs, markers and style runs.
+JavaScript reference: `node tools/craftdoc.cjs FILE.XCW` prints the plain text, `--json` prints header, paragraphs, markers and style runs.
 
 ## Other machines
 
 - **Atari 8-bit:** DOS 2.x, MyDOS, SpartaDOS and BW-DOS all store it as an ordinary file. Block `put` of the 16-byte header, then the payload. No device assumptions.
-- **PC and web:** open with any hex viewer or `craftdoc.cjs`; the web editions will read and write the same bytes. Use `.cwd` and treat the file as binary (no newline conversion).
+- **PC and web:** open with any hex viewer or `craftdoc.cjs`; the web editions will read and write the same bytes. Use `.xcw` and treat the file as binary (no newline conversion).
 - **C64 (planned):** a PRG/SEQ file with the same bytes. Convert Craft text to PETSCII on import and back on export; keep the stream layout unchanged.
 - **Line endings:** Craft text has its own (13/14). Never rewrite them to CR LF in the stored file; convert on export only.
 

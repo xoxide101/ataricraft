@@ -59,4 +59,4 @@ Z80 family first: ZX Spectrum, Amstrad CPC/PCW, MSX; then SMS/SG-1000/ColecoVisi
 
 ## Adding a machine
 
-Copy a stub, fill what is known, list the rest in `unknown`, run the tests, add free test material, keep ROM files local with names/hashes only.
+Copy a stub, fill what is known, list the rest in `unknown`, run the tests, add free test material (public homebrew/test ROMs, kept local), keep ROM files local with names/hashes only.

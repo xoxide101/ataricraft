@@ -39,4 +39,4 @@ Import: `sql.query` -> rows -> Container table (original = result dump, schema =
 
 ## Open questions
 
-Which databases first (SQLite is easiest, MySQL requested); row packing format for 8-bit clients; whether writes are ever enabled from the Atari side.
+Decided: databases go in the order **SQLite first, then MySQL**. Open: row packing format for 8-bit clients; whether writes are ever enabled from the Atari side.

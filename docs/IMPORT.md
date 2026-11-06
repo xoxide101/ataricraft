@@ -1,8 +1,8 @@
 # Converting documents to and from Craft Word
 
-## Import: `node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format F] [--cols N]`
+## Import: `node tools/craftimport.cjs INPUT [OUTPUT.XCW] [--format F] [--cols N]`
 
-`F` is one of `atascii text rtf html md doc docx`. It is auto-detected from content and extension. Output is a CRFT `.CWD` file (see CRAFT-FORMAT.md), wrapped at 64 columns with soft breaks (14) and hard ends (13).
+`F` is one of `atascii text rtf html md doc docx`. It is auto-detected from content and extension. Output is a CRFT `.XCW` file (default name; the old `.CWD` is still read) (see CRAFT-FORMAT.md), wrapped at 64 columns with soft breaks (14) and hard ends (13).
 
 | Format | Kept | Dropped |
 |---|---|---|
@@ -18,7 +18,7 @@ Smart quotes and dashes are transliterated to ASCII. The payload is cut at 7680 
 
 AtariWriter rules come from its manual and from sample documents on the AtariWriter+ disks. Its bold, elongated and sub/superscript markers are not decoded, because no sample file shows how they are stored.
 
-## Export: `node tools/craftexport.cjs FILE.CWD OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]`
+## Export: `node tools/craftexport.cjs FILE.XCW OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]`
 
 The format defaults to the output extension (`.txt`, `.atx`, `.rtf`, `.htm`, `.md`).
 

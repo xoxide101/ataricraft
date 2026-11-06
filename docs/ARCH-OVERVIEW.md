@@ -1,6 +1,6 @@
 # Architecture overview
 
-ataricraft is the **blueprint** for a family of retro-computer "Craft" systems. Only the **core/engine** changes per machine; the apps, file formats, transport and ideas stay the same. Status: draft v1 (proposals marked *Proposed*). Code: `tools/craftcore/`, tests: `node scripts/craftcore-test.cjs`.
+ataricraft is the **blueprint** for a family of retro-computer "Craft" systems. Only the **core/engine** changes per machine; the apps, file formats, transport and ideas stay the same. Status: draft v1 (decisions in the table below are approved; anything still marked *Proposed* is not). Code: `tools/craftcore/`, tests: `node scripts/craftcore-test.cjs`.
 
 Specs: [ARCH-TRANSPORT](ARCH-TRANSPORT.md) · [ARCH-CONTAINER](ARCH-CONTAINER.md) · [ARCH-MACHINE-CORE](ARCH-MACHINE-CORE.md) · [MACHINE-PROFILE](MACHINE-PROFILE.md) · [ARCH-COMPANIONS](ARCH-COMPANIONS.md) · [ARCH-SQL-GATEWAY](ARCH-SQL-GATEWAY.md) · existing [TRANSPORT](TRANSPORT.md), [CRAFT-FORMAT](CRAFT-FORMAT.md), [FONT](FONT.md).
 
@@ -10,7 +10,7 @@ Specs: [ARCH-TRANSPORT](ARCH-TRANSPORT.md) · [ARCH-CONTAINER](ARCH-CONTAINER.md
 2. **Originals are sacred.** Imports keep the original bytes; derived forms and a *loss report* sit beside them. Exports are checked by round-trip diff, as in the word processor.
 3. **Data, not code, describes a machine.** A machine is a core (code) plus a *profile* (JSON).
 4. **Every tool has an Atari-native companion** using the same file format and transport.
-5. **Free test material only.** ROMs stay local and are never committed.
+5. **Free test material only** (public homebrew and test ROMs). ROMs stay local and are never committed.
 
 ## Lanes
 
@@ -39,6 +39,18 @@ Rules:
 - Apps never call a core or a device directly; they go through a transport (even in-process: `emulator` backend).
 - Machine-specific knowledge lives only in L0 and in profile JSON. An app asks the profile, not `if (machine == ...)`.
 - No credentials, ROMs or personal media in git.
+
+## Decisions recorded (approved by the user)
+
+| Topic | Decision |
+|---|---|
+| File names | `.xcw` Craft Word, `.xcs` spreadsheet, `.xcd` database; everything else uses its normal name ([FILE-EXTENSIONS.md](FILE-EXTENSIONS.md)). `.cwd` stays readable. The Container file is a normal ZIP with `manifest.json` ([ARCH-CONTAINER](ARCH-CONTAINER.md)); `.ccn` is dropped. |
+| Transport errors | `error.code` is the protocol number, the relay's old number is `error.native` ([ARCH-TRANSPORT](ARCH-TRANSPORT.md) section 6). |
+| Frame checksum | CRC-16/CCITT-FALSE by default, CRC-32 optional (flag bit 1). |
+| Disk catalogs | DOS-specific catalog adapters (MyDOS, SpartaDOS, BW-DOS) come later; the heuristic DOS 2 catalog stays for now. |
+| Text encodings | ATASCII/PETSCII mappings stay partial; unmapped codes are reported as losses, never guessed. |
+| SQL gateway | SQLite first, then MySQL ([ARCH-SQL-GATEWAY](ARCH-SQL-GATEWAY.md)). |
+| Test material | Free test material means public homebrew and test ROMs, kept locally; ROM files are never committed to git (hashes and names only). |
 
 ## Repo layout
 

@@ -30,7 +30,7 @@ existing data / database / file
 
 ## Schema type map
 
-Fields `{name, type, encoding?, length?, nullable?}`; `type` is one of `int, uint, float, decimal, bool, string, bytes, date, time, datetime, blob, json`. Text encodings: `craft` (Craft text), `atascii`, `petscii`, `ascii`, `latin1`, `utf8`. Mappings are **partial on purpose**: unmapped codes are reported as lost, never guessed. Target type maps (e.g. `decimal` -> MySQL `DECIMAL(p,s)`, DBF `N`, CSV text) live in the export adapter and are listed in the loss report when narrowing happens.
+Fields `{name, type, encoding?, length?, nullable?}`; `type` is one of `int, uint, float, decimal, bool, string, bytes, date, time, datetime, blob, json`. Text encodings: `craft` (Craft text), `atascii`, `petscii`, `ascii`, `latin1`, `utf8`. Mappings are **partial on purpose** (decision accepted): unmapped codes are reported as lost, never guessed. Target type maps (e.g. `decimal` -> MySQL `DECIMAL(p,s)`, DBF `N`, CSV text) live in the export adapter and are listed in the loss report when narrowing happens.
 
 ## Loss report
 
@@ -42,15 +42,17 @@ Entries `{code, severity: info|warn|lossy, where, count, detail, samples?}`. Exa
 
 ## Archive lane (folder form)
 
-`toFiles()/fromFiles()`: `manifest.json`, `original/<name>`, `derived/<id>`. An unpacked disk becomes a Windows folder with a catalog (names, sizes, sha256 per file) and can be **rebuilt** to the identical image. The ATR adapter's DOS 2 catalog is heuristic (sectors 361-368, follows chains); disks it cannot read keep only the original and a note.
+`toFiles()/fromFiles()`: `manifest.json`, `original/<name>`, `derived/<id>`. An unpacked disk becomes a Windows folder with a catalog (names, sizes, sha256 per file) and can be **rebuilt** to the identical image. The ATR adapter's DOS 2 catalog is heuristic (sectors 361-368, follows chains); disks it cannot read keep only the original and a note. Decision: DOS-specific catalog adapters (MyDOS, SpartaDOS, BW-DOS, ...) come **later**, as separate adapters on top of the ATR one; until then the heuristic stays.
 
-## Single-file form
+## Single-file form (ZIP)
+
+Decision (file naming): the Container uses a normal name. The file form is a **ZIP** (`.zip`) with `manifest.json` first, then `original/<name>` and `derived/<id>`: the folder form above, packed with **stored** (uncompressed) entries and a fixed 1980-01-01 timestamp so the same input and `created` give identical bytes. Any unzip tool can open it; `Container.toZip()` / `fromZip()` / `open()` (`open` takes either form) are in `container.cjs`, and the round trip test goes through it. Damage fails the per-entry CRC-32 and `verify()` checks each blob's size and sha256. Compressed entries (e.g. re-zipped by another tool) are refused with `Unsupported`; unpack and re-pack with Craft. The compact binary form below is kept for the wire and for tests; it has **no file extension** of its own (the `.ccn` name is dropped).
 
 ```
 "CCNT" | ver u8 | flags u8 | reserved u16 | manifestLen u32 | blobLen u32 | manifest JSON | blobs (sorted by id) | sha256 of everything before (32)
 ```
-Little-endian, deterministic (same input and `created` => identical bytes). Suggested extension `.ccn` (*open question*). Any damage fails the trailing sha256 and `verify()` also checks each blob's size and sha256.
+Little-endian, deterministic. Any damage fails the trailing sha256.
 
 ## Adapters now
 
-ATR (header facts, DOS 2 catalog, per-file sha256), CWD (header/payload/trailer + lossy text), ACF fonts (JSON via `tools/craftfont.cjs`), raw (fallback). Next: CSV/DBF/SQLite/XLSX (Convert), SQL gateway rows -> container tables ([ARCH-SQL-GATEWAY](ARCH-SQL-GATEWAY.md)), tape images (CAS/TAP).
+ATR (header facts, DOS 2 catalog, per-file sha256), CWD (the adapter for Craft Word `.xcw`/`.cwd`: header/payload/trailer + lossy text), ACF fonts (`.acf`/`.xcf`) (JSON via `tools/craftfont.cjs`), raw (fallback). Next: CSV/DBF/SQLite/XLSX (Convert), SQL gateway rows -> container tables ([ARCH-SQL-GATEWAY](ARCH-SQL-GATEWAY.md)), tape images (CAS/TAP).
