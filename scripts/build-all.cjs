@@ -16,7 +16,7 @@ const git = (a) => spawnSync('git', a, { cwd: ROOT, encoding: 'utf8' });
 // tracked: committed to git; false = gitignored, produced locally by this build. dir entries cover every file below them.
 const DERIVED = [
   { step: 'xcwriter', files: ['web/js/xcwriter/core/xcw-core.js', 'web/js/xcwriter/core/xcw-data.js'], tracked: true, from: 'tools/*.cjs (bundle list in sync-xcwriter-core.cjs), tools/acwriter/font4.json, sym.json, docs/samples' },
-  { step: 'faces', files: ['font/build/craft4.inc', 'font/build/craft5.inc', 'font/build/craft6.inc', 'font/build/zfont.inc', 'web/js/fontedit/acw-faces.js'], tracked: true, from: 'tools/acwfaces.cjs + font/overrides/*.acf' },
+  { step: 'faces', files: ['font/build/craft4.inc', 'font/build/craft5.inc', 'font/build/craft6.inc', 'font/build/zfont.inc', 'web/js/fontedit/acw-faces.js', 'web/js/fontedit/craft-big.js'], tracked: true, from: 'tools/acwfaces.cjs + font/overrides/*.acf' },
   { step: 'faces', files: ['web/library/fonts/acw'], tracked: true, from: 'tools/acwfaces.cjs + font/overrides/*.acf (force-added although web/library/* is ignored)' },
   { step: 'fontlist', files: ['web/library/fonts/local'], tracked: false, from: 'scripts/fontlist.cjs: font/, font_personal/, ROM charset, converted/ (manifest.json "generated" stamp ignored)' },
   { step: 'acwriter', files: ['tools/acwriter/craft4.inc', 'tools/acwriter/craft5.inc', 'tools/acwriter/craft6.inc', 'tools/acwriter/zfont.inc', 'tools/acwriter/craftpg.inc', 'tools/acwriter/craftpg_a.inc', 'tools/acwriter/craftpg_b.inc', 'web/js/fontedit/builtin-fonts.js', 'tools/acwriter/poc5.lst'], tracked: true, from: 'tools/acwriter/mk*.cjs, then font/build/*.inc overlay' },

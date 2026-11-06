@@ -204,13 +204,14 @@
 
   function render() {
     if (!$('v1')) return;
+    if (!st.f) return;
     const face = mkFace(st.f);
     last = computeDiff(face); last.diff = last.list;
     const n = [draw1x(face), draw2x(face), drawPage(face)];
     drawDiff(face);
     return n;
   }
-  FE.hooks.push(render);
+  FE.hooks.push(() => { if (st.f && FE.isTab('atari')) render(); });
   for (const id of ['vsz', 'vpz', 'vpitch', 'vgrid', 'vbands', 'vhl', 'vth']) $(id).addEventListener('input', render);
   FE.val = { render, diff: () => ({ list: last.list.slice(), pct: Object.assign({}, last.pct) }), mkFace, glyph8, direct8 };
   render();
