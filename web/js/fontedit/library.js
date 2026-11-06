@@ -270,6 +270,19 @@
       const raw = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
       return openBytes(new Uint8Array(raw), name.replace(/\.gz$/i, ''), o);
     }
+    const FX = FP.Formats, fx = FX && FX.detect(bytes, name);
+    if (fx === 'eot') return openBytes(FX.eotUnwrap(bytes), name.replace(/\.eot$/i, '') + '.ttf', o);
+    if (fx === 'ttc') {
+      const cnt = FP.Sfnt.ttcCount(bytes), base0 = name.replace(/\.ttc$/i, '');
+      for (let i = 0; i < cnt; i++) await openBytes(FX.ttcUnpack(bytes, i), base0 + (cnt > 1 ? '-' + (i + 1) : '') + '.ttf', o);
+      return FE.toast('TTC collection: ' + cnt + ' font(s) added as families');
+    }
+    if (fx) {
+      const f = FX.read(bytes, name, { name: nm, format: fx, cw: +$('rawcw').value || 8, ch: +$('rawch').value || 8, order: $('raworder').value });
+      addFamily(CF.familyNew(f, nm), nm, ['Mine', fx.toUpperCase()], o);
+      return FE.toast(fx.toUpperCase() + ' imported as a ' + f.adv + ' px family');
+    }
+    if (kind === 'fnt' && $('raworder').value === 'atascii') { const f = FX.readAtari(bytes, { name: nm, order: 'atascii' }); addFamily(CF.familyNew(f, nm), nm, ['Mine', 'Atari .fnt (ATASCII)'], o); return FE.toast('Atari charset (ATASCII order) imported'); }
     if (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG') { const f = await sheetFromPng(bytes, nm); f.name = nm; addFamily(CF.familyNew(f, nm), nm, ['Mine', 'PNG sheet'], o); return FE.toast('PNG sheet imported as ' + f.adv + ' px family'); }
     const acfm = (kind === 'bdf' && /ACFM/.test(buf.toString('latin1', 0, 4096))) || (kind === 'ttf' && buf.toString('latin1', 0, 600).includes('ACFM'));
     if ((kind === 'ttf' || kind === 'woff' || kind === 'woff2') && !acfm) return convertTtf(bytes, name, o);

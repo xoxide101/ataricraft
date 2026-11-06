@@ -105,6 +105,20 @@
       const f = FE.atari8(true); if (!f) return FE.toast('Cannot make an 8x8 set');
       download(fname() + '.fnt', CF.toFnt(f), 'application/octet-stream'); FE.toast('Exported ' + fname() + '.fnt (1024 bytes, 8x8, screen-code order' + (f === st.f || (st.fam && st.fam.sizes[8] === f) ? '' : ', derived on the fly from ' + st.f.adv + ' px') + ')');
     };
+    $('bxfmt').onclick = () => {
+      try {
+        const FX = FP.Formats, v = $('xfmt').value, cw = +$('xcw').value || 8, ch = +$('xch').value || 8, f0 = cw <= 8 && ch <= 8 ? FE.atari8(true) : st.f, f = f0 || st.f, base = fname();
+        exportAcf(); let r;
+        if (v.startsWith('atari')) r = FX.write('atari', f, { order: v === 'atari-atascii' ? 'atascii' : 'atari-screen', inverse: v === 'atari-inv' });
+        else if (v === 'c64h') r = FX.write('c64', f, { header: true });
+        else if (v === 'eot') r = { bytes: FX.eotWrap(FP.toTtf(st.f, {}), st.fam.name), ext: 'eot' };
+        else if (v === 'woff') r = { bytes: FP.Sfnt.woff(FP.toTtf(st.f, {})), ext: 'woff' };
+        else if (v === 'ttc') r = { bytes: FX.ttcPack(Object.keys(st.fam.sizes).map((k) => FP.toTtf(st.fam.sizes[k], {}))), ext: 'ttc' };
+        else r = FX.write(v, f, { cw, ch });
+        download(base + '.' + r.ext, r.bytes, 'application/octet-stream'); FE.toast('Exported ' + base + '.' + r.ext + ' (' + r.bytes.length + ' bytes)');
+        return r;
+      } catch (e) { FE.toast('Export failed: ' + e.message); }
+    };
     $('bpng').onclick = () => {
       const sh = CF.toSheet(st.f), cv = document.createElement('canvas'); cv.width = sh.w; cv.height = sh.h;
       const c = cv.getContext('2d'), im = c.createImageData(sh.w, sh.h);

@@ -500,4 +500,4 @@ function roundtrip(input, name, opt = {}) {
   return res;
 }
 
-module.exports = { SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, pixelContours, Sfnt: SF, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
+module.exports = { get Formats() { return require('./fontformats.cjs'); }, SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, pixelContours, Sfnt: SF, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
