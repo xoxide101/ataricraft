@@ -1218,7 +1218,7 @@ const U32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o +
 const tag4 = (b, o) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
 
 // ---- container: sfnt (TTF/OTF) or WOFF ---------------------------------------------------------------------------------------
-function tables(b) {
+function tables(b, idx) {
   const t = {};
   const sig = tag4(b, 0);
   if (sig === 'wOFF') {
@@ -1235,7 +1235,7 @@ function tables(b) {
     return W.tables(b);
   }
   let base = 0;
-  if (sig === 'ttcf') base = U32(b, 12);
+  if (sig === 'ttcf') base = U32(b, 12 + 4 * Math.min(idx || 0, U32(b, 8) - 1));
   else if (!(sig === 'OTTO' || sig === '\0\x01\0\0' || sig === 'true' || sig === 'typ1')) throw new Error('not a TrueType/OpenType/WOFF font');
   const n = U16(b, base + 4);
   for (let i = 0; i < n; i++) {
@@ -1319,7 +1319,7 @@ function flattenTt(pts) {
   return out;
 }
 
-function glyfOutline(tb, loca, longLoca, gid, depth) {
+function glyfOutline(tb, loca, longLoca, gid, depth, raw) {
   const lo = longLoca ? U32(loca, gid * 4) : U16(loca, gid * 2) * 2, hi = longLoca ? U32(loca, gid * 4 + 4) : U16(loca, gid * 2 + 2) * 2;
   if (hi <= lo) return [];
   const g = tb.glyf.subarray(lo, hi), nc = S16(g, 0);
@@ -1338,7 +1338,7 @@ function glyfOutline(tb, loca, longLoca, gid, depth) {
     for (const e of ends) {
       const pts = [];
       for (let i = s; i <= e; i++) pts.push({ x: xs[i], y: ys[i], on: !!(flags[i] & 1) });
-      const poly = flattenTt(pts); if (poly.length > 2) out.push(poly);
+      const poly = raw ? pts.map((q) => [q.x, q.y, q.on ? 0 : 1]) : flattenTt(pts); if (poly.length > 2) out.push(poly);
       s = e + 1;
     }
     return out;
@@ -1353,7 +1353,7 @@ function glyfOutline(tb, loca, longLoca, gid, depth) {
     let a = 1, b = 0, c = 0, d = 1;
     const f2 = (o) => S16(g, o) / 16384;
     if (f & 8) { a = d = f2(p); p += 2; } else if (f & 0x40) { a = f2(p); d = f2(p + 2); p += 4; } else if (f & 0x80) { a = f2(p); b = f2(p + 2); c = f2(p + 4); d = f2(p + 6); p += 8; }
-    for (const poly of glyfOutline(tb, loca, longLoca, sub, depth + 1)) out.push(poly.map(([x, y]) => [a * x + c * y + dx, b * x + d * y + dy]));
+    for (const poly of glyfOutline(tb, loca, longLoca, sub, depth + 1, raw)) out.push(poly.map(([x, y, k]) => (raw ? [a * x + c * y + dx, b * x + d * y + dy, k] : [a * x + c * y + dx, b * x + d * y + dy])));
   } while (f & 0x20);
   return out;
 }
@@ -1406,13 +1406,13 @@ function cffPrepare(cff) {
   } else fds.push(priv(top));
   return { cs: cs.items, gsubrs: gsub.items, fds, sel };
 }
-function cffOutline(c, gid) {
+function cffOutline(c, gid, raw) {
   const subrs = c.fds[c.sel ? c.sel[gid] : 0].subrs, gs = c.gsubrs;
   const bias = (a) => (a.length < 1240 ? 107 : a.length < 33900 ? 1131 : 32768);
   const out = []; let cur = null, x = 0, y = 0, nst = 0, first = true, st = [], done = false;
-  const move = () => { if (cur && cur.length > 2) out.push(cur); cur = [[x, y]]; };
-  const line = (dx, dy) => { x += dx; y += dy; cur.push([x, y]); };
-  const curve = (a, b, c2, d, e, f) => { const p0 = [x, y], p1 = [x + a, y + b], p2 = [p1[0] + c2, p1[1] + d], p3 = [p2[0] + e, p2[1] + f]; cubic(cur, p0, p1, p2, p3, 8); x = p3[0]; y = p3[1]; };
+  const move = () => { if (cur && cur.length > 2) out.push(cur); cur = [raw ? [x, y, 0] : [x, y]]; };
+  const line = (dx, dy) => { x += dx; y += dy; cur.push(raw ? [x, y, 0] : [x, y]); };
+  const curve = (a, b, c2, d, e, f) => { const p0 = [x, y], p1 = [x + a, y + b], p2 = [p1[0] + c2, p1[1] + d], p3 = [p2[0] + e, p2[1] + f]; if (raw) cur.push([p1[0], p1[1], 2], [p2[0], p2[1], 2], [p3[0], p3[1], 0]); else cubic(cur, p0, p1, p2, p3, 8); x = p3[0]; y = p3[1]; };
   const width = (odd) => { if (first) { first = false; if (odd) st.shift(); } };
   function run(code, depth) {
     let i = 0;
@@ -1426,9 +1426,9 @@ function cffOutline(c, gid) {
       switch (b0) {
         case 1: case 3: case 18: case 23: width(st.length % 2); nst += st.length >> 1; st = []; break;
         case 19: case 20: width(st.length % 2); nst += st.length >> 1; st = []; i += (nst + 7) >> 3; break;
-        case 21: width(st.length > 2); move.call(null); x += st[0]; y += st[1]; cur = [[x, y]]; st = []; break;
-        case 22: width(st.length > 1); move(); x += st[0]; cur = [[x, y]]; st = []; break;
-        case 4: width(st.length > 1); move(); y += st[0]; cur = [[x, y]]; st = []; break;
+        case 21: width(st.length > 2); move.call(null); x += st[0]; y += st[1]; cur = [raw ? [x, y, 0] : [x, y]]; st = []; break;
+        case 22: width(st.length > 1); move(); x += st[0]; cur = [raw ? [x, y, 0] : [x, y]]; st = []; break;
+        case 4: width(st.length > 1); move(); y += st[0]; cur = [raw ? [x, y, 0] : [x, y]]; st = []; break;
         case 5: for (let k = 0; k + 1 < st.length; k += 2) line(st[k], st[k + 1]); st = []; break;
         case 6: case 7: { let h = b0 === 6; for (const v of st) { if (h) line(v, 0); else line(0, v); h = !h; } st = []; break; }
         case 8: for (let k = 0; k + 5 < st.length; k += 6) curve(st[k], st[k + 1], st[k + 2], st[k + 3], st[k + 4], st[k + 5]); st = []; break;
@@ -1471,8 +1471,8 @@ function cffOutline(c, gid) {
 }
 
 // ---- font object --------------------------------------------------------------------------------------------------------------
-function parse(input) {
-  const b = u8(input), tb = tables(b);
+function parse(input, idx) {
+  const b = u8(input), tb = tables(b, idx);
   if (!tb.head || !tb.maxp || !tb.cmap) throw new Error('font has no head/maxp/cmap table');
   const upm = U16(tb.head, 18) || 1000, longLoca = S16(tb.head, 50) === 1;
   const numGlyphs = U16(tb.maxp, 4);
@@ -1513,6 +1513,12 @@ function parse(input) {
     let o = [];
     try { o = cff ? cffOutline(cff, g) : glyfOutline(tb, tb.loca, longLoca, g, 0); } catch (e) { o = []; }
     font.cache.set(g, o); return o;
+  };
+  // editable outline: contours of [x, y, kind] in font units (y up); kind 0 = on-curve, 1 = quadratic control, 2 = cubic control
+  font.raw = (g) => {
+    let o = [];
+    try { o = cff ? cffOutline(cff, g, true) : glyfOutline(tb, tb.loca, longLoca, g, 0, true); } catch (e) { o = []; }
+    return o;
   };
   font.bbox = (g) => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -1566,21 +1572,24 @@ function sum32(a) { let s = 0; for (let i = 0; i < a.length; i += 4) s = (s + ((
 function build(spec) {
   const G = spec.glyphs, n = G.length, upm = spec.upm;
   const glyf = [], loca = [], hmtx = [];
+  const otf = !!spec.otf;
   let xMin = 1e9, yMin = 1e9, xMax = -1e9, yMax = -1e9, maxP = 0, maxC = 0, advMax = 0;
   for (const g of G) {
     loca.push(glyf.length);
-    const cs = g.contours || [];
+    const cs = (g.contours || []).map((c) => (otf ? toCubic(c) : toQuad(c)).map((q) => [Math.round(q[0]), Math.round(q[1]), q[2] || 0]));
     let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9, np = 0;
     for (const c of cs) for (const [x, y] of c) { bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x); by1 = Math.max(by1, y); np++; }
     if (cs.length) {
+      if (!otf) {
       w16(glyf, cs.length); w16(glyf, bx0); w16(glyf, by0); w16(glyf, bx1); w16(glyf, by1);
       let e = -1; for (const c of cs) { e += c.length; w16(glyf, e); }
       w16(glyf, 0);
       const flags = [], xs = [], ys = []; let px = 0, py = 0;
-      for (const c of cs) for (const [x, y] of c) { flags.push(1); w16(xs, x - px); w16(ys, y - py); px = x; py = y; }
+      for (const c of cs) for (const [x, y, k] of c) { flags.push(k === 1 ? 0 : 1); w16(xs, x - px); w16(ys, y - py); px = x; py = y; }
       glyf.push(...flags, ...xs, ...ys);
       // deltas are written as 16-bit words: flags 1 (on curve) with neither the short nor the same bit set
       pad4(glyf);
+      }
       xMin = Math.min(xMin, bx0); yMin = Math.min(yMin, by0); xMax = Math.max(xMax, bx1); yMax = Math.max(yMax, by1);
       maxP = Math.max(maxP, np); maxC = Math.max(maxC, cs.length);
     }
@@ -1635,10 +1644,15 @@ function build(spec) {
   const post = []; w32(post, 0x00030000); w32(post, 0); w16(post, -100); w16(post, 50); w32(post, 0); for (let i = 0; i < 4; i++) w32(post, 0);
 
   const tabs = { 'OS/2': os2, cmap: cm, glyf, head, hhea, hmtx, loca: locaB, maxp, name, post };
+  if (otf) {
+    delete tabs.glyf; delete tabs.loca;
+    tabs.maxp = []; w32(tabs.maxp, 0x00005000); w16(tabs.maxp, n);
+    tabs['CFF '] = buildCff(G.map((g, i) => ({ adv: g.adv, contours: [] })), spec, G);
+  }
   for (const k of Object.keys(spec.extra || {})) tabs[k] = Array.from(spec.extra[k]);
   const tags = Object.keys(tabs).sort(), nt = tags.length;
   let s2 = 1, e2 = 0; while (s2 * 2 <= nt) { s2 *= 2; e2++; }
-  const out = []; w32(out, 0x00010000); w16(out, nt); w16(out, s2 * 16); w16(out, e2); w16(out, nt * 16 - s2 * 16);
+  const out = []; w32(out, otf ? 0x4f54544f : 0x00010000); w16(out, nt); w16(out, s2 * 16); w16(out, e2); w16(out, nt * 16 - s2 * 16);
   let off = 12 + nt * 16; const bodies = [];
   for (const t of tags) {
     const body = pad4(tabs[t].slice());
@@ -1654,7 +1668,134 @@ function build(spec) {
   return Uint8Array.from(out);
 }
 
-module.exports = { parse, coverage, build, tables };
+// ---- editable outlines: raw contours [[x, y, kind]], kind 0 on-curve, 1 quadratic control, 2 cubic control ---------------------
+function rotateToOn(c) {
+  let s = c.findIndex((p) => p[2] === 0);
+  if (s >= 0) return c.slice(s).concat(c.slice(0, s));
+  const a = c[0], b = c[c.length - 1];
+  return [[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0]].concat(c);
+}
+// quadratic -> cubic (exact)
+function toCubic(c) {
+  if (c.length < 2 || !c.some((p) => p[2] === 1)) return c.map((p) => [p[0], p[1], p[2] || 0]);
+  const q = rotateToOn(c), n = q.length, out = [q[0]];
+  let cur = q[0], i = 1;
+  while (i <= n) {
+    const p = q[i % n];
+    if ((p[2] || 0) !== 1) { if (i < n) out.push([p[0], p[1], p[2] || 0]); cur = p; i++; continue; }
+    const nx = q[(i + 1) % n], onNext = (nx[2] || 0) === 0;
+    const end = onNext ? nx : [(p[0] + nx[0]) / 2, (p[1] + nx[1]) / 2, 0], endIdx = onNext ? i + 2 : i + 1;
+    out.push([cur[0] + (2 / 3) * (p[0] - cur[0]), cur[1] + (2 / 3) * (p[1] - cur[1]), 2], [end[0] + (2 / 3) * (p[0] - end[0]), end[1] + (2 / 3) * (p[1] - end[1]), 2]);
+    if (!(onNext && (i + 1) % n === 0)) out.push([end[0], end[1], 0]);
+    cur = end; i = endIdx;
+  }
+  return out;
+}
+// cubic -> quadratic: every cubic segment is split in four and each part approximated by one quadratic (error well under 1 unit at 1000 upm)
+function toQuad(c) {
+  if (!c.some((p) => p[2] === 2)) return c.map((p) => [p[0], p[1], p[2] || 0]);
+  const q = rotateToOn(c), n = q.length, out = [q[0]];
+  let cur = q[0], i = 1;
+  while (i < n) {
+    const p = q[i];
+    if (p[2] !== 2) { out.push([p[0], p[1], p[2] || 0]); cur = p; i++; continue; }
+    const c2 = q[(i + 1) % n], e = q[(i + 2) % n], mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    // de Casteljau at t = 0.5, then again at each half
+    const half = (a, b, cc, d) => { const ab = mid(a, b), bc = mid(b, cc), cd = mid(cc, d), abc = mid(ab, bc), bcd = mid(bc, cd), m = mid(abc, bcd); return [[a, ab, abc, m], [m, bcd, cd, d]]; };
+    const parts = [];
+    for (const h of half(cur, p, c2, e)) for (const k of half(h[0], h[1], h[2], h[3])) parts.push(k);
+    for (const [a, b, cc, d] of parts) { out.push([(3 * (b[0] + cc[0]) - a[0] - d[0]) / 4, (3 * (b[1] + cc[1]) - a[1] - d[1]) / 4, 1]); out.push([d[0], d[1], 0]); }
+    if ((i + 2) % n === 0) out.pop();
+    cur = e; i += 3;
+  }
+  return out;
+}
+// raw contour -> polygon of [x, y]
+function flattenRaw(c, steps = 8) {
+  const k = toCubic(c);
+  if (!k.length) return [];
+  const out = [[k[0][0], k[0][1]]];
+  let i = 1, cur = k[0];
+  while (i < k.length) {
+    const p = k[i];
+    if (p[2] === 2 && i + 2 < k.length + 1) { const c2 = k[i + 1], e = k[(i + 2) % k.length]; cubic(out, [cur[0], cur[1]], [p[0], p[1]], [c2[0], c2[1]], [e[0], e[1]], steps); cur = e; i += 3; }
+    else { out.push([p[0], p[1]]); cur = p; i++; }
+  }
+  return out;
+}
+
+// ---- CFF writer (Type 2 charstrings, no hints, no subroutines) -----------------------------------------------------------------
+function cffNum(v) {
+  v = Math.round(v);
+  if (v >= -107 && v <= 107) return [v + 139];
+  if (v >= 108 && v <= 1131) { v -= 108; return [247 + (v >> 8), v & 255]; }
+  if (v >= -1131 && v <= -108) { v = -v - 108; return [251 + (v >> 8), v & 255]; }
+  return [28, (v >> 8) & 255, v & 255];
+}
+function cffIndexBytes(items) {
+  if (!items.length) return [0, 0];
+  const out = []; w16(out, items.length); out.push(4);
+  let o = 1; w32(out, o); for (const it of items) { o += it.length; w32(out, o); }
+  for (const it of items) for (const b of it) out.push(b);
+  return out;
+}
+function cffReal(v) {
+  const s = v.toFixed(10).replace(/0+$/, '').replace(/\.$/, '') || '0', nib = [];
+  for (const ch of s) nib.push(ch === '.' ? 10 : ch === '-' ? 14 : +ch);
+  nib.push(15); if (nib.length % 2) nib.push(15);
+  const out = [30]; for (let i = 0; i < nib.length; i += 2) out.push((nib[i] << 4) | nib[i + 1]);
+  return out;
+}
+function buildCff(_unused, spec, G) {
+  const n = G.length, cs = [];
+  for (const g of G) {
+    const code = []; let x = 0, y = 0, first = true;
+    const args = (...a) => { for (const v of a) code.push(...cffNum(v)); };
+    for (const c0 of g.contours || []) {
+      const c = toCubic(c0).map((p) => [Math.round(p[0]), Math.round(p[1]), p[2] || 0]);
+      if (c.length < 2) continue;
+      if (first) { args(g.adv); first = false; }
+      args(c[0][0] - x, c[0][1] - y); code.push(21); x = c[0][0]; y = c[0][1];
+      let i = 1;
+      while (i < c.length) {
+        if (c[i][2] === 2 && i + 1 < c.length) { const e = c[(i + 2) % c.length]; args(c[i][0] - x, c[i][1] - y, c[i + 1][0] - c[i][0], c[i + 1][1] - c[i][1], e[0] - c[i + 1][0], e[1] - c[i + 1][1]); code.push(8); x = e[0]; y = e[1]; i += 3; }
+        else { args(c[i][0] - x, c[i][1] - y); code.push(5); x = c[i][0]; y = c[i][1]; i++; }
+      }
+    }
+    if (first) args(g.adv);
+    code.push(14); cs.push(code);
+  }
+  const name = Array.from(String(spec.name || 'Font').replace(/[^A-Za-z0-9]/g, '') || 'Font').map((ch) => ch.charCodeAt(0));
+  const strings = []; for (let i = 1; i < n; i++) strings.push(Array.from('g' + i).map((ch) => ch.charCodeAt(0)));
+  const charset = [0]; if (n > 1) { charset.length = 0; charset.push(2); w16(charset, 391); w16(charset, n - 2); }
+  const csIdx = cffIndexBytes(cs), nameIdx = cffIndexBytes([name]), strIdx = cffIndexBytes(strings), gsub = cffIndexBytes([]);
+  const dict = (cso, cho, pso) => {
+    const d = [], i5 = (v) => { d.push(29, (v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255); };
+    if (spec.upm !== 1000) { for (const v of [1 / spec.upm, 0, 0, 1 / spec.upm, 0, 0]) d.push(...(v === 0 ? [139] : cffReal(v))); d.push(12, 7); }
+    i5(cho); d.push(15); i5(cso); d.push(17); i5(0); i5(pso); d.push(18);
+    return d;
+  };
+  const head = [1, 0, 4, 4], topLen = cffIndexBytes([dict(0, 0, 0)]).length;
+  const base = head.length + nameIdx.length + topLen + strIdx.length + gsub.length;
+  const chOff = base, csOff = chOff + charset.length, prOff = csOff + csIdx.length;
+  return [].concat(head, nameIdx, cffIndexBytes([dict(csOff, chOff, prOff)]), strIdx, gsub, charset, csIdx);
+}
+
+// ---- WOFF writer (tables stored, not deflated: valid, but not smaller) ---------------------------------------------------------------
+function woff(sfnt) {
+  const b = u8(sfnt), n = U16(b, 4), ent = [];
+  for (let i = 0; i < n; i++) { const o = 12 + i * 16; ent.push({ tag: b.subarray(o, o + 4), sum: U32(b, o + 4), off: U32(b, o + 8), len: U32(b, o + 12) }); }
+  const out = []; let off = 44 + n * 20, total = 12 + n * 16;
+  out.push(0x77, 0x4f, 0x46, 0x46); w32(out, U32(b, 0)); w32(out, 0); w16(out, n); w16(out, 0); w32(out, 0); w16(out, 0); w16(out, 0);
+  for (let i = 0; i < 5; i++) w32(out, 0);
+  for (const e of ent) { out.push(...e.tag); w32(out, off); w32(out, e.len); w32(out, e.len); w32(out, e.sum); off += (e.len + 3) & ~3; total += (e.len + 3) & ~3; }
+  for (const e of ent) { for (let i = 0; i < e.len; i++) out.push(b[e.off + i]); while (out.length % 4) out.push(0); }
+  const len = out.length; out[8] = len >>> 24; out[9] = (len >>> 16) & 255; out[10] = (len >>> 8) & 255; out[11] = len & 255;
+  out[16] = total >>> 24; out[17] = (total >>> 16) & 255; out[18] = (total >>> 8) & 255; out[19] = total & 255;
+  return Uint8Array.from(out);
+}
+
+module.exports = { parse, coverage, build, tables, toCubic, toQuad, flattenRaw, woff, ttcCount: (input) => { const b = u8(input); return tag4(b, 0) === 'ttcf' ? U32(b, 8) : 1; } };
 
 });
 __def("fontpipe.cjs", function (module, exports, require) {
@@ -1973,13 +2114,40 @@ function toBdf(f) {
 
 // ---- TrueType export / re-import of an exported font ------------------------------------------------------------------------------
 const PX = 100;
-function toTtf(f) {
-  const codes = codesOf(f), glyphs = [], meta = { font: null, sh: {}, xinfo: f.xinfo || {} };
+// Pixels of one glyph as merged outline contours (y up, one pixel = PX units, clockwise ink, holes counter-clockwise): shared edges cancel,
+// the remaining directed edges are chained, collinear points dropped.
+function pixelContours(f, g, cols, sh) {
+  const E = new Map(), key = (x, y) => x + "," + y;
+  const edge = (a, b) => { const r = key(b[0], b[1]) + ">" + key(a[0], a[1]); if (E.has(r)) E.delete(r); else E.set(key(a[0], a[1]) + ">" + key(b[0], b[1]), [a, b]); };
+  for (let r = 0; r < f.rows; r++) for (let q = 0; q < cols; q++) {
+    if (!CF.hasPx(f, g[r], q)) continue;
+    const x0 = q - sh, x1 = x0 + 1, y1 = f.base + 1 - r, y0 = y1 - 1;
+    edge([x0, y0], [x0, y1]); edge([x0, y1], [x1, y1]); edge([x1, y1], [x1, y0]); edge([x1, y0], [x0, y0]);
+  }
+  const from = new Map();
+  for (const [k, e] of E) { const s = key(e[0][0], e[0][1]); if (!from.has(s)) from.set(s, []); from.get(s).push(k); }
+  const out = [];
+  for (const k0 of E.keys()) {
+    if (!E.has(k0)) continue;
+    const pts = []; let k = k0;
+    while (E.has(k)) {
+      const e = E.get(k); E.delete(k); pts.push(e[0]);
+      const nx = (from.get(key(e[1][0], e[1][1])) || []).find((z) => E.has(z)); if (!nx) break; k = nx;
+    }
+    const c = pts.filter((p, i) => { const a = pts[(i + pts.length - 1) % pts.length], b = pts[(i + 1) % pts.length]; return (p[0] - a[0]) * (b[1] - p[1]) !== (p[1] - a[1]) * (b[0] - p[0]); });
+    if (c.length >= 3) out.push(c.map(([x, y]) => [x * PX, y * PX]));
+  }
+  return out;
+}
+// opt.merge: merged contours instead of one box per run; opt.otf: CFF flavour (OpenType) instead of glyf
+function toTtf(f, opt = {}) {
+  const codes = codesOf(f), glyphs = [], meta = { font: null, sh: {}, xinfo: f.xinfo || {}, merged: !!opt.merge };
   const box = (x0, y0, x1, y1) => [[x0, y0], [x0, y1], [x1, y1], [x1, y0]];
   glyphs.push({ unicode: [], adv: f.adv * PX, contours: [box(PX, 0, PX * 3, (f.base + 1) * PX)] });
   for (const c of codes) {
     const g = rowsOf(f, c), m = glyphMetrics(f, c), cs = [], cols = colsFor(f, c);
     if (m.sh) meta.sh[c] = m.sh;
+    if (opt.merge) { glyphs.push({ unicode: [uniOf(c)], adv: m.adv * PX, contours: pixelContours(f, g, cols, m.sh) }); continue; }
     for (let r = 0; r < f.rows; r++) {
       let q = 0;
       while (q < cols) {
@@ -1995,7 +2163,7 @@ function toTtf(f) {
   const hh = (r) => (f.base + 1 - r) * PX;
   return SF.build({
     name: f.name.slice(0, 40), upm: f.rows * PX, ascent: hh(0), descent: -(f.rows - f.base - 1) * PX, capHeight: (f.base - f.head + 1) * PX, xHeight: (f.base - f.xTop + 1) * PX,
-    glyphs, extra: { ACFM: enc(JSON.stringify(meta)) },
+    glyphs, otf: !!opt.otf, extra: { ACFM: enc(JSON.stringify(meta)) },
   });
 }
 
@@ -2008,7 +2176,10 @@ function fromTtfExport(input) {
   for (let c = 0; c < 256; c++) {
     const id = font.gid(uniOf(c)); if (!id) continue;
     const sh = f.sh[c] || 0, g = zeros(f.rows);
-    for (const poly of font.outline(id)) {
+    if (meta.merged) {
+      const cols = colsFor(f, c), cov = SF.coverage(font.outline(id).map((p) => p.map(([x, y]) => [x / PX + sh, f.base + 1 - y / PX])), cols, f.rows, 4);
+      for (let r = 0; r < f.rows; r++) for (let q = 0; q < cols; q++) if (cov[r * cols + q] >= 0.5) g[r] |= CF.bitMask(f, q);
+    } else for (const poly of font.outline(id)) {
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const [x, y] of poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
       const r = f.base - Math.round(y1 / PX) + 1;
@@ -2130,7 +2301,7 @@ function roundtrip(input, name, opt = {}) {
   return res;
 }
 
-module.exports = { SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
+module.exports = { SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, pixelContours, Sfnt: SF, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
 
 });
 __def("craftdoc.cjs", function (module, exports, require) {

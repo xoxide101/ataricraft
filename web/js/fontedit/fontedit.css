@@ -95,3 +95,13 @@ canvas{max-width:none}#preview{max-width:100%;border:1px solid var(--line);backg
 @container (max-width:780px){#v-edit{flex-direction:column;overflow:auto}#gcol{width:auto;height:250px;flex:none}#ecol{flex:none;min-height:520px}}
 #tree table.tree{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}#tree .tree th,#tree .tree td{padding:2px 4px;text-align:left;border-bottom:1px solid var(--line)}#tree .tree tr.on{background:var(--hl,#ff980022)}#tree input.explicit{outline:2px solid var(--acc)}#tree .treehead code{font-size:11px}
 #hint{margin:8px 10px 0;padding:8px 12px;border:1px solid var(--acc);border-radius:8px;background:var(--panel);display:flex;gap:10px;align-items:center}#hint span{flex:1}
+#v-outline{display:flex;gap:10px;overflow:hidden}
+#olmain{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;gap:6px}
+#oltools{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+#olcvwrap{flex:1;min-height:260px;position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+#olcv{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#olside{width:min(34%,340px);flex:none;overflow:auto}
+.oltool.on{background:var(--acc);color:var(--accink)}
+.olrow{padding:2px 4px;cursor:pointer;font-size:12px;border-radius:3px}.olrow:hover{background:var(--panel2)}
+#olpv{width:100%;max-width:420px;border:1px solid var(--line);border-radius:4px}
+@container (max-width:780px){#v-outline{flex-direction:column;overflow:auto}#olside{width:auto}#olcvwrap{min-height:340px;flex:none}}

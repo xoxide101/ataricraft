@@ -243,6 +243,16 @@ A size other than the master is the **pixel layer** of the family: derived from 
 - **Guides**: cap/ascender, x-height and baseline are dragged in the ruler (the descender is the bottom of the cell and follows the baseline). **Onion skin** shows the neighbouring size, the **ghost** shows a reference TTF/OTF outline behind the pixels (opacity, scale, offset).
 - **Kerning**: pairs plus *classes* (left/right groups of letters with one value per class pair; an explicit pair wins). Editor-side only (autosave, `kerning.json` in the family zip).
 - Tests: `scripts/fontedit-ui3-test.cjs`. The hinting options live in `tools/craftfont.cjs`, so the generated bundle `web/js/xcwriter/core/xcw-core.js` was re-synced with `scripts/sync-xcwriter-core.cjs` (behaviour-neutral for xCWriter, which passes no options).
+### Outline layer (phase 4)
+
+The **Outline** tab edits the real outlines behind the pixels (`web/js/fontedit/outline.js`).
+
+- **Source**: an imported TTF/OTF/TTC/WOFF keeps its contours (`tools/sfnt.cjs` `font.raw(gid)`: glyf incl. composites with transforms, or CFF Type 2; TTC takes a font index). A pixel-only family (Craft, Atari) gets *square contours* from its 12 px master (`FontPipe.pixelContours`: one pixel = 100 units, edges between touching pixels cancelled, collinear points dropped, ink clockwise).
+- **Editing**: select/move (rubber band, shift-add, smooth points mirror their handles), pen (click = corner, drag = smooth, Enter/first point closes), knife, rect, ellipse (hole option), delete, smooth/corner, line<->curve, simplify, round to grid, reverse, fix directions (outer clockwise, holes counter-clockwise), flip, nudge, undo/redo list. Metrics lines (ascender, cap, x-height, baseline, descender), advance, lsb/rsb and the font-unit values are editable. Edits persist in localStorage `craft.outline`.
+- **Pixel layer link**: *Rasterize* draws the outline into the current size or all sizes, one glyph or all ASCII, with the Family-source hinting options; overrides and locked sizes are kept unless *overwrite* is ticked.
+- **Export**: TTF (quadratic glyf; cubic curves are approximated), OTF (CFF, no hints/subrs), WOFF 1 (tables stored). Pixel-only fonts export square contours merged per glyph (`toTtf({merge:true})`, round trip exact; also with `otf:true`). Output is checked by loading it as a `FontFace` in Chrome.
+- **Limits (honest)**: composites are flattened on load (no anchors / accent composition yet), no hinting instructions are written, WOFF is not compressed, WOFF2 stays Node-only (`tools/woff2.cjs`), rasterize covers ASCII 32-126, CFF2 is not read.
+- Tests: `scripts/fontedit-ui4-test.cjs`.
 ## Font editor status (implemented / planned)
 
 | Area | State |
@@ -250,6 +260,6 @@ A size other than the master is the **pixel layer** of the family: derived from 
 | Unified Fonts list, size strip 4-26 + Atari 8x8, derive-on-click, file:// | implemented |
 | Family registry, support flags, tree, group/split, first-run hint | implemented |
 | Pixel layer: hinting-lite, per-glyph/all re-render, overrides + diff, draggable guides, onion skin, ghost, kerning pairs + classes | implemented (phase 3) |
-| Outline layer (glyf/CFF contours, point editing, outline export) | planned (phase 4) |
+| Outline layer: glyf/CFF/TTC contours, point editing, pen/knife/shapes, rasterize, TTF/OTF/WOFF export, pixel fonts as square contours | implemented (phase 4); anchors/composites, CFF2 planned |
 | Extra formats (PSF/PCF/FON/C64/ZX/MSX/raw...) with round-trip tests | planned (phase 5) |
 | Font manager (tags, collections, compare, duplicates) | planned (phase 6) |

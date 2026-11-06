@@ -313,13 +313,40 @@ function toBdf(f) {
 
 // ---- TrueType export / re-import of an exported font ------------------------------------------------------------------------------
 const PX = 100;
-function toTtf(f) {
-  const codes = codesOf(f), glyphs = [], meta = { font: null, sh: {}, xinfo: f.xinfo || {} };
+// Pixels of one glyph as merged outline contours (y up, one pixel = PX units, clockwise ink, holes counter-clockwise): shared edges cancel,
+// the remaining directed edges are chained, collinear points dropped.
+function pixelContours(f, g, cols, sh) {
+  const E = new Map(), key = (x, y) => x + "," + y;
+  const edge = (a, b) => { const r = key(b[0], b[1]) + ">" + key(a[0], a[1]); if (E.has(r)) E.delete(r); else E.set(key(a[0], a[1]) + ">" + key(b[0], b[1]), [a, b]); };
+  for (let r = 0; r < f.rows; r++) for (let q = 0; q < cols; q++) {
+    if (!CF.hasPx(f, g[r], q)) continue;
+    const x0 = q - sh, x1 = x0 + 1, y1 = f.base + 1 - r, y0 = y1 - 1;
+    edge([x0, y0], [x0, y1]); edge([x0, y1], [x1, y1]); edge([x1, y1], [x1, y0]); edge([x1, y0], [x0, y0]);
+  }
+  const from = new Map();
+  for (const [k, e] of E) { const s = key(e[0][0], e[0][1]); if (!from.has(s)) from.set(s, []); from.get(s).push(k); }
+  const out = [];
+  for (const k0 of E.keys()) {
+    if (!E.has(k0)) continue;
+    const pts = []; let k = k0;
+    while (E.has(k)) {
+      const e = E.get(k); E.delete(k); pts.push(e[0]);
+      const nx = (from.get(key(e[1][0], e[1][1])) || []).find((z) => E.has(z)); if (!nx) break; k = nx;
+    }
+    const c = pts.filter((p, i) => { const a = pts[(i + pts.length - 1) % pts.length], b = pts[(i + 1) % pts.length]; return (p[0] - a[0]) * (b[1] - p[1]) !== (p[1] - a[1]) * (b[0] - p[0]); });
+    if (c.length >= 3) out.push(c.map(([x, y]) => [x * PX, y * PX]));
+  }
+  return out;
+}
+// opt.merge: merged contours instead of one box per run; opt.otf: CFF flavour (OpenType) instead of glyf
+function toTtf(f, opt = {}) {
+  const codes = codesOf(f), glyphs = [], meta = { font: null, sh: {}, xinfo: f.xinfo || {}, merged: !!opt.merge };
   const box = (x0, y0, x1, y1) => [[x0, y0], [x0, y1], [x1, y1], [x1, y0]];
   glyphs.push({ unicode: [], adv: f.adv * PX, contours: [box(PX, 0, PX * 3, (f.base + 1) * PX)] });
   for (const c of codes) {
     const g = rowsOf(f, c), m = glyphMetrics(f, c), cs = [], cols = colsFor(f, c);
     if (m.sh) meta.sh[c] = m.sh;
+    if (opt.merge) { glyphs.push({ unicode: [uniOf(c)], adv: m.adv * PX, contours: pixelContours(f, g, cols, m.sh) }); continue; }
     for (let r = 0; r < f.rows; r++) {
       let q = 0;
       while (q < cols) {
@@ -335,7 +362,7 @@ function toTtf(f) {
   const hh = (r) => (f.base + 1 - r) * PX;
   return SF.build({
     name: f.name.slice(0, 40), upm: f.rows * PX, ascent: hh(0), descent: -(f.rows - f.base - 1) * PX, capHeight: (f.base - f.head + 1) * PX, xHeight: (f.base - f.xTop + 1) * PX,
-    glyphs, extra: { ACFM: enc(JSON.stringify(meta)) },
+    glyphs, otf: !!opt.otf, extra: { ACFM: enc(JSON.stringify(meta)) },
   });
 }
 
@@ -348,7 +375,10 @@ function fromTtfExport(input) {
   for (let c = 0; c < 256; c++) {
     const id = font.gid(uniOf(c)); if (!id) continue;
     const sh = f.sh[c] || 0, g = zeros(f.rows);
-    for (const poly of font.outline(id)) {
+    if (meta.merged) {
+      const cols = colsFor(f, c), cov = SF.coverage(font.outline(id).map((p) => p.map(([x, y]) => [x / PX + sh, f.base + 1 - y / PX])), cols, f.rows, 4);
+      for (let r = 0; r < f.rows; r++) for (let q = 0; q < cols; q++) if (cov[r * cols + q] >= 0.5) g[r] |= CF.bitMask(f, q);
+    } else for (const poly of font.outline(id)) {
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const [x, y] of poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
       const r = f.base - Math.round(y1 / PX) + 1;
@@ -470,4 +500,4 @@ function roundtrip(input, name, opt = {}) {
   return res;
 }
 
-module.exports = { SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
+module.exports = { SIZES, BIG, detect, load, down, rasterFont, gridFont, pixelUnit, sfntInfo, romCharset, fromBdfText, toBdf, toTtf, pixelContours, Sfnt: SF, fromTtfExport, toXcf, fromXcf, files, readBack, roundtrip, analyze, diffFonts, glyphMetrics, glyphName, uniOf, codeOfUni, inkBox, codesOf, baseName };
