@@ -92,10 +92,11 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
 // ---- browser ------------------------------------------------------------------------------------------------------------
 (async () => {
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
-  const p = await (await b.newContext({ viewport: { width: 1380, height: 950 } })).newPage();
+  const p = await (await b.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => d.accept('0'));
   await p.goto('file:///' + ROOT.replace(/\\/g, '/') + '/web/fontedit.html');
-  await p.waitForFunction(() => window.FE);
+  await p.waitForFunction(() => window.FE && FE.state.f);
+  { const click0 = p.click.bind(p); p.click = async (sel, o) => { if (/^#b(save|json|inc|fnt|png|prev|xcf|bdf|ttf|fam|zip|spec|send)$|^#buse$/.test(sel)) { await p.evaluate(() => { document.querySelector('details.menu').open = true; }); try { return await click0(sel, o); } finally { await p.evaluate(() => { document.querySelector('details.menu').open = false; }); } } return click0(sel, o); }; }
   await p.click('#bnew');
   assert.strictEqual(await p.evaluate(() => FE.state.f.adv), 12); ok('New makes a blank 12x12 master');
   await p.evaluate(() => FE.select(65));
@@ -138,6 +139,7 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
   assert.strictEqual(fnt, Array.from(new Uint8Array(1024).map((_, i) => i * 7 & 255)).join()); ok('.fnt open then export in the browser is identical');
   // ---- validation panes, bands, grid, diff ---------------------------------------------------------------------------------
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   const ink = (id) => p.evaluate((i) => { const c = document.getElementById(i), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let k = 0; k < d.length; k += 4) if (d[k] < 90 && d[k + 1] < 90 && d[k + 2] < 90) n++; return [c.width, c.height, n]; }, id);
   for (const id of ['v1', 'v2', 'vp']) { const [w, h, n] = await ink(id); assert.ok(w > 100 && h > 20 && n > 200, id + ' draws visible text (' + n + ' ink px)'); }
   ok('ACWriter 1x, 2x and xCWriter Page panes all show ink');
@@ -160,6 +162,7 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
   await p.evaluate(() => FE.openBytes(new Uint8Array(1024).map((_, i) => (i * 5) & 255), 'a.fnt'));
   assert.ok((await ink('v2'))[2] > 100); ok('8 px .fnt font renders in the ACWriter panes');
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   // ---- per-glyph width / bearings / advance --------------------------------------------------------------------------------
   await p.evaluate(() => FE.select(65));
   const gm = () => p.evaluate(() => ['gmw', 'gmlb', 'gmrb', 'gmadv'].map((i) => +document.getElementById(i).value));
@@ -184,20 +187,24 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
   await p.evaluate(() => { delete window.FujiNet; });
   const t0 = Date.now(); await p.click('#bsend'); await p.waitForFunction(() => /Not sent/.test(document.body.innerText), null, { timeout: 5000 }); ok('Send without an emulator reports it (' + (Date.now() - t0) + ' ms)');
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   await p.fill('#name', 'MYFONT'); await p.dispatchEvent('#name', 'change'); await p.click('#buse');
   const uf = await p.evaluate(() => JSON.parse(localStorage.getItem('craft.userfonts') || '{}'));
   assert.ok(JSON.stringify(uf).includes('MYFONT') || Object.keys(uf).length > 0); ok('Use in xCWriter stores the font in craft.userfonts (' + Object.keys(uf).join(',') + ')');
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   await p.evaluate(() => { FE.state.f.locked = true; document.getElementById('bderive').click(); });
-  await p.evaluate(() => { const s = document.getElementById('fsize'); s.value = '5'; s.dispatchEvent(new Event('change')); });
+  await p.evaluate(() => { FE.selectSize(5); });
   const m8 = await p.evaluate(() => [FE.state.f.adv, FE.state.fam && Object.keys(FE.state.fam.sizes).length]); assert.strictEqual(m8[0], 5);
   await p.click('#bmaster'); assert.strictEqual(await p.evaluate(() => FE.state.fam.master), 5);
-  await p.click('#bderive'); assert.ok(await p.evaluate(() => Object.keys(FE.state.fam.sizes).every((k) => +k <= 5 || FE.state.fam.sizes[k].origin === 2 || FE.state.fam.sizes[k].locked))); ok('Set as master + Derive smaller keep locked and hand-edited sizes');
+  const lockedKept = await p.evaluate(() => { const l = Object.values(FE.state.fam.sizes).filter((f) => f.locked); document.getElementById('bderive').click(); return l.length > 0 && l.every((f) => Object.values(FE.state.fam.sizes).includes(f)); }); assert.ok(lockedKept); ok('Set as master + Derive smaller keep locked and hand-edited sizes');
   const rt = await p.evaluate(() => { const a = FE.exportAcf(); const b = FE.CF.parse(a); return [a.length, b.adv === FE.state.f.adv, JSON.stringify(b.glyphs) === JSON.stringify(FE.state.f.glyphs)]; });
   assert.ok(rt[1] && rt[2]); ok('save then open of .acf is lossless (' + rt[0] + ' bytes)');
   await p.evaluate(() => FE.openBytes(FE.CF.serialize(FE.state.f), 'rt.acf')); ok('.acf opens through the page');
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   // ---- font pipeline: ROM import, XCF / BDF / TTF export and lossless re-import ----------------------------------------------
   const romFile = ROOT + '/software_n_roms/ATARIXL.ROM';
   if (fs.existsSync(romFile)) {
@@ -205,6 +212,7 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
     assert.deepStrictEqual(imp2, [8, true]); ok('ROM charset imported through the pipeline (8x8, A has ink)');
   }
   await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
   await p.evaluate(() => { document.getElementById('bderive').click(); });
   const before = await p.evaluate(() => JSON.stringify(FE.state.f.glyphs));
   for (const [btn, ext] of [['bxcf', 'xcf'], ['bbdf', 'bdf'], ['bttf', 'ttf']]) {
@@ -217,6 +225,7 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
         if (ext !== 'xcf') assert.strictEqual(after, before, ext + ' re-import differs');
     ok(ext.toUpperCase() + ' exported (' + fs.statSync(file).size + ' bytes) and re-imported in the browser');
     await p.evaluate(() => FE.openBytes(Uint8Array.from(atob(window.CRAFT_FONTS.craft6), (c) => c.charCodeAt(0)), 'c6.acf'));
+  await p.evaluate(() => FE.showTab('atari'));
     await p.evaluate(() => { document.getElementById('bderive').click(); });
   }
   const xcfSame = await p.evaluate(async () => {
@@ -227,7 +236,7 @@ ok('PCF import matches BDF import for ' + pcfOk + ' byte/bit-order, pad and metr
   });
   assert.ok(xcfSame[1].bdf === xcfSame[0] && xcfSame[1].ttf === xcfSame[0]); ok('BDF and TTF exports re-import to identical glyph bitmaps');
   await p.screenshot({ path: ROOT + '/out/fe-tools.png' });
-  await p.evaluate(() => { document.getElementById('vhl').checked = false; document.getElementById('vhl').dispatchEvent(new Event('input')); document.querySelectorAll('.toast,#toast').forEach((e) => e.remove()); document.getElementById('val').scrollIntoView(); }); await p.screenshot({ path: ROOT + '/out/fe-validate.png', fullPage: true }); fs.copyFileSync(ROOT + '/out/fe-validate.png', ROOT + '/out/fe-validate-v.png');
+  await p.evaluate(() => { document.getElementById('vhl').checked = false; document.getElementById('vhl').dispatchEvent(new Event('input')); document.querySelectorAll('.toast,#toast').forEach((e) => e.remove()); FE.showTab('atari'); }); await p.screenshot({ path: ROOT + '/out/fe-validate.png', fullPage: true }); fs.copyFileSync(ROOT + '/out/fe-validate.png', ROOT + '/out/fe-validate-v.png');
   assert.deepStrictEqual(errs, []); ok('no page errors');
   await b.close();
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

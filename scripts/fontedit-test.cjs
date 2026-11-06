@@ -9,16 +9,17 @@ const ok = (m) => console.log('ok  ' + m);
 (async () => {
   fs.mkdirSync(ROOT + '/out', { recursive: true });
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
-  const p = await (await b.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  const p = await (await b.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => d.accept('0'));
   await p.goto('file:///' + ROOT.replace(/\\/g, '/') + '/web/fontedit.html');
-  await p.waitForFunction(() => window.FE);
+  await p.waitForFunction(() => window.FE && FE.state.f);
+  await p.evaluate(() => FE.selectSize(6));
   ok('loads the built-in Craft 6 px font: ' + (await p.textContent('#info')).trim());
 
   // select 'g' slot and paint
   await p.evaluate(() => FE.select(103));
-  assert.ok((await p.textContent('#gname')).includes('"g"'));
+  assert.ok((await p.textContent('#gname')).includes('code 103'));
   const before = await p.evaluate(() => FE.state.f.glyphs[103].slice());
   const box = await p.locator('#edit').boundingBox();
   await p.mouse.click(box.x + 4, box.y + 4); // column 0, row 0 (headroom)
@@ -63,13 +64,11 @@ const ok = (m) => console.log('ok  ' + m);
   await p.evaluate((x) => FE.openBytes(Uint8Array.from(atob(x), (c) => c.charCodeAt(0)), 'OLD.acf'), a1.toString('base64'));
   assert.strictEqual(await p.evaluate(() => FE.state.f.rows), 8);
   ok('legacy ACF1 (2 sizes) opens, size 0 chosen');
-  await p.selectOption('#ttfadv', '6');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
-  await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'arial', null, { timeout: 20000 });
+  await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'arial', null, { timeout: 20000 }); await p.evaluate(() => FE.selectSize(6));
   assert.deepStrictEqual(await p.evaluate(() => [FE.state.f.rows, FE.state.f.adv]), [12, 6]);
 
   // TTF -> 12x12 master -> derived 8x8 and 4 px; locked / hand-edited sizes survive a re-derive
-  await p.selectOption('#ttfadv', '12');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/ariblk.ttf');
   await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'ariblk', null, { timeout: 20000 });
   await p.click('#bderive');
@@ -90,7 +89,6 @@ const ok = (m) => console.log('ok  ' + m);
   const kept = await p.evaluate(() => { const b = FE.state.fam.sizes[8].glyphs[65].join(), c = FE.state.fam.sizes[4]; FE.state.fam.sizes[12].glyphs[66][5] ^= 1; document.getElementById('bderive').click(); return [b === FE.state.fam.sizes[8].glyphs[65].join(), c === FE.state.fam.sizes[4]]; });
   assert.deepStrictEqual(kept, [true, true]);
   ok('TTF -> 12x12 master -> derived 10/8/6/5/4 px: 94 glyphs each, none empty; hand-edited and locked sizes survive re-derive');
-  await p.selectOption('#ttfadv', '6');
   await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
   await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'arial', null, { timeout: 20000 });
   await p.evaluate(() => FE.select(72));
@@ -99,7 +97,7 @@ const ok = (m) => console.log('ok  ' + m);
   ok('TTF (arial) converted in the browser to the 12-row Craft cell');
 
   // 4 px built-in for 17 cpi
-  await p.selectOption('#builtin', 'craft4');
+  await p.evaluate(async () => { await FE.openEntry('craft'); FE.selectSize(4); });
   await p.fill('#sample', 'The quick brown fox jumps over the lazy dog. mmm www MW\nHamburgefonstiv 0123456789 (gypsy) @#%&');
   await p.selectOption('#pvz', '4');
   await p.screenshot({ path: ROOT + '/out/fe-4-craft4.png' });

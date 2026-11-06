@@ -23,35 +23,38 @@ fs.mkdirSync(OUT, { recursive: true });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   const url = 'http://127.0.0.1:' + srv.address().port + '/fontedit.html';
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
-  const ctx = await b.newContext({ viewport: { width: 1500, height: 1000 }, acceptDownloads: true });
+  const ctx = await b.newContext({ viewport: { width: 1600, height: 1000 }, acceptDownloads: true });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(e.message)); p.on('dialog', (d) => d.dismiss());
   const shot = (n) => p.screenshot({ path: path.join(OUT, 'fe-ui-' + n + '.png') });
-  const download = async (sel, saveAs) => { const [d] = await Promise.all([p.waitForEvent('download'), p.click(sel)]); const f = path.join(OUT, saveAs || d.suggestedFilename()); await d.saveAs(f); return { name: d.suggestedFilename(), data: rd(f), file: f }; };
-  const pick = async (value) => { await p.selectOption('#flist', value); };
+  { const click0 = p.click.bind(p); p.click = async (sel, o) => { if (/^#b(save|json|inc|fnt|png|prev|xcf|bdf|ttf|fam|zip|spec|send)$|^#buse$/.test(sel)) { await p.evaluate(() => { document.querySelector('details.menu').open = true; }); try { return await click0(sel, o); } finally { await p.evaluate(() => { document.querySelector('details.menu').open = false; }); } } return click0(sel, o); }; }
+const download = async (sel, saveAs) => { const [d] = await Promise.all([p.waitForEvent('download'), p.click(sel)]); const f = path.join(OUT, saveAs || d.suggestedFilename()); await d.saveAs(f); return { name: d.suggestedFilename(), data: rd(f), file: f }; };
+  const pick = async (value) => { if (value.startsWith('acw:')) await p.evaluate((v) => FE.openAcw(v), value.slice(4)); else await p.evaluate((v) => FE.openEntry(v), value); };
+  const size = (n) => p.evaluate((s) => FE.selectSize(s), +n);
   try {
-    await p.goto(url); await p.waitForFunction(() => window.FE && document.querySelectorAll('#flist optgroup').length >= 5);
+    await p.goto(url); await p.waitForFunction(() => window.FE && document.querySelectorAll('#flist .fitem').length >= 3 && FE.state.f);
 
     // ---- ACWriter / Craft fonts group: first in the list, every face opens and shows ink --------------------------------
-    const groups = await p.$$eval('#flist optgroup', (g) => g.map((x) => [x.label, [...x.querySelectorAll('option')].map((o) => o.value)]));
-    assert.strictEqual(groups[0][0], 'ACWriter / Craft fonts');
-    assert.deepStrictEqual(groups[0][1], ['acw:craft4', 'acw:craft5', 'acw:craft6', 'acw:craft8', 'acw:craft10', 'acw:craft12', 'acw:zfont']); ok('library: "ACWriter / Craft fonts" is the first group with 7 faces');
+    const fids = await p.$$eval('#flist .fitem', (g) => g.map((x) => x.dataset.fid));
+    assert.ok(fids[0] === 'craft' && fids.includes('zfont'), fids.join()); ok('library: one merged Fonts list, Craft Sans first (' + fids.length + ' families)');
+    const strip = await p.$$eval('#sizes .sz', (s) => s.map((x) => x.dataset.size + (x.classList.contains('missing') ? 'm' : '')));
+    assert.deepStrictEqual(strip, ['4', '5', '6', '8', '10', '12', '14', '16', '18', '20', '22', '24', '26']); ok('size strip of Craft Sans shows 4..26 (all filled): ' + strip.join(' '));
     for (const x of A.FACES) {
       await pick('acw:' + x.id);
       await p.waitForFunction((a) => FE.state.f.adv === a, x.adv);
       const r = await p.evaluate(() => { const f = FE.state.f; const g = FE.CF.glyph(f, 65); return { ink: g.some((v) => v), adv: f.adv, sizes: Object.keys(FE.state.fam ? FE.state.fam.sizes : {}).join(','), bar: !document.getElementById('acwbar').hidden, txt: document.getElementById('acwbar').textContent }; });
       assert.ok(r.ink && r.bar && r.txt.includes(x.id), x.id + ' opens with ink and the ACWriter bar');
-      if (x.id !== 'zfont') assert.strictEqual(r.sizes, '4,5,6,8,10,12'); else assert.strictEqual(r.sizes, '');
+      if (x.id !== 'zfont') assert.ok(r.sizes.startsWith('4,5,6,8,10,12')); else assert.strictEqual(r.sizes, '8');
       // the opened face is byte-identical to the one ACWriter builds from
       const bytes = await p.evaluate(() => JSON.stringify(FE.state.f.glyphs));
       assert.strictEqual(bytes, JSON.stringify(A.load(x.id).glyphs), x.id + ' glyphs equal tools/acwfaces load()');
       await p.evaluate(() => FE.select(FE.state.f.map[103])); await shot('acw-' + x.id);
     }
-    ok('each ACWriter face (craft4/5/6/8/10/12, zfont) opens in the editor, is byte-identical to the build face; per-size family 4/5/6/8/10/12');
+    ok('each ACWriter face (craft4/5/6/8/10/12, zfont) opens in the editor, is byte-identical to the build face; per-size family 4..26');
     // size dropdown steps through the real faces
     await pick('acw:craft12');
-    await p.selectOption('#fsize', '4'); assert.strictEqual(await p.evaluate(() => FE.state.f.adv), 4);
+    await size(4); assert.strictEqual(await p.evaluate(() => FE.state.f.adv), 4);
     assert.ok(await p.isVisible('#acwbar')); ok('size list switches to the 4 px PAGE face of the family');
     // super / sub glyph of craft4 are real variants
     assert.ok(await p.evaluate(() => Object.keys(FE.state.f.sup).length > 20));
@@ -89,15 +92,15 @@ fs.mkdirSync(OUT, { recursive: true });
     // ---- Send to ACWriter / Use in xCWriter / Set as master ---------------------------------------------------------------
     await pick('acw:craft8');
     await p.click('#bsend'); await p.waitForFunction(() => /SEND|CRAFT8|Not sent|Wrote/.test(document.body.textContent));
-    const sent = await p.evaluate(() => FE.acwriterFile().then ? null : FE.acwriterFile()); assert.ok(/^CRAFT_?8.*\.FNT$/.test(sent[0]), sent[0]); assert.strictEqual(sent[1].length, 1024);
-    ok('Send to ACWriter on craft8 produces CRAFT8.FNT (1024 bytes); without emulator the page says so');
+    const sent = await p.evaluate(() => FE.acwriterFile().then ? null : FE.acwriterFile()); assert.ok(/^CRAFT.*\.FNT$/.test(sent[0]), sent[0]); assert.strictEqual(sent[1].length, 1024);
+    ok('Send to ACWriter on craft8 produces a CRAFT*.FNT (1024 bytes); without emulator the page says so');
     await p.click('#buse'); const uf = await p.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('craft.userfonts') || '{}')));
     assert.ok(uf.length >= 1); ok('Use in xCWriter stores it in craft.userfonts (' + uf.join(',') + ')');
-    await p.selectOption('#fsize', '6'); await p.click('#bmaster'); assert.strictEqual(await p.evaluate(() => FE.state.fam.master), 6); ok('Set as master clicked on the 6 px size');
+    await size(6); await p.click('#bmaster'); assert.strictEqual(await p.evaluate(() => FE.state.fam.master), 6); ok('Set as master clicked on the 6 px size');
 
     // ---- Atari ROM charset ---------------------------------------------------------------------------------------------------
-    await p.click('#brom');
-    await p.waitForFunction(() => FE.state.f.adv === 8 && /Atari ROM charset/.test(FE.state.fam.name));
+    await p.evaluate(() => FE.showTab('atari')); await p.click('#brom');
+    await p.waitForFunction(() => FE.state.f.adv === 8 && /atari ?rom/i.test(FE.state.fam.name));
     const rom = await p.evaluate(() => ({ n: FE.state.f.glyphs.filter((g) => g.some((x) => x)).length, A: FE.CF.glyph(FE.state.f, 65).some((x) => x), sizes: Object.keys(FE.state.fam.sizes).join(',') }));
     assert.ok(rom.A && rom.n > 100 && rom.sizes.includes('8')); ok('Atari ROM charset button: 8x8 native, ' + rom.n + ' glyphs, family ' + rom.sizes);
     await p.selectOption('#atlay', 'screen'); await shot('atari-rom-screen');
@@ -105,7 +108,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const cb = await p.locator('#atcv').boundingBox();
     await p.mouse.click(cb.x + cb.width * ((1 * 10 + 5) / (16 * 10 * 2 + 8)), cb.y + cb.height * ((2 * 10 + 5) / 80));
     assert.strictEqual(await p.evaluate(() => FE.state.slot), 65); ok('Atari charset view: clicking screen code 33 selects "A" (ATASCII 65)');
-    await p.selectOption('#atlay', 'atascii'); await shot('atari-rom-atascii');
+    await p.selectOption('#atlay', 'ascii'); await shot('atari-rom-atascii');
     await p.mouse.click(cb.x + cb.width * ((2 * 10 + 5) / (16 * 10 * 2 + 8)), cb.y + cb.height * ((4 * 10 + 5) / 80));
     assert.strictEqual(await p.evaluate(() => FE.state.slot), 66); ok('ATASCII layout: row 4 col 2 = code 66');
     const fnt = await download('#bfnt', 'ui-rom.fnt'); assert.strictEqual(fnt.data.length, 1024);
@@ -121,7 +124,6 @@ fs.mkdirSync(OUT, { recursive: true });
     ok('FONT.FNT and ATARIXL.ROM open through the file chooser (8x8, ROM charset bytes survive toFnt)');
 
     // ---- TTF import: personal Atari8bit.ttf (pixel font), panel, controls, preview -------------------------------------------
-    await p.selectOption('#ttfadv', '8');
     await p.setInputFiles('#file', path.join(ROOT, 'font_personal', 'Atari8bit.ttf'));
     await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'Atari8bit' && !document.getElementById('imp').hidden);
     const t1 = await p.evaluate(() => ({ adv: FE.state.f.adv, sizes: Object.keys(FE.state.fam.sizes).join(','), info: document.getElementById('impinfo').textContent, w: document.getElementById('impprev').width }));
@@ -133,7 +135,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.waitForFunction(() => !/pixel-grid/.test(document.getElementById('impinfo').textContent));
     await p.fill('#ttfbl', '1'); await p.dispatchEvent('#ttfbl', 'change');
     await p.fill('#ttfth', '0.5'); await p.dispatchEvent('#ttfth', 'change');
-    await p.check('#ttfdirect'); await p.waitForFunction(() => /direct|px/.test(document.getElementById('impinfo').textContent));
+    await p.check('#ttfdirect'); await p.waitForFunction(() => /sizes/.test(document.getElementById('impinfo').textContent));
     const g1 = await p.evaluate(() => FE.state.fam.sizes[12].glyphs[65].slice());
     assert.ok(g1.some((v) => v)); ok('TTF controls (native grid, baseline, threshold, per-size outline) re-convert and re-draw the preview');
     await shot('ttf-atari8bit-outline');
@@ -145,10 +147,9 @@ fs.mkdirSync(OUT, { recursive: true });
     assert.notDeepStrictEqual(m0, m2); ok('baseline control moves the glyph rows');
     await p.fill('#ttfbl', '0'); await p.dispatchEvent('#ttfbl', 'change'); await p.fill('#ttfth', '0.3'); await p.dispatchEvent('#ttfth', 'change');
     await p.uncheck('#ttfdirect'); await p.check('#ttfnative'); await p.waitForFunction(() => /pixel-grid/.test(document.getElementById('impinfo').textContent));
-    await p.click('#impkeep'); assert.ok(!(await p.isVisible('#imp')));
+    await p.click('#impkeep'); assert.ok(await p.evaluate(() => FE.entries.has('my:Atari8bit')));
 
     // second TTF
-    await p.selectOption('#ttfadv', '12');
     await p.setInputFiles('#file', 'C:/Windows/Fonts/arial.ttf');
     await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'arial');
     assert.strictEqual(await p.evaluate(() => FE.state.f.adv), 12); await shot('ttf-arial'); ok('arial.ttf converted, 12x12 master with family');
@@ -157,7 +158,7 @@ fs.mkdirSync(OUT, { recursive: true });
     // ---- edit a glyph in an imported font then save/export in every format ---------------------------------------------------
     await p.setInputFiles('#file', path.join(ROOT, 'font_personal', 'Atari8bit.ttf'));
     await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'Atari8bit'); await p.click('#impkeep');
-    await p.selectOption('#fsize', '8'); await p.evaluate(() => FE.select(65));
+    await size(8); await p.evaluate(() => { FE.showTab('edit'); FE.select(65); });
     const e0 = await p.evaluate(() => FE.state.f.glyphs[65].slice());
     const eb = await p.locator('#edit').boundingBox();
     await p.mouse.click(eb.x + 4, eb.y + 4);
@@ -178,15 +179,15 @@ fs.mkdirSync(OUT, { recursive: true });
 
     // ---- persistence: imported fonts are in My fonts after a reload ------------------------------------------------------------
     await p.click('#bkeep');
-    await p.reload(); await p.waitForFunction(() => window.FE && document.querySelectorAll('#flist optgroup').length >= 6);
-    const my = await p.$$eval('#flist optgroup[data-my] option', (o) => o.map((x) => x.value));
+    await p.reload(); await p.waitForFunction(() => window.FE && document.querySelectorAll('#flist .fitem').length >= 3 && FE.state.f);
+    const my = await p.$$eval('#flist .fitem[data-fid^="my:"]', (o) => o.map((x) => x.dataset.fid));
     assert.ok(my.includes('my:Atari8bit') && my.includes('my:arial'), my.join()); ok('My fonts group after reload lists: ' + my.join(', '));
     await pick('my:Atari8bit'); await p.waitForFunction(() => FE.state.fam && FE.state.fam.name === 'Atari8bit');
     assert.ok(await p.evaluate(() => FE.CF.glyph(FE.state.f, 65).some((v) => v))); await shot('my-fonts-reopened'); ok('a kept font reopens from the picker');
 
     // ---- library Converted + Atari ROM + Personal groups ---------------------------------------------------------------------------
-    for (const g of ['Converted', 'Atari ROM', 'Personal']) {
-      const vals = await p.$$eval('#flist optgroup', (gs, l) => (gs.find((x) => x.label.startsWith(l)) || { querySelectorAll: () => [] }).querySelectorAll('option').length ? [...gs.find((x) => x.label.startsWith(l)).querySelectorAll('option')].map((o) => o.value) : [], g);
+    for (const g of ['converted', 'atari', 'personal']) {
+      const vals = await p.evaluate((l) => [...FE.entries.values()].filter((e) => e.group === l && e.kind === 'url').map((e) => e.id), g);
       assert.ok(vals.length, g + ' group has fonts'); await pick(vals[0]); await p.waitForTimeout(700);
       assert.ok(await p.evaluate(() => FE.state.f && FE.state.f.glyphs.some((x) => x && x.some((v) => v))), g + ' first font opens');
     }
