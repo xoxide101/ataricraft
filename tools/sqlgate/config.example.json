@@ -1,0 +1,8 @@
+{
+  "_comment": "Copy to %APPDATA%\\ataricraft\\xcsqlgate.json (or out\\) and point XCSQLGATE_CONFIG at it. Never commit a real config. SQLite files need no credentials.",
+  "limits": { "maxRows": 1000, "maxBytes": 1048576, "timeoutMs": 5000 },
+  "audit": "xcsqlgate-audit.log",
+  "databases": {
+    "shop": { "engine": "sqlite", "path": "C:\\data\\shop.sqlite", "tables": ["customers", "orders"], "readOnly": true }
+  }
+}
