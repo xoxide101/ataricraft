@@ -169,13 +169,15 @@
     export(c) { return U.u8(FONT.serialize(FONT.fromJson(U.dec(c.blob('font.json'))))); },
   };
 
-  const ADAPTERS = { atr, cwd, acf, raw };
+  let xcs = null; // spreadsheet adapter, Node only (tools/craftcore/adapter-xcs.cjs)
+  try { if (typeof require === 'function') xcs = require('./adapter-xcs.cjs')(U, make, jbytes, ext); } catch (e) { xcs = null; }
+  const ADAPTERS = Object.assign({ atr, cwd, acf }, xcs ? { xcs } : {}, { raw });
   // Craft file extensions (docs/FILE-EXTENSIONS.md). The adapter id 'cwd' (container type) is the Craft Word adapter; .xcw is its name, .cwd the legacy alias.
   // xcs and xcd are reserved: no adapter yet, so detection falls back to raw.
   const EXTENSIONS = {
     xcw: { adapter: 'cwd', kind: 'word', status: 'implemented', description: 'Craft Word document' },
     cwd: { adapter: 'cwd', kind: 'word', status: 'legacy alias of xcw', description: 'Craft Word document (old name, still read)' },
-    xcs: { adapter: null, kind: 'spreadsheet', status: 'reserved', description: 'Craft spreadsheet' },
+    xcs: { adapter: 'xcs', kind: 'spreadsheet', status: 'implemented', description: 'Craft spreadsheet' },
     xcd: { adapter: null, kind: 'database', status: 'reserved', description: 'Craft database' },
     acf: { adapter: 'acf', kind: 'font', status: 'implemented', description: 'Craft font (ACF2)' },
     xcf: { adapter: 'acf', kind: 'font', status: 'implemented', description: 'Craft font (same format as .acf)' },
@@ -186,5 +188,5 @@
     for (const a of Object.values(ADAPTERS)) { if (a === acf && !FONT) continue; const v = a.detect(bytes, filename); if (v > s) { best = a; s = v; } }
     return best;
   };
-  return { ADAPTERS, EXTENSIONS, detect, atr, cwd, acf, raw, cwdText };
+  return { ADAPTERS, EXTENSIONS, detect, atr, cwd, acf, xcs, raw, cwdText };
 });
