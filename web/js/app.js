@@ -3789,9 +3789,15 @@
     return d.getFileHandle(parts[parts.length - 1], { create });
   }
   $('fsmount').onclick = async () => {
-    if (!window.showDirectoryPicker) { log('Mount folder needs a Chromium browser (File System Access API)'); return; }
-    if (!S.emu) { log('boot first'); return; }
-    let h; try { h = await showDirectoryPicker({ id: 'ataricraft-folder', mode: 'readwrite' }); } catch (e) { return; }
+    if (!window.showDirectoryPicker) { log('Mount folder needs Chrome or Edge (File System Access API); it does not work in Firefox/Safari or from some embedded views'); return; }
+    if (!S.emu) { log('Mount folder: turn the Atari on first (press Boot), then mount the folder'); return; }
+    let h;
+    try { h = await showDirectoryPicker({ id: 'ataricraft-folder', mode: 'readwrite' }); }
+    catch (e) {
+      if (e && e.name === 'AbortError') return;
+      log(`Mount folder: the browser refused that folder (${e && e.name}: ${e && e.message}). Chrome blocks whole Desktop, Documents, Downloads and drive roots; pick or make a sub-folder inside them (for example Documents\\Atari).`);
+      return;
+    }
     const n = +$('fsdrv').value;
     try {
       const files = [], st = { total: 0, prog: AC.Progress.begin('Reading folder "' + h.name + '"…') };
