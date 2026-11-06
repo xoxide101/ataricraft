@@ -84,11 +84,15 @@
       else set('dos-ii-d', 'DOS II+D', '', 80, 'DOS II+D boot header (c4 03 00 07 fb 12)');
     }
     if (/CAR DOS|AR DOS/.test(bootText) && has(/^DOS\.SYS$/) && out.confidence < 80) set('happy-dos', 'Happy-Computer DOS II+D', '4.5', 70, 'Happy DOS boot text');
+    // Happy-Computer DOS II+D 4.5: boot header 00 03 00 07 15 12 (init $1215), "CAR DOS" text on the alt dump, DISKTOOL / HAPPYDOS files
+    if (/^0003000715124c2f/.test(out.bootHeader) && out.confidence < 80) set('happy-dos', 'Happy-Computer DOS II+D', '4.5', 75, 'Happy DOS boot header (load $0700, init $1215)');
+    // Atari DOS 1.0 (1979): one boot sector, init $1300, DOS.SYS only (no DUP.SYS); the single-sector header is unique
+    if (/^0001000700134c12/.test(out.bootHeader) && out.confidence < 60) set('atari-dos1', 'Atari DOS 1', '1.0', 80, 'DOS 1 boot header (1 sector, load $0700, init $1300)');
     if (has(/^DOS\.SYS$/) && has(/^DUP\.SYS$/) && out.confidence < 60) {
       const big = L.nsec > 720 || has(/^(RAMDISK|SETUP|COPY32)\.COM$/);
       set('atari-dos2', 'Atari DOS 2', big ? '2.5' : '2.0', 60, 'DOS.SYS + DUP.SYS' + (big ? ' with 2.5 utilities / enhanced density' : ''));
     } else if (has(/^DOS\.SYS$/) && out.confidence < 50) {
-      set('atari-dos2', 'DOS 2 compatible', '', 50, 'DOS.SYS only');
+      set('atari-dos2', 'DOS 2 compatible', /^0003000740154c14/.test(out.bootHeader) ? '2.0' : '', 50, 'DOS.SYS only' + (/^0003000740154c14/.test(out.bootHeader) ? ' with the DOS 2.0 boot loader' : ''));
     }
     if (out.family === 'unknown' && out.bootable && init === 0x0714 && L.nsec < 100) {
       set('bootstub', 'DOS 2 boot stub (no DOS.SYS)', '', 30, 'DOS 2 boot sector but a tiny file collection');
@@ -110,7 +114,7 @@
 
   // What the boot should show. DOS screens are matched case-insensitively against the emulator's screen text.
   const EXPECT = {
-    'atari-dos2': ['SELECT ITEM', 'DISK OPERATING'], 'dos-xl': ['DOS XL', 'D1:', 'SELECT', 'COMMAND'],
+    'atari-dos2': ['SELECT ITEM', 'DISK OPERATING'], 'atari-dos1': ['SELECT ITEM', 'DISK OPERATING', 'DOS'], 'happy-dos': ['SELECT ITEM', 'DISK OPERATING', 'D1:'], 'dos-xl': ['DOS XL', 'D1:', 'SELECT', 'COMMAND'],
     'bw-dos': ['D1:', 'BW-DOS', 'DOS'], 'spartados': ['D1:', 'SPARTA'],
     'dos-xe': ['DOS XE', 'D1:', 'SELECT', 'COMMAND'], 'mach-dos': ['MACH', 'SELECT', 'D1:'],
     'turbo-dos': ['TURBO', 'SELECT ITEM', 'D1:', 'D1>'], 'top-dos': ['TOP', 'SELECT', 'D1:'],

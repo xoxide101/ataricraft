@@ -455,8 +455,7 @@
     const buf = Buffer.from(bytes), FP = XCW.FontPipe, kind = FP.detect(bytes, name);
     if (buf[0] === 0x1f && buf[1] === 0x8b || (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG')) return openBytesLegacy(bytes, name);
     const acfm = (kind === 'bdf' && /ACFM/.test(buf.toString('latin1', 0, 4096))) || (kind === 'ttf' && buf.toString('latin1', 0, 600).includes('ACFM'));
-    if ((kind === 'ttf' || kind === 'woff') && !acfm) return convertTtf(bytes, name);
-    if (kind === 'woff2') throw new Error('WOFF2 is not supported; convert to WOFF or TTF first');
+    if ((kind === 'ttf' || kind === 'woff' || kind === 'woff2') && !acfm) return convertTtf(bytes, name);
     st.src = null; $('imp').hidden = true;
     if (kind === 'rom-nocharset') throw new Error('this ROM image has no Atari character set at the standard location');
     if (['xcf', 'rom', 'fnt', 'bdf', 'pcf', 'family', 'ttf'].includes(kind)) {

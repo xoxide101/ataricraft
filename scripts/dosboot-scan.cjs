@@ -19,7 +19,7 @@ const base = path.resolve(root);
 if (!fs.existsSync(base) || !fs.statSync(base).isDirectory()) { console.error('not a folder: ' + base); process.exit(2); }
 const outFile = path.resolve(opt('--out') || path.join(base, 'dosboot.json'));
 
-const { records, skipped } = scan(base, { all: flag('--all'), machine: opt('--machine'), ram: opt('--ram') });
+const { records, skipped, warnings } = scan(base, { all: flag('--all'), machine: opt('--machine'), ram: opt('--ram') });
 let existing = { records: [] };
 if (fs.existsSync(outFile)) { try { existing = DB.parse(fs.readFileSync(outFile, 'utf8')); } catch (e) { console.error('existing ' + outFile + ' ignored: ' + e.message); } }
 const doc = { format: DB.FORMAT, version: DB.VERSION, title: 'DOS boot records', root: base, generated: new Date().toISOString().slice(0, 10), records: DB.merge(existing, records) };
@@ -27,6 +27,7 @@ const doc = { format: DB.FORMAT, version: DB.VERSION, title: 'DOS boot records',
 console.log('scanned ' + base);
 for (const r of doc.records) console.log(('  ' + r.id).padEnd(64).slice(0, 64), r.family.padEnd(15), (r.version || '-').padEnd(6), r.machine.model + '/' + r.machine.ram + 'K');
 console.log(doc.records.length + ' boot records, ' + skipped.length + ' skipped');
+warnings.forEach(([n, w]) => console.log('  WARN', n, '-', w));
 if (flag('--verbose')) skipped.forEach(([n, w]) => console.log('  skip', n, '-', w));
 if (flag('--dry')) process.exit(0);
 fs.writeFileSync(outFile, JSON.stringify(doc, null, 2) + '\n');

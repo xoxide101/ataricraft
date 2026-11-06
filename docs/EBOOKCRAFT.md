@@ -17,7 +17,7 @@ Everything is offline vanilla JS, no build step, no CDN, no network at run time.
 | MOBI / AZW / PRC | MOBI6 with PalmDOC (type 2) compression. **Not supported:** DRM, HUFF/CDIC compression, KF8-only AZW3 (those report a clear error) |
 | CWD (Craft Word), DOCX, RTF | yes, through the xCWriter core (`XCW.openDoc`) |
 | PDF with a text layer | yes: own parser (xref/object streams, Flate, ToUnicode CMaps), reading order by position |
-| PDF scans | page images are decoded directly (Flate/DCT JPEG/raw). In the browser the pdf.js copy vendored for the PDF viewer (`web/js/pdfjs`) is used when present to rasterise any page (`EBC.pdf.engine`). **Not supported without pdf.js:** CCITT, JBIG2, JPX, LZW images; encrypted PDFs |
+| PDF scans | page images are decoded directly (Flate/DCT JPEG/raw). In the browser the pdf.js module vendored for the PDF viewer (`PDFENGINE` from `web/js/pdfjs/pdfengine.js`, loaded by `ebookcraft.html` and assigned to `EBC.pdf.engine`) rasterises any page; if those files are absent the engine is null. **Not supported without pdf.js:** CCITT, JBIG2, JPX, LZW images; encrypted PDFs |
 | Images: PNG, JPEG (baseline + progressive), BMP, PBM/PGM/PPM | yes; several images = several pages in name order |
 | `.ebookcraft.zip` bundles | yes (the output of the converter re-opens in the reader) |
 

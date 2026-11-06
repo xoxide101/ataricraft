@@ -18,6 +18,8 @@ function namesOf(bytes) {
 function versionFromName(stem) {
   const my = /mydos[ _-]?(\d)(\d\d)(b\d*)?/i.exec(stem);
   if (my) return my[1] + '.' + my[2] + (my[3] || '');
+  const sp = /sparta-?dos[ _-]?(\d)(\d\d)(?!\d)/i.exec(stem);
+  if (sp) return sp[1] + '.' + sp[2];
   const v = /\bv(\d+(?:\.\d+)?[a-z]?)(?![\w.])/i.exec(stem);
   return v ? v[1] : '';
 }
@@ -26,16 +28,19 @@ function versionFromName(stem) {
 function scan(base, opts) {
   opts = opts || {};
   const rel = (p) => path.relative(base, p).replace(/\\/g, '/');
-  const records = [], skipped = [], seen = new Map(), usedIds = new Set();
+  const records = [], skipped = [], warnings = [], seen = new Map(), usedIds = new Set();
   function consider(file, member, bytes) {
     const stem = path.basename(member || file);
     const label = path.basename(file).replace(/\.(zip|atr|xfd)$/i, '').replace(/^OS - /, '').replace(/^DOS - /, '');
     const nm = namesOf(bytes), det = DB.detect(new Uint8Array(bytes), nm.names, nm.kind);
     if (det.family === 'spartados' && /bw-?dos/i.test(label)) { det.family = 'bw-dos'; det.name = 'BW-DOS'; det.evidence.push('named BW-DOS'); }
+    const claimed = /sparta/i.test(label) ? 'spartados' : /bw-?dos/i.test(label) ? 'bw-dos' : /mydos/i.test(label) ? 'mydos' : '';
+    const mislabelled = !!(claimed && det.bootable && det.family !== claimed);
+    if (mislabelled) warnings.push([label, 'named for ' + claimed + ' but the disk is ' + det.family + ' (' + det.evidence.slice(-1)[0] + ')']);
     const hash = sha1(bytes);
     if (seen.has(hash)) { skipped.push([label, 'duplicate of ' + seen.get(hash)]); return; }
     if (!opts.all && (!det.bootable || det.family === 'unknown' || det.family === 'bootstub')) { skipped.push([label, det.family === 'bootstub' ? 'file collection, no DOS' : 'not a recognised DOS boot disk (' + det.evidence.slice(-1)[0] + ')']); return; }
-    const fileVer = versionFromName(label);
+    const fileVer = mislabelled ? '' : versionFromName(label);
     const version = det.version && det.family !== 'atari-dos2' ? det.version : fileVer || det.version;
     let id = DB.slug(label), n = 2;
     while (usedIds.has(id)) id = DB.slug(label) + '-' + n++;
@@ -56,7 +61,7 @@ function scan(base, opts) {
       else if (/\.zip$/i.test(f)) for (const e of Z.list(f)) if (/\.(atr|xfd)$/i.test(e.name) && e.size < 20e6) consider(f, e.name, Z.read(f, e.name));
     } catch (e) { skipped.push([rel(f), 'unreadable: ' + e.message]); }
   }
-  return { records, skipped };
+  return { records, skipped, warnings };
 }
 
 // Reads one medium of a record: a loose image, or a member of a zip. The path must stay inside root.

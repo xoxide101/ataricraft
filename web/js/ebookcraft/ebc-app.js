@@ -292,29 +292,9 @@
     out.appendChild(ul);
   }
 
-  // Optional full PDF rasteriser: reuses the pdf.js copy vendored for the PDF viewer (js/pdfjs), loaded on first use.
-  // Absent => EBC.pdf falls back to its own decoder (scans that are single embedded images).
-  let pdfjsP = null;
-  const loadPdfjs = () => pdfjsP || (pdfjsP = new Promise((res, rej) => {
-    if (window.pdfjsLib) return res(window.pdfjsLib);
-    const s = document.createElement('script'); s.src = 'js/pdfjs/pdf.min.js';
-    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/pdfjs/pdf.worker.min.js'; res(window.pdfjsLib); };
-    s.onerror = () => rej(new Error('js/pdfjs not installed')); document.head.appendChild(s);
-  }));
-  EBC.pdf.engine = {
-    async renderPage(bytes, no, dpi) {
-      const lib = await loadPdfjs();
-      const doc = await lib.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
-      const pg = await doc.getPage(no), vp = pg.getViewport({ scale: (dpi || 150) / 72 });
-      const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-      const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
-      await pg.render({ canvasContext: cx, viewport: vp }).promise;
-      const d = cx.getImageData(0, 0, c.width, c.height);
-      return { w: c.width, h: c.height, rgba: new Uint8Array(d.data.buffer) };
-    },
-  };
-  // pdf.js missing => drop the engine so pack.js takes the built-in path
-  fetch('js/pdfjs/pdf.min.js', { method: 'HEAD' }).then((r) => { if (!r.ok) EBC.pdf.engine = null; }).catch(() => { EBC.pdf.engine = null; });
+  // Full PDF rasteriser: the vendored pdf.js module PDFENGINE (js/pdfjs/pdfengine.js, docs/PDFVIEW.md), loaded by ebookcraft.html.
+  // Absent (files not installed) => null and EBC.pdf falls back to its own decoder (scans that are single embedded images).
+  EBC.pdf.engine = window.PDFENGINE || null;
 
   // test hook (used by scripts/ebookcraft-browser-test.cjs)
   window.EBCApp = { openBytes, R, st, showTab, setPanel, addInputs, listInputs, readOpts };

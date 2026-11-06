@@ -34,7 +34,7 @@ const tryClient = (port, tries) => new Promise((res) => {
 (async () => {
   await Promise.all([web, echo].map((s) => new Promise((r) => s.once('listening', r))));
   const WP = '127.0.0.1:' + web.address().port, EP = echo.address().port;
-  const LP = 18555;
+  const LP = 20000 + (process.pid % 20000); // fresh port per run: a listener left bound by an earlier unfinished run gives ADDR_IN_USE = 'CANNOT CONNECT'
   const relay = spawn('node', [ROOT + '/tools/tnfs-bridge/bridge.cjs', '8791', '--allow-lan'], { env: Object.assign({}, process.env, { AC_TOKEN: 'testtoken' }) });
   await new Promise((r) => setTimeout(r, 800));
   const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
@@ -55,6 +55,7 @@ const tryClient = (port, tries) => new Promise((res) => {
   for (const n of ['curl', 'jq', 'nc']) xexs[n] = build(n).xex;
   for (const core of (process.env.CORES || 'atari800,altirra').split(',')) {
     for (const [app, args, check, side] of cases.filter((c) => !process.env.ONLY || c[1].startsWith(process.env.ONLY))) {
+      const wd = setTimeout(() => { console.log('HUNG (page stopped answering)', core, app, args); relay.kill(); process.exit(2); }, 90000);
       const p = await (await b.newContext()).newPage();
       const errs = []; p.on('pageerror', (e) => errs.push(e.message));
       await p.goto('file:///' + ROOT + '/web/index.html');
@@ -82,7 +83,7 @@ const tryClient = (port, tries) => new Promise((res) => {
       if (process.env.SHOW || !ok) console.log('---', core, app, args, '\n' + s);
       console.log(core, app, args.split(' ')[0], errs, ok ? 'OK' : 'FAILED');
       if (!ok) bad++;
-      await p.context().close();
+      await p.context().close(); clearTimeout(wd);
     }
   }
   await b.close(); relay.kill(); web.close(); echo.close();

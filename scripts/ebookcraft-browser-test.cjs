@@ -69,6 +69,13 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++
     return { engine: !!EBC.pdf.engine, files: r.files.map((f) => f.path), report: r.report };
   }, sample('scan-page.pdf'));
   ok(pdfRes.files.some((f) => /atari-bw\/p001/.test(f)), 'scanned PDF converts in the browser (pdf.js engine: ' + pdfRes.engine + ')');
+  const eng = await pg.evaluate(async (b) => {
+    const u = Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+    const r = await window.PDFENGINE.renderPage(u, 1, 72); let dark = 0;
+    for (let i = 0; i < r.rgba.length; i += 4) if (r.rgba[i] < 128) dark++;
+    return { wired: EBC.pdf.engine === window.PDFENGINE, pages: await window.PDFENGINE.pageCount(u), w: r.w, h: r.h, dark };
+  }, sample('scan-page.pdf'));
+  ok(eng.wired && eng.pages >= 1 && eng.w > 100 && eng.dark > 100, 'EBC.pdf.engine is the vendored PDFENGINE and renders ink: ' + JSON.stringify(eng));
   ok(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await br.close(); srv.close();
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED'); process.exit(fails ? 1 : 0);

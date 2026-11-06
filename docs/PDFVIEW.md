@@ -49,7 +49,7 @@ await PDFENGINE.pageText(bytes, 2)          // text of page 2 (1-based)
 await PDFENGINE.renderPage(bytes, 1, 150)   // { w, h, rgba } at 150 dpi (72 PDF points = 1 inch), white background
 ```
 
-`renderPage` matches the contract EBookCraft already defines in `web/js/ebookcraft/ebc-pdf.js`, so enabling high-resolution page rendering there is one line once the three scripts are on its page: `EBC.pdf.engine = PDFENGINE;`. The last opened document is cached by `bytes` identity, so rendering many pages of one file does not re-parse it. For anything richer (text layer, annotations) use `window.pdfjsLib` directly, as `pdfview.js` does.
+`renderPage` matches the contract EBookCraft already defines in `web/js/ebookcraft/ebc-pdf.js`, and EBookCraft is wired to it: `web/ebookcraft.html` loads the three scripts and `ebc-app.js` sets `EBC.pdf.engine = window.PDFENGINE || null` (tested in `scripts/ebookcraft-browser-test.cjs`). The last opened document is cached by `bytes` identity, so rendering many pages of one file does not re-parse it. For anything richer (text layer, annotations) use `window.pdfjsLib` directly, as `pdfview.js` does.
 
 ## Test
 

@@ -1,5 +1,5 @@
 // Font pipeline (docs/FONT.md, "Font pipeline"): one shared module for Node and the browser, no build step beyond the xCWriter bundle.
-//   DOWN  high-res outline font (TTF / OTF / WOFF) -> ACF2 at 12x12 (master), 10x12, 8x8, 6/5/4 px, using the Craft master/derive logic.
+//   DOWN  high-res outline font (TTF / OTF / WOFF / WOFF2 in Node) -> ACF2 at 12x12 (master), 10x12, 8x8, 6/5/4 px, using the Craft master/derive logic.
 //   UP    Atari fonts (ROM charset, .fnt, .acf, .json, BDF, PCF) -> working ACF + XCF, and export to BDF / TTF / .fnt so a font survives.
 // XCF = xCWriter font: the craft-family JSON plus names, Unicode, advances, bearings and metrics (see docs/FONT.md).
 // All functions take and return plain bytes (Uint8Array / Buffer) or strings; nothing touches the file system or the DOM.
@@ -397,8 +397,7 @@ function load(input, name, opt = {}) {
   const b = bytes(input), kind = detect(b, name), nm = opt.name || baseName(name), warnings = [];
   let fam;
   if (kind === 'ttf') { const ex = fromTtfExport(b); if (ex) { if (!ex.xinfo) ex.xinfo = {}; return { kind, fam: CF.familyNew(ex, ex.name || nm), info: { warnings } }; } }
-  if (kind === 'ttf' || kind === 'woff') return Object.assign({ kind }, down(b, name, opt));
-  if (kind === 'woff2') throw new Error('WOFF2 is not supported; convert to WOFF or TTF first');
+  if (kind === 'ttf' || kind === 'woff' || kind === 'woff2') return Object.assign({ kind }, down(b, name, opt));
   if (kind === 'xcf') { const r = fromXcf(text(b)); return { kind, fam: r.fam, info: { warnings }, meta: r.meta }; }
   if (kind === 'family') return { kind, fam: CF.familyFromJson(text(b)), info: { warnings } };
   let f;
