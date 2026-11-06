@@ -1,0 +1,60 @@
+{
+  "profile": 1,
+  "id": "c64",
+  "name": "Commodore 64",
+  "family": "6502",
+  "status": "stub",
+  "variants": [
+    { "id": "ntsc", "name": "C64 NTSC (VIC-II 6567)", "clockHz": 1022727, "cyclesPerLine": 65, "lines": 263 },
+    { "id": "pal", "name": "C64 PAL (VIC-II 6569)", "clockHz": 985248, "cyclesPerLine": 63, "lines": 312 }
+  ],
+  "cpu": { "arch": "6502", "chip": "MOS 6510", "clockHz": 1022727, "clockHzPal": 985248, "endianness": "little", "addressBits": 16, "notes": "6502 core plus an on-chip 6-bit I/O port at $0000-$0001 (DDR, data) that selects the memory map; the VIC-II steals cycles on bad lines" },
+  "memory": {
+    "addressBits": 16,
+    "regions": [
+      { "name": "CPU port", "start": 0, "end": 1, "type": "io", "notes": "$0000 data direction, $0001 port: bit 0 LORAM, bit 1 HIRAM, bit 2 CHAREN" },
+      { "name": "RAM", "start": 2, "end": 40959, "type": "ram" },
+      { "name": "BASIC ROM / cartridge ROML", "start": 40960, "end": 49151, "type": "rom", "notes": "A000-BFFF, 8 KB, visible when LORAM and HIRAM are set" },
+      { "name": "RAM", "start": 49152, "end": 53247, "type": "ram", "notes": "C000-CFFF" },
+      { "name": "VIC-II", "start": 53248, "end": 54271, "type": "io", "notes": "D000-D3FF, 47 registers mirrored every 64 bytes" },
+      { "name": "SID", "start": 54272, "end": 55295, "type": "io", "notes": "D400-D7FF, 29 registers mirrored every 32 bytes" },
+      { "name": "Colour RAM", "start": 55296, "end": 56319, "type": "video", "notes": "D800-DBFF, 1 KB of 4-bit cells" },
+      { "name": "CIA 1", "start": 56320, "end": 56575, "type": "io", "notes": "DC00-DCFF: keyboard matrix, joysticks, IRQ timers" },
+      { "name": "CIA 2", "start": 56576, "end": 56831, "type": "io", "notes": "DD00-DDFF: serial bus, user port, VIC bank select, NMI timers" },
+      { "name": "I/O expansion 1 and 2", "start": 56832, "end": 57343, "type": "io", "notes": "DE00-DFFF: cartridge I/O" },
+      { "name": "KERNAL ROM / cartridge ROMH", "start": 57344, "end": 65535, "type": "rom", "notes": "E000-FFFF, 8 KB, visible when HIRAM is set" },
+      { "name": "Character ROM", "start": 53248, "end": 57343, "type": "rom", "layer": "chargen", "notes": "D000-DFFF, 4 KB, replaces I/O when CHAREN is clear (and LORAM or HIRAM set)" },
+      { "name": "RAM under ROM/I/O", "start": 40960, "end": 49151, "type": "ram", "layer": "ram-under", "notes": "all-RAM configurations (LORAM/HIRAM clear)" },
+      { "name": "RAM under I/O", "start": 53248, "end": 65535, "type": "ram", "layer": "ram-under", "notes": "all-RAM configuration" }
+    ]
+  },
+  "video": {
+    "chip": "VIC-II (MOS 6567 NTSC / 6569 PAL)",
+    "native": { "width": 320, "height": 200, "note": "40x25 characters or bitmap; multicolour halves the horizontal resolution to 160" },
+    "overscan": { "width": null, "height": null },
+    "frame": { "ntscHz": 59.83, "palHz": 50.12, "ntscLines": 263, "palLines": 312 },
+    "modes": [
+      { "id": "text", "name": "Standard text", "type": "text", "width": 40, "height": 25, "colors": 2 },
+      { "id": "mctext", "name": "Multicolour text", "type": "text", "width": 40, "height": 25, "colors": 4 },
+      { "id": "ectext", "name": "Extended background colour text", "type": "text", "width": 40, "height": 25, "colors": 5 },
+      { "id": "bitmap", "name": "Standard bitmap", "type": "bitmap", "width": 320, "height": 200, "colors": 2, "notes": "2 colours per 8x8 cell" },
+      { "id": "mcbitmap", "name": "Multicolour bitmap", "type": "bitmap", "width": 160, "height": 200, "colors": 4, "notes": "4 colours per 4x8 cell" }
+    ],
+    "palette": { "kind": "fixed", "entries": 16, "distinctColors": 16, "rgb": null },
+    "sprites": "8 hardware sprites, 24x21 pixels, optional multicolour and expansion"
+  },
+  "audio": { "chip": "SID (MOS 6581 / 8580)", "channels": 3, "notes": "three voices with four waveforms, ADSR, ring modulation, sync, one multimode filter" },
+  "charset": { "name": "PETSCII / C64 screen codes", "encoding": "petscii", "glyph": { "width": 8, "height": 8 }, "glyphs": 512, "rom": { "size": 4096, "note": "two 2 KB sets (upper case/graphics and upper/lower case), each with inverse variants" }, "lineEnd": "0x0D" },
+  "keyboard": { "kind": "matrix-keyboard", "layout": "C64 64-key, 8x8 matrix", "notes": "scanned through CIA 1 ports A and B; RESTORE is wired to NMI, not to the matrix; Commodore, CTRL, two SHIFT, RUN/STOP", "implementation": null },
+  "controllers": [ { "kind": "joystick", "ports": 2, "notes": "digital joysticks, paddles, mouse, light pen via CIA 1 and SID" } ],
+  "media": [
+    { "kind": "disk", "formats": ["d64", "g64", "d71", "d81"] },
+    { "kind": "tape", "formats": ["tap", "t64"] },
+    { "kind": "program", "formats": ["prg", "p00"], "notes": "2-byte load address followed by data" },
+    { "kind": "cartridge", "formats": ["crt", "bin"] }
+  ],
+  "roms": { "policy": "local-only", "list": [ { "role": "basic", "size": 8192, "address": 40960 }, { "role": "kernal", "size": 8192, "address": 57344 }, { "role": "chargen", "size": 4096, "address": 53248 }, { "role": "drive-1541", "size": 16384, "name": "1541 DOS", "address": 49152 } ] },
+  "testMaterial": [ "Candidates to confirm per licence: VICE testprogs, Lorenz CPU tests, homebrew demos with explicit redistribution terms" ],
+  "sources": [ "Commodore 64 Programmer's Reference Guide (Commodore, 1982)", "MOS 6510 and 6567/6569 datasheets" ],
+  "unknown": ["video.overscan.width", "video.overscan.height", "video.palette.rgb", "keyboard.implementation"]
+}

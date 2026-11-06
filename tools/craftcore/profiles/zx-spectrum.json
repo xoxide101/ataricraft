@@ -1,0 +1,43 @@
+{
+  "profile": 1,
+  "id": "zx-spectrum",
+  "name": "Sinclair ZX Spectrum (16K/48K, 128K)",
+  "family": "z80",
+  "status": "stub",
+  "variants": [
+    { "id": "48k", "name": "ZX Spectrum 16K/48K", "ram": [16384, 49152], "tStatesPerFrame": 69888, "tStatesPerLine": 224, "lines": 312 },
+    { "id": "128k", "name": "ZX Spectrum 128K (and +2)", "ram": [131072], "tStatesPerFrame": 70908, "tStatesPerLine": 228, "lines": 311, "notes": "8 RAM banks of 16 KB and two 16 KB ROMs, paged through port 0x7FFD; AY-3-8912 sound" }
+  ],
+  "cpu": { "arch": "z80", "chip": "Zilog Z80A", "clockHz": 3500000, "clockHz128k": 3546900, "endianness": "little", "addressBits": 16, "notes": "the ULA delays CPU access to 4000-7FFF while it reads the screen (contention); a cycle-exact core must model that" },
+  "memory": {
+    "addressBits": 16,
+    "regions": [
+      { "name": "ROM", "start": 0, "end": 16383, "type": "rom", "notes": "16 KB BASIC ROM (48K); the 128K has two ROMs paged into this window" },
+      { "name": "Screen bitmap", "start": 16384, "end": 22527, "type": "video", "notes": "4000-57FF, 6144 bytes, non-linear line order" },
+      { "name": "Screen attributes", "start": 22528, "end": 23295, "type": "video", "notes": "5800-5AFF, 768 bytes: flash, bright, paper, ink for each 8x8 cell" },
+      { "name": "RAM", "start": 23296, "end": 65535, "type": "ram", "notes": "5B00-FFFF (system variables start at 5C00); 8000-FFFF is the part the 16K model lacks" }
+    ]
+  },
+  "video": {
+    "chip": "ULA",
+    "native": { "width": 256, "height": 192, "note": "plus a border; colour is per 8x8 attribute cell" },
+    "overscan": { "width": null, "height": null },
+    "frame": { "hz48k": 50.08, "lines48k": 312 },
+    "modes": [ { "id": "screen0", "name": "Standard screen (bitmap + attributes)", "type": "mixed", "width": 256, "height": 192, "colors": 15, "notes": "8 colours, each normal or bright (black is the same), 2 colours per 8x8 cell; 128K adds a second screen bank" } ],
+    "palette": { "kind": "fixed", "entries": 16, "distinctColors": 15, "rgb": null }
+  },
+  "audio": { "chip": "beeper (ULA port 0xFE bit 4); 128K adds AY-3-8912", "channels": 1, "notes": "48K: 1-bit; 128K: three tone channels plus noise" },
+  "charset": { "name": "Spectrum character set", "encoding": "ascii", "glyph": { "width": 8, "height": 8 }, "glyphs": 96, "rom": { "address": 15616, "size": 768, "note": "3D00-3FFF, codes 32-127; 0x60 is the pound sign and 0x7F the copyright sign; codes 144-164 are user graphics A-U; 165-255 are BASIC tokens" }, "lineEnd": "0x0D" },
+  "keyboard": { "kind": "matrix-keyboard", "layout": "40-key rubber keyboard", "notes": "8 half-rows of 5 keys read through port 0xFE (the high address byte selects rows); CAPS SHIFT and SYMBOL SHIFT", "implementation": null },
+  "controllers": [ { "kind": "joystick", "notes": "no standard port; Kempston, Sinclair 1/2 and Cursor interfaces" } ],
+  "media": [
+    { "kind": "tape", "formats": ["tap", "tzx", "wav"] },
+    { "kind": "snapshot", "formats": ["sna", "z80", "szx"] },
+    { "kind": "disk", "formats": ["dsk", "trd", "mgt"], "notes": "+3 (3 inch), Beta Disk / TR-DOS, DISCiPLE/+D" },
+    { "kind": "other", "formats": ["mdr"], "notes": "Interface 1 microdrive cartridge" }
+  ],
+  "roms": { "policy": "local-only", "list": [ { "role": "system", "size": 16384, "name": "48K ROM", "address": 0 }, { "role": "system", "size": 32768, "name": "128K ROMs (2 x 16 KB)", "address": 0 } ] },
+  "testMaterial": [ "Homebrew and public-domain tapes only; licences to be checked per item before they are added to the repository" ],
+  "sources": [ "Sinclair ZX Spectrum technical documentation (public reference works, e.g. World of Spectrum / the Spectrum ROM disassembly)", "Z80 CPU User Manual (Zilog)" ],
+  "unknown": ["video.overscan.width", "video.overscan.height", "video.palette.rgb", "keyboard.implementation"]
+}

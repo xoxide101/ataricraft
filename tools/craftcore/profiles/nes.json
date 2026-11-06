@@ -1,0 +1,46 @@
+{
+  "profile": 1,
+  "id": "nes",
+  "name": "Nintendo Entertainment System / Famicom",
+  "family": "6502",
+  "status": "stub",
+  "variants": [
+    { "id": "ntsc", "name": "NES/Famicom NTSC (2A03 + 2C02)", "clockHz": 1789773, "lines": 262, "frameHz": 60.0988 },
+    { "id": "pal", "name": "NES PAL (2A07 + 2C07)", "clockHz": 1662607, "lines": 312, "frameHz": 50.007 }
+  ],
+  "cpu": { "arch": "6502", "chip": "Ricoh 2A03 (NTSC) / 2A07 (PAL)", "clockHz": 1789773, "clockHzPal": 1662607, "endianness": "little", "addressBits": 16, "notes": "6502 core with the decimal mode disabled, plus the APU and OAM DMA on the same die" },
+  "memory": {
+    "addressBits": 16,
+    "regions": [
+      { "name": "Internal RAM", "start": 0, "end": 2047, "type": "ram", "notes": "2 KB" },
+      { "name": "RAM mirrors", "start": 2048, "end": 8191, "type": "mirror", "notes": "0800-1FFF mirror 0000-07FF" },
+      { "name": "PPU registers", "start": 8192, "end": 8199, "type": "io", "notes": "2000-2007" },
+      { "name": "PPU register mirrors", "start": 8200, "end": 16383, "type": "mirror", "notes": "2008-3FFF mirror 2000-2007 every 8 bytes" },
+      { "name": "APU and I/O registers", "start": 16384, "end": 16407, "type": "io", "notes": "4000-4017: APU, OAM DMA ($4014), controllers ($4016/$4017)" },
+      { "name": "Normally disabled test registers", "start": 16408, "end": 16415, "type": "io", "notes": "4018-401F" },
+      { "name": "Cartridge space", "start": 16416, "end": 24575, "type": "cart", "notes": "4020-5FFF: expansion, mapper registers" },
+      { "name": "Cartridge PRG RAM", "start": 24576, "end": 32767, "type": "cart", "notes": "6000-7FFF: optional work or battery RAM" },
+      { "name": "Cartridge PRG ROM", "start": 32768, "end": 65535, "type": "cart", "notes": "8000-FFFF: program ROM, banked by the mapper; vectors at FFFA-FFFF" }
+    ]
+  },
+  "video": {
+    "chip": "PPU (Ricoh 2C02 / 2C07)",
+    "native": { "width": 256, "height": 240, "note": "NTSC TVs commonly crop the top and bottom 8 lines" },
+    "overscan": { "width": null, "height": null },
+    "frame": { "ntscHz": 60.0988, "palHz": 50.007, "ntscLines": 262, "palLines": 312, "dotsPerLine": 341 },
+    "modes": [ { "id": "tiles", "name": "Background + sprites", "type": "tile", "width": 256, "height": 240, "colors": 25, "notes": "8x8 tiles from CHR memory (8 KB pattern tables), 64 sprites with 8 per scanline, 4 background and 4 sprite palettes of 3 colours plus a shared backdrop" } ],
+    "palette": { "kind": "fixed", "entries": 64, "rgb": null, "note": "master palette of 64 entries chosen from a 32-byte palette RAM; the exact RGB values are analogue and differ between decoders" }
+  },
+  "audio": { "chip": "APU (inside the 2A03)", "channels": 5, "notes": "two pulse channels, one triangle, one noise, one delta-modulation (DMC) sample channel" },
+  "charset": { "name": "none (tile based)", "encoding": null, "glyph": { "width": 8, "height": 8 }, "glyphs": null, "note": "no fixed character set; text is drawn from tiles in the cartridge CHR data" },
+  "keyboard": { "kind": "controller", "buttons": ["A", "B", "Select", "Start", "Up", "Down", "Left", "Right"], "notes": "serial shift-register read at $4016/$4017; the Famicom Family BASIC keyboard is an optional peripheral", "implementation": null },
+  "controllers": [ { "kind": "gamepad", "ports": 2, "notes": "Zapper light gun and other devices use the same ports" } ],
+  "media": [
+    { "kind": "cartridge", "formats": ["nes", "unf", "unif"], "notes": "iNES: 16-byte header starting 4E 45 53 1A, then PRG and CHR ROM; NES 2.0 extends it" },
+    { "kind": "disk", "formats": ["fds"], "notes": "Famicom Disk System" }
+  ],
+  "roms": { "policy": "local-only", "list": [ { "role": "fds-bios", "size": 8192, "name": "Disk System BIOS" } ], "note": "games are cartridge images supplied by the user; mapper numbers (0 NROM, 1 MMC1, 2 UxROM, 3 CNROM, 4 MMC3 ...) are in the iNES header" },
+  "testMaterial": [ "Candidates to confirm per licence: nestest, blargg's NES test ROMs, homebrew released with redistribution terms" ],
+  "sources": [ "NESdev Wiki (nesdev.org), public hardware documentation", "iNES / NES 2.0 format specification (NESdev Wiki)" ],
+  "unknown": ["video.overscan.width", "video.overscan.height", "video.palette.rgb", "charset.encoding", "charset.glyphs", "keyboard.implementation"]
+}

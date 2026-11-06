@@ -1,0 +1,124 @@
+{
+  "profile": 1,
+  "id": "atari8",
+  "name": "Atari 8-bit computers (400/800, 600XL/800XL, 65XE/130XE, XEGS)",
+  "family": "6502",
+  "status": "complete",
+  "variants": [
+    { "id": "800", "name": "Atari 400/800", "ram": [16384, 32768, 40960, 49152], "os": "10 KB OS ROM (rev A/B), BASIC on a cartridge", "notes": "memory map below is the XL/XE one; on 400/800 there is no PORTB banking and the OS ROM is D800-FFFF (floating point D800-DFFF, charset E000-E3FF) with C000-CFFF unused" },
+    { "id": "xl", "name": "600XL/800XL/1200XL", "ram": [16384, 65536], "os": "16 KB OS ROM, BASIC built in (switchable)" },
+    { "id": "xe", "name": "65XE/130XE/XEGS", "ram": [65536, 131072], "os": "16 KB OS ROM, BASIC built in (switchable)", "notes": "130XE adds 64 KB of banked RAM through PORTB bits 2-3 (window 4000-7FFF)" }
+  ],
+  "cpu": {
+    "arch": "6502",
+    "chip": "MOS 6502C (SALLY)",
+    "clockHz": 1789773,
+    "clockHzPal": 1773447,
+    "endianness": "little",
+    "addressBits": 16,
+    "notes": "ANTIC steals cycles (WSYNC, DMA); a cycle-exact core must model that. Clock is the nominal NTSC colour-clock / 2; PAL value is the PAL equivalent."
+  },
+  "memory": {
+    "addressBits": 16,
+    "regions": [
+      { "name": "RAM (user, 40 KB)", "start": 0, "end": 40959, "type": "ram", "notes": "page 0-1 CPU, 2-3 OS, screen and display list wherever the program places them" },
+      { "name": "BASIC ROM / cartridge right slot", "start": 40960, "end": 49151, "type": "rom", "notes": "A000-BFFF: built-in BASIC (XL/XE, PORTB bit 1 = 0) or the right-slot cartridge" },
+      { "name": "OS ROM (low part)", "start": 49152, "end": 53247, "type": "rom", "notes": "C000-CFFF XL/XE OS" },
+      { "name": "GTIA", "start": 53248, "end": 53503, "type": "io", "notes": "D000-D0FF, registers mirror every 32 bytes" },
+      { "name": "Unused (D1xx)", "start": 53504, "end": 53759, "type": "unmapped", "notes": "reserved for parallel devices on 400/800" },
+      { "name": "POKEY", "start": 53760, "end": 54015, "type": "io", "notes": "D200-D2FF, registers mirror every 16 bytes" },
+      { "name": "PIA", "start": 54016, "end": 54271, "type": "io", "notes": "D300-D3FF, PORTA/PORTB/PACTL/PBCTL; PORTB also drives banking on XL/XE" },
+      { "name": "ANTIC", "start": 54272, "end": 54527, "type": "io", "notes": "D400-D4FF, registers mirror every 16 bytes" },
+      { "name": "Cartridge control", "start": 54528, "end": 55295, "type": "io", "notes": "D500-D7FF, bank-select areas for banked cartridges" },
+      { "name": "OS ROM (high part)", "start": 55296, "end": 65535, "type": "rom", "notes": "D800-FFFF: floating point D800-DFFF, internal character set E000-E3FF, OS code and vectors up to FFFF" },
+      { "name": "RAM under BASIC", "start": 40960, "end": 49151, "type": "ram", "layer": "basic-off", "notes": "visible when PORTB bit 1 = 1 (BASIC disabled)" },
+      { "name": "RAM under OS (low)", "start": 49152, "end": 53247, "type": "ram", "layer": "os-off", "notes": "XL/XE with PORTB bit 0 = 0" },
+      { "name": "RAM under OS (high)", "start": 55296, "end": 65535, "type": "ram", "layer": "os-off", "notes": "XL/XE with PORTB bit 0 = 0" },
+      { "name": "Self-test ROM window", "start": 20480, "end": 22527, "type": "rom", "layer": "self-test", "notes": "5000-57FF, XL/XE, PORTB bit 7 = 0 with the OS enabled" },
+      { "name": "Extended RAM window", "start": 16384, "end": 32767, "type": "banked", "layer": "ext-bank", "notes": "4000-7FFF, 130XE and expansions: PORTB bits 2-3 pick one of four 16 KB banks, bit 4 enables CPU access, bit 5 enables ANTIC access; larger expansions (Rambo, Compy-Shop) use more bits" },
+      { "name": "Left cartridge", "start": 32768, "end": 40959, "type": "cart", "layer": "cart-left", "notes": "8000-9FFF with a 16 KB or left-slot cartridge (400/800 and 5200-style layouts)" }
+    ]
+  },
+  "video": {
+    "chip": "ANTIC (display list DMA) + GTIA (colour, players/missiles)",
+    "native": { "width": 320, "height": 192, "note": "normal-width playfield, 8 pixel tall characters; narrow 256 and wide 384 playfields exist" },
+    "overscan": { "width": 384, "height": 240, "note": "buffer size used by this repo's emulator (emu.js: 384x240, 336 columns shown); not a hardware limit" },
+    "frame": { "ntscHz": 59.92, "palHz": 49.86, "ntscLines": 262, "palLines": 312, "cyclesPerLine": 114 },
+    "modes": [
+      { "id": "gr0", "name": "GRAPHICS 0 (ANTIC 2)", "type": "text", "width": 40, "height": 24, "colors": 2 },
+      { "id": "gr1", "name": "GRAPHICS 1 (ANTIC 6)", "type": "text", "width": 20, "height": 24, "colors": 5 },
+      { "id": "gr2", "name": "GRAPHICS 2 (ANTIC 7)", "type": "text", "width": 20, "height": 12, "colors": 5 },
+      { "id": "gr3", "name": "GRAPHICS 3 (ANTIC 8)", "type": "bitmap", "width": 40, "height": 24, "colors": 4 },
+      { "id": "gr4", "name": "GRAPHICS 4 (ANTIC 9)", "type": "bitmap", "width": 80, "height": 48, "colors": 2 },
+      { "id": "gr5", "name": "GRAPHICS 5 (ANTIC A)", "type": "bitmap", "width": 80, "height": 48, "colors": 4 },
+      { "id": "gr6", "name": "GRAPHICS 6 (ANTIC B)", "type": "bitmap", "width": 160, "height": 96, "colors": 2 },
+      { "id": "gr7", "name": "GRAPHICS 7 (ANTIC D)", "type": "bitmap", "width": 160, "height": 96, "colors": 4 },
+      { "id": "gr8", "name": "GRAPHICS 8 (ANTIC F)", "type": "bitmap", "width": 320, "height": 192, "colors": 2, "notes": "one hue, two luminances; artifacting on NTSC gives colour" },
+      { "id": "gr9", "name": "GRAPHICS 9 (ANTIC F + GTIA)", "type": "bitmap", "width": 80, "height": 192, "colors": 16, "notes": "16 luminances of one hue" },
+      { "id": "gr10", "name": "GRAPHICS 10 (ANTIC F + GTIA)", "type": "bitmap", "width": 80, "height": 192, "colors": 9 },
+      { "id": "gr11", "name": "GRAPHICS 11 (ANTIC F + GTIA)", "type": "bitmap", "width": 80, "height": 192, "colors": 16, "notes": "16 hues of one luminance" },
+      { "id": "gr12", "name": "GRAPHICS 12 (ANTIC 4)", "type": "text", "width": 40, "height": 24, "colors": 5, "notes": "multicolour character mode" },
+      { "id": "gr13", "name": "GRAPHICS 13 (ANTIC 5)", "type": "text", "width": 40, "height": 12, "colors": 5 },
+      { "id": "gr14", "name": "GRAPHICS 14 (ANTIC C)", "type": "bitmap", "width": 160, "height": 192, "colors": 2 },
+      { "id": "gr15", "name": "GRAPHICS 15 (ANTIC E)", "type": "bitmap", "width": 160, "height": 192, "colors": 4 }
+    ],
+    "palette": { "kind": "generated", "indexBits": 8, "distinctColors": 128, "note": "colour register = 4-bit hue and 3-bit luminance (bit 0 unused); hue 0 is grey. Hue angles differ between NTSC and PAL.", "rgb": null },
+    "sprites": "4 players (8 px wide) and 4 missiles, positioned horizontally by registers, vertically by data (DMA)"
+  },
+  "audio": {
+    "chip": "POKEY",
+    "channels": 4,
+    "notes": "four 8-bit channels (or two 16-bit pairs), polynomial-counter noise and distortion, high-pass filter; two POKEYs (stereo) are a common upgrade"
+  },
+  "charset": {
+    "name": "ATASCII / Atari internal set",
+    "encoding": "atascii",
+    "glyph": { "width": 8, "height": 8 },
+    "glyphs": 128,
+    "rom": { "address": 57344, "size": 1024, "note": "E000-E3FF; display (internal) codes differ from ATASCII codes: bits 5-6 of the code are rotated" },
+    "lineEnd": "0x9B"
+  },
+  "keyboard": {
+    "kind": "matrix-keyboard",
+    "layout": "Atari 800/XL US",
+    "consoleKeys": ["START", "SELECT", "OPTION", "RESET"],
+    "extraKeys": ["HELP (XL/XE)", "Atari logo / inverse", "CAPS", "CONTROL", "SHIFT", "BREAK"],
+    "implementation": "web/js/keyboard.js"
+  },
+  "controllers": [
+    { "kind": "joystick", "ports": 4, "notes": "4 ports on 400/800, 2 on XL/XE; one fire button; paddles and light pen share the ports" }
+  ],
+  "media": [
+    { "kind": "disk", "formats": ["atr", "xfd", "dcm", "atx", "pro"], "notes": "810/1050 drives: 40 tracks, 18 sectors (single, 128 B) or 26 (enhanced); double density 256 B; the first three sectors are always 128 bytes" },
+    { "kind": "cartridge", "formats": ["car", "rom", "bin"], "notes": "CAR has a 16-byte header with a type code; raw ROMs need the type given by the user" },
+    { "kind": "tape", "formats": ["cas"], "notes": "FSK blocks of 132 bytes via the 410/1010 recorder" },
+    { "kind": "program", "formats": ["xex", "com", "exe", "obx"], "notes": "binary load files (segments with $FFFF header)" },
+    { "kind": "program", "formats": ["bas", "lst"], "notes": "tokenised or listed BASIC" }
+  ],
+  "roms": {
+    "policy": "local-only",
+    "list": [
+      { "role": "os", "variant": "800", "size": 10240, "name": "OS-A / OS-B", "address": 55296 },
+      { "role": "os", "variant": "xl/xe", "size": 16384, "name": "XL/XE OS", "address": 49152 },
+      { "role": "basic", "size": 8192, "name": "Atari BASIC rev A/B/C", "address": 40960 },
+      { "role": "5200-bios", "size": 2048, "name": "5200 BIOS", "address": 63488 }
+    ],
+    "note": "ROM images are never committed or embedded; the user points the app at a local folder. Hashes are recorded locally by the ROM scan."
+  },
+  "testMaterial": [
+    "archive/blank/*.atr (blank disks generated by this repo)",
+    "docs/samples/ACWRITER-DEMO.CWD (own work)",
+    "Altirra replacement OS/BASIC ROMs as tracked under roms/altirra/ (licence to be confirmed per file before redistribution)"
+  ],
+  "implementations": [
+    { "core": "libatari800", "file": "web/js/emu.js" },
+    { "core": "AltirraSDL", "file": "web/js/emu-altirra.js" }
+  ],
+  "sources": [
+    "Atari 400/800 Hardware Manual (Atari, 1979)",
+    "De Re Atari (Atari, 1981)",
+    "Altirra Hardware Reference Manual (Avery Lee)",
+    "Atari 130XE memory-banking documentation (PORTB)"
+  ],
+  "unknown": ["video.palette.rgb"]
+}
