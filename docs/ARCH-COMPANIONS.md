@@ -11,7 +11,7 @@ Naming: web/Windows `xC<Name>`, Atari `AC<Name>` (existing ACWriter/xCWriter). "
 | FujiNet Explorer (web) | Atari `N:` browser / CONFIG-style picker | Container catalog JSON | `net.*`, `fs.*` | web exists; Atari planned |
 | Disk/Archive tool | Atari disk utility (DOS-level copy) | ATR + Container folder form | `disk.*` | Container exists |
 | xCCalc (spreadsheet) | ACCalc | Craft sheet (`.csh`, planned) | file; `sql.*` import | planned |
-| xCBase (database) | ACBase | Craft table in Container (schema type map) | `sql.*` via gateway ([ARCH-SQL-GATEWAY](ARCH-SQL-GATEWAY.md)) | planned |
+| xCBase (database) | ACBase | Craft table in Container (schema type map) | `sql.*` via gateway ([ARCH-SQL-GATEWAY](ARCH-SQL-GATEWAY.md)); xCBase side done ([XCBASE](XCBASE.md)), ACBase not started | xCBase implemented, ACBase planned |
 | Slides | ACSlides | Craft slides (text + page layout) | file | planned |
 | Paint | ACPaint | Atari picture formats + Container | file | planned |
 | Terminal | ACTerm | line protocol over serial / `N:` | serial P:/R:, net | planned |

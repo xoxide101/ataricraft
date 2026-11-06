@@ -1,6 +1,6 @@
 # SQL gateway
 
-Lets ACBase/xCBase (and any tool) use real databases through the transport. Status: **design only**; opcodes 64-67 are reserved ([ARCH-TRANSPORT](ARCH-TRANSPORT.md)).
+Lets ACBase/xCBase (and any tool) use real databases through the transport. Status: **SQLite gateway implemented** (`tools/sqlgate/`, see [XCBASE.md](XCBASE.md)); the transport `sql.*` mapping and other engines are still design; opcodes 64-67 are reserved ([ARCH-TRANSPORT](ARCH-TRANSPORT.md)).
 
 ## Shape
 
