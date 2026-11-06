@@ -107,8 +107,8 @@ const rejects = async (p, code, m) => { try { await p(); ok(false, m + ' (no err
     const req = http.request({ host: '127.0.0.1', port: srv.port, path: route, method: 'POST', headers: h }, (res) => { let d = ''; res.on('data', (c) => (d += c)); res.on('end', () => resolve({ status: res.statusCode, body: d ? JSON.parse(d) : null, headers: res.headers })); });
     req.on('error', reject); req.end();
   });
-  ok((await call('/sql/caps', {}, null)).status === 401, 'http: token required');
-  ok((await call('/sql/caps', {}, 'wrong')).status === 401, 'http: wrong token');
+  ok((await call('/sql/caps', {}, null)).status === 403, 'http: token required');
+  ok((await call('/sql/caps', {}, 'wrong')).status === 403, 'http: wrong token');
   const caps = await call('/sql/caps'); ok(caps.status === 200 && caps.body.databases.length === 2 && !JSON.stringify(caps.body).includes(file), 'http: caps hides paths');
   const hq = await call('/sql/query', { db: 'shop', sql: 'SELECT name FROM customers WHERE id = ?', params: [2] }); ok(hq.body.rows[0][0] === 'c1', 'http: query');
   const hb = await call('/sql/query', { db: 'shop', sql: 'SELECT * FROM secrets' }); ok(hb.status === 400 && hb.body.error === 'denied' && hb.headers['x-ac-err'] === 'denied', 'http: denied -> 400 + X-AC-Err');
