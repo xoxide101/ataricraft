@@ -17,6 +17,7 @@ Naming: web/Windows `xC<Name>`, Atari `AC<Name>` (existing ACWriter/xCWriter). "
 | Terminal | ACTerm | line protocol over serial / `N:` | serial P:/R:, net | planned |
 | Calendar | ACCal | Craft calendar (records, dates) | file / sql | planned |
 | Document manager shell | ACShell | Container catalog | `fs.*`, `container.*` | planned |
+| xCCalc web app (`web/xccalc.html`) | ACCalc | `.xcs` ([XCCALC](XCCALC.md)); supersedes the planned `.csh` above | file via fs/disk ops | web exists; ACCalc in progress |
 
 ## Constraints for the Atari side
 

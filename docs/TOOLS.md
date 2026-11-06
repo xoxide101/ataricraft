@@ -15,6 +15,7 @@ Every tool in this repository, with a page that explains what it does, how to us
 | [Craft and documents](tools/craft-tools.md) | Craft format tools, fonts, dictionaries, importers, web apps |
 | Existing | [Workbench](WORKBENCH.md), [Inspect](INSPECT.md), [FujiNet](FUJINET.md), [DOS boot](DOSBOOT.md), [Fonts](FONT.md), [Import](IMPORT.md), [xCWriter](XCWRITER.md), [EBookCraft](EBOOKCRAFT.md) |
 | [FujiNet Explorer](FUJIEXPLORER.md) | `web/fujiexplorer.html`: browse TNFS/SD/FTP/PC folders, disk images, drives D1-D8, N:, P:, settings, DOS boot, without booting an Atari; [Transport layer](TRANSPORT.md) |
+| [xCCalc](XCCALC.md) | `web/xccalc.html` spreadsheet (grid, formulas, charts, Atari view, `.xcs`/CSV/TSV/XLSX/ODS/HTML), engine `tools/calccore.cjs`, bundle `scripts/sync-xccalc-core.cjs`, test `scripts/xccalc-test.cjs` |
 
 ## Conventions
 
