@@ -4458,6 +4458,16 @@
     e.preventDefault();
     pasteText((e.clipboardData && e.clipboardData.getData('text')) || '');
   });
+  // Right-click on the Atari screen: Paste / Copy (not while the screen is acting as a pad or mouse).
+  cv.addEventListener('contextmenu', (e) => {
+    if (PAD.on && PAD.screen) return;
+    e.preventDefault();
+    openPick(e.clientX, e.clientY, 'Atari screen', [
+      { label: 'Paste (type into the Atari)', run: clip(async () => pasteText(await navigator.clipboard.readText())) },
+      { label: 'Copy screen text', run: clip(copyScreenText) },
+      { label: 'Copy screen image', run: clip(copyScreenImage) },
+      { label: 'Stop pasting', run: () => { S.typeQ.length = 0; log('paste cancelled'); } }]);
+  });
   $('pastebtn').onclick = clip(async () => pasteText(await navigator.clipboard.readText()));
   $('copytxt').onclick = clip(copyScreenText);
   $('copyimg').onclick = clip(copyScreenImage);
