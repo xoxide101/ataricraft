@@ -4500,6 +4500,27 @@
     },
     boot: async (o) => { if (o && o.model) $('model').value = o.model; if (o && o.tv) $('tv').value = o.tv; if (o && o.basic != null) $('basic').checked = !!o.basic; return boot(); },
     screenshot: (o) => shot((o && o.scale) || 2, o && o.format),
+    // Boots a dosboot.json record; images = {D1: Uint8Array, ...} already fetched for its media slots.
+    bootRecord: async (rec, images) => {
+      const m = rec.machine || {};
+      if (m.model) { $('model').value = m.model; $('model').onchange(); }
+      if (m.ram && [...$('ram').options].some((o) => o.value === String(m.ram))) $('ram').value = String(m.ram);
+      if (m.tv) $('tv').value = m.tv;
+      $('basic').checked = !!m.basic;
+      if (m.fastSio != null) $('fastsio').checked = !!m.fastSio;
+      for (let n = 1; n <= 8; n++) $('de' + n).onclick();
+      for (const md of rec.media || []) {
+        const n = +String(md.slot).slice(1), b = images && images[md.slot];
+        if (!b) continue;
+        const name = (md.path || 'disk').split(/[\\/]/).pop().replace(/\.zip$/i, '.atr');
+        S.disks[n] = { name: md.member || name, bytes: b }; S.dirty[n] = false;
+        $('d' + n).textContent = S.disks[n].name;
+      }
+      S.lastExe = null;
+      const ok = await boot();
+      if (ok !== false && rec.boot && rec.boot.autorun) setTimeout(() => window.ataricraft.type(rec.boot.autorun + '\r'), 3000);
+      return ok;
+    },
     screenText: () => S.emu.screenText(),
     type: (text) => pasteText(text),
     copyText: () => S.emu.screenText(),

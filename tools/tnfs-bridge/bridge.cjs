@@ -337,7 +337,9 @@ const relayNet = netapi.create({ token: persistentToken(), allowLan: flag('--all
 const webRoot = pathMod.resolve(__dirname, '..', '..', 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.bin': 'application/octet-stream' };
 const ctl = require('./ctl.cjs').create(relayNet.token);
-const isApi = (p) => p.startsWith('/net/') || p.startsWith('/ctl/') || ['/ping', '/status', '/list', '/file'].includes(p);
+const dosArgs = process.argv.reduce((a, v, i, all) => (v === '--dos' && all[i + 1] ? a.concat(all[i + 1]) : a), []);
+const dosboot = require('../dosboot/api.cjs').create({ token: relayNet.token, extraRoots: dosArgs });
+const isApi = (p) => p.startsWith('/net/') || p.startsWith('/ctl/') || p.startsWith('/dosboot/') || ['/ping', '/status', '/list', '/file'].includes(p);
 function serveStatic(rq, rs, u) {
   if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(rq.headers.host || '')) { rs.writeHead(403); rs.end('bad host'); return; }
   let rel;
@@ -358,6 +360,7 @@ function serveStatic(rq, rs, u) {
 }
 const server = http.createServer(async (rq, rs) => {
   const u = new URL(rq.url, 'http://x');
+  if (u.pathname.startsWith('/dosboot/')) { dosboot.handle(rq, rs, u); return; }
   if (rq.method === 'GET' && !isApi(u.pathname)) { serveStatic(rq, rs, u); return; }
   rs.setHeader('Access-Control-Allow-Origin', '*');
   rs.setHeader('Access-Control-Allow-Private-Network', 'true');
