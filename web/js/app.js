@@ -809,6 +809,8 @@
   S.profile = localStorage.getItem('ac.profile') || 'mame';
   try { S.overrides = JSON.parse(localStorage.getItem('ac.keymap') || '{}'); } catch (e) { S.overrides = {}; }
   S.rctrl = false;
+  S.noBrk = localStorage.getItem('ac.noBrk') !== '0';
+  if ($('nobrk')) { $('nobrk').checked = S.noBrk; $('nobrk').onchange = (e) => { S.noBrk = e.target.checked; localStorage.setItem('ac.noBrk', S.noBrk ? '1' : '0'); e.target.blur(); }; }
 
   const effMap = () => Object.assign({}, S.profile === 'mame' ? MAME_MAP : NATURAL_MAP, S.joyMode ? JOY_MAP : {}, S.overrides);
   const codeFor = (id) => { const m = Object.assign({}, S.profile === 'mame' ? MAME_MAP : NATURAL_MAP, JOY_MAP, S.overrides); return Object.keys(m).find((c) => S.overrides[c] === id) || Object.keys(m).find((c) => m[c] === id) || ''; };
@@ -867,7 +869,8 @@
     }
     if (e.repeat) { e.preventDefault(); return; }
     const map = effMap();
-    const id = map[e.code];
+    let id = map[e.code];
+    if (id === 'break' && S.noBrk) id = e.code === 'Backspace' ? 'bksp' : null;
     if (id && (id.startsWith('joy') || id === 'fire')) {
       if (S.joyMode) { e.preventDefault(); joyApply(id, true); return; }
     }
