@@ -38,7 +38,7 @@ ovq lda $FFFF,y
  cmp #2
  bcc ov_sw
  cmp #4
- bcs ov_sw
+ beq ov_sw
  lda ovrq
  cmp #2
  bcs ov_sw
@@ -91,6 +91,7 @@ pwsetlm ovstub P.pwsetlm,2
 pwcalc ovstub P.pwcalc,2
 pwst ovstub P.pwst,2
 pwmain ovstub P.pwmain,2
+o_prt ovstub R.prt,5
 hpgz ovstub Z.hpgz,3
 pzmain ovstub Z.pzmain,3
 hface ovstub Z.hface,3

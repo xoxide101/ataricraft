@@ -35,6 +35,11 @@ hopen
  sta fop
  jmp fask
 
+hprt
+ lda #10
+ sta fop
+ jmp fask
+
 ; the typed name is in CMDB[0..clen)
 dofile
  lda fop
@@ -44,7 +49,10 @@ dofile
  bne fz_df00
  jmp sp_setname
 fz_df00 bcc fz_df0
- jmp exdone
+ cmp #10
+ bne fz_dfx
+ jmp o_prt
+fz_dfx jmp exdone
 fz_df0 lda #0
  sta fdt
  ldy #0

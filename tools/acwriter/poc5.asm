@@ -93,13 +93,19 @@ hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),
  icl 'word/edit.inc'
 e_end = *
  .endl
- org $A900
+ org $AD00
  org r:SLA
  .local S
  icl 'word/spell.inc'
 e_end = *
  .endl
- org $B100
+ org $B500
+ org r:SLA
+ .local R
+ icl 'word/print.inc'
+e_end = *
+ .endl
+ org $A100
  org r:SLA
  .local P
  icl 'word/page.inc'
