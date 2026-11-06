@@ -35,7 +35,7 @@ Rules: adapters add no logic beyond argument shaping; the old classes stay impor
 ## Refactor plan (safe order)
 
 1. **Golden tests first (before any change):** headless Playwright runs boot a known blank ATR + fixed keys, and record `screenHash` after N frames, a memory CRC of RAM, a snapshot->restore->N frames hash. Store the hashes in `scripts/` fixtures. These pass on the *current* code.
-2. Add `tools/craftcore/machine-core.cjs` with the interface + a **fake core** (counter machine) and contract tests every core must pass (reset determinism, saveState/loadState equality, read-after-write, `Unsupported` for missing capabilities).
+2. Add a machine-core module in craftcore (not yet written) with the interface + a **fake core** (counter machine) and contract tests every core must pass (reset determinism, saveState/loadState equality, read-after-write, `Unsupported` for missing capabilities).
 3. Add the two adapters; run goldens through them: hashes must be identical.
 4. Switch one consumer (e.g. the transport `emulator` backend), re-run goldens; then others.
 5. Only then add the next core (Z80/ZX Spectrum), validated by its profile and contract tests.
