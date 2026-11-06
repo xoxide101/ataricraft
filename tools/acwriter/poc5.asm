@@ -10,6 +10,7 @@ bsoff lda $D301
 
  org $2000
  icl 'word/main.inc'
+ icl 'word/spellbk.inc'
  icl 'word/screen.inc'
  icl 'word/text.inc'
  icl 'word/scale.inc'
@@ -128,5 +129,19 @@ BFNT = $9800
  icl 'word/helpdoc.inc'
  org $1E93
  icl 'word/segx.inc'
- icl 'word/spellbk.inc'
+ org DNM
+ dta c'D1:EN.CDC',b($9B)
+ org DNM2
+ dta c'H:EN.CDC',b($9B)
+
+; home and convert pages: image 4, staged at $7600 (free tail of the document area at startup)
+ org $7600
+ org r:SLA
+ .local H
+homedoc
+ homebody
+convdoc
+ convbody
+e_end = *
+ .endl
  run start

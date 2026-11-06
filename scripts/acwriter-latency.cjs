@@ -13,6 +13,8 @@ const ROOT = 'C:/Users/raver/ataricraft';
   await p.locator('canvas').first().click();
   await p.waitForTimeout(8000); await p.keyboard.press('Escape'); await p.waitForTimeout(1500);
   for (const k of 'abcdef') { await p.keyboard.press(k); await p.waitForTimeout(600); }
-  console.log('mfull/mkey', await p.evaluate(() => Array.from(ataricraft.peek(0xA0, 3))));
+  const m = await p.evaluate(() => Array.from(ataricraft.peek(0xA0, 3)));
+  const de = await p.evaluate(() => Array.from(ataricraft.peek(0xA6, 2)));
+  console.log('mfull/mscr/mkey', m, 'dend', de[0] + 256 * de[1]);
   await b.close();
 })();

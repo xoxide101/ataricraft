@@ -1,7 +1,7 @@
 # ACWriter PAGE mode (Stage 4)
 
 A second view next to the normal 5px/64-column editor. The normal view is untouched: same code paths,
-same typing latency (`mfull`/`mkey` meters at `$A0`/`$A2` read 77/6 after typing, identical to the
+same typing latency (`mfull`/`mscr`/`mkey` meters at `$A0`/`$A1`/`$A2` are in the Latency section below, identical to the
 pre-PAGE build).
 
 ## Use
@@ -46,7 +46,7 @@ Machine tiers (detected at startup; the startup message is "Needs 128K (130XE); 
 `bk_cnt` writes a signature to `$4000` under every PORTB bank-bit combination (bits 2,3,5,6,7), counts distinct signatures and restores the bytes. `scripts\acwriter-banks.cjs` runs it on the emulator's 64K, 128K, 320K (Rambo and Compy-Shop), 576K and 1088K settings: it reports 1, 4, 16, 16, 16, 32 banks. The 576K setting reports 16 because that machine's extra bank bits (PORTB bit 1 and others) are outside the probed set, so only the standard five bits are counted. This is verified in the emulator only; no real hardware was tried.
 
 * Document area: `$6400-$8FFF` = **11,264 bytes** in every view; the old view's capacity check stops typing at the end (`scripts\acwriter-cap.cjs`).
-* Page code (P), the font module (Z), edit (E) and spell (S) code are overlay images stored in bank 2 and run from the shared slot `SLA = $54FC` (the overlay manager is `ovl.inc`; `ovc` refuses E/S while P/Z is loaded and the view is PAGE). Image Z is staged at `$8000` because staging sources must be outside the `$4000-$7FFF` bank window and the images no longer fit `$BD00`.
+* Page code (P), the font module (Z), edit (E) and spell (S) code are overlay images stored in bank 2 and run from the shared slot `SLA = $57B7` (the slot is 12 pages and must end at or below DOC = `$6400`, so ~73 bytes of resident growth remain) (the overlay manager is `ovl.inc`; `ovc` refuses E/S while P/Z is loaded and the view is PAGE). Image Z is staged at `$8000` because staging sources must be outside the `$4000-$7FFF` bank window and the images no longer fit `$BD00`.
 * Bank 3 holds up to 4 loaded 1 KB charsets (4 pages each, `$40 + (slot-1)*4`).
 
 ## Zoom (2x) and fonts
@@ -55,7 +55,10 @@ PAGE mode has a 2x blow-up that draws the true 8x8 glyphs at 2x (16 px cells, 20
 
 `Esc`, `C`, `F` (Character > Font; the Character menu has no visible label for this key yet) asks for a file name and loads a 1,024-byte `.FNT` Atari charset from disk or `H:` into the next free font slot, then applies it to the paragraph at the cursor. The font name is written as CPG1 tag 2 (paragraph 0) and tag 3 (`[paragraph lo, hi, name]`, one per change); `ROM` means the standard face. A font change only exists at a paragraph start, so a line never mixes fonts. On Open, tags 2/3 load the named files (looked up on the same device) before the first paint. Limits: 4 loaded fonts, 8 font changes; `.acf` files are not read directly (export `.fnt` from the font editor).
 
-Typing in the old view is unchanged: `scripts\acwriter-latency.cjs` prints `mfull/mkey [34, 5, 5]` on the 130XE after these changes (the earlier `77/6` figure came from a different meter format and a cold start; the build before the bank probe printed `[35, 5, 5]`).
+Typing in the old view is unchanged: `scripts\acwriter-latency.cjs` prints `mfull/mscr/mkey` (`$A0..$A2`) on the 130XE. History: `[34, 5, 5]` before the overlay work, `[77, 6, 7]` now. The change is explained, not a code regression: `mfull` is a full redraw of the start-up sample document, and until the overlap fix (see Segment overlaps) the sample was truncated by the home/convert text (353 then 594 bytes, `dend` = $6561/$6692); it is now the intended 1499 bytes (two `body` copies), so `mfull` scales with it. `mscr` (one `scrolldown` = 6144-byte block copy + one `drawdoc` line) is 5.5 jiffies of copying plus a line draw, so the longer sample text tips it over a one-jiffy boundary; typing latency (`mkey`) is within one or two jiffies. Compare builds only with the same sample length.
+
+### Segment overlaps (scripts/xex-overlap.cjs)
+Two overlaps reported by `xex-overlap.cjs` were real corruption, not overlay reuse, and are fixed: (1) `homedoc`/`convdoc` were assembled at `SLA+$0C00` = `$6225`, on top of the first 589 bytes of the sample DOC (`$6400`); they are now overlay image H (id 4, staged at `$7600`, run from the slot by `pgshow`; home and convert pages therefore need a 130XE like the editor does). (2) the spell dictionary access code (`spellbk`, `$9300-$947F`) overwrote `font4` planes f4_0/f4_1 (`$9400+`); it is now resident below `$4000`. The tool reports no overlapping segments.
 
 ## Not done / limits (honest list)
 
