@@ -29,7 +29,7 @@
     const f8 = st.fam && st.fam.sizes[8]; if (f8) return f8;
     if (!derive) return null;
     const m = st.fam.sizes[st.fam.master] || st.f;
-    if (!FE.a8cache || FE.a8cache.m !== m) FE.a8cache = { m, f: CF.derive(m, 8, { threshold: +$('dth').value, keepStems: $('dkeep').checked }) };
+    if (!FE.a8cache || FE.a8cache.m !== m) FE.a8cache = { m, f: CF.derive(m, 8, FE.hintOpts()) };
     return FE.a8cache.f;
   };
 

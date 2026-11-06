@@ -126,7 +126,7 @@
     const fam = st.fam;
     if (!fam.sizes[fam.master]) return null;
     if (s === fam.master) return fam.sizes[s];
-    CF.familyDerive(fam, [s], { threshold: +$('dth').value, keepStems: $('dkeep').checked });
+    CF.familyDerive(fam, [s], FE.hintOpts());
     if (!fam.sizes[s]) fam.sizes[s] = CF.createSize(s, { name: fam.name });
     st.dirty = true; sig = '';
     FE.toast(s + ' px created from the ' + fam.master + ' px master (derived: re-derive any time, or edit and it becomes hand-edited)');
@@ -147,7 +147,7 @@
   });
 
   // ---- family operations ---------------------------------------------------------------------------------------------------------------
-  const deriveOpts = () => ({ threshold: +$('dth').value, keepStems: $('dkeep').checked });
+  const deriveOpts = () => (FE.hintOpts());
   function deriveSizes(sizes, force) {
     const fam = st.fam, cur = st.f.adv;
     if (!fam.sizes[fam.master]) fam.sizes[fam.master] = st.f;

@@ -66,7 +66,7 @@
     if (sel.dataset.sig !== ds.join()) { sel.innerHTML = ds.map((s) => '<option value="' + s + '">' + s + ' px</option>').join(''); sel.dataset.sig = ds.join(); if (ds.includes(+cur)) sel.value = cur; else if (ds.includes(st.f.adv)) sel.value = st.f.adv; }
     const cv = $('cmp'), c = cv.getContext('2d'), C = FE.themeColors(), s = +sel.value, orig = st.fam.sizes[s], master = st.fam.sizes[st.fam.master];
     if (!orig || !master) { cv.width = 1; cv.height = 1; $('cmpinfo').textContent = 'The master has no other size to compare yet. Create sizes from the strip above.'; return; }
-    const fresh = CF.derive(master, s, { threshold: +$('dth').value, keepStems: $('dkeep').checked }), z = Math.max(1, Math.min(3, Math.floor(40 / s * 2)));
+    const fresh = CF.derive(master, s, FE.hintOpts()), z = Math.max(1, Math.min(3, Math.floor(40 / s * 2)));
     const codes = []; for (let k = 33; k < 127; k++) codes.push(k);
     const perRow = Math.max(8, Math.floor(700 / ((orig.adv + 2) * z))), nrows = Math.ceil(codes.length / perRow), cw = (orig.adv + 2) * z, ch = (orig.rows + 2) * z;
     cv.width = perRow * cw; cv.height = nrows * ch; c.fillStyle = C.bg; c.fillRect(0, 0, cv.width, cv.height);

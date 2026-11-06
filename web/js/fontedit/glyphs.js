@@ -91,6 +91,7 @@
       if (!has && code !== 32 && code !== 160) { cx.setLineDash([3, 3]); cx.strokeStyle = C.dim; cx.strokeRect(x + 6.5, y + 4.5, TW - 13, TH - 22); cx.setLineDash([]); }
       drawGlyphTile(f, slot, x + 3, y + 3, TW - 6, TH - 20, has ? C.ink : C.dim);
       cx.fillStyle = sel ? C.acc : C.dim; cx.fillText(code >= 33 && code < 127 ? String.fromCharCode(code) + ' ' + code : '' + code, x + TW / 2, y + TH - 5);
+      if (FE.isOvr && FE.isOvr(slot) && $('bdiff').checked) { cx.fillStyle = '#f59e0b'; cx.beginPath(); cx.moveTo(x + TW - 9, y + 2); cx.lineTo(x + TW - 2, y + 2); cx.lineTo(x + TW - 2, y + 9); cx.fill(); }
       if (slot === st.slot) { cx.strokeStyle = C.acc; cx.lineWidth = 2; cx.strokeRect(x + 1, y + 1, TW - 2, TH - 2); }
     });
     $('gcount').textContent = st.visible.length + ' glyphs' + (st.sel.size > 1 ? ', ' + st.sel.size + ' selected' : '');
