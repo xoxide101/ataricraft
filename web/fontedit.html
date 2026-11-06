@@ -97,7 +97,7 @@
       <div id="sizes" role="tablist" aria-label="Craft sizes 4-26 px"></div>
     </div>
     <nav id="tabs">
-      <button class="tabbtn on" data-tab="edit">Glyphs</button><button class="tabbtn" data-tab="family">Family</button><button class="tabbtn" data-tab="specimen">Specimen</button><button class="tabbtn" data-tab="atari">Atari</button><button class="tabbtn" data-tab="outline" title="Real outlines behind the pixels: points, curves, rasterize to any size">Outline</button><button class="tabbtn" data-tab="kern">Kerning</button><button class="tabbtn" data-tab="quality">Quality</button>
+      <button class="tabbtn on" data-tab="edit">Glyphs</button><button class="tabbtn" data-tab="family">Family</button><button class="tabbtn" data-tab="specimen">Specimen</button><button class="tabbtn" data-tab="atari">Atari</button><button class="tabbtn" data-tab="outline" title="Real outlines behind the pixels: points, curves, rasterize to any size">Outline</button><button class="tabbtn" data-tab="kern">Kerning</button><button class="tabbtn" data-tab="quality">Quality</button><button class="tabbtn" data-tab="manager" title="All your fonts: favourites, tags, collections, compare, coverage, duplicates">Manager</button>
     </nav>
     <div id="views">
       <div class="view" id="v-edit">
@@ -225,7 +225,19 @@
         <div class="dim">Black: no kerning. Red: with kerning.</div>
         <canvas id="kernpv"></canvas>
       </div>
-      <div class="view" id="v-quality" hidden>
+      <div class="view" id="v-manager" hidden>
+        <p class="dim">Font manager: star favourites, add #tags and collections, compare two fonts, check coverage and find duplicates. Double-click a row to edit it.</p>
+        <div class="row"><input id="mgsearch" placeholder="Search name, badge, tag..."><select id="mgfilter"></select><span id="mgcount" class="dim"></span><button id="mgscan" title="Opens every font once to measure coverage and find duplicates">Scan all fonts</button></div>
+        <table class="mgtable"><thead><tr><th></th><th>Name</th><th>Source</th><th>Sizes</th><th>ASCII</th><th>Tags / collections</th></tr></thead><tbody id="mgrows"></tbody></table>
+        <div class="row"><b id="mgsel"></b><button id="mgopen">Edit</button><button id="mgxcw" title="Add to the xCWriter font list in this browser">Use in xCWriter</button><button id="mgacw" title="Write to the emulator disk or ACWriter channel">Send to ACWriter</button><button id="mginstall" title="Keep in My fonts for all Craft editors">Install for Craft</button></div>
+        <div class="row"><input id="mgtagin" placeholder="tag"><button id="mgtag">Add tag</button><input id="mgcollin" placeholder="collection"><button id="mgcoll">Add to collection</button><button id="mguntag">Clear tags</button></div>
+        <details class="sec" open><summary>Coverage</summary><div id="mgcov"></div></details>
+        <details class="sec" open><summary>Duplicates</summary><div id="mgdup"></div></details>
+        <details class="sec" open><summary>Compare and waterfall</summary>
+          <div class="row"><select id="mgA"></select> vs <select id="mgB"></select><label>px <select id="mgpx"><option>4</option><option>5</option><option>6</option><option selected>8</option><option>10</option><option>12</option><option>14</option><option>16</option><option>18</option><option>20</option><option>22</option><option>24</option><option>26</option></select></label><input id="mgtext" value="Hamburgefonstiv 0123"><button id="mgcmp">Compare</button><button id="mgwfgo">Waterfall of selected</button></div>
+          <div id="mgcmpinfo" class="dim"></div><canvas id="mgcA"></canvas><br><canvas id="mgcB"></canvas><div id="mgwf"></div>
+        </details>
+      </div>      <div class="view" id="v-quality" hidden>
         <div class="row"><label>Coverage set <select id="qcov"></select></label><label><input id="qall" type="checkbox"> all sizes of the family</label><button id="qrun">Check</button><button id="qcsv">Save report</button><span id="qsum"></span></div>
         <div id="qres"></div>
       </div>
@@ -281,6 +293,7 @@
 <script src="js/fontedit/family.js"></script>
 <script src="js/fontedit/hint.js"></script>
 <script src="js/fontedit/outline.js"></script>
+<script src="js/fontedit/manager.js"></script>
 <script src="js/fontedit/export.js"></script>
 <script src="js/fontedit/views.js"></script>
 <script src="js/fontedit/kern.js"></script>
