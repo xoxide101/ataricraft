@@ -86,8 +86,12 @@ loop
  sta key
  lda mode
  cmp #2
- bne lp1
+ bne lp0
  jsr promptkey
+ jmp loop
+lp0 cmp #1
+ bne lp1
+ jsr entrykey
  jmp loop
 lp1 jsr navkey
  jmp loop
@@ -128,9 +132,10 @@ nk3 cmp #$13
  lda #'S'
  jmp askname
 nk4 cmp #$12
- bne nkx
+ bne nk5
  jsr recalc
  jmp drawall
+nk5 jmp edkey
 nkx rts
 nkdn lda cr
  cmp #NROWS-1
@@ -274,6 +279,7 @@ xcs dta c'.XCS'
  icl 'file.inc'
  icl 'calc.inc'
  icl 'save.inc'
+ icl 'edit.inc'
  icl '..\acwriter\zfont.inc'
 
  org $1600

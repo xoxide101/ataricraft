@@ -34,8 +34,9 @@ async function boot(xex, files = {}) {
   await p.click('canvas');
   return {
     b, p,
+    bksp: async (w = 500) => { await p.evaluate(async () => { for (const t of ['keydown','keyup']) { document.dispatchEvent(new KeyboardEvent(t, { code: 'IntlBackslash', key: 'Backspace', bubbles: true })); await new Promise(r => setTimeout(r, 70)); } }); await p.waitForTimeout(w); },
     key: async (k, w = 250) => { const ks = k.split('+'); for (const x of ks) await p.keyboard.down(x); await p.waitForTimeout(70); for (const x of ks.reverse()) await p.keyboard.up(x); await p.waitForTimeout(w); },
-    type: async (t, w = 120) => { for (const ch of t) { await p.keyboard.press(ch === ':' ? 'Shift+Semicolon' : ch === ' ' ? 'Space' : ch === '.' ? 'Period' : ch === '=' ? 'Equal' : ch === '(' ? 'Shift+9' : ch === ')' ? 'Shift+0' : ch === '+' ? 'Shift+Equal' : ch === '*' ? 'Shift+8' : ch === ',' ? 'Comma' : ch === '-' ? 'Minus' : ch === '^' ? 'Shift+6' : ch === '/' ? 'Slash' : ch === '"' ? 'Shift+Quote' : ch === '>' ? 'Shift+Period' : ch === '<' ? 'Shift+Comma' : ch); await p.waitForTimeout(w); } },
+    type: async (t, w = 120) => { const M = { ':': 'Shift+Semicolon', ' ': 'Space', '.': 'Period', '=': 'BracketRight', '(': 'Shift+9', ')': 'Shift+0', '+': 'Quote', '*': 'Backslash', ',': 'Comma', '-': 'BracketLeft', '^': 'Shift+Backslash', '/': 'Slash', '"': 'Shift+2', '>': 'Equal', '<': 'Minus', '%': 'Shift+5', '$': 'Shift+4', '&': 'Shift+6' }; for (const ch of t) { await p.keyboard.press(M[ch] || ch); await p.waitForTimeout(w); } },
     shot: async (n) => { const f = path.join(OUT, n + '.png'); await p.locator('canvas').first().screenshot({ path: f }); return f; },
     peek: (a, n) => p.evaluate(([a, n]) => Array.from(ataricraft.peek(a, n)), [a, n]),
     host: () => p.evaluate(() => { const h = FujiNet.emu.hostFiles(); return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, Array.from(v)])); }),
@@ -69,3 +70,4 @@ async function main() {
   await e.close();
 }
 if (require.main === module) main().catch((x) => { console.error(x); process.exit(1); });
+
