@@ -4,6 +4,7 @@ Every tool in this repository, with a page that explains what it does, how to us
 
 | Page | Covers |
 |---|---|
+| [Build](BUILD.md) | `scripts/build-all.cjs` (regenerate / `--check` every derived file), `scripts/docs-check.cjs`, `scripts/audit-run.cjs` |
 | [PDF viewer](PDFVIEW.md) | High-res offline PDF viewer, reusable `PDFENGINE` module, licence |
 | [Network apps](tools/net-apps.md) | WGET, WPUT, LYNX, CURL, JQ, NC, MAIL, PING/NSLOOKUP/TRACERT/WHOIS/IPCONFIG, FTP, test results |
 | [Relay](tools/tnfs-bridge.md) | `tools/tnfs-bridge` (bridge, netapi, ftp, ctl) and `tools/ctl.cjs` |

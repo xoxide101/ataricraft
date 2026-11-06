@@ -28,7 +28,7 @@ toolchain has to be WebAssembly or plain JS. Status marks what exists today, not
 - `bcomp.js`: Atari BASIC to MADS asm / XEX. Design: 16-bit signed integers and fixed-capacity strings, no floats (compile error),
   runtime routines included only when used, output through CIO. Cross-checked against MADS and run on the node 6502.
 - GFA-style language: structured BASIC with procedures and a back end per CPU. Needs the assemblers first.
-- `tools/tui/tui.inc`: text-mode UI (windows, menus, mouse) for Atari tools; a browser-side `tui.js` skin is planned.
+- `tools/tui/tui.inc`: text-mode UI (windows, menus, mouse) for Atari tools; a browser-side skin (not written yet) is planned.
 
 ## Suggested order
 1. ~~Atari BASIC compiler~~ (done, see below). 2. FastBASIC and cc65 in the browser. 3. Forth. 4. Z80, TMS9900, 8086 back ends. 5. GFA-style language.

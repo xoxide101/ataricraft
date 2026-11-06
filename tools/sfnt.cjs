@@ -27,7 +27,10 @@ function tables(b) {
     }
     return t;
   }
-  if (sig === 'wOF2') throw new Error('WOFF2 is not supported (Brotli and the glyf transform); convert it to WOFF or TTF');
+  if (sig === 'wOF2') {
+    let W; try { W = require('./woff2.cjs'); } catch (e) { throw new Error('WOFF2 is only supported in Node (Brotli); convert the font to WOFF or TTF'); }
+    return W.tables(b);
+  }
   let base = 0;
   if (sig === 'ttcf') base = U32(b, 12);
   else if (!(sig === 'OTTO' || sig === '\0\x01\0\0' || sig === 'true' || sig === 'typ1')) throw new Error('not a TrueType/OpenType/WOFF font');
