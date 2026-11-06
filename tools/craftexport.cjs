@@ -1,5 +1,5 @@
 // Exports a Craft Word document (docs/CRAFT-FORMAT.md) to other formats.
-// Usage: node tools/craftexport.cjs FILE.CWD OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]
+// Usage: node tools/craftexport.cjs FILE.XCW OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]
 // The format defaults to the output extension: .txt text, .atx atascii, .rtf, .htm/.html, .md.
 const fs = require('fs'), path = require('path');
 const { parse } = require('./craftdoc.cjs');
@@ -86,7 +86,7 @@ function exportDoc(buf, format, name = 'document', eol = 'crlf') {
 if (require.main === module) {
   const args = process.argv.slice(2); const pos = []; let format, eol = 'crlf';
   for (let i = 0; i < args.length; i++) { if (args[i] === '--format') format = args[++i]; else if (args[i] === '--eol') eol = args[++i]; else pos.push(args[i]); }
-  if (pos.length < 2) { console.error('usage: node tools/craftexport.cjs FILE.CWD OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]'); process.exit(2); }
+  if (pos.length < 2) { console.error('usage: node tools/craftexport.cjs FILE.XCW OUTPUT [--format text|atascii|rtf|html|md] [--eol crlf|lf|cr]'); process.exit(2); }
   format = format || { '.txt': 'text', '.atx': 'atascii', '.rtf': 'rtf', '.htm': 'html', '.html': 'html', '.md': 'md' }[path.extname(pos[1]).toLowerCase()] || 'text';
   const out = exportDoc(fs.readFileSync(pos[0]), format, path.basename(pos[0]), eol);
   fs.writeFileSync(pos[1], out); console.log(format + ' -> ' + pos[1] + ' (' + out.length + ' bytes)');

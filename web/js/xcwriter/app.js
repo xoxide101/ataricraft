@@ -11,7 +11,7 @@
     get(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
   };
-  const NOTES = ['Font, size and line spacing are not stored in a .CWD (ACWriter has one font)', 'Bullets show as * with a 2 column indent'];
+  const NOTES = ['Font, size and line spacing are not stored in a .xcw (ACWriter has one font)', 'Bullets show as * with a 2 column indent'];
 
   const XW = window.XW = {
     doc: XCW.newDoc(), mode: 'hq', name: 'Untitled', id: null, dirty: false, docVer: 0, warnVer: -1, warns: [],
@@ -353,7 +353,7 @@
   });
 
   // ---------- open ----------
-  const KNOWN = /\.(cwd|txt|text|atx|rtf|html?|md|markdown|docx|doc|atr)$/i;
+  const KNOWN = /\.(xcw|cwd|txt|text|atx|rtf|html?|md|markdown|docx|doc|atr)$/i;
   const readFile = (f) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(new Uint8Array(r.result)); r.onerror = no; r.readAsArrayBuffer(f); });
   async function openFile(f, force) {
     const buf = await readFile(f);
@@ -468,7 +468,7 @@
   const bc = window.BroadcastChannel ? new BroadcastChannel('xcwriter') : null;
   function sendAtari() {
     const r = XCW.save(XW.doc, 'cwd', pgOpt()), nm = (hostName(XW.name.replace(/\.[^.]*$/, '')).replace(/\./g, '').slice(0, 8) || 'DOC') + '.CWD';
-    if (!bc) { toast('BroadcastChannel is not available: save the .CWD and add it to H: in the emulator'); return; }
+    if (!bc) { toast('BroadcastChannel is not available: save the .xcw and add it to H: in the emulator'); return; }
     let answered = false;
     bc.onmessage = (e) => {
       const m = e.data || {};
@@ -479,7 +479,7 @@
       } else if (m.type === 'result') toast(m.ok ? 'Sent as H:' + m.name + '. In ACWriter use File > Open and type H:' + m.name : 'Not sent: ' + m.msg, 7000);
     };
     bc.postMessage({ type: 'ping' });
-    setTimeout(() => { if (!answered) toast('No emulator tab found. Open the main page (index.html) in this browser, boot ACWriter, and try again. Or save the .CWD and import it into the H: panel.', 8000); }, 900);
+    setTimeout(() => { if (!answered) toast('No emulator tab found. Open the main page (index.html) in this browser, boot ACWriter, and try again. Or save the .xcw and import it into the H: panel.', 8000); }, 900);
   }
   $('tb-send').onclick = sendAtari;
 
@@ -499,19 +499,19 @@
 <h3>Two modes</h3>
 <p><b>High quality</b> is a normal word processor page with proportional system fonts, real sizes and justification. <b>Atari matching</b> shows the document exactly as ACWriter will: 64 columns by 20 lines on a 320x192 screen with the ACWriter pixel font, the same word wrap as the .CWD exporter, and a live meter of how much of ACWriter's ~11 KB document area you use. Switching keeps the document. Entering matching mode turns characters the Atari lacks into look-alikes (curly quotes, dashes) or ?, which you can undo.</p>
 <h3>Opening</h3>
-<p>Open or drop: .CWD, text, ATASCII (EOL $9B), RTF, HTML, Markdown, .docx, .doc (text only), Letter Perfect, PaperClip, First XLEnt, Text Wizard, Bank Street Writer files and Bank Street .ATR disk images. Files whose type is not recognised ask you how to read them; hold <kbd>Shift</kbd> when opening to always choose the format.</p>
+<p>Open or drop: .xcw (or old .cwd), text, ATASCII (EOL $9B), RTF, HTML, Markdown, .docx, .doc (text only), Letter Perfect, PaperClip, First XLEnt, Text Wizard, Bank Street Writer files and Bank Street .ATR disk images. Files whose type is not recognised ask you how to read them; hold <kbd>Shift</kbd> when opening to always choose the format.</p>
 <h3>Saving and converting</h3>
-<p>Save offers .CWD, text, ATASCII, RTF, HTML, Markdown and .docx, and lists what the format cannot keep (for example bold in plain text). Convert changes a file without opening it in the editor. A .docx written here uses stored (uncompressed) zip parts and has only been checked by re-reading it, not in Microsoft Word.</p>
+<p>Save offers .xcw, text, ATASCII, RTF, HTML, Markdown and .docx, and lists what the format cannot keep (for example bold in plain text). Convert changes a file without opening it in the editor. A .docx written here uses stored (uncompressed) zip parts and has only been checked by re-reading it, not in Microsoft Word.</p>
 <h3>Send to Atari</h3>
-<p>With the main app (index.html) open and booted in another tab of this browser, <b>Send to Atari</b> writes the .CWD to the emulator's H: device. In ACWriter choose File &gt; Open and type <code>H:NAME.CWD</code>. Otherwise save the .CWD and add it in the main app's H: panel.</p>
+<p>With the main app (index.html) open and booted in another tab of this browser, <b>Send to Atari</b> writes the document to the emulator's H: device as NAME.CWD (the name ACWriter's Open adds by itself). In ACWriter choose File &gt; Open and type <code>H:NAME.CWD</code>. Otherwise save the .xcw and add it in the main app's H: panel (open it as <code>H:NAME.XCW</code>).</p>
 <h3>Keys</h3>
 <table><tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>I</kbd> <kbd>U</kbd></td><td>bold, italic, underline</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></td><td>undo, redo</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>find and replace</td></tr><tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>O</kbd></td><td>save/export, open</td></tr><tr><td>right-click a red squiggle</td><td>spelling suggestions (dictionary: EN.CDC)</td></tr></table>
 <h3>Limits</h3>
-<p>The spell checker is a compact Bloom-filter dictionary: about 2% of misspellings are not flagged. Bold, italic and underline in matching mode are drawn approximately; the exported .CWD stores exact style codes. Font and size are not part of a .CWD.</p>`;
+<p>The spell checker is a compact Bloom-filter dictionary: about 2% of misspellings are not flagged. Bold, italic and underline in matching mode are drawn approximately; the exported .xcw stores exact style codes. Font and size are not part of a .xcw.</p>`;
   $('logo').onclick = $('bhome').onclick = () => screen('home');
   $('bhelp').onclick = $('hhelp').onclick = () => screen('help');
   $('hnew').onclick = newDoc;
-  $('hdemo').onclick = () => openBuf(b64(XCW_DATA.demo), 'ACWRITER-DEMO.CWD', 'auto');
+  $('hdemo').onclick = () => openBuf(b64(XCW_DATA.demo), 'ACWRITER-DEMO.XCW', 'auto');
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); hideCtx(); } });
   window.addEventListener('beforeunload', saveRecent);
 

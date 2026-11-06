@@ -29,7 +29,7 @@ for (const f of ls) { const b = path.basename(f).toLowerCase(); (byBase.get(b) |
 // Paths that are produced at run time or live only on a user's machine (gitignored, see .gitignore / docs/BUILD.md).
 const LOCAL_ONLY = [/^out\//, /^roms\//, /^software_n_roms\//, /^font_personal\//, /^books\//, /^vendor\//, /^node_modules\//, /^web\/ref\//, /^web\/library\/fonts\/(local|personal)\//, /^web\/library\/(?!craftapps\/(AFM|Tools)\b)/, /^archive\/boot\//, /^library\/craftapps\//, /^SOURCES\//, /^web\/library\/craftapps\/Tools\/AtariCraft/, /^catalog\.sqlite$/, /^library\.json$/, /^web\/js\/diskdb\.js$/, /^tools\/ebookcraft\/ocr\//, /^web\/js\/ebookcraft\/ocr\//, /^tools\/acwriter\/poc5\.xex$/, /\.(rom|ROM)$/, /^[A-Za-z]:[\\/]/, /^~/, /^\//];
 const SRC_EXT = 'cjs|mjs|js|html|css|md|asm|inc|json|ps1|txt|svg|png|jpg|sh';
-const DATA_EXT = 'com|xex|atr|acf|fnt|cwd|cdc|dic|ovl|bdf|ttf|otf|woff2?|pdf|car|rom|zip|dat|bin|cfg|xml';
+const DATA_EXT = 'com|xex|atr|acf|xcf|fnt|cwd|xcw|xcs|xcd|cdc|dic|ovl|bdf|ttf|otf|woff2?|pdf|car|rom|zip|dat|bin|cfg|xml';
 const FILE_RE = new RegExp('^[A-Za-z0-9_@.\\-/\\\\]+\\.(' + SRC_EXT + '|' + DATA_EXT + ')$', 'i');
 const DIR_RE = /^(tools|scripts|web|docs|font|games|archive|roms)\/[A-Za-z0-9_.\-/]*\/?$/;
 

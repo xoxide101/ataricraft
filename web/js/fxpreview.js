@@ -14,7 +14,7 @@
     xex: 'xex com obx exe bin',
     pdf: 'pdf',
     ebook: 'epub fb2 mobi azw azw3 prc ebookcraft',
-    doc: 'cwd docx odt',
+    doc: 'xcw cwd docx odt',
     zip: 'zip',
   };
   const K = {}; for (const [k, v] of Object.entries(EXT)) for (const e of v.split(' ')) K[e] = k;

@@ -39,7 +39,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++
   // 4. epub -> everything, bundle round trip
   const out2 = await EBC.pack.convert([{ name: 'sampler.epub', bytes: S('sampler.epub') }], { text: true, bw: true, gray: [4, 16, 256], dither: 'floyd', bundle: true, textdisk: true }, () => {});
   const f2 = out2.files.map((f) => f.path);
-  ok(['text/book.txt', 'text/book.cwd'].every((p) => f2.includes(p)) && f2.some((p) => /print-gray256/.test(p)) && f2.some((p) => /-text\.atr$/.test(p)), 'epub converts to text, cwd, all gray sets, text ATR (' + f2.length + ' files)');
+  ok(['text/book.txt', 'text/book.xcw'].every((p) => f2.includes(p)) && f2.some((p) => /print-gray256/.test(p)) && f2.some((p) => /-text\.atr$/.test(p)), 'epub converts to text, cwd, all gray sets, text ATR (' + f2.length + ' files)');
   const zip = out2.files.find((f) => /\.ebookcraft\.zip$/.test(f.path)).bytes;
   ok(await EBC.pack.isBundle(zip), 'bundle recognised');
   const back = await EBC.pack.openBundle(zip);

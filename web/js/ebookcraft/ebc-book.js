@@ -356,7 +356,7 @@
     if (a.length > 68 && /BOOKMOBI|TEXtREAd/.test(String.fromCharCode(...a.subarray(60, 68)))) return 'mobi';
     if (['mobi', 'azw', 'azw3', 'prc'].includes(e)) return 'mobi';
     if (e === 'fb2' || (/^\s*(<\?xml[^>]*>\s*)?<FictionBook/i.test(String.fromCharCode(...a.subarray(0, 200))))) return 'fb2';
-    if (['cwd', 'cw'].includes(e)) return 'cwd';
+    if (['xcw', 'cwd', 'cw'].includes(e)) return 'cwd';
     if (['rtf', 'md', 'markdown', 'docx'].includes(e)) return e === 'markdown' ? 'md' : e;
     if (['html', 'htm', 'xhtml'].includes(e) || /^\s*(<!doctype html|<html)/i.test(String.fromCharCode(...a.subarray(0, 100)))) return 'html';
     if (e === 'epub') return 'epub';

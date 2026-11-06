@@ -89,7 +89,7 @@
   <div class="seg" id="tabs"><button data-tab="reader" class="on">Reader</button><button data-tab="conv">Convert &amp; deploy</button></div>
   <div class="docname" id="docname">no book open</div>
   <button id="open">Open book...</button>
-  <input type="file" id="file" hidden accept=".epub,.txt,.text,.html,.htm,.xhtml,.fb2,.mobi,.azw,.azw3,.prc,.cwd,.docx,.rtf,.md,.pdf,.zip,.ebookcraft">
+  <input type="file" id="file" hidden accept=".epub,.txt,.text,.html,.htm,.xhtml,.fb2,.mobi,.azw,.azw3,.prc,.xcw,.cwd,.docx,.rtf,.md,.pdf,.zip,.ebookcraft">
 </header>
 
 <div id="reader" class="tab on">
@@ -123,10 +123,10 @@
     <fieldset><legend>Input</legend>
       <div class="hint">A book (EPUB, TXT, HTML, FB2, MOBI, CWD, DOCX, RTF), a PDF (text layer and/or scanned pages) or page images (PNG, JPEG, BMP, PGM). Several images = several pages, in name order.</div>
       <div class="row"><button id="cpick">Choose files...</button><button id="cfromreader" title="Use the book that is open in the reader">Use open book</button></div>
-      <input type="file" id="cfile" hidden multiple accept=".epub,.txt,.html,.htm,.fb2,.mobi,.azw,.azw3,.prc,.cwd,.docx,.rtf,.md,.pdf,.png,.jpg,.jpeg,.bmp,.pbm,.pgm,.ppm">
+      <input type="file" id="cfile" hidden multiple accept=".epub,.txt,.html,.htm,.fb2,.mobi,.azw,.azw3,.prc,.xcw,.cwd,.docx,.rtf,.md,.pdf,.png,.jpg,.jpeg,.bmp,.pbm,.pgm,.ppm">
     </fieldset>
     <fieldset><legend>Text</legend>
-      <label><input type="checkbox" id="o-text" checked><span>Text (.txt, Craft .cwd)</span></label>
+      <label><input type="checkbox" id="o-text" checked><span>Text (.txt, Craft .xcw)</span></label>
       <label><input type="checkbox" id="o-ocr"><span>OCR scanned pages</span></label>
       <div class="hint" id="ocrstate">Checking OCR add-on...</div>
     </fieldset>

@@ -5,7 +5,7 @@
 // Input: a book (EPUB/TXT/HTML/FB2/MOBI/CWD/...), a PDF (text layer and/or scanned page images) or one or more images (PNG/JPEG/BMP/PNM).
 // Everything returns files in memory; the caller decides where they go (zip download, folder, library, server layout).
 // Options (defaults in brackets):
-//   text [true]      write text/book.txt (+ text/pNNN.txt for scanned pages), text/book.cwd (Craft Word, 64 columns)
+//   text [true]      write text/book.txt (+ text/pNNN.txt for scanned pages), text/book.xcw (Craft Word, 64 columns)
 //   ocr  [false]     recognise text on page images that have no text layer (needs the OCR add-on; 'force' = also when a text layer exists)
 //   bw [true]        1-bit pages; gray [[]] e.g. [4,16,256] more levels; dither ['atkinson'] threshold|bayer4|bayer8|floyd|atkinson
 //   contrast brightness gamma auto deskew crop      page clean-up (EBC.image.adjust / deskew / autocrop)
@@ -132,8 +132,8 @@
         pages.forEach((p, i) => { if (p.text && p.text.trim() && p.src) put('text/p' + pad(i + 1) + '.txt', p.text + '\n'); });
         if (G.XCW) {
           const paras = paragraphsOf(book);
-          if (paras) { const c = G.XCW.toCwd(paras, { cols: opt.cols }); put('text/book.cwd', c.file || c.bytes); if (c.truncated) rep.push('CWD export truncated to the Craft Word document limit (' + c.dropped + ' paragraph(s) dropped); book.txt has the full text'); }
-        } else rep.push('xCWriter core not loaded: no .CWD written');
+          if (paras) { const c = G.XCW.toCwd(paras, { cols: opt.cols }); put('text/book.xcw', c.file || c.bytes); if (c.truncated) rep.push('CWD export truncated to the Craft Word document limit (' + c.dropped + ' paragraph(s) dropped); book.txt has the full text'); }
+        } else rep.push('xCWriter core not loaded: no .xcw written');
       }
     } else if (opt.text) rep.push('no text available (no text layer; run with OCR)');
 

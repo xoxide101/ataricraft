@@ -1,5 +1,5 @@
 // Imports other document formats into a Craft Word document (docs/CRAFT-FORMAT.md).
-// Usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]
+// Usage: node tools/craftimport.cjs INPUT [OUTPUT.XCW] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]
 // Formats: ATASCII text (incl. AtariWriter), ASCII/UTF-8 text, RTF, HTML, Markdown, Word .docx and .doc,
 // and Atari Letter Perfect, PaperClip, First XLEnt, Text Wizard and Bank Street Writer (explicit --format; see docs/formats).
 // AtariWriter inverse video, centre and right codes are decoded. See docs/IMPORT.md.
@@ -289,7 +289,7 @@ function build(bytes, cols, lines, page) {
   return Buffer.concat([h, pay, P.toTrailer(page)]);
 }
 
-// Any supported input to the intermediate model (opts.unicode keeps text un-transliterated; opts.allowCraft also reads .CWD).
+// Any supported input to the intermediate model (opts.unicode keeps text un-transliterated; opts.allowCraft also reads .XCW / .CWD).
 function toModel(buf, name, opts = {}) {
   buf = Buffer.from(buf);
   const fmt = opts.format || detect(buf, name);
@@ -334,9 +334,9 @@ function convert(buf, name, opts = {}) {
 if (require.main === module) {
   const args = process.argv.slice(2); const o = {}; const pos = [];
   for (let i = 0; i < args.length; i++) { if (args[i] === '--format') o.format = args[++i]; else if (args[i] === '--cols') o.cols = +args[++i]; else if (args[i] === '--paper') (o.page = o.page || {}).paper = args[++i]; else if (args[i] === '--pitch') (o.page = o.page || {}).pitch = +args[++i]; else pos.push(args[i]); }
-  if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.CWD] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]'); process.exit(2); }
+  if (!pos[0]) { console.error('usage: node tools/craftimport.cjs INPUT [OUTPUT.XCW] [--format atascii|text|rtf|html|md|doc|docx|letterperfect|paperclip|firstxlent|textwizard|bankstreet] [--cols N]'); process.exit(2); }
   const r = convert(fs.readFileSync(pos[0]), pos[0], o);
-  const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.CWD');
+  const outp = pos[1] || path.join(path.dirname(pos[0]), path.basename(pos[0], path.extname(pos[0])).slice(0, 8).toUpperCase() + '.XCW');
   fs.writeFileSync(outp, r.file);
   console.log(`${r.format}: ${r.paragraphs} paragraphs, ${r.bytes} bytes${r.truncated ? ' (TRUNCATED to the 11264 byte ACWriter document area, ' + r.dropped + ' bytes dropped)' : ''} -> ${outp}`);
 }

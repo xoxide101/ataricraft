@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // List words that are not in a Craft dictionary. Same hash and word rules as ACWriter's Search > Spell check.
-// Usage: node tools/spellcheck.cjs FILE.CWD|FILE.txt [--dict docs/samples/EN.CDC] [--unique]
+// Usage: node tools/spellcheck.cjs FILE.XCW|FILE.txt [--dict docs/samples/EN.CDC] [--unique]
 // Line numbers are editor lines (a soft line break starts a new line), the same as "Ln" in ACWriter.
 const fs = require('fs');
 const path = require('path');
@@ -12,7 +12,7 @@ for (let i = 0; i < a.length; i++) {
   else if (a[i] === '--unique') unique = true;
   else pos.push(a[i]);
 }
-if (!pos.length) { console.error('usage: node tools/spellcheck.cjs FILE.CWD|FILE.txt [--dict EN.CDC] [--unique]'); process.exit(2); }
+if (!pos.length) { console.error('usage: node tools/spellcheck.cjs FILE.XCW|FILE.txt [--dict EN.CDC] [--unique]'); process.exit(2); }
 
 // one string per editor line; style and paragraph codes (< 32) are skipped
 function linesOf(buf) {

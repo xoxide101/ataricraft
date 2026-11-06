@@ -93,7 +93,10 @@
     { "kind": "cartridge", "formats": ["car", "rom", "bin"], "notes": "CAR has a 16-byte header with a type code; raw ROMs need the type given by the user" },
     { "kind": "tape", "formats": ["cas"], "notes": "FSK blocks of 132 bytes via the 410/1010 recorder" },
     { "kind": "program", "formats": ["xex", "com", "exe", "obx"], "notes": "binary load files (segments with $FFFF header)" },
-    { "kind": "program", "formats": ["bas", "lst"], "notes": "tokenised or listed BASIC" }
+    { "kind": "program", "formats": ["bas", "lst"], "notes": "tokenised or listed BASIC" },
+    { "kind": "other", "formats": ["xcw", "cwd"], "notes": "Craft Word document (type byte W): .xcw is the name we write, .cwd is the legacy name still read; docs/CRAFT-FORMAT.md" },
+    { "kind": "other", "formats": ["xcs"], "notes": "Craft spreadsheet: name reserved, format not defined yet" },
+    { "kind": "other", "formats": ["xcd"], "notes": "Craft database: name reserved, format not defined yet" }
   ],
   "roms": {
     "policy": "local-only",
