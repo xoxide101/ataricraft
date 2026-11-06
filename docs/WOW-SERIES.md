@@ -182,4 +182,4 @@ File > Save / Save As / Open (hidden letters S, A, O) take a file name on the bo
 Character > Y (hidden): arrows choose, Enter inserts, Space switches between Latin-1 (160-255) and Atari graphics (128-159), Esc cancels. Glyphs come from tools/acwriter/mksym.cjs.
 
 ### xCWriter (web companion for every format)
-web/xcwriter.html (opened from the main app's xCWriter tab) is the eXtreme Craft Writer: a browser word processor that opens and saves .CWD, text, ATASCII, RTF, HTML, Markdown, docx and the Atari word processors, with an Atari matching mode that shows exactly what ACWriter will show and fit. Send to Atari writes the .CWD to H:. See docs/XCWRITER.md.
+web/xcwriter.html (opened from the main app's xCWriter tab) is the eXtreme Craft Writer: a browser word processor that opens and saves .xcw (reads the old .cwd too), text, ATASCII, RTF, HTML, Markdown, docx and the Atari word processors, with an Atari matching mode that shows exactly what ACWriter will show and fit. Send to Atari writes the .CWD to H:. See docs/XCWRITER.md.

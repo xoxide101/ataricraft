@@ -11,11 +11,11 @@ A browser word processor (`web/xcwriter.html`) for the Craft family. One documen
 | Limits | none | live meter: bytes of the CRFT payload against the 7680 byte document area ($6600-$83FF) |
 | Characters | anything | non-Atari characters become look-alikes or `?` on entering the mode (undoable); typing is mapped the same way |
 
-Switching keeps the document. The side panel lists what the Atari cannot show. A `.CWD` exported from matching mode reopens to the same payload and the same screen lines (checked by `scripts/xcwriter-test.cjs`). Bold, italic and underline are drawn approximately (smear, shear, underline row); the file stores exact style codes. Justify and centring are drawn from the alignment marker, not read back from ACWriter. The round trip is proven at file level (export, import, export), not by running the file in ACWriter.
+Switching keeps the document. The side panel lists what the Atari cannot show. An `.xcw` exported from matching mode reopens to the same payload and the same screen lines (checked by `scripts/xcwriter-test.cjs`). Bold, italic and underline are drawn approximately (smear, shear, underline row); the file stores exact style codes. Justify and centring are drawn from the alignment marker, not read back from ACWriter. The round trip is proven at file level (export, import, export), not by running the file in ACWriter.
 
 ## Formats
 
-Open: .CWD, text, ATASCII (EOL $9B), RTF, HTML, Markdown, .docx, .doc (text only), Letter Perfect, PaperClip, First XLEnt, Text Wizard, Bank Street (file or .ATR image). Unknown extensions ask for the format; Shift+Open always asks. Save: .CWD, text, ATASCII, RTF, HTML, Markdown, .docx. Every save and the **Convert** dialog list what the target drops ("bold dropped for ATASCII (12 characters)").
+Open: .xcw (and the old .cwd), text, ATASCII (EOL $9B), RTF, HTML, Markdown, .docx, .doc (text only), Letter Perfect, PaperClip, First XLEnt, Text Wizard, Bank Street (file or .ATR image). Unknown extensions ask for the format; Shift+Open always asks. Save: .xcw, text, ATASCII, RTF, HTML, Markdown, .docx. Every save and the **Convert** dialog list what the target drops ("bold dropped for ATASCII (12 characters)").
 
 The .docx writer uses stored (uncompressed) zip parts with styles and bullet numbering; it is re-read by our own reader, but has not been opened in Microsoft Word. The .docx reader handles deflate through `tools/inflate.cjs`.
 
@@ -25,7 +25,7 @@ Toolbar: bold, italic, underline, sub/sup, align L/C/R/J, bullets, undo/redo (ow
 
 ## Send to Atari
 
-`Send to Atari` posts the .CWD over a `BroadcastChannel('xcwriter')` to the main app tab (index.html), which calls `FujiNet.emu.hostWrite(name, bytes)`. In ACWriter use File > Open and type `H:NAME.CWD`. The emulator must be booted in the same browser; otherwise the toast says so. Fallback: save the .CWD and use the H: panel import.
+`Send to Atari` posts the document (as NAME.CWD, the name ACWriter's Open adds) over a `BroadcastChannel('xcwriter')` to the main app tab (index.html), which calls `FujiNet.emu.hostWrite(name, bytes)`. In ACWriter use File > Open and type `H:NAME.CWD`. The emulator must be booted in the same browser; otherwise the toast says so. Fallback: save the .CWD and use the H: panel import.
 
 ## Architecture (for Electron and C64 later)
 
@@ -45,7 +45,7 @@ The core takes a profile (`XCW.PROFILES.atari`: columns, rows, document limit, p
 
 ## Page model
 
-Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md](PAGE.md) (`tools/craftpage.cjs`, `XCW.Page`). ``.CWD`` files carry it as a trailer.
+Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md](PAGE.md) (`tools/craftpage.cjs`, `XCW.Page`). ``.xcw`` files carry it as a trailer.
 
 ### Page view (third mode)
 
@@ -59,7 +59,7 @@ Paper size, pitch, margins and tab stops live in the shared page model: [PAGE.md
 - **Navigator**: thumbnail of all pages with the viewport rectangle, bottom right; click or drag to move the view.
 - **Page setup...**: paper (Letter, A4, Legal), pitch, margins, with a fit bar showing the usable columns, inches and lines per page, and whether the text width fits the 320 px Atari screen without scrolling. Changing the pitch resets margins to that pitch's defaults and clears tab stops.
 - **Tab key** inserts spaces up to the next stop; centre and right stops act as left stops while typing (they are honoured as real centre/right alignment only when text with tab characters is imported or laid out through `Page.expandTabs`).
-- The page (and its tab stops) is saved into the `.CWD` trailer from any mode once the document has one; opening a `.CWD` that has a trailer restores it. In Atari matching mode the view still wraps at 64 columns.
+- The page (and its tab stops) is saved into the `.xcw` trailer from any mode once the document has one; opening an `.xcw`/`.cwd` that has a trailer restores it. In Atari matching mode the view still wraps at 64 columns.
 
 Test: `node scripts/xcwriter-page-test.cjs` (screenshots `out/xcwp-*.png`). Not verified: other browsers (only Chrome), high-DPI displays (devicePixelRatio is handled but only tested at 1).
 

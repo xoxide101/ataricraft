@@ -10,6 +10,7 @@ Existing docs cover the formats and apps in depth: [../formats/](../formats), [.
 | `fontpipe.cjs`, `sfnt.cjs` | Convert TrueType/OpenType into Atari fonts |
 | `officeread.cjs`, `inflate.cjs` | Read office formats; deflate decoder |
 | `xcwcore.cjs` | Shared xCWriter core |
+| File names | [FILE-EXTENSIONS.md](../FILE-EXTENSIONS.md): `.xcw` Craft Word (old `.cwd` still read), `.xcs`, `.xcd`; the Container is a normal `.zip` |
 | `import-bankstreet`, `-firstxlent`, `-letterperfect`, `-paperclip`, `-textwizard` | Importers for old word-processor files |
 | `tools/ebookcraft/` | `build-viewer.cjs`, `viewer.asm`: Atari-side e-book viewer |
 | `web/pdfview.html` | PDF viewer, reusable module `web/js/pdfjs/pdfengine.js` |
