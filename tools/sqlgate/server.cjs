@@ -27,7 +27,7 @@ function startServer(gate, opt) {
   const server = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
     const url = (req.url || '').split('?')[0], fn = routes[url];
-    if (!okTok(req.headers['x-ac-token'])) return send(res, 401, { error: 'bad-token' }, undefined, 'bad-token');
+    if (!okTok(req.headers['x-ac-token'])) return send(res, 403, { error: 'bad-token' }, undefined, 'bad-token');
     if (!fn) return send(res, 404, { error: 'no-route' }, undefined, 'no-route');
     let args = {};
     try { args = JSON.parse(decodeURIComponent(req.headers['x-ac-args'] || '{}')); if (!args || typeof args !== 'object' || Array.isArray(args)) throw 0; } catch (e) { return send(res, 400, { error: 'bad-args' }, undefined, 'bad-args'); }

@@ -23,6 +23,7 @@ const DERIVED = [
   { step: 'acwriter', files: ['tools/acwriter/poc5.xex'], tracked: false, from: 'MADS (out/mads/mads.exe) on tools/acwriter/poc5.asm' },
   { step: 'acwriter', files: ['web/library/fonts/craft'], tracked: false, from: 'tools/acwriter/mkcraftfonts.cjs' },
   { step: 'xccalc', files: ['web/js/xccalc/core/xcc-core.js', 'web/js/xccalc/core/xcc-data.js'], tracked: true, from: 'tools/calccore.cjs, tools/xccalc/*.cjs (bundle list in sync-xccalc-core.cjs), tools/acwriter/font4.json' },
+  { step: 'xcbase', files: ['web/js/xcbase/core/xcb-core.js', 'web/js/xcbase/core/xcb-data.js'], tracked: true, from: 'tools/calccore.cjs, dbcore.cjs, xcdformat.cjs, xcdio.cjs (bundle list in xcbase-sync-core.cjs), tools/acwriter/font4.json' },
 ];
 // Hand-editable in place: created when missing, never overwritten, only validated.
 const IN_PLACE = ['font/craft8.fnt', 'font/craft10.acf', 'font/craft12.acf', 'font/craft4.acf', 'font/craft5.acf', 'font/craft6.acf'];
@@ -83,6 +84,7 @@ function validateOverrides() {
 function build() {
   step('xcwriter bundle', 'scripts/sync-xcwriter-core.cjs');
   step('xccalc bundle', 'scripts/sync-xccalc-core.cjs');
+  step('xcbase bundle', 'scripts/xcbase-sync-core.cjs');
   validateOverrides();
   const rawFaces = !fail.length && step('craft faces (font/*.acf created when missing)', 'scripts/mkcraftfaces.cjs');
   void rawFaces;
