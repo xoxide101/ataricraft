@@ -85,7 +85,7 @@ const NL = PARAS.length;
   assert.deepStrictEqual(P.resolve(sv.paras, sv.page).map((r) => r.face), EXPECT, 'ACWriter-saved file carries the same resolved faces');
   console.log('ok   ACWriter saved the same resolved faces (tags 2/3)');
   await menu('f', 'n'); await p.waitForTimeout(1500);
-  await menu('f', 'o'); await type('h:sec2.cwd'); await key('Enter', 6000);
+  await menu('f', 'o'); await type('h:sec2.xcw'); await key('Enter', 6000);
   await p.waitForTimeout(2500);
   await key('ArrowUp', 300); await key('ArrowUp', 300);
   const A2 = await still(); await shot('acwriter-zoom-reloaded');
