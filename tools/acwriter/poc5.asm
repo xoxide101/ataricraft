@@ -100,6 +100,7 @@ e_end = *
  org r:SLA
  .local S
  icl 'word/spell.inc'
+ icl 'word/legend.inc'
 e_end = *
  .endl
  org $B500
