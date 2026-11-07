@@ -361,42 +361,27 @@ ip6 dta c'V',b(53),c'P',b(54),c'T',b(55),c'L',b(56),c'R',b(57),c'1',b(58),c'2',b
 it6 dta b(3),c'V',b(3),c'iew page  ',b(3),c'P',b(3),c'aper  pi',b(3),c'T',b(3),c'ch  ',b(3),c'L',b(3),c'eft  ',b(3),c'R',b(3),c'ight  tab ',b(3),c'1',b(3),c' ',b(3),c'2',b(3),c' ',b(3),c'3',b(3),c' ',b(3),c'X',b(3),c' clear ',b(3),c'Z',b(3),c'oom',b(0)
 it5 dta b(3),c'R',b(3),c'uler  ',b(3),c'T',b(3),c'abs  ',b(3),c'M',b(3),c'argins  ',b(3),c'B',b(3),c'ars  ',b(3),c'C',b(3),c'olor  Si',b(3),c'z',b(3),c'e  ',b(3),c'L',b(3),c'ine  ',b(3),c'H',b(3),c'ilite',b(0)
 
+; One display-list interrupt serves both bands. It picks the colours from the scan line, so it cannot swap bands
+; when an interrupt is missed (the text area was getting the status colours in page and zoom view).
 dli1
  pha
  txa
  pha
- lda #<dli2
- sta VDSLST
- lda #>dli2
- sta VDSLST+1
+ lda VCOUNT
+ cmp #$30
+ bcs dlibot
  lda tci
  ldx tcb
- sta WSYNC
- sta COLPF1
- stx COLPF2
- pla
- tax
- pla
- rti
-
-dli2
- pha
- txa
- pha
- lda #<dli1
- sta VDSLST
- lda #>dli1
- sta VDSLST+1
- lda COLOR1
+ jmp dligo
+dlibot lda COLOR1
  ldx COLOR2
- sta WSYNC
+dligo sta WSYNC
  sta COLPF1
  stx COLPF2
  pla
  tax
  pla
  rti
-
 appmsg
  lda #<m1
  ldx #>m1
