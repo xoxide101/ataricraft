@@ -5,9 +5,8 @@
     { id: 'basic', g: 'Development', n: 'BASIC', d: 'Atari BASIC editor and compiler; compile and run on the connected emulator.', k: 'basic compiler editor program', panel: () => AC.BasicPanel.open(), emu: 1 },
     { id: 'asm', g: 'Development', n: 'ASM', d: '6502 assembler with listing; assemble and inject into emulator memory.', k: 'assembler 6502 macro listing', panel: () => AC.AsmPanel.open(), emu: 1 },
     { id: 'insp', g: 'Development', n: 'Inspect', d: 'RAM page map, N: network log, IP settings, extended banks, memory poke/dump, remote control.', k: 'inspect ram memory network banks remote debug', panel: () => AC.InspectPanel.open(), emu: 1 },
-    { id: 'font', g: 'Data in/out', n: 'Font', d: 'Character-set editor: ROM font, TTF import, install into the running machine.', k: 'font charset character ttf', panel: () => AC.FontPanel.open(), emu: 1 },
     { id: 'wb', g: 'Data in/out', n: 'Workbench', d: 'MIDI to POKEY converter and SAP editor.', k: 'workbench midi pokey sap music audio', url: 'workbench.html' },
-    { id: 'fontedit', g: 'Data in/out', n: 'Charset editor', d: 'Full-page font and character-set editor.', k: 'font editor charset glyph', url: 'fontedit.html' },
+    { id: 'fontedit', g: 'Data in/out', n: 'Font editor', d: 'Make and edit fonts for every Craft app: all sizes, Atari character sets, import and export, install into the running emulator.', k: 'font editor charset character glyph ttf', url: 'fontedit.html' },
     { id: 'xcw', g: 'Hybrid apps (web twin + Atari companion)', n: 'xCWriter', d: 'Word processor for Atari documents.', k: 'writer word processor text document', url: 'xcwriter.html' },
     { id: 'xcc', g: 'Hybrid apps (web twin + Atari companion)', n: 'xCCalc', d: 'Spreadsheet.', k: 'calc spreadsheet', url: 'xccalc.html' },
     { id: 'xcb', g: 'Hybrid apps (web twin + Atari companion)', n: 'xCBase', d: 'Database.', k: 'base database records', url: 'xcbase.html' },
@@ -15,7 +14,7 @@
     { id: 'pdf', g: 'Data in/out', n: 'PDF', d: 'PDF viewer; can send files to the emulator.', k: 'pdf viewer document', url: 'pdfview.html' },
     { id: 'fujiexplorer', g: 'Data in/out', n: 'FujiNet Explorer', d: 'Browse FujiNet and network resources.', k: 'fujinet explorer network tnfs', url: 'fujiexplorer.html' }
   ];
-  const ALIAS = { inspect: 'insp', workbench: 'wb', xcwriter: 'xcw', xccalc: 'xcc', xcbase: 'xcb', ebookcraft: 'ebc' };
+  const ALIAS = { font: 'fontedit', inspect: 'insp', workbench: 'wb', xcwriter: 'xcw', xccalc: 'xcc', xcbase: 'xcb', ebookcraft: 'ebc' };
   const $ = (id) => document.getElementById(id);
   const root = $('groups');
 
@@ -51,6 +50,7 @@
     const h = decodeURIComponent(location.hash.replace(/^#/, '')).toLowerCase();
     const t = T.find((x) => x.id === (ALIAS[h] || h));
     if (t && t.panel) launch(t);
+    else if (t && t.id === 'fontedit') location.replace('fontedit.html');
   }
 
   AC.ToolsLink.onChange((s) => {

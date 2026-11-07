@@ -14,7 +14,7 @@
   <button id="undo" title="Undo (Ctrl+Z)">Undo</button><button id="redo" title="Redo (Ctrl+Y)">Redo</button>
   <button id="bkeep" title="Store this family in My fonts (this browser)">Keep in My fonts</button>
   <span class="sp"></span>
-  <span id="autosaved" class="dim"></span><button id="bautorestore" title="Reopen the last autosaved session">Restore autosave</button>
+  <button id="emustat" class="emustat" title="Atari emulator link">Emulator not connected</button><span id="autosaved" class="dim"></span><button id="bautorestore" title="Reopen the last autosaved session">Restore autosave</button>
   <button id="bopen" title="Add a font: TTF, OTF, WOFF, BDF, PCF, PNG sheet, ACF, XCF, FNT charset. You can also drop files anywhere.">Import font...</button>
   <input id="file" type="file" multiple hidden>
   <details class="menu"><summary>Export</summary><div class="pop">
@@ -41,6 +41,7 @@
     <label class="dim">for <select id="bztarget"></select></label> <button id="bzip">Zip (all sizes, formats, kerning, manifest)</button>
 <button id="bmanifest" title="craft-family-manifest JSON: sizes, origins, support flags per app">Family manifest (.json)</button>
     <h4>Other programs</h4>
+    <button id="binstall" title="Put the 8x8 set into the running Atari (RAM $9800, CHBAS)">Install in running Atari emulator</button>
     <button id="bsend">Send to ACWriter</button>
     <button id="buse">Use in xCWriter</button>
   </div></details>
@@ -55,7 +56,7 @@
     <div id="fchips"></div>
     <div id="flist" role="listbox"></div>
 <details class="rawopt"><summary class="dim" title="Binary charsets carry no header: tell the editor the cell size and character order">Raw / binary import options</summary><div class="row dim">Raw binary files: cell <input id="rawcw" type="number" min="1" max="23" value="8" style="width:44px"> x <input id="rawch" type="number" min="1" max="26" value="8" style="width:44px"> <select id="raworder"><option value="seq">in order from code 0</option><option value="atari-screen">Atari screen-code order</option><option value="atascii">ATASCII order</option><option value="c64-screen">C64 screen codes</option></select></div></details>
-    <div class="row"><button id="bnew" title="A blank 12 px family to draw from scratch">+ New blank family</button><span id="fcount" class="dim"></span></div>
+    <div class="row"><button id="bnew" title="A blank 12 px family to draw from scratch">+ New blank font</button><button id="bemurom" title="Read the standard Atari character set from the connected emulator">ROM charset from emulator</button><span id="fcount" class="dim"></span></div>
     <div id="imp" hidden>
       <b>Importing <span id="impname"></span></b>
       <div id="impinfo" class="dim"></div>
@@ -65,7 +66,7 @@
       <div class="row"><button id="impkeep">Add to My fonts</button></div>
     </div>
     <div id="acwbar" hidden></div>
-    <h3>Family source</h3>
+    <h3 title="Where the shapes of this font come from, and how smaller sizes are made">Master and sizes</h3>
     <div class="sec" style="padding:8px">
       <div id="srcinfo" class="dim"></div>
       <div id="ttfbox" hidden>
@@ -76,8 +77,8 @@
       </div>
       <div class="row"><label>derive threshold <input id="dth" type="number" step="0.05" min="0.05" max="0.95" value="0.5"></label>      <label title="A one-pixel stem never vanishes when scaled down"><input id="dkeep" type="checkbox" checked> snap stems</label></div>
             <div class="row"><label title="Lowercase tops land exactly on the target x-height line"><input id="dsnapx" type="checkbox"> snap x-height</label><label title="Glyphs that sat on the baseline stay on it"><input id="dsnapb" type="checkbox" checked> snap baseline</label><label>weight <select id="dwt"><option value="-1">lighter</option><option value="0" selected>normal</option><option value="1">bolder</option></select></label></div>
-            <div class="row"><button id="bderive" title="Re-derive every size from the master; locked and hand-edited sizes are kept">Derive all sizes</button><button id="bmissing">Create missing</button></div>
-            <div class="row"><button id="brerall" title="Re-render every glyph of every derived size with the settings above. Glyphs you drew by hand (overrides) are kept unless you tick the box">Re-render all sizes</button><label><input id="brinc" type="checkbox"> overwrite overrides too</label></div>
+            <div class="row"><button id="bderive" title="Make every size again from the master; locked and hand-edited sizes are kept">Rebuild all sizes</button><button id="bmissing" title="Make only the sizes that do not exist yet">Make missing sizes</button></div>
+            <div class="row"><button id="brerall" title="Re-render every glyph of every derived size with the settings above. Glyphs you drew by hand (overrides) are kept unless you tick the box">Redraw all sizes from outline</button><label><input id="brinc" type="checkbox"> overwrite overrides too</label></div>
             <div class="row"><label title="Mark overrides: orange corner in the grid, green/red pixels in the editor where this size differs from a fresh derive"><input id="bdiff" type="checkbox"> highlight overrides</label><span id="ovrinfo" class="dim"></span></div>
       <div class="row"><button id="bmaster" title="Make this size the master of the family">Use this size as master</button><label><input id="flock" type="checkbox"> lock this size</label></div>
       <div id="hnote" class="dim"></div>
@@ -91,7 +92,11 @@
     </div>
   </aside>
   <section id="center">
-    <div id="hint" hidden><b>First time here?</b> <span>1. Pick a font family on the left. 2. Pick a size above: dashed sizes are not made yet, click one to create it from the family master. 3. Click a glyph, then draw in the big grid. Press <kbd>?</kbd> for shortcuts.</span> <button id="hintx">Got it</button></div>
+        <div id="hint" hidden>
+      <div><b>Welcome. Make or edit a font in three steps</b>
+      <ol><li>Pick a font in the <b>Fonts</b> list on the left (or start a new one).</li><li>Pick a <b>size</b> in the strip below. A dashed size is not made yet: click it to create it.</li><li>Click a character, draw its pixels, then use <b>Export</b> at the top.</li></ol>
+      <div class="row"><button id="sfonts" class="primary">Pick a font</button><button id="snew" class="primary">New blank font</button><button id="sopen" class="primary">Open a font file...</button><span class="dim">or drop a file anywhere. TTF, OTF, WOFF, BDF, PNG, ACF, FNT and more.</span><span class="sp"></span><button id="hintx">Got it, hide this</button></div></div>
+    </div>
     <div id="fambar">
       <div id="famhead"><h2 id="famtitle">Craft</h2><span id="famsub" class="dim"></span></div>
       <div id="sizes" role="tablist" aria-label="Craft sizes 4-26 px"></div>
@@ -280,6 +285,8 @@
 <div id="status"><span>Craft sizes 4-26 px + Atari 8x8</span><span class="sp"></span><span>Drop font files anywhere to add a family - press ? for shortcuts</span></div>
 <div id="drop" hidden>Drop fonts to add families</div>
 <div id="help" hidden><div><div class="row"><h3 style="margin:0;flex:1">Keyboard shortcuts</h3><button id="helpclose">Close</button></div><div id="helpkeys"></div></div></div>
+<script src="js/fontlib.js?v=1"></script>
+<script src="js/toolshub-link.js?v=1"></script>
 <script src="js/xcwriter/core/xcw-core.js"></script>
 <script src="js/fontedit/builtin-fonts.js"></script>
 <script src="js/xcwriter/faces.js"></script>
@@ -299,5 +306,6 @@
 <script src="js/fontedit/kern.js"></script>
 <script src="js/fontedit/quality.js"></script>
 <script src="js/fontedit/validate.js"></script>
+<script src="js/fontedit/emulator.js"></script>
 </body>
 </html>

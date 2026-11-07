@@ -13,12 +13,12 @@ Because of that, the tools are not part of the emulator. The emulator (`web/inde
 | Moved to `tools.html` | Group |
 |---|---|
 | BASIC, ASM, Inspect | Development |
-| FONT (character-set editor), Workbench (MIDI to POKEY, SAP editor), Charset editor (`fontedit.html`), PDF, FujiNet Explorer | Data in/out |
+| Font editor (`fontedit.html`, the one font and character-set editor), Workbench (MIDI to POKEY, SAP editor), PDF, FujiNet Explorer | Data in/out |
 | xCWriter, xCCalc, xCBase, EBookCraft | Hybrid apps (web twin + Atari companion) |
 
-The hub has a search box, a description per tool and an **Emulator connected / not connected** indicator with an **Open emulator** button. BASIC, ASM, Inspect and FONT open as floating panels on the hub; the rest open in a new tab.
+The hub has a search box, a description per tool and an **Emulator connected / not connected** indicator with an **Open emulator** button. BASIC, ASM and Inspect open as floating panels on the hub; the rest open in a new tab.
 
-Deep links keep working: `index.html#basic`, `#asm`, `#insp`/`#inspect`, `#font`, `#wb`, `#xcw`, `#xcc`, `#xcb`, `#ebc`, `#pdf`, `#fujiexplorer`, `#fontedit` (and `?tab=` / `?tool=`) redirect to `tools.html#<name>`, which opens that tool.
+Deep links keep working: `index.html#basic`, `#asm`, `#insp`/`#inspect`, `#font` (now the Font editor), `#wb`, `#xcw`, `#xcc`, `#xcb`, `#ebc`, `#pdf`, `#fujiexplorer`, `#fontedit` (and `?tab=` / `?tool=`) redirect to `tools.html#<name>`, which opens that tool.
 
 ## Link protocol
 
@@ -54,4 +54,4 @@ The built-in program library (`progs.js`) now loads on first use only.
 
 ## Tests
 
-`node scripts/toolshub-test.cjs [shots]` covers the reduced tabs, file manager, redirects, hub, BASIC compile+run into a connected emulator (screen text checked), ASM, Inspect and FONT over the channel, and that every page loads. `inspect-test`, `inspect-ui-test` and `fontlib-test` drive the panels on the tools page.
+`node scripts/toolshub-test.cjs [shots]` covers the reduced tabs, file manager, redirects, hub, BASIC compile+run into a connected emulator (screen text checked), ASM and Inspect over the channel, and that every page loads. `inspect-test`, `inspect-ui-test` and `fontlib-test` drive the panels on the tools page.

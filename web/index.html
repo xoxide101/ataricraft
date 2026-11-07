@@ -9,8 +9,9 @@
 <script>
 // Old deep links (index.html#basic, ?tab=asm ...) now live on the tools hub
 (function () {
-  var m = /^#?(basic|asm|insp|inspect|font|wb|workbench|xcw|xcwriter|xcc|xccalc|xcb|xcbase|ebc|ebookcraft|pdf|fujiexplorer|fontedit)$/i.exec(location.hash) || /[?&](?:tab|tool)=(basic|asm|insp|inspect|font|wb|workbench|xcw|xcc|xcb|ebc|pdf)\b/i.exec(location.search);
-  if (m) location.replace('tools.html#' + m[1].toLowerCase());
+  var m = /^#?(basic|asm|insp|inspect|wb|workbench|xcw|xcwriter|xcc|xccalc|xcb|xcbase|ebc|ebookcraft|pdf|fujiexplorer)$/i.exec(location.hash) || /[?&](?:tab|tool)=(basic|asm|insp|inspect|wb|workbench|xcw|xcc|xcb|ebc|pdf)\b/i.exec(location.search);
+  if (/^#?(font|fontedit)$/i.test(location.hash) || /[?&](?:tab|tool)=font(edit)?\b/i.test(location.search)) location.replace('fontedit.html');
+  else if (m) location.replace('tools.html#' + m[1].toLowerCase());
 })();
 </script>
 <style>

@@ -31,6 +31,7 @@
     if (![...entries.values()].some((e) => e.badges.includes('ROM'))) add({ id: 'url:library/fonts/local/atarirom.fnt', name: 'Atari ROM charset (8x8)', kind: 'url', url: 'library/fonts/local/atarirom.fnt', badges: ['ROM', 'Atari .fnt'], group: 'atari' });
     const my = FE.myFonts();
     for (const n of Object.keys(my).sort()) add({ id: 'my:' + n, name: n, kind: 'my', badges: ['Mine'], group: 'mine' });
+    for (const l of FE.libFonts || []) add({ id: 'lib:' + l.id, name: l.name.replace(/\.[^.]+$/, ''), kind: 'lib', libId: l.id, libKind: l.kind, badges: ['Library', l.kind === 'fnt' ? 'Atari .fnt' : l.kind.toUpperCase(), l.pack], group: l.kind === 'fnt' ? 'atari' : 'mine' });
     const a = FE.autosaved();
     if (a) add({ id: 'autosave', name: 'Autosaved session: ' + a.name, kind: 'autosave', badges: ['Autosave', new Date(a.t).toLocaleString()], group: 'mine' });
   }
@@ -93,6 +94,7 @@
         if (id === 'zfont') { const meta = acwFaces().find((x) => x.id === 'zfont'), f = CF.parse(FE.b64ToBuf(meta.acf)); e.acw = new Map([[f, 'zfont']]); e.fam = CF.familyNew(f, 'ZFont'); }
         else { e.fam = craftFamily(); e.acw = st.acw; await loadBigCraft(e.fam); }
       } else if (e.kind === 'my') await openBytes(new TextEncoder().encode(FE.myFonts()[e.name]), e.name + '.xcf', { entry: id, keep: false });
+      else if (e.kind === 'lib') { const r = await window.AC.FontLib.get(e.libId); await openBytes(new Uint8Array(r.bytes), e.name + '.' + e.libKind, { entry: id, keep: false }); return; }
       else if (e.kind === 'autosave') { FE.restoreAutosave(); st.entry = id; e.fam = st.fam; return drawList(); }
       else { const r = await fetch(e.url); if (!r.ok) throw new Error('HTTP ' + r.status); await openBytes(new Uint8Array(await r.arrayBuffer()), e.url.split('/').pop(), { entry: id, keep: false }); return; }
     }
@@ -184,7 +186,16 @@
   });
 
   // ---- import: TTF/OTF/WOFF, BDF, PNG sheet, ACF, XCF, FNT, charset (1024), ROM -> a family in the list ------------------------------------------------------
-  async function importFile(f) { try { await openBytes(new Uint8Array(await f.arrayBuffer()), f.name); } catch (e) { FE.toast('Cannot open ' + f.name + ': ' + e.message); } }
+    const guessFormat = (b, name) => {
+    const m = String.fromCharCode(...b.slice(0, 4)), ext = (name.match(/\.([^.]+)$/) || [, ''])[1].toLowerCase();
+    const kind = m === 'wOFF' ? 'WOFF' : m === 'wOF2' ? 'WOFF2' : m === 'ttcf' ? 'TTC collection' : m === 'OTTO' ? 'OpenType/CFF' : (b[0] === 0 && b[1] === 1 && b[2] === 0 && b[3] === 0) || m === 'true' ? 'TrueType' : m === 'ACF2' ? 'Craft ACF' : m === 'STAR' ? 'BDF' : '';
+    return kind || (ext ? '.' + ext + ' file' : 'unknown format');
+  };
+  async function importFile(f) {
+    let bytes = null;
+    try { bytes = new Uint8Array(await f.arrayBuffer()); await openBytes(bytes, f.name); }
+    catch (e) { console.error('Font import failed', f.name, e); FE.toast('Cannot open ' + f.name + ' (' + (bytes ? guessFormat(bytes, f.name) + ', ' + bytes.length + ' bytes' : 'file could not be read') + '): ' + (e && e.message ? e.message : e)); }
+  }
   window.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); $('drop').hidden = false; } });
   window.addEventListener('dragleave', (e) => { if (!e.relatedTarget) $('drop').hidden = true; });
   window.addEventListener('drop', async (e) => { e.preventDefault(); $('drop').hidden = true; for (const f of [...e.dataTransfer.files]) await importFile(f); });

@@ -100,7 +100,9 @@
     };
     FE.fillTargets();
     const h = $('hint'); try { h.hidden = localStorage.getItem('craft.hint') === '1'; } catch (e) { h.hidden = false; }
-    $('hintx').onclick = () => { h.hidden = true; try { localStorage.setItem('craft.hint', '1'); } catch (e) { /* private mode */ } };
+    $('sfonts').onclick = () => { const l = $('lpanel'); if (l.hidden || getComputedStyle(l).display === 'none') $('tgl').click(); $('fsearch').focus(); };
+  $('snew').onclick = () => $('bnew').click(); $('sopen').onclick = () => $('bopen').click();
+  $('hintx').onclick = () => { h.hidden = true; try { localStorage.setItem('craft.hint', '1'); } catch (e) { /* private mode */ } };
   });
   FE.fillTargets = () => {
     const sel = $('bztarget'); if (!sel) return;

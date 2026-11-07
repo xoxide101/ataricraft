@@ -1,4 +1,4 @@
-// Font library: import .FNT/.TTF/.OTF/.ZIP, load a set into the FONT editor, embed a TTF in the WebAFM print page. node scripts/fontlib-test.cjs
+// Font library: import .FNT/.TTF/.OTF/.ZIP, list them in the one font editor and load a set, embed a TTF in the WebAFM print page. node scripts/fontlib-test.cjs
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const fs = require('fs'), os = require('os'), path = require('path');
 const ROOT = 'C:/Users/raver/ataricraft';
@@ -25,13 +25,11 @@ const ROOT = 'C:/Users/raver/ataricraft';
     return { r1, r2, kinds: L.map((f) => f.kind).sort(), fam, cssOk: css.startsWith("@font-face{font-family:'ACPrint'"), htmlOk: html.includes('@font-face') && html.includes("9px/1.25 'ACPrint'") };
   }, [[...fnt], [...fs.readFileSync(ROOT + '/web/library/fonts/PressStart2P.ttf')], [...fs.readFileSync(ROOT + '/web/library/fonts/Connection.otf')]]);
   console.log(JSON.stringify(res));
-  const pt = await p.context().newPage(); pt.on('pageerror', (e) => errs.push(e.message)); await pt.goto('file:///' + ROOT + '/web/tools.html'); await pt.evaluate(() => AC.FontPanel.open()); await pt.waitForTimeout(800);
-  const n = await pt.evaluate(() => [...document.querySelectorAll('select')].map((s) => s.options[0] && (s.options[0]||{}).textContent).filter((t) => /Font library/.test(t || '')));
-  await pt.evaluate(async () => { const s = [...document.querySelectorAll('select')].find((x) => /Font library/.test(((x.options[0]||{}).textContent||''))); s.value = s.querySelector('option[value]:not([value=""])').value; s.dispatchEvent(new Event('change')); });
-  await p.waitForTimeout(500);
-  const msg = await pt.evaluate(() => document.body.innerText.match(/Loaded "[^"]+" from the library/));
-  await b.close();
-  const pass = res.r1.added === 3 && res.r1.skipped === 1 && res.r2.added === 0 && res.kinds.join() === 'fnt,ttf,ttf' && /^ACLib/.test(res.fam) && res.cssOk && res.htmlOk && n.length === 1 && n[0] === 'Font library (1)' && msg && !errs.length;
+  const pt = await p.context().newPage(); pt.on('pageerror', (e) => errs.push(e.message)); await pt.goto('file:///' + ROOT + '/web/fontedit.html');
+  await pt.waitForFunction(() => window.FE && FE.libFonts && FE.libFonts.length, null, { timeout: 8000 }).catch(() => {});
+  const n = await pt.evaluate(() => [...FE.entries.values()].filter((e) => e.kind === 'lib').map((e) => e.name));
+  const msg = await pt.evaluate(async () => { const e = [...FE.entries.values()].find((x) => x.kind === 'lib' && x.libKind === 'fnt'); if (!e) return null; await FE.openEntry(e.id); return FE.state.fam && FE.state.f.adv === 8 ? 'loaded ' + e.name : null; });  await b.close();
+  const pass = res.r1.added === 3 && res.r1.skipped === 1 && res.r2.added === 0 && res.kinds.join() === 'fnt,ttf,ttf' && /^ACLib/.test(res.fam) && res.cssOk && res.htmlOk && n.length === 3 && msg && !errs.length;
   console.log(pass ? 'FONTLIB PASS' : 'FONTLIB FAIL ' + JSON.stringify({ n, msg, errs }));
   process.exit(pass ? 0 : 1);
 })();
