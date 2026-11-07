@@ -26,9 +26,16 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   if (SHOTS) await p.screenshot({ path: OUT + 'emu-after.png' });
 
   // deep links redirect
-  for (const h of ['basic', 'asm', 'insp', 'font', 'wb', 'xcw', 'fontedit']) {
+  for (const h of ['basic', 'asm', 'insp', 'wb', 'xcw']) {
     const q = await ctx.newPage(); await q.goto(U + 'index.html#' + h); await wait(500);
     ok(/tools\.html#/.test(q.url()), 'deep link #' + h + ' redirects', q.url()); await q.close();
+  }
+
+  for (const h of ['font', 'fontedit']) {
+    const q = await ctx.newPage(); await q.goto(U + 'index.html#' + h); await wait(800);
+    ok(/fontedit\.html/.test(q.url()), 'old #' + h + ' deep link goes to the one font editor', q.url()); await q.close();
+    const q2 = await ctx.newPage(); await q2.goto(U + 'tools.html#' + h); await wait(800);
+    ok(/fontedit\.html/.test(q2.url()), 'tools.html#' + h + ' goes to the font editor', q2.url()); await q2.close();
   }
 
   // hub opened from the emulator button (opener-direct)
@@ -36,7 +43,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   watch(hub, 'hub'); await hub.waitForLoadState(); await wait(1500);
   ok(/tools\.html/.test(hub.url()), 'Tools button opens the hub');
   ok(/Emulator connected/.test(await hub.innerText('#status')), 'hub reports emulator connected', await hub.innerText('#status'));
-  ok((await hub.locator('.card').count()) === 12, 'hub lists 12 tools');
+  ok((await hub.locator('.card').count()) === 11, 'hub lists 11 tools');
+  ok((await hub.locator('.card', { hasText: 'Font editor' }).count()) === 1, 'hub has the Font editor card'); ok((await hub.locator('.card', { hasText: /^Font\b(?! editor)/ }).count()) === 0, 'no second Font card');
   await hub.fill('#q', 'midi'); ok((await hub.locator('.card').count()) === 1, 'search filters');
   await hub.fill('#q', '');
   if (SHOTS) await hub.screenshot({ path: OUT + 'hub.png' });
@@ -63,8 +71,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   if (SHOTS) await h2.screenshot({ path: OUT + 'hub-inspect.png' });
   const r = await h2.evaluate(() => AC.ToolsLink.call('peek', { addr: 0x14, n: 1 }).then((v) => v).catch((e) => 'ERR ' + e.message));
   ok(r && !String(r).startsWith('ERR'), 'channel peek works', r);
-  await h2.goto(U + 'tools.html#font'); await wait(2500);
-  ok(await h2.evaluate(() => !!document.querySelector('canvas')), 'FONT panel opens');
+  ok(await h2.evaluate(() => !window.AC.FontPanel), 'the old FONT panel is gone from the hub');
   const q2 = await ctx.newPage(); await q2.goto(U + 'tools.html'); await wait(500);
   for (const u of ['workbench.html', 'xcwriter.html', 'xccalc.html', 'xcbase.html', 'ebookcraft.html', 'pdfview.html', 'fujiexplorer.html']) {
     const e0 = errs.length; const q = await ctx.newPage(); watch(q, u); await q.goto(U + u); await wait(800);
