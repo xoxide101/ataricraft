@@ -92,8 +92,27 @@ ode scripts/ram-config-test.cjs.
 | Compy-Shop 192 KB (XL/XE) | yes, via a generated config file (RAM_SIZE=192; there is no CLI option) | no | PORTB memtest: 8 banks, 0 errors |
 | Axlon 2096 KB (2 MB) (400/800) | yes, -axlon 2080: 128 banks of 16 KB | no | $CFFF bank register: 128 distinct banks |
 | Axlon 4144 KB (4 MB) (400/800) | yes, -axlon 4128: 256 banks | no | $CFFF bank register: 256 distinct banks |
-| ACX 8192 KB (Ataricraft 8 MB) | no, disabled | no, disabled | not implementable |
+| ACX 8192 KB (Ataricraft 8 MB) (XL/XE) | yes, -acx (patched core, build/atari800-acx.patch) | no, disabled | scripts/acx-test.asm: 512 distinct banks, ID byte, reset |
 
 - Axlon: atari800 takes a total of 32 + 16 x banks KB with a power-of-two bank count up to 256, so the labels (2096, 4144) map to 2080 and 4128. The bank number is written to $CFFF; the window is $4000-.
 - Altirra: the WASM build only exposes ltirra_memory (8K to 64K, 128K, 256K, 320K, 576K, 1088K, Compy variants) plus Rapidus/65C816. There is no 192K or Axlon. Rapidus 65C816 high memory was tried; long-address stores hang in this build, so 8 MB could not be confirmed.
-- ACX 8192 is the Ataricraft product's own 8 MB RAM and is a placeholder here. Intended scheme (to be fixed for the real system): 512 banks of 16 KB behind a bank register selecting the $4000- window, i.e. an Axlon-style register extended to 9 bits. Booting it shows an explanatory message instead of starting.
+- ACX 8192 is Ataricraft's own 8 MB system, implemented as a patch to libatari800 (`build/atari800-acx.patch`: memory.c/memory.h/atari.c; apply to vendor/atari800, then `powershell -File scripts\build-reference.ps1`). The `-acx` flag is a 1088K XL/XE plus an extension register, so 130XE/1088K software runs unchanged. The WASM in web/ref is git-ignored, so rebuild it after a fresh clone.
+
+### ACX bank map and register
+
+- 8 MB = 512 extended banks of 16 KB behind the $4000-$7FFF window, plus the normal 64 KB base RAM. Bank number = PORTB bank (0..63, bits 1-3 and 5-7 exactly as on a 1088K) + 64 x segment.
+- Segment register **$D1F0** (read/write): bits 0-2 = 1 MB segment 0..7, upper bits read 0. Cleared by cold start and warm start (RESET). It sits in the otherwise unused upper end of the PBI page $D1xx, clear of Axlon ($CFFF), Mosaic ($FFC0), cartridge banking ($D5xx) and the PBI IRQ byte $D1FF. **$D1F1** reads $AC (ID byte; plain hardware reads $FF), so software can detect ACX.
+- Banking rules otherwise follow PORTB: bit 4 = CPU sees the bank, and the segment applies to whatever bank PORTB selects (the CPU view stays consistent when only $D1F0 changes). Segment 0 is identical to a 1088K machine.
+
+| Segment | Banks | Size | Use |
+|---|---|---|---|
+| 0 | 0-63 | 1 MB | Compatibility: exactly the 1088K bank space for normal XE software |
+| 1 | 64-127 | 1 MB | ACX-OS (planned Linux-style OS: cooperative, non-preemptive threads, not multitasking) |
+| 1 | 64-79 | 256 KB | Kernel, drivers, filesystem, syscall table |
+| 1 | 80-111 | 512 KB | Thread banks: one 16 KB bank per thread slot (32 threads) holding its saved stack/TLS, switched cooperatively by a yield call |
+| 1 | 112-127 | 256 KB | Kernel heap, buffer/page cache, message queues |
+| 2-7 | 128-511 | 6 MB | General RAM: per-process heaps, data, RAM disk |
+
+This allocation is a design convention for the OS to come; the emulator treats all 512 banks as plain RAM. The OS keeps its code resident below $4000 or in base RAM, and switches $D1F0/PORTB through a small trampoline in base RAM.
+
+Limits: not in the libatari800 state snapshot (the segment register and the 8 MB are not saved, so Save state/restore is unsupported with ACX), and not on AltirraSDL. Test: `scripts/ram-config-test.cjs` boots `scripts/acx-test.xex` (source `acx-test.asm`, build `out\mads\mads.exe scripts\acx-test.asm -o:scripts\acx-test.xex`), which writes a distinct pattern into every one of the 512 banks, reads them all back (512 good), checks the ID byte, segment readback, base RAM intact and reset; a plain 1088K run of the same program finds only 64 banks and no ID byte.

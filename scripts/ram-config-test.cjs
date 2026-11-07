@@ -1,4 +1,4 @@
-// RAM configuration test: Compy-Shop 192K, Axlon 2096K/4144K, the disabled ACX 8192K entry, per-core dropdown, persistence.
+// RAM configuration test: Compy-Shop 192K, Axlon 2096K/4144K, ACX 8192K (patched libatari800), per-core dropdown, persistence.
 // Usage: node scripts/ram-config-test.cjs
 const { chromium } = require('C:/Users/raver/craftapi/node_modules/playwright-core');
 const ROOT = 'C:/Users/raver/ataricraft';
@@ -74,24 +74,17 @@ const OS800 = 'Atari 400_800 rev B ntsc.rom';
     let o = await opts(p);
     const by = (v) => o.find((x) => x.v === v);
     ok(by('192') && !by('192').d && by('192').sel, 'atari800: 192 enabled and selected');
-    ok(by('acx8192') && by('acx8192').d && /4 MB/.test(by('acx8192').t), 'atari800: ACX 8192 listed but disabled with a tooltip', by('acx8192'));
+    ok(by('acx8192') && !by('acx8192').d, 'atari800: ACX 8192 enabled', by('acx8192'));
     ok(!by('ax2096'), 'XL machines do not list Axlon');
     await p.selectOption('#core', 'altirra'); o = await opts(p);
     ok(by('192').d && /192/.test(by('192').t), 'altirra: 192 disabled with a reason', by('192'));
-    ok(by('acx8192').d && by('1088') && !by('1088').d && !by('128').d && !by('320c').d, 'altirra: ACX disabled; 128/320/1088 enabled');
+    ok(by('acx8192').d && /Atari800 core/.test(by('acx8192').t) && by('1088') && !by('1088').d && !by('128').d && !by('320c').d, 'altirra: ACX disabled; 128/320/1088 enabled');
     ok(!by('192').sel && by('64').sel, 'altirra: selection fell back to the model default', o.filter((x) => x.sel));
     await p.selectOption('#core', 'atari800'); o = await opts(p);
     ok(by('192').sel && !by('192').d, 'back on atari800: 192 selection restored');
     // persistence of the choice
     await p.reload(); await p.waitForTimeout(500);
     ok(await p.evaluate(() => document.getElementById('ram').value) === '192', 'RAM choice 192 persists across a reload');
-    // ACX refuses to boot (forced past the disabled state)
-    await p.setInputFiles('#romfiles', [ROOT + '/software_n_roms/ATARIXL.ROM', ROOT + '/software_n_roms/ATARIBAS.ROM']);
-        await p.waitForTimeout(2500);
-        await p.evaluate(() => { const s = document.getElementById('ram'); s.value = 'acx8192'; });
-        await p.click('#boot'); await p.waitForTimeout(2500);
-    const msg = await p.evaluate(() => document.getElementById('status').textContent);
-    ok(/ACX 8192/.test(msg) && /cannot|no 8 MB/.test(msg), 'ACX 8192 boot gives a clear message', msg);
     await p.context().close();
   }
   {
@@ -99,11 +92,35 @@ const OS800 = 'Atari 400_800 rev B ntsc.rom';
     let o = await opts(p);
     ok(o.some((x) => x.v === 'ax2096' && !x.d) && o.some((x) => x.v === 'ax4144' && !x.d && x.sel), 'atari800 800: Axlon 2096/4144 enabled');
     await p.selectOption('#core', 'altirra'); o = await opts(p);
-    ok(o.filter((x) => /^ax|^acx/.test(x.v)).every((x) => x.d && x.t), 'altirra 800: Axlon and ACX disabled with tooltips');
+    ok(!o.some((x) => x.v === 'acx8192') && o.filter((x) => /^ax/.test(x.v)).every((x) => x.d && x.t), 'altirra 800: Axlon disabled with tooltips; no ACX on 400/800');
     ok(o.find((x) => x.v === '48').sel, 'altirra 800: fell back to 48 KB');
     await p.selectOption('#core', 'atari800'); o = await opts(p);
     ok(o.find((x) => x.v === 'ax4144').sel, 'back on atari800: Axlon 4144 restored');
     await p.context().close();
+  }
+  // ---- ACX 8192 KB: 512 banks (8 segments x 64) via PORTB + $D1F0, in-guest test (scripts/acx-test.asm, built with mads)
+  {
+    const fs = require('fs');
+    const p = await open(b, 'atari800', '800xl', 'ATARIXL.ROM', 'acx8192');
+    await p.click('#boot'); await p.waitForTimeout(3500);
+    const xexBytes = [...fs.readFileSync(ROOT + '/scripts/acx-test.xex')];
+    await p.evaluate(async (by) => { await ataricraft.bootFile('ACX.XEX', Uint8Array.from(by)); }, xexBytes);
+    let r = null;
+    for (let i = 0; i < 30; i++) { await p.waitForTimeout(500); r = await p.evaluate(() => ataricraft.peek(0x600, 8)); if (r[2]) break; }
+    ok(r[2] === 1 && r[0] + (r[1] << 8) === 512, 'ACX: all 512 banks keep distinct data', r);
+    ok(r[3] === 1 && r[4] === 0, 'ACX: ID byte $AC at $D1F1, $D1F0 reads back its segment', r);
+    ok(r[5] === 1, 'ACX: base RAM at $4000 intact after the bank sweep', r);
+    ok(r[6] === 1, 'ACX: segment register resets to 0 when written 0', r);
+    ok(p.errs.length === 0, 'ACX: no page errors', p.errs);
+    await p.context().close();
+    // 1088 K without -acx must not have the register (ID reads $FF, so software can detect it)
+    const q = await open(b, 'atari800', '800xl', 'ATARIXL.ROM', '1088');
+    await q.click('#boot'); await q.waitForTimeout(3500);
+    await q.evaluate(async (by) => { await ataricraft.bootFile('ACX.XEX', Uint8Array.from(by)); }, xexBytes);
+    await q.waitForTimeout(3000);
+    const s = await q.evaluate(() => ataricraft.peek(0x600, 8));
+    ok(s[3] === 0 && s[0] + (s[1] << 8) === 64, 'plain 1088K: no ACX ID byte and only 64 distinct banks (seg writes alias)', s);
+    await q.context().close();
   }
   // ---- Altirra still boots its supported sizes
   for (const ram of ['128', '1088']) {
