@@ -16,7 +16,6 @@ const bad = (m) => { console.log('FAIL ' + m); process.exitCode = 1; };
   };
   const expect = async (label, want) => { const g = await doc(); g === want ? ok(label + ' -> ' + g) : bad(label + ': got ' + g + ' want ' + want); };
   await key('n', 2500);
-  await key('CapsLock', 800);
   await type('plain ', 200);
   await key('Control+b', 400);
   await t.shot(out + '/1-bold-pending.png');

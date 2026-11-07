@@ -316,14 +316,7 @@ cck9 rts
 
 ; The K: handler swallows the Caps key and then waits for the next real key, which would leave the status line stale,
 ; so the Caps key is handled here (plain = toggle, Shift = caps lock, Control = control lock) before it reaches K:.
-lckc jsr capskey
- bcc lckn
- jsr capsck
- jmp loop
-lckn lda CH
- and #$40
- sta keyshift
- jmp lgot
+
 capskey lda CH
  and #$3F
  cmp #$3C
