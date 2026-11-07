@@ -296,3 +296,22 @@ Export lives in the Export menu (*Retro and other formats*); import is drag and 
 | Formats: PSF, PCF write, GEM, C64, ZX, MSX/CPC, raw, Atari orders, TTC, EOT, WOFF write, with round-trip tests | implemented (phase 5); SVG font, UFO, .fon, WOFF2 write planned |
 | Font manager (favourites, tags, collections, compare, coverage, duplicates, hand-off) | implemented (phase 6: Manager tab, tested by fontedit-ui6-test) |
 | Choose font window, Atari ROM charset without emulator | implemented (fontedit-ui7-test) |
+
+## Panels and layouts
+
+Every section of the editor (glyph grid, pixel editor, outline editor and its details, family, specimen, Atari, kerning, manager, quality, and the Details sections Glyph, Selection, Reference ghost, Metrics, Preview, History) is a **panel** with a small title bar: `-` `+` `Fit` `100%` (zoom), pop out (floating window), maximise, Back. Code: `web/js/fontedit/panels.js`.
+
+- **Pop out** makes a floating window: drag the bar, resize from the lower-right corner. **Maximise** fills about 94% of the window over a dimmed backdrop; Esc, double-click on the bar or a click on the backdrop goes back. A dashed note ("... is in its own window / Bring it back") stays in the old place.
+- **Zoom** is per panel: bar buttons, `+` `-` `0` while the pointer is over the panel, or Ctrl + mouse wheel. The pixel editor uses its own pixel size, the glyph grid its tile size, the outline editor its canvas zoom, Specimen/Atari/Kerning/Preview their size menus; all other panels use a CSS zoom of their content (interactive canvases are never CSS-zoomed, so mouse positions stay exact).
+- **Layouts** (header): *Editor* (fonts, glyphs, details), *Compare* (family sizes + details), *Overview* (specimen, full width), and *Reset layout* (all panels docked, all zoom 100%).
+- **Saved** in localStorage `craft.layout`: `{layout, panels:{id:{mode:'float', x,y,w,h, zoom}}}`. Maximise is never restored. In a window 900 px wide or less the side panels start folded; use Maximise on a panel instead of cramped columns.
+
+Add a panel with one line in `FE.panelsInit` (end of `panels.js`):
+
+```js
+add({ id: 'myview', title: 'My view', el: '#v-my' });                           // CSS zoom of the content
+add({ id: 'myview', title: 'My view', el: '#v-my', zoom: selectZoom('#myz', 2) }); // steps a <select>
+add({ id: 'myview', title: 'My view', el: '#v-my', zoom: { get, set, nudge(dir), fit, reset, label } }); // native zoom
+```
+
+The element stays where it is in the page (nothing is cloned), so ids and handlers keep working. Add `FE.panels.LAYOUTS.name = {label, tab, left, right, hint}` for a new layout. Test: `scripts/fontedit-ui8-test.cjs`.
