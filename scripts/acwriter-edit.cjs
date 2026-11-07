@@ -45,17 +45,17 @@ TEXT += 'the end Beta final\r';
   let s = await state();
   check('copy: clipboard 4 bytes, selection cleared, doc unchanged', s.clip === 4 && s.sel === 0 && (await lineOf(0)) === 'alpha beta gamma', s);
   // paste at the start of line 2
-  await key('ArrowDown', 500); await key('Control+a', 500); await key('Control+p', 1200); await shot('3-pasted');
+  await key('ArrowDown', 1500); await key('Control+a', 500); await key('Control+p', 1200); await shot('3-pasted');
   check('paste at line start', (await lineOf(1)) === 'alphDelta epsilon zeta', await lineOf(1));
   // cut "alp" from there, paste at the end of line 1
   await key('Control+a', 500); await key('Control+s', 600); for (let i = 0; i < 3; i++) await key('ArrowRight', 1600);
   await key('Control+d', 1000); await shot('4-cut');
   check('cut removes the text', (await lineOf(1)) === 'hDelta epsilon zeta', await lineOf(1));
-  await key('ArrowUp', 500); await key('Control+e', 500); await key('Control+p', 1200); await shot('5-pasted-end');
+  await key('ArrowUp', 1500); await key('Control+q', 500); await key('Control+p', 1200); await shot('5-pasted-end');
   check('paste at end of line 1', (await lineOf(0)) === 'alpha beta gammaalp', await lineOf(0));
   // Home / End
   await key('Control+a', 500); s = await state(); check('^A = line start', s.cc === 0, s);
-  await key('Control+e', 500); s = await state(); check('^E = line end', s.cc === 19, s);
+  await key('Control+q', 500); s = await state(); check('^E = line end', s.cc === 19, s);
   // find (case-insensitive: "beta" also matches "Beta" on the last line)
   await key('Control+g', 800); await shot('6-findprompt');
   await type('beta'); await key('Enter', 2200); await shot('7-found');
@@ -64,21 +64,21 @@ TEXT += 'the end Beta final\r';
   s = await state(); check('find next wraps to line 1', s.sel === 1 && s.cl === 0, s);
   await key('Escape', 600);
   // goto line
-  await key('Control+l', 1500); await type('2'); await key('Enter', 2200); await shot('9-goto');
+  await key('Escape', 600); await key('s', 600); await key('g', 1500); await type('2'); await key('Enter', 2200); await shot('9-goto');
   s = await state(); check('goto line 2', s.cl === 1 && s.cc === 0, s);
-  await key('Control+l', 1500); await type('99'); await key('Enter', 2200);
+  await key('Escape', 600); await key('s', 600); await key('g', 1500); await type('99'); await key('Enter', 2200);
   s = await state(); check('goto past the end clamps to the last line', s.cl === (await peek(0x96))[0] - 1, s);
   // replace: beta -> zed (typed under the Atari caps lock, so ZED), Y then N
-  await key('Control+l', 1500); await type('1'); await key('Enter', 2000);
-  await key('Control+r', 800); await type('beta'); await key('Enter', 900); await type('zed'); await key('Enter', 2200); await shot('10-replace-prompt');
+  await key('Escape', 600); await key('s', 600); await key('g', 1500); await type('1'); await key('Enter', 2000);
+  await key('Escape', 600); await key('s', 600); await key('r', 800); await type('beta'); await key('Enter', 900); await type('zed'); await key('Enter', 2200); await shot('10-replace-prompt');
   s = await state(); check('replace prompt shown', s.cmsg === 32 && s.sel === 1, s);
   await key('y', 1500); await shot('11-replaced-one');
   check('Y replaced the first match', (await lineOf(0)) === 'alpha ZED gammaalp', await lineOf(0));
   await key('n', 1500); await shot('12-skipped');
   check('N skipped the second', (await lineOf(30)) === 'the end Beta final', await lineOf(30));
   // replace all: line -> LN
-  await key('Control+l', 1500); await type('1'); await key('Enter', 2000);
-  await key('Control+r', 800); await type('line'); await key('Enter', 900); await type('LN'); await key('Enter', 2200);
+  await key('Escape', 600); await key('s', 600); await key('g', 1500); await type('1'); await key('Enter', 2000);
+  await key('Escape', 600); await key('s', 600); await key('r', 800); await type('line'); await key('Enter', 900); await type('LN'); await key('Enter', 2200);
   await key('a', 1000); for (let i = 0; i < 60 && (await peek(0x14C2))[0]; i++) await p.waitForTimeout(1000);
   await p.waitForTimeout(1500); await shot('13-replace-all');
   check('A replaced all', (await lineOf(4)) === 'LN number 5 filler text' && (await lineOf(29)) === 'LN number 30 filler text' && (await peek(0x14C5))[0] === 27, [await lineOf(4), await lineOf(29), await peek(0x14C5), await state()]);

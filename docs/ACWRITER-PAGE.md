@@ -102,3 +102,32 @@ The zoom-view header and status lines (and the menu bar) still use the Atari OS 
 - **Fonts**: text face defaults to Craft 5px (`font4.inc`), menus/status to Craft 6px (`font6.inc`); ROM remains selectable via Character > Font.
 - **Memory**: the overlay slot `SLA..SLA+$C00` must end at or below DOC (`$6400`), i.e. `SLA <= $5800` (asserted in `poc5.asm`). Cursor helpers live in free pools (`$0489`, `$06C0`, `$1F55`); keep `xex-overlap.cjs` clean.
 - **Version**: single source `word/version.inc`; shown on the start menu and Help; build script prints it and writes `ACWRITER.VERSION.txt`. Bump on every rebuild.
+
+
+## Keys (0.1.6)
+
+ACWriter 0.1.5 had these Ctrl bindings (before): ^X command line, ^B bold, ^I italic, ^U underline (these inserted codes at the cursor), ^K spell check, ^T force redraw, and in Edit mode ^A home, ^D cut, ^E end of line, ^S mark, ^F find, ^G next find, ^L goto line, ^R replace, ^P paste, ^Y copy, ^N / ^O next/previous segment, Tab = ribbon next.
+
+The Atari OS translates some Ctrl keys before ACWriter sees them: Ctrl-I = Tab, Ctrl-H = Backspace, Ctrl-J and Ctrl-M = Return. The browser keeps Ctrl-C, V, N, T, W for itself. So ^I italic, ^J justify and ^C centre cannot work.
+
+| Key | Action |
+|---|---|
+| ^B | bold on/off |
+| ^O | italic on/off (O for oblique, because ^I is Tab) |
+| ^U | underline on/off |
+| ^K | strikethrough on/off |
+| ^L / ^E / ^R / ^Z | paragraph align left / centre / right / justify |
+| Tab | indent on/off (paragraph) |
+| Shift-Tab, Ctrl-Tab | outdent (real Atari only; the web emulator sends Tab) |
+| ^X | command line |
+| ^T | force redraw |
+| ^S | mark selection (then move, ^D cut, ^Y copy, ^P paste) |
+| ^A / ^Q | start / end of line |
+| ^F / ^G | find / next find |
+| ^N / ^W | next / previous segment (real Atari only) |
+
+Moved to the Esc menu only: goto line (Search), replace (Search), spell check (Search). Menu items Character > bold/italic/underline still insert a code at the cursor.
+
+Style keys work like Word: with no selection they set the style of the text typed next (status line shows inverse B I U S for the pending style; it clears when the cursor moves elsewhere). With a ^S selection they style the selection (one paragraph only). Styles combine.
+
+Status line also shows the current font and size and a CAPS indicator (inverse when Caps lock is on).

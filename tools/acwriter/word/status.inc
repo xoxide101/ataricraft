@@ -189,7 +189,7 @@ sm1 lda #<fm
  jsr putc
  lda rm
  jsr putnum
-sm2 jsr curstyle
+sm2 jsr showsty
  lsr
  bcc sg1
  pha
@@ -205,9 +205,15 @@ sg1 lsr
  jsr putstr
  pla
 sg2 lsr
- bcc sg3
+ bcc sg2a
  lda #<fun
  ldx #>fun
+ jsr putstr
+sg2a lda stv
+ and #$40
+ beq sg3
+ lda #<fstr
+ ldx #>fstr
  jsr putstr
 sg3 lda rz
  beq sf1
@@ -244,9 +250,10 @@ s2 dta c' Col ',b(0)
 s3 dta c' ch ',b(0)
 s4 dta c'K free',b(0)
 fm dta c' M ',b(0)
-fbl dta c' ',b(4),c'BLD',b(4),b(0)
-fit dta c' ',b(4),c'ITA',b(4),b(0)
-fun dta c' ',b(4),c'UND',b(4),b(0)
+fbl dta c' ',b(4),c'B',b(4),b(0)
+fit dta c' ',b(4),c'I',b(4),b(0)
+fun dta c' ',b(4),c'U',b(4),b(0)
+fstr dta c' ',b(4),c'S',b(4),b(0)
 fz dta c' ',b(4),c'ZUM',b(4),b(0)
 fi dta c' ',b(4),c'INV',b(4),b(0)
 fb dta c' ',b(4),c'BLU',b(4),b(0)
@@ -255,7 +262,30 @@ fgr dta c' ',b(4),c'GRN',b(4),b(0)
 tfl dta l(fb),l(fb),l(fam),l(fgr)
 tfh dta h(fb),h(fb),h(fam),h(fgr)
 kname dta c'K:',b($9B)
-helpmsg dta c'Esc menu  ^X command  ^B ^I ^U style  F1 help',b(0)
+helpmsg dta c'Esc menu  ^X command  ^B ^O ^U ^K style  F1 help',b(0)
+
+; typing style: pend = bits typed next (1 bold, 2 italic, 4 underline, $40 strike), valid while pvf is set and the cursor is at pvl/pvc
+pend = $BFE5
+pvf = $BFE6
+pvl = $BFE7
+pvc = $BFE8
+stv = $BFE9
+showsty lda pvf
+ beq ssy1
+ lda pvl
+ cmp cl
+ bne ssy0
+ lda pvc
+ cmp cc
+ bne ssy0
+ lda pend
+ sta stv
+ rts
+ssy0 lda #0
+ sta pvf
+ssy1 jsr curstyle
+ sta stv
+ rts
 
 ; Caps lock indicator at column 49 of the status line: inverse CAPS when on (SHFLOK bit 6), plain caps when off
 capsv = $BFE3

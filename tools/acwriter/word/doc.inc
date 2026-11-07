@@ -8,9 +8,16 @@ hn_s lda ed_rp
  jmp exrkey
 hn_r lda ed_on
  beq hn_e
+ lda kk
+ ldx #3
+hn_s2 cmp styt,x
+ beq hn_s3
+ dex
+ bpl hn_s2
  jsr expre
  bcc hn_e
  rts
+hn_s3 jmp exsty
 hn_e lda pkon
  beq hn00
  jmp pkkey
@@ -44,24 +51,20 @@ hn0b lda kk
  cmp #$18
  bne hn0k
  jmp cmdopen
-hn0k cmp #$0B
- bne hn0m
- jmp hspell
-hn0m cmp #$14
+hn0k cmp #$14
  bne hn0q
  jmp hforce
-hn0q jsr exkeys
+hn0q ldx #10
+hn0s cmp styt,x
+ beq hn0t
+ dex
+ bpl hn0s
+ jsr exkeys
  bcc hn0n
  rts
+hn0t jmp stykey
 hn0n lda kk
-hn1 cmp #$7F
- bne hn2
- lda hmode
- cmp #PGV
- bne hn1a
- jmp pwtab
-hn1a jmp ribnext
-hn2 cmp #$1C
+hn1 cmp #$1C
  bne h1
  jmp kup
 h1 cmp #$1D
@@ -77,34 +80,29 @@ h4 cmp #$7E
  bne h5
  jmp delete
 h5 cmp #$9B
- bne h6
+ bne h9
  lda fpn
  beq h5a
  jsr o_fsplit
 h5a lda #13
  jmp insert
-h6 cmp #2
- bne h7
- lda #1
- jmp insert
-h7 cmp #9
- bne h8
- lda hmode
- cmp #PGV
- bne h7a
- jmp pwtab
-h7a lda #2
- jmp insert
-h8 cmp #$15
- bne h9
- lda #3
- jmp insert
 h9 cmp #32
  bcc hx
  cmp #127
  bcs hx
+ ldx pvf
+ beq h9i
+ jsr showsty
+ lda pvf
+ bne h9p
+h9i lda kk
  jmp insert
+h9p jmp ptype
 hx rts
+; style keys ^B bold ^O italic ^U underline ^K strike; align ^L left ^E centre ^R right ^Z justify; Tab indent, Shift-Tab / Ctrl-Tab outdent
+styt dta b(2),b(15),b($15),b(11),b(12),b(5),b(18),b(26),b($7F),b($9F),b($FF)
+; style bit to document code (bold, italic, underline, strike)
+stcode dta b(1),b(2),b(3),b(21)
 
 ; X = line; A = paragraph attribute marker found in the first line's header within pcs..pch1-1
 ; (0 = none); pal = the paragraph's first line, pidx = the marker's offset
@@ -259,10 +257,16 @@ pst4 iny
 pst5 cmp #11
  bcc pst4
  cmp #13
- bcs pst4
+ bcs pst6
  tax
  lda stb2-11,x
  eor psb
+ sta psb
+ jmp pst4
+pst6 cmp #21
+ bne pst4
+ lda psb
+ eor #$40
  sta psb
  jmp pst4
 pst3 inc psx
@@ -319,7 +323,7 @@ cs1 cpy cc
  beq cs2
  lda (tp),y
  cmp #5
- bcs cs3
+ bcs cs4
  tax
  lda stab-1,x
  eor cst
@@ -327,8 +331,14 @@ cs1 cpy cc
 cs3 iny
  bne cs1
 cs2 lda cst
- and #7
+ and #$47
  rts
+cs4 cmp #21
+ bne cs3
+ lda cst
+ eor #$40
+ sta cst
+ jmp cs3
 
 linelen
  ldx cl
