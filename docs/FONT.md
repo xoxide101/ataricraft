@@ -125,6 +125,11 @@ ACWriter (Character > Font) loads `.FNT` 8x8 charsets into bank 3; xCWriter's Pa
 * **Send to ACWriter** writes `NAME.FNT` (8 px) or `NAME.ACF` to H: through `FujiNet.emu.hostWrite`, or over BroadcastChannel `xcwriter` to an open emulator tab. **Use in xCWriter** stores the font in `craft.userfonts`. **Set as master** makes the current size the master for **Derive smaller** (locked and hand-edited sizes are kept).
 
 
+### xCWriter font lists
+
+xCWriter's Typeface list and the "Font for this section" picker (the `#secbar` row, shown in every view: High quality, Atari and Page) are built by `web/js/xcwriter/faces.js` from the Craft manifest (http only), `craft.userfonts`, `craft.myfonts` (one XCF family per font, written by the font editor) and the `craft.manifest` flags overlay. They are grouped Family > Style, one entry per size, labelled "Family N px" with support notes (ACWriter + xCWriter, or xCWriter only). Faces flagged off for xCWriter, and Craft faces on file:// (they need http), are hidden unless "show all" is ticked; then they are greyed with the reason. A section font now also changes HQ text (section < role style < paragraph font). Test: `scripts/xcwriter-sectionfont-test.cjs`.
+
+
 ## Font pipeline (down and up)
 
 One shared module, `tools/fontpipe.cjs` (+ `tools/sfnt.cjs`, a TrueType/OpenType/WOFF reader, rasteriser and TTF writer). Plain bytes in and out, no
