@@ -253,6 +253,13 @@ br0 lda cmdon
  lda exprl-5,y
  ldx exprh-5,y
 br0a jsr putstr
+ lda fpr
+ beq br0b
+ lda fop
+ cmp #9
+ bne br0b
+ jsr o_fpmt
+br0b
  ldx clen
  lda #'_'
  sta CMDB,x
@@ -331,7 +338,11 @@ br6e cmp #10
  lda #<rs17
  ldx #>rs17
  jmp br8
-br6g cmp #20
+br6g cmp #13
+ bne br6i
+ jsr o_fmsg
+ jmp br9
+br6i cmp #20
  bcc br6h
  jsr spmsg
  jmp br9

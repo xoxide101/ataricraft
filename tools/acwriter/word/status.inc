@@ -227,7 +227,10 @@ sf2 ldx th
  tax
  pla
  jsr putstr
-sf3 jsr stfin
+sf3 lda #' '
+ jsr putc
+ jsr fdesc
+ jsr stfin
  lda #<BUF
  sta tp
  lda #>BUF

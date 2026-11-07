@@ -23,13 +23,14 @@ bsoff lda $D301
  icl 'word/doc.inc'
  icl 'lib/util.inc'
  icl 'word/status.inc'
+ icl 'word/fontinfo.inc'
  icl 'word/home.inc'
  icl 'word/msgs.inc'
  icl 'word/ovl.inc'
  icl 'word/diskfs.inc'
 SLA = *                        ; overlay slot: 12 pages shared by the edit, spell and page code (word/ovl.inc)
  .if SLA+$0C00>DOC
- .error "overlay slot overlaps the document"
+  .error "overlay slot overlaps the document"
  .endif
  org SLA+$0C00
  .macro body
