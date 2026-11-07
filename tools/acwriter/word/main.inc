@@ -5,13 +5,14 @@ start
  sta PORTB
  jsr bk_cnt
  jsr bk_det
+ jsr ddinit
+ jsr mktab
+ jsr mkfont
+ jsr mkst
  lda sv_xe
  beq stn
  jsr ovstage
-stn jsr mktab
- jsr mkfont
- jsr mkst
- jsr openk
+stn jsr openk
  lda #<dl
  sta SDLSTL
  lda #>dl

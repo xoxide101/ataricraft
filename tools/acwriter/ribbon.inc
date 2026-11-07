@@ -290,12 +290,19 @@ br6 cmp #6
  bne br6b
  lda #<rs13
  ldx #>rs13
- jmp br8
+ jmp brnm
 br6b cmp #7
  bne br6c
  lda #<rs14
  ldx #>rs14
- jmp br8
+brnm jsr putstr
+ ldx #0
+brn1 lda FNB,x
+ cmp #$9B
+ beq br9
+ jsr putc
+ inx
+ bne brn1
 br6c cmp #8
  bne br6d
  lda #<rs15
@@ -303,7 +310,17 @@ br6c cmp #8
  jsr putstr
  lda fer
  jsr putnum
- jmp br9
+ lda fer
+ cmp #170
+ bne br6x
+ lda #<rs18
+ ldx #>rs18
+ jmp br8
+br6x cmp #162
+ bne br9
+ lda #<rs19
+ ldx #>rs19
+ jmp br8
 br6d cmp #9
  bne br6e
  lda #<rs16
@@ -344,8 +361,10 @@ rs8 dta c'Unknown command. Press Tab after a few letters to complete.',b(0)
 rs9 dta c'Not in the proof of concept yet.',b(0)
 rs11 dta c'Symbols: arrows pick, Enter inserts, Spc page, Esc cancels',b(0)
 rs12 dta c'File name (D1: is the default): ',b(0)
-rs13 dta c'Saved.',b(0)
-rs14 dta c'Loaded.',b(0)
+rs13 dta c'Saved ',b(0)
+rs14 dta c'Loaded ',b(0)
+rs18 dta c' - file not found',b(0)
+rs19 dta c' - disk full',b(0)
 rs15 dta c'Disk error ',b(0)
 rs16 dta c'Not an ACWriter file, or it is damaged.',b(0)
 rs17 dta c'That file is too big for the page.',b(0)

@@ -321,6 +321,8 @@ pcrt rts
 
 bm8 dta b($80),b($40),b($20),b($10),b($08),b($04),b($02),b($01)
 
+su_d = *
+ org SUA4
 mksh
  ldx #0
 ms1 txa
@@ -391,4 +393,5 @@ mf2 inx
  cpx #96
  bne mf1
  rts
+ org su_d
 
