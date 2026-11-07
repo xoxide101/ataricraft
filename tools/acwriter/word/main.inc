@@ -25,6 +25,8 @@ stn jsr openk
  sta COLOR1
  lda #$04
  sta COLOR4
+ lda #0
+ sta SHFLOK
  lda #$0F
  sta tcb
  lda #0
@@ -147,6 +149,7 @@ lgot
  lda RTCLOK+2
  sta tm
  jsr getkey
+ jsr casefix
 lgotk sta kk
  jsr cuoff
  lda #0
