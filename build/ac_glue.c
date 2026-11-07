@@ -7,6 +7,9 @@
 #include "cassette.h"
 #include "atari.h"
 #include "xep80.h"
+#include "pbi.h"
+#include "cpu.h"
+#include "pokey.h"
 #include <emscripten.h>
 
 /* SIO hook: JS (Module.acSio) returns 0 = not handled, else 'C','N','E' etc. */
@@ -77,3 +80,22 @@ EMSCRIPTEN_KEEPALIVE unsigned char *ac_xep80_screen(int n) { return n ? XEP80_sc
 /* cfg.c references these when HAVE_LIBZ is set; screenshot/video export is not built. */
 int File_Export_ReadConfig(char *string, char *ptr) { return 0; }
 void File_Export_WriteConfig(FILE *fp) { }
+
+/* ACNet register window $D1A0-$D1BF: JS (Module.acNet) implements the device; rw 0=read 1=write 2=peek */
+int ac_net_enabled = 0;
+EM_JS(int, ac_net_rw, (int rw, int addr, int val), {
+	return Module.acNet ? (Module.acNet(rw, addr, val) | 0) : 0;
+});
+EMSCRIPTEN_KEEPALIVE void ac_net_enable(int on) { ac_net_enabled = on; }
+/* Level-triggered IRQ line on the PBI bus (shares the POKEY IRQ with other sources) */
+EMSCRIPTEN_KEEPALIVE void ac_net_irq(int level)
+{
+	if (level) {
+		PBI_IRQ |= 0x100;
+		CPU_GenerateIRQ();
+	}
+	else if (PBI_IRQ & 0x100) {
+		PBI_IRQ &= ~0x100;
+		POKEY_PutByte(POKEY_OFFSET_IRQEN, POKEY_IRQEN);
+	}
+}
