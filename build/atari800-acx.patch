@@ -37,7 +37,7 @@ index 63910a8..4954c68 100644
  			Atari800_machine_type = Atari800_MACHINE_XLXE;
  			MEMORY_ram_size = 64;
 diff --git a/src/memory.c b/src/memory.c
-index 197e0a9..d5902c2 100644
+index 197e0a9..1c476bf 100644
 --- a/src/memory.c
 +++ b/src/memory.c
 @@ -88,6 +88,9 @@ static UBYTE under_cartA0BF[8192];
@@ -94,7 +94,7 @@ index 197e0a9..d5902c2 100644
  	AllocXEMemory();
  	alloc_axlon_memory();
  	alloc_mosaic_memory();
-@@ -727,6 +733,49 @@ static UBYTE const * builtin_cart(UBYTE portb)
+@@ -727,6 +733,58 @@ static UBYTE const * builtin_cart(UBYTE portb)
  	return NULL;
  }
  
@@ -124,8 +124,13 @@ index 197e0a9..d5902c2 100644
 +		ACX_SetExt(0);
 +}
 +
++/* ACNet register window (glue: build/ac_glue.c) */
++extern int ac_net_enabled;
++extern int ac_net_rw(int rw, int addr, int val);
++
 +UBYTE ACX_D1GetByte(UWORD addr, int no_side_effects)
 +{
++	if (ac_net_enabled && addr >= 0xd1a0 && addr <= 0xd1bf) return (UBYTE) ac_net_rw(no_side_effects ? 2 : 0, addr, 0);
 +	if (MEMORY_acx && MEMORY_ram_size == 1088) {
 +		if (addr == 0xd1f0) return (UBYTE) acx_ext;
 +		if (addr == 0xd1f1) return 0xac;
@@ -135,6 +140,10 @@ index 197e0a9..d5902c2 100644
 +
 +void ACX_D1PutByte(UWORD addr, UBYTE byte)
 +{
++	if (ac_net_enabled && addr >= 0xd1a0 && addr <= 0xd1bf) {
++		ac_net_rw(1, addr, byte);
++		return;
++	}
 +	if (MEMORY_acx && MEMORY_ram_size == 1088 && addr == 0xd1f0 && atarixe_memory != NULL) {
 +		ACX_SetExt(byte);
 +		return;
@@ -144,7 +153,7 @@ index 197e0a9..d5902c2 100644
  /* Note: this function is only for XL/XE! */
  void MEMORY_HandlePORTB(UBYTE byte, UBYTE oldval)
  {
-@@ -771,7 +820,7 @@ void MEMORY_HandlePORTB(UBYTE byte, UBYTE oldval)
+@@ -771,7 +829,7 @@ void MEMORY_HandlePORTB(UBYTE byte, UBYTE oldval)
  				bank = (((byte & 0x0e) + ((byte & 0x60) >> 1)) >> 1) + 1;
  				break;
  			case 1088:
@@ -153,7 +162,7 @@ index 197e0a9..d5902c2 100644
  				break;
  			}
  		cpu_bank = (oldval & 0x10) ? 0 : MEMORY_xe_bank;
-@@ -1132,7 +1181,7 @@ UBYTE MEMORY_HwGetByte(UWORD addr, int no_side_effects)
+@@ -1132,7 +1190,7 @@ UBYTE MEMORY_HwGetByte(UWORD addr, int no_side_effects)
  		}
  		break;
  	case 0xd100:				/* PBI page D1 */
@@ -162,7 +171,7 @@ index 197e0a9..d5902c2 100644
  		break;
  	case 0xd600:				/* PBI page D6 */
  		byte = PBI_D6GetByte(addr, no_side_effects);
-@@ -1212,7 +1261,7 @@ void MEMORY_HwPutByte(UWORD addr, UBYTE byte)
+@@ -1212,7 +1270,7 @@ void MEMORY_HwPutByte(UWORD addr, UBYTE byte)
  		}
  		break;
  	case 0xd100:				/* PBI page D1 */
