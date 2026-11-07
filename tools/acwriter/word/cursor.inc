@@ -295,13 +295,9 @@ stf5 cmp qql
 stf6 stx qqt
  rts
 
-; finish the status text in BUF: keep the left part within 41 columns, then "Pg n/m Lnn" up to column 53
-stfin lda bi
- cmp #41
- bcc stf1
- lda #41
- sta bi
-stf1 lda #41
+; finish the status text in BUF: keep the left part within 39 columns, then "Pg n/m Lnn" then CAPS at column 49
+stfin jsr capsset
+stf1 lda qqt
  jsr stpad
  jsr stcalc
  lda #<spg
@@ -320,10 +316,7 @@ stf1 lda #41
  clc
  adc #1
  jsr putnum
- lda #53
- jsr stpad
- lda #0
- jmp putc
+ jmp capsput
 ; in-place row draw without a visible blank: render the row (ruler or status, rule line included) into RB, then copy it over
  .if * > $0500
  .error "status finish code overruns page 5 variables"

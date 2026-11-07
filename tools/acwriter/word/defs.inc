@@ -13,6 +13,7 @@ COLPF2 = $D018
 tcb    = $BB
 tci    = $BC
 CH     = $02FC
+SHFLOK = $02BE
 RTCLOK = $12
 ATRACT = $4D
 PORTB  = $D301

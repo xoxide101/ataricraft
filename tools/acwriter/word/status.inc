@@ -257,3 +257,74 @@ tfh dta h(fb),h(fb),h(fam),h(fgr)
 kname dta c'K:',b($9B)
 helpmsg dta c'Esc menu  ^X command  ^B ^I ^U style  F1 help',b(0)
 
+; Caps lock indicator at column 49 of the status line: inverse CAPS when on (SHFLOK bit 6), plain caps when off
+capsv = $BFE3
+capscol = $BFE4
+capsput lda capscol
+ jsr stpad
+ lda SHFLOK
+ and #$40
+ sta capsv
+ beq cpo
+ lda #<fcap
+ ldx #>fcap
+ jmp putstr
+cpo lda #<fnoc
+ ldx #>fnoc
+ jmp putstr
+fcap dta b(4),c'CAPS',b(4),b(0)
+fnoc dta c'caps  ',b(0)
+
+; idle loop: redraw the status line when the caps lock changed
+capsck lda SHFLOK
+ and #$40
+ cmp capsv
+ beq cck9
+ jmp status
+cck9 rts
+
+; The K: handler swallows the Caps key and then waits for the next real key, which would leave the status line stale,
+; so the Caps key is handled here (plain = toggle, Shift = caps lock, Control = control lock) before it reaches K:.
+lckc jsr capskey
+ bcc lckn
+ jsr capsck
+ jmp loop
+lckn jmp lgot
+capskey lda CH
+ and #$3F
+ cmp #$3C
+ bne cknot
+ lda CH
+ asl
+ bcs ckct
+ bmi cksh
+ ldx #0
+ lda SHFLOK
+ bne ckst
+cksh ldx #$40
+ bne ckst
+ckct ldx #$80
+ckst stx SHFLOK
+ lda #$FF
+ sta CH
+ sec
+ rts
+cknot clc
+ rts
+
+capsset ldx #49
+ lda hmode
+ cmp #PGV
+ bne stf0
+ ldx #41
+stf0 stx capscol
+ txa
+ sec
+ sbc #10
+ sta qqt
+ lda bi
+ cmp qqt
+ bcc stf1x
+ lda qqt
+ sta bi
+stf1x rts
