@@ -39,12 +39,12 @@ const ok = (m) => console.log('ok  ' + m);
     // Export menu
     assert.strictEqual(await p.locator('details.menu #bsave').count(), 1); await p.evaluate(() => { document.querySelector('details.menu').open = true; }); await shot('file-export-menu'); ok('Export buttons grouped in one menu');
     await p.evaluate(() => { document.querySelector('details.menu').open = false; FE.showTab('edit'); });
-    for (const [w, h] of [[1280, 800], [1000, 700], [760, 900]]) { await p.setViewportSize({ width: w, height: h }); await p.waitForTimeout(250); await shot('file-' + w + 'x' + h); }
+    for (const [w, h] of [[1280, 800], [1000, 700], [760, 900]]) { await p.setViewportSize({ width: w, height: h }); await p.waitForTimeout(250); await shot('file-' + w + 'x' + h); } await p.setViewportSize({ width: 1600, height: 1000 });
     // ---- phase 2: dashed size really derives from the master; hints; registry tree, flags, group/split ------------------------------------
     await p.evaluate(() => localStorage.removeItem('craft.hint')); await p.reload(); await p.waitForFunction(() => window.FE && FE.state.f);
     assert.ok(await p.isVisible('#hint')); await p.click('#hintx'); assert.ok(!(await p.isVisible('#hint')));
     await p.reload(); await p.waitForFunction(() => window.FE && FE.state.f); assert.ok(!(await p.isVisible('#hint'))); ok('first-run hint shows once and stays dismissed');
-    await p.click('#bnew'); await p.waitForFunction(() => FE.state.fam.name.startsWith('New font'));
+    await p.evaluate(() => document.getElementById('bnew').click()); await p.waitForFunction(() => FE.state.fam.name.startsWith('New font'));
     assert.strictEqual(await p.locator('#sizes .sz.missing').count(), 12);
     await p.evaluate(() => { const f = FE.state.f; const g = f.glyphs[65] || (f.glyphs[65] = new Array(f.rows).fill(0)); for (let r = 3; r < 9; r++) for (let q = 1; q < 10; q++) g[r] = FE.CF.setPx(f, g[r], q); f.glyphs[65] = g; });
     await p.click('#sizes .sz[data-size="8"]');

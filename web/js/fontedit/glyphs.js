@@ -64,7 +64,9 @@
 
   // ---- the grid ---------------------------------------------------------------------------------------------------------------
   st.cat = 'all'; st.query = ''; st.visible = [];
-  const cv = $('grid'), cx = cv.getContext('2d'), TW = 40, TH = 46;
+  const cv = $('grid'), cx = cv.getContext('2d');
+  let TW = 40, TH = 46, GZ = 1; // tile size; the panel zoom (panels.js) scales it
+  FE.gridZoom = (z) => { if (z === undefined) return GZ; GZ = Math.max(0.6, Math.min(4, z)); TW = Math.round(40 * GZ); TH = Math.round(46 * GZ); drawGrid(); return GZ; };
   function visibleCodes() {
     const base = codesOfCat(st.cat), mt = matcher(st.query);
     return mt ? base.filter((c) => mt(info(c))) : base;
@@ -83,7 +85,7 @@
     const cols = Math.max(1, Math.floor(W / TW)), rows = Math.max(1, Math.ceil(st.visible.length / cols));
     cv.width = cols * TW; cv.height = rows * TH; st.gcols = cols;
     cx.fillStyle = C.bg; cx.fillRect(0, 0, cv.width, cv.height);
-    cx.font = '10px system-ui,sans-serif'; cx.textAlign = 'center';
+    cx.font = Math.round(10 * Math.max(1, GZ)) + 'px system-ui,sans-serif'; cx.textAlign = 'center';
     st.visible.forEach((code, i) => {
       const x = (i % cols) * TW, y = ((i / cols) | 0) * TH, slot = f.map[code], g = f.glyphs[slot], has = g && g.some((v) => v), sel = st.sel.has(slot);
       if (sel) { cx.fillStyle = slot === st.slot ? C.acc + '55' : C.acc + '2a'; cx.fillRect(x + 1, y + 1, TW - 2, TH - 2); }
