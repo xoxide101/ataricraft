@@ -27,6 +27,10 @@ ICAX2  = $034B
 
 SCR  = $A060
 DOC  = $6400
+SUA1  = $6000                  ; start-up routines (run once, then the overlay slot overwrites them)
+SUA2  = $6080
+SUA3  = $6100
+SUA4  = $6200
 LPL  = $9000
 LPH  = $9100
 BUF  = $0600

@@ -2,6 +2,8 @@ PWt dta b(3),b(5),b(8),b(10),b(13),b(15)
 ST = $9C00
 
 ; build the horizontal stretch tables: for each size 1..6 and 5-bit cell, a left-aligned 16-bit pixel word
+su_a = *
+ org SUA1
 mkst ldx #1
 mst1 stx szh
  lda PWt-1,x
@@ -74,6 +76,7 @@ mst7 lsr
  cpx #7
  bne mst1
  rts
+ org su_a
 
 ; A = width in cells; sets pit, avl/avh (pixels), returns A = characters that fit
 szcap sta zbx

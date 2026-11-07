@@ -26,7 +26,7 @@ helpdoc
  dta b(13)
  dta b(1),c'Files',b(1),b(13)
  dta c'Open/Save ask for a name. Without a device it is D1:',b(13)
- dta c'and .CWD is added: D1:LETTER becomes D1:LETTER.CWD.',b(13)
+ dta c'and .XCW is added: D1:LETTER becomes D1:LETTER.XCW.',b(13)
  dta c'H:NAME is used as typed (emulator host files).',b(13)
  dta c'Save keeps the name; Save-As asks again.',b(13)
  dta c'Format CRFT: 16 byte header + text stream, see',b(13)
@@ -103,7 +103,7 @@ helpdoc
  dta b(13)
  dta c'Letter Perfect, PaperClip, Text Wizard, Bank Street,',b(13)
  dta c'RTF and Word files: convert on the PC first with',b(13)
- dta c'  node tools/craftimport.cjs INPUT OUTPUT.CWD',b(13)
+ dta c'  node tools/craftimport.cjs INPUT OUTPUT.XCW',b(13)
  dta c'Then press E to edit the result.',b(13)
  dta b(0)
  .endm

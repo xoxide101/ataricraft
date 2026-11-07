@@ -1,3 +1,5 @@
+su_b = *
+ org SUA2
 mktab
  lda #0
  sta tmp
@@ -54,6 +56,7 @@ mt3 lda src
  cpx #24
  bne mt3
  rts
+ org su_b
 
 ; rebuild line pointer table
 scan

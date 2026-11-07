@@ -15,7 +15,6 @@ bsoff lda $D301
  icl 'word/text.inc'
  icl 'word/scale.inc'
  icl 'word/spacer.inc'
- icl 'word/picker.inc'
  icl 'word/file.inc'
  icl 'lib/barfont.inc'
  icl 'word/cmds.inc'
@@ -25,9 +24,9 @@ bsoff lda $D301
  icl 'lib/util.inc'
  icl 'word/status.inc'
  icl 'word/home.inc'
- icl 'word/import.inc'
  icl 'word/msgs.inc'
  icl 'word/ovl.inc'
+ icl 'word/diskfs.inc'
 SLA = *                        ; overlay slot: 12 pages shared by the edit, spell and page code (word/ovl.inc)
  .if SLA+$0C00>DOC
  .error "overlay slot overlaps the document"
@@ -152,6 +151,8 @@ homedoc
  homebody
 convdoc
  convbody
+ icl 'word/import.inc'
+ icl 'word/picker.inc'
 e_end = *
  .endl
  run start

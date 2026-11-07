@@ -1,5 +1,5 @@
 ; File Save / Open through CIO. Format: docs/CRAFT-FORMAT.md (16-byte header + text stream).
-; Names default to D1: and ".CWD"; a name with a device prefix (H:NAME) is used as typed.
+; Names default to D1: and ".XCW"; a name with a device prefix (H:NAME) is used as typed.
 HDR  = $1400
 fnl  = $1410
 fop  = $1411
@@ -119,7 +119,7 @@ fz_df8a cmp #2
 fz_df8b cmp #3
  beq fz_df8c
  jmp dosave
-fz_df8c jmp doimport
+fz_df8c jmp o_import
 
 dosave
  lda sg_n
@@ -557,4 +557,4 @@ fz_pl9 lda #7
  jsr fblk
  cpy #$80
  rts
-fext dta c'.CWD.FNT'
+fext dta c'.XCW.FNT'

@@ -109,7 +109,10 @@ fbm2 lda #0
  sta fns
  sta sg_n
  sta sg_c
- jmp doimport
+ jmp o_import
+o_import ovstub H.doimport,4
+hpick ovstub H.hpick,4
+pkkey ovstub H.pkkey,4
 o_fclip ovstub Z.fclip,3
 o_sgsave ovstub E.sgsave,0
 o_sgload ovstub E.sgload,0
