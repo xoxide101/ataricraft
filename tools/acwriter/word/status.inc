@@ -288,6 +288,7 @@ ssy1 jsr curstyle
  rts
 
 ; Caps lock indicator at column 49 of the status line: inverse CAPS when on (SHFLOK bit 6), plain caps when off
+keyshift = $BFEE
 capsv = $BFE3
 capscol = $BFE4
 capsput lda capscol
@@ -319,7 +320,10 @@ lckc jsr capskey
  bcc lckn
  jsr capsck
  jmp loop
-lckn jmp lgot
+lckn lda CH
+ and #$40
+ sta keyshift
+ jmp lgot
 capskey lda CH
  and #$3F
  cmp #$3C
@@ -358,3 +362,23 @@ stf0 stx capscol
  lda qqt
  sta bi
 stf1x rts
+
+; Typing case like a PC: a letter is upper when exactly one of Shift and Caps Lock is on (the OS makes it upper when both are)
+casefix tax
+ and #$DF
+ cmp #65
+ bcc cfx
+ cmp #91
+ bcs cfx
+ lda SHFLOK
+ and #$40
+ eor keyshift
+ beq cfl
+ txa
+ and #$DF
+ rts
+cfl txa
+ ora #$20
+ rts
+cfx txa
+ rts
