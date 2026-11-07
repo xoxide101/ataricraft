@@ -255,7 +255,7 @@ xr5 cmp #1
  bne xr6
  jsr exhome
  jmp xrmv
-xr6 cmp #5
+xr6 cmp #17
  bne xr7
  jsr exend
 xrmv jsr exgcp
@@ -287,9 +287,45 @@ xr11 lda #0
  clc
  rts
 
+; style key with a selection: put the style code at both ends (one paragraph only)
+exsty txa
+ pha
+ jsr exhloff
+ pla
+ tax
+ lda stcode,x
+ sta exsc
+ jsr exsrt
+ mv16 ed_lo,src
+xy1 cmp16 src,ed_hi
+ bcs xy2
+ ldy #0
+ lda (src),y
+ cmp #13
+ beq xy9
+ inc16 src
+ jmp xy1
+xy2 mv16 ed_hi,ed_q
+ jsr xy3
+ mv16 ed_lo,ed_q
+ jsr xy3
+ jsr scan
+ mv16 ed_cp,ed_q
+ jsr exp2c
+ jmp exoff
+xy3 jsr exone
+ jsr exgap
+ lda exsc
+ jsr exstb
+ jmp exadj
+xy9 lda #40
+ sta cmsg
+ jmp exoff
+exsc = $BFED
+
 ; keys with no selection; carry set = handled
 exkeys lda kk
- ldx #11
+ ldx #9
 xk1 cmp exkt,x
  beq xk2
  dex
@@ -304,9 +340,9 @@ xk3 lda exjh,x
  lda exjl,x
  pha
  rts
-exkt dta b(1),b(4),b(5),b(6),b(7),b(12),b(16),b(18),b(19),b(25),b(14),b(15)
-exjl dta l(exhome-1),l(excut-1),l(exend-1),l(exfind-1),l(exnext-1),l(exgoto-1),l(expaste-1),l(exrepl-1),l(exmark-1),l(excopy-1),l(exsgn-1),l(exsgp-1)
-exjh dta h(exhome-1),h(excut-1),h(exend-1),h(exfind-1),h(exnext-1),h(exgoto-1),h(expaste-1),h(exrepl-1),h(exmark-1),h(excopy-1),h(exsgn-1),h(exsgp-1)
+exkt dta b(1),b(4),b(17),b(6),b(7),b(23),b(16),b(14),b(19),b(25)
+exjl dta l(exhome-1),l(excut-1),l(exend-1),l(exfind-1),l(exnext-1),l(exsgp-1),l(expaste-1),l(exsgn-1),l(exmark-1),l(excopy-1)
+exjh dta h(exhome-1),h(excut-1),h(exend-1),h(exfind-1),h(exnext-1),h(exsgp-1),h(expaste-1),h(exsgn-1),h(exmark-1),h(excopy-1)
 
 ; command table hook: commands other than cut/copy/paste/mark end the selection
 excx ldx ed_on

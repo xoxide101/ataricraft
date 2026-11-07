@@ -350,6 +350,14 @@ szr3 lda style
  lda #$1F
  sta v
 szr4 lda style
+ and #$40
+ beq szr4a
+ ldy ry
+ cpy #3
+ bne szr4a
+ lda #$1F
+ sta v
+szr4a lda style
  and #8
  beq szr5
  lda v

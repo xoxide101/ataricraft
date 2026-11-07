@@ -1,4 +1,4 @@
-; Spell checker (Search > Spell check, ^K). Dictionary format and hash: docs/DICTIONARY.md.
+; Spell checker (Search > Spell check). Dictionary format and hash: docs/DICTIONARY.md.
 ; The dictionary (CDIC file) is read once: on a 130XE the 16 KB bit table goes into extended bank 1 (window
 ; $4000-$7FFF, switched in only inside bk_get / bk_put at $9300); on a stock 64K machine it is placed
 ; just below $9000, in the unused top of the document area, and released when the check ends.

@@ -95,6 +95,9 @@ hmr24 dta b(0),b(0),b(0),b(1),b(1),b(1),b(2),b(2),b(2),b(3),b(3),b(3),b(4),b(4),
  .local E
  icl 'word/edit.inc'
 e_end = *
+ .if e_end>SLA+$0C00
+ .error 'overlay image too big'
+ .endif
  .endl
  org $AD00
  org r:SLA
@@ -102,12 +105,18 @@ e_end = *
  icl 'word/spell.inc'
  icl 'word/legend.inc'
 e_end = *
+ .if e_end>SLA+$0C00
+ .error 'overlay image too big'
+ .endif
  .endl
  org $B500
  org r:SLA
  .local R
  icl 'word/print.inc'
 e_end = *
+ .if e_end>SLA+$0C00
+ .error 'overlay image too big'
+ .endif
  .endl
  org $A100
  org r:SLA
@@ -115,6 +124,9 @@ e_end = *
  icl 'word/page.inc'
  icl 'craftpg.inc'
 e_end = *
+ .if e_end>SLA+$0C00
+ .error 'overlay image too big'
+ .endif
  .endl
  org $977B
  icl 'craftpg_a.inc'
@@ -126,6 +138,9 @@ e_end = *
  icl 'word/zoom.inc'
  icl 'word/fontz.inc'
 e_end = *
+ .if e_end>SLA+$0C00
+ .error 'overlay image too big'
+ .endif
  .endl
 
  org $96A0
@@ -155,6 +170,11 @@ convdoc
  convbody
  icl 'word/import.inc'
  icl 'word/picker.inc'
+ icl 'word/sizes.inc'
+ icl 'word/typing.inc'
 e_end = *
+ .if e_end>SLA+$0C00
+ .error 'overlay image too big'
+ .endif
  .endl
  run start

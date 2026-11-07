@@ -85,6 +85,7 @@ Toggles: the first occurrence turns the style on, the next turns it off. Zero wi
 | 1 | bold |
 | 2 | italic |
 | 3 | underline |
+| 21 | strikethrough (toggle; ACWriter 0.1.6; tools\xcwcore.cjs ignores it, treated as an unknown zero-width code) |
 | 4 | inverse |
 | 11 | superscript (one size, raised) |
 | 12 | subscript (one size, lowered) |

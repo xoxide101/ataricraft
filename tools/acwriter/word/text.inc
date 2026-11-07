@@ -168,7 +168,7 @@ dt1 jsr cuhit
  bcc dtchar
  cmp #32
  bcs dtchar
- jmp dtnext
+ jmp dtst
 dtsty tax
  lda stab-1,x
  eor style
@@ -216,6 +216,12 @@ dtmk cmp #11
  tax
  lda stb2-11,x
  eor style
+ sta style
+ jmp dtnext
+dtst cmp #21
+ bne dtnext
+ lda style
+ eor #$40
  sta style
  jmp dtnext
 
@@ -312,6 +318,14 @@ dc7 lda style
  lda #$1F
  sta v
 dc8 lda style
+ and #$40
+ beq dc8a
+ ldy ry
+ cpy #3
+ bne dc8a
+ lda #$1F
+ sta v
+dc8a lda style
  and #8
  beq dc9
  lda v

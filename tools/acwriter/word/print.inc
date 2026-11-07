@@ -527,20 +527,32 @@ gb6 lsr wh
  bne gb6
 gb7 lda cst
  and #4
- beq gb8
+ beq gb7a
  lda wl
  ora #$20
  sta wl
+gb7a lda cst
+ and #$40
+ beq gb8
+ lda wh
+ ora #$04
+ sta wh
 gb8 lda wh
  sta ghi,x
  lda wl
  sta glo,x
  inx
  cpx #3
- bne gb2
- lda #0
+ beq gbx
+ jmp gb2
+gbx lda #0
  sta ghi+3
  lda cst
+ and #$40
+ beq gb9a
+ lda #$04
+ sta ghi+3
+gb9a lda cst
  and #4
  beq gb9
  lda #$20
@@ -610,10 +622,16 @@ gt1 inc16 src
  beq gte
  cmp #14
  beq gte
- bcs getc
+ bcs gt2
  tax
  lda tgb,x
  eor st
+ sta st
+ jmp getc
+gt2 cmp #21
+ bne getc
+ lda st
+ eor #$40
  sta st
  jmp getc
 gte sta eol

@@ -58,6 +58,13 @@ ov_no lda #40
  clc
  rts
 
+hlg ovstub H.hlg,4
+hsm ovstub H.hsm,4
+hwid ovstub H.hwid,4
+hht ovstub H.hht,4
+hfont ovstub H.hfont,4
+stykey ovstub H.stykey,4
+ptype ovstub H.ptype,4
 hspell ovstub S.hspell,1
 hsetdict ovstub S.hsetdict,1
 spkey ovstub S.spkey,1
@@ -66,6 +73,7 @@ o_spm20 ovstub S.spm20,1
 exrkey ovstub E.exrkey,0
 expre ovstub E.expre,0
 exkeys ovstub E.exkeys,0
+exsty ovstub E.exsty,0
 exdone ovstub E.exdone,0
 excx ovstub E.excx,0
 excut ovstub E.excut,0
