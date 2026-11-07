@@ -214,7 +214,7 @@
     $('atlay').onchange = $('atinv').onchange = drawAtari;
     $('simtext').value = 'The quick brown fox jumps over the lazy dog.\n{i}INVERSE VIDEO{/i} normal 0123456789\n\u250c\u2500\u2500\u2500\u2510 \u2665\u2663\u2666\u2660 \u2190\u2191\u2192\u2193\n\u2514\u2500\u2500\u2500\u2518';
     $('simtext').oninput = $('simz').onchange = drawScreens;
-    $('brom').onclick = () => FE.openEntry('url:library/fonts/local/atarirom.fnt').catch((e) => { FE.toast('ROM charset not found in the library (' + e.message + '): choose ATARIXL.ROM or a .fnt file'); $('file').click(); });
+    $('brom').onclick = () => FE.openRomCharset();
   });
   FE.onTab('atari', () => { if (FE.val) FE.val.render(); });
 })();
