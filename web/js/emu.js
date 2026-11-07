@@ -6,13 +6,12 @@ window.AC = window.AC || {};
   const STATE_SIZE = 128 + 128 + 210000;
   const SCREEN_W = 384, SCREEN_H = 240, VIS_X1 = 24, VIS_W = 336;
 
-  // The ACX 8192 KB machine (Ataricraft's own 8 MB system) has no emulation yet: libatari800 tops out at 4 MB (Axlon) and the AltirraSDL core exposes no 8 MB memory option.
-  const ACX = { v: 'acx8192', label: 'ACX 8192 KB (Ataricraft 8 MB)', args: [], no: { atari800: 'libatari800 cannot do 8 MB: its largest banked RAM is 4 MB (Axlon, 800 only).', altirra: 'The AltirraSDL core exposes no 8 MB memory option (largest is 1088 KB; high memory is not reachable from its options).' } };
+  // ACX 8192 KB (Ataricraft's own 8 MB system): the 1088K PORTB scheme plus a segment register at $D1F0, via -acx in the patched libatari800 (build/atari800-acx.patch). AltirraSDL has no equivalent.
+  const ACX = { v: 'acx8192', label: 'ACX 8192 KB (Ataricraft 8 MB)', args: ['-acx'], no: { altirra: 'The AltirraSDL core exposes no 8 MB memory option (largest is 1088 KB). Use the Atari800 core.' } };
   const AXLON = [
     { v: 'ax2096', label: 'Axlon 2096 KB (2 MB)', args: ['-atari', '-axlon', '2080'], no: { altirra: 'AltirraSDL core has no Axlon option. Use the Atari800 core.' } },
-    { v: 'ax4144', label: 'Axlon 4144 KB (4 MB)', args: ['-atari', '-axlon', '4128'], no: { altirra: 'AltirraSDL core has no Axlon option. Use the Atari800 core.' } },
-    ACX,
-  ];
+    { v: 'ax4144', label: 'Axlon 4144 KB (4 MB)', args: ['-atari', '-axlon', '4128'], no: { altirra: 'AltirraSDL core has no Axlon option.     Use the Atari800 core.' } },
+      ];
   const XL_RAM = [
     { v: '64', label: '64 KB', args: ['-xl'] },
     { v: '128', label: '128 KB (130XE)', args: ['-xe'] },
