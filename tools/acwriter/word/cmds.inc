@@ -197,13 +197,15 @@ hlg lda #1
  lda #0
  sta wrpf
  jsr stw
- jmp sth
+ jsr sth
+ jmp fnote
 hsm lda #$FF
  sta dlt
  lda #0
  sta wrpf
  jsr stw
- jmp sth
+ jsr sth
+ jmp fnote
 ; keep-together characters: a space and a hyphen that reflow never breaks at
 ; legend: append one entry per superscript run (up to 15 chars) at the end of the document
 lgn = $050A
@@ -377,7 +379,8 @@ hf1 lda #22
  bne hf3
 hf2 lda #23
 hf3 sta pam
- jmp hset
+ jsr hset
+ jmp fnote
 
 ; themes: paper, blue, amber, green (body bg, body ink, bar bg, bar ink)
 hcol ldx th
@@ -513,7 +516,7 @@ ith dta h(it0),h(it1),h(it2),h(it3),h(it4),h(it5),h(it6)
 it0 dta b(3),c'N',b(3),c'ew  ',b(3),c'O',b(3),c'pen  ',b(3),c'S',b(3),c'ave  Save-',b(3),c'A',b(3),c's  ',b(3),c'H',b(3),c'ome  Hel',b(3),c'p  P',b(3),c'r',b(3),c'int',b(0)
 it1 dta b(3),c'U',b(3),c'ndo  Cu',b(3),c't',b(3),c'  ',b(3),c'C',b(3),c'opy  ',b(3),c'P',b(3),c'aste  ',b(3),c'M',b(3),c'ark  T',b(3),c'o',b(3),c'p  ',b(3),c'E',b(3),c'nd',b(0)
 it2 dta b(3),c'F',b(3),c'ind  ',b(3),c'N',b(3),c'ext  ',b(3),c'R',b(3),c'eplace  ',b(3),c'G',b(3),c'oto  ',b(3),c'S',b(3),c'pell check  ',b(3),c'D',b(3),c'ictionary',b(0)
-it3 dta b(3),c'R',b(3),c'egular ',b(3),c'B',b(3),c'old ',b(3),c'I',b(3),c'talic ',b(3),c'U',b(3),c'nderline ',b(3),c'S',b(3),c'maller ',b(3),c'L',b(3),c'arger F',b(3),c'o',b(3),c'nts',b(0)
+it3 dta b(3),c'R',b(3),c'egular ',b(3),c'B',b(3),c'old ',b(3),c'I',b(3),c'talic ',b(3),c'U',b(3),c'nderline ',b(3),c'S',b(3),c'maller ',b(3),c'L',b(3),c'arger f',b(3),c'O',b(3),c'nt ',b(3),c'F',b(3),c'ace',b(0)
 it4 dta b(3),c'L',b(3),c'eft  ',b(3),c'C',b(3),c'enter  ',b(3),c'R',b(3),c'ight  ',b(3),c'J',b(3),c'ustify  ',b(3),c'B',b(3),c'ullet  ',b(3),c'I',b(3),c'ndent',b(0)
 ip6 dta c'V',b(53),c'P',b(54),c'T',b(55),c'L',b(56),c'R',b(57),c'1',b(58),c'2',b(59),c'3',b(60),c'X',b(61),c'Z',b(62),b(0)
 it6 dta b(3),c'V',b(3),c'iew page  ',b(3),c'P',b(3),c'aper  pi',b(3),c'T',b(3),c'ch  ',b(3),c'L',b(3),c'eft  ',b(3),c'R',b(3),c'ight  tab ',b(3),c'1',b(3),c' ',b(3),c'2',b(3),c' ',b(3),c'3',b(3),c' ',b(3),c'X',b(3),c' clear ',b(3),c'Z',b(3),c'oom',b(0)

@@ -95,6 +95,9 @@ o_prt ovstub R.prt,5
 hpgz ovstub Z.hpgz,3
 pzmain ovstub Z.pzmain,3
 hface ovstub Z.hface,3
+o_fslot ovstub Z.fcurslot,3
+o_fmsg ovstub Z.fmsg,3
+o_fpmt ovstub Z.fpmt,3
 o_fnload ovstub Z.fnload,3
 o_fsplit ovstub Z.fsplit,3
 o_fjoin ovstub Z.fjoin,3

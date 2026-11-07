@@ -9,6 +9,11 @@ hface lda #9
  sta fop
  jmp fask
 
+; slot of the paragraph at the cursor (for the status line)
+fcurslot ldx cl
+ jsr fpara
+ jmp ffind
+
 ; X = line -> A = paragraph number (hard line ends before that line)
 fpara stx fz3
  lda #0
@@ -664,3 +669,54 @@ fsv8e stx fln
 fsv9 ldy #1
 fsvr rts
 fromn dta c'ROM',b(0)
+
+; "[Craft] NAME NAME": the faces, current one in brackets (stops before the line is full)
+ffaces lda #0
+ffa1 sta fv3
+ cmp fv1
+ bne ffa2
+ lda #'['
+ jsr putc
+ffa2 lda fv3
+ jsr fname
+ lda fv3
+ cmp fv1
+ bne ffa3
+ lda #']'
+ jsr putc
+ffa3 lda #' '
+ jsr putc
+ lda bi
+ cmp #22
+ bcs ffa4
+ lda fv3
+ cmp fns
+ bcs ffa4
+ adc #1
+ jmp ffa1
+ffa4 rts
+
+; cmsg 13: after a size or weight change
+fmsg lda #<fm1
+ ldx #>fm1
+ jsr putstr
+ jsr fdesc
+ lda #<fm2
+ ldx #>fm2
+ jmp putstr
+fm1 dta c'Font: ',b(0)
+fm2 dta c' (current)',b(0)
+
+; the font prompt continues "Font: " with the current font and the loaded faces
+fpmt jsr fdesc
+ lda #<fm3
+ ldx #>fm3
+ jsr putstr
+ jsr ffaces
+ lda #<fm4
+ ldx #>fm4
+ jmp putstr
+fm3 dta c' ',b(0)
+fm4 dta c'File: ',b(0)
+
+
