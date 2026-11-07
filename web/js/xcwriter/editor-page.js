@@ -22,16 +22,7 @@
   // typefaces come from XFACE (faces.js): one bitmap per character, scaled into the cell, so the 8x8, 10x12 and 12x12 faces show their
   // real pixels at every zoom. The standard face (no font on the paragraph) stays the 4x7 ACWriter font.
   function faceRows(face, c) { const f = XFACE.use(face), bm = f && f.get(c); if (!bm) return null; return Array.from({ length: bm.h }, (_, y) => { let n = 0; for (let x = 0; x < bm.w; x++) n = (n << 1) | bm.px[y * bm.w + x]; return n; }); }
-  function fillFaceSelect() {
-    const sel = $('pgfont'), cur = sel.value; sel.innerHTML = '<option value="">Standard (ACWriter 4x7)</option>';
-    const groups = {};
-    for (const f of XFACE.list()) {
-      const g = groups[f.group] = groups[f.group] || Object.assign(document.createElement('optgroup'), { label: f.group });
-      const o = document.createElement('option'); o.value = f.id; o.textContent = f.label + ' [' + f.id + ']' + (f.state === 'error' ? ' - cannot load' : ''); g.appendChild(o);
-    }
-    for (const g of Object.values(groups)) sel.appendChild(g);
-    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
-  }
+  function fillFaceSelect() { XFACE.fill($('pgfont'), 'Standard (ACWriter 4x7)'); }
   XFACE.onChange(() => { fillFaceSelect(); FCACHE = {}; render(); });
   XFACE.init();
   const page = () => P.info(XW.page || {});

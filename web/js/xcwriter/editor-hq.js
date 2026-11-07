@@ -54,17 +54,19 @@
   // paragraphs with a Craft typeface get that face as a web font (bitmap faces become a generated TrueType font, TTF/OTF use their own file);
   // the pixel size is a whole multiple of the cell height so the pixels stay crisp
   const hqFamilyIsVector = (css) => /XCV_/.test(css);
+  // the face of a paragraph is resolved like every other view does (document default < section font < style < paragraph font, docs/FONT.md)
   function applyFaces() {
-    for (const el of hq.querySelectorAll('p[data-font]')) {
-      const id = el.dataset.font, f = XFACE.get(id);
-      if (!f) continue;
-      const css = XFACE.css(id);
-      if (!css) { XFACE.hqFont(f).then((c) => { if (c) applyFaces(); }); continue; }
+    const els = [...hq.children], RF = XCW.Page.resolve(els.map((el) => ({ font: el.dataset.font || '', sec: !!el.dataset.sec, sf: el.dataset.sf || '', role: el.dataset.role || '', size: +el.dataset.size || 0 })), (window.XW && XW.page) || {});
+    els.forEach((el, i) => {
+      const f = RF[i].face && XFACE.get(RF[i].face);
+      if (!f) { if (el.dataset.xf) { delete el.dataset.xf; el.style.fontFamily = el.style.fontSize = el.style.lineHeight = el.style.letterSpacing = ''; el.removeAttribute('title'); } return; }
+      const id = f.id, css = XFACE.css(id);
+      if (!css) { XFACE.use(id); XFACE.hqFont(f).then((c) => { if (c) applyFaces(); }); return; }
       const pt = parseFloat(hq.style.fontSize) || 11, k = Math.max(1, Math.round((pt * 4 / 3 * 1.5) / (f.h || 12)));
       const px = hqFamilyIsVector(css) ? Math.round(pt * 4 / 3) : k * (f.h || 12);
-      el.style.fontFamily = css; el.style.fontSize = px + 'px';
-      el.style.lineHeight = Math.round(px * 1.35) + 'px'; el.style.letterSpacing = '0'; el.style.fontWeight = ''; el.title = 'Typeface ' + f.label;
-    }
+      el.dataset.xf = id; el.style.fontFamily = css; el.style.fontSize = px + 'px';
+      el.style.lineHeight = Math.round(px * 1.35) + 'px'; el.style.letterSpacing = '0'; el.style.fontWeight = ''; el.title = 'Typeface ' + XFACE.labelOf(f);
+    });
   }
   XFACE.onChange(applyFaces);
 

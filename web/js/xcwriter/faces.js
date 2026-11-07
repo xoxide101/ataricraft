@@ -11,7 +11,7 @@
   const screenCode = (c) => (c >= 96 ? c : c - 32);
   const toB64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
   const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-  const notify = () => listeners.forEach((f) => f());
+  const notify = () => { version++; listeners.forEach((f) => f()); };
 
   // ACWriter document byte 128..159 = Atari graphics 0..31 (docs/FONT.md); they fill the whole advance, so they are not centred like letters
   const gfxSlot = (c) => (c >= 128 && c < 160 ? c - 128 : -1);
@@ -38,11 +38,13 @@
   }
 
   async function load(face) {
-    if (face.state === 'ready' || face.state === 'loading') return face.ready;
+    if (face.state === 'ready' || face.state === 'loading' || face.state === 'error') return face.ready;
     face.state = 'loading';
     face.ready = (async () => {
       try {
+        await null;
         if (face.user) setData(face, { acf: CF.parse(fromB64(face.user)) });
+        else if (!face.url) throw new Error('its file cannot be read from here');
         else {
           const buf = new Uint8Array(await (await fetch(face.url)).arrayBuffer());
           if (/\.fnt$/i.test(face.url)) { if (buf.length !== 1024) throw new Error('not a 1 KB Atari charset'); setData(face, { fnt: buf }); }
@@ -66,6 +68,96 @@
   }
   function userFonts() { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch (e) { return {}; } }
 
+  // ---- the family tree: Family > Style > Size with support flags (docs/FONT.md "Family registry") ---------------------------------------
+  // The font editor keeps imported families in localStorage craft.myfonts (XCF text per family) and the user's flags in craft.manifest;
+  // both are read here, so every font added there is a typeface per size, named "<Family> <n> px".
+  const MYKEY = 'craft.myfonts', MANKEY = 'craft.manifest', SHOWKEY = 'xcw.showall';
+  const FF = window.FE_FAMILY || null, TARGET_ORDER = ['acwriter-atari', 'xcwriter', 'print'];
+  let version = 0, mineRaw = null, manRaw = null, showAll = false;
+  try { showAll = localStorage.getItem(SHOWKEY) === '1'; } catch (e) { /* storage unavailable */ }
+  const readKey = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+  function manifest() {
+    if (!FF) return null;
+    const m = FF.craft();
+    try {
+      const u = JSON.parse(readKey(MANKEY) || 'null');
+      if (u && u.format === FF.FORMAT) {
+        for (const f of u.families || []) { const i = m.families.findIndex((x) => x.id === f.id); if (i >= 0) m.families[i] = f; else m.families.push(f); }
+        Object.assign(m.targets, u.targets || {});
+      }
+    } catch (e) { /* damaged overlay: shipped rules only */ }
+    return m;
+  }
+  const craftSize = (id) => { const m = /^CRAFT(\d+)$/.exec(id); return m ? +m[1] : 0; };
+  // which apps use a face: { 'acwriter-atari': true, ... } plus the registry labels
+  function supportOf(face) {
+    const m = manifest(), out = {}; if (!FF || !m) return out;
+    const size = face.size || craftSize(face.id) || (face.state === 'ready' ? face.h : 0) || (/\.fnt$/i.test(face.url || '') ? 8 : 0), T = FF.targets(m);
+    const reg = FF.find(m, face.famId || (craftSize(face.id) ? 'craft-sans' : '')), style = face.style || 'regular';
+    for (const t of Object.keys(T)) {
+      if (reg && reg.styles.some((s) => s.sizes[size])) out[t] = FF.supports(m, reg, style, size, t);
+      else out[t] = T[t].styles ? false : T[t].sizes === 'all' || (Array.isArray(T[t].sizes) && T[t].sizes.includes(size));
+    }
+    face.targetLabels = Object.fromEntries(Object.keys(T).map((t) => [t, T[t].label]));
+    return out;
+  }
+  // why a face cannot be used right now ('' = fine)
+  function statusOf(face) {
+    if (face.needsHttp && !/^https?:/.test(location.protocol)) return 'needs xCWriter served over http (this page was opened from a file)';
+    if (face.state === 'error') return 'cannot be loaded (' + face.error + ')';
+    if (supportOf(face).xcwriter === false) return 'turned off for xCWriter in the font editor';
+    return '';
+  }
+  const noteOf = (face) => { const s = supportOf(face); return s['acwriter-atari'] ? 'ACWriter + xCWriter' : 'xCWriter only (ACWriter loads sizes 4-8)'; };
+  const labelOf = (face) => face.famName && face.size ? face.famName + ' ' + face.size + ' px' : face.label;
+  function titleOf(face) {
+    const s = supportOf(face), L = face.targetLabels || {}, why = statusOf(face);
+    return labelOf(face) + ' (' + face.id + ')\nUsed by: ' + (Object.keys(s).filter((t) => s[t]).map((t) => L[t] || t).join(', ') || 'no app') + (why ? '\nNot available: ' + why : '');
+  }
+  const mineIds = {};
+  function refreshMine() {
+    const raw = readKey(MYKEY), man = readKey(MANKEY);
+    if (raw === mineRaw && man === manRaw) return false;
+    mineRaw = raw; manRaw = man;
+    let my = {}; try { my = JSON.parse(raw || '{}'); } catch (e) { /* damaged: nothing added */ }
+    const keep = new Set(), taken = (id, key) => faces[id] && faces[id].mineKey !== key;
+    for (const name of Object.keys(my)) {
+      let r; try { r = XCW.FontPipe.fromXcf(my[name]); } catch (e) { continue; }
+      const famName = (r.fam && r.fam.name) || name, famId = FF ? FF.slug(name) : name;
+      for (const k of Object.keys(r.fam.sizes).map(Number).sort((a, b) => a - b)) {
+        const key = name + '\n' + k; let id = mineIds[key];
+        if (!id || taken(id, key)) {
+          const base = faceId(famName) || 'FONT', suffix = String(k);
+          id = base.slice(0, 8 - suffix.length) + suffix;
+          for (let n = 2; taken(id, key); n++) id = base.slice(0, 8 - suffix.length - String(n).length) + n + suffix;
+          mineIds[key] = id;
+        }
+        let bytes; try { bytes = CF.serialize(r.fam.sizes[k]); } catch (e) { continue; }
+        const u = toB64(bytes), f = add(id, famName + ' ' + k + ' px', famName + ' (my fonts)', { user: u, groupId: 'mine', mineKey: key, famName, famId, size: k, style: 'regular' });
+        if (f.user !== u) { f.user = u; f.state = 'new'; f.cache = {}; f.ttf = null; delete hqFamilies[id]; }
+        keep.add(id);
+      }
+    }
+    for (const id of Object.keys(faces)) if (faces[id].mineKey && !keep.has(id)) { delete faces[id]; order.splice(order.indexOf(id), 1); delete hqFamilies[id]; }
+    return true;
+  }
+  // fills a <select> with the faces as Group (family) > size, hiding unavailable ones unless "show all" (then greyed with the reason)
+  function fill(sel, blank, o) {
+    o = o || {}; const cur = o.keep !== undefined ? o.keep : sel.value, groups = new Map();
+    sel.innerHTML = '';
+    const opt = (v, t, d, title) => { const e = document.createElement('option'); e.value = v; e.textContent = t; if (d) e.disabled = true; if (title) e.title = title; return e; };
+    sel.appendChild(opt('', blank));
+    if (o.rom) sel.appendChild(opt('ROM', 'Standard (ACWriter 4x7)'));
+    for (const f of order.map((id) => faces[id])) {
+      const why = statusOf(f), isCur = f.id === cur;
+      if (why && !showAll && !isCur) continue;
+      let g = groups.get(f.group); if (!g) { g = Object.assign(document.createElement('optgroup'), { label: f.group }); groups.set(f.group, g); sel.appendChild(g); }
+      g.appendChild(opt(f.id, labelOf(f) + (why ? ' - ' + why : ' - ' + noteOf(f)), !!why && !isCur, titleOf(f)));
+    }
+    if (cur && ![...sel.options].some((e) => e.value === cur)) sel.appendChild(opt(cur, cur + ' (not installed in this browser)', false));
+    sel.value = cur;
+  }
+
   async function init() {
     const http = /^https?:/.test(location.protocol);
     if (http) {
@@ -75,22 +167,29 @@
           if (!/\.(fnt|acf|ttf|otf)$/i.test(f.url)) continue;
           let id = faceId(f.url);
           for (let n = 2; faces[id]; n++) id = faceId(f.url).slice(0, 8 - String(n).length) + n;
-          add(id, f.label || (g.id === 'personal' ? f.name : f.name.replace(/\.[^.]*$/, '')), g.label, { url: f.url, groupId: g.id });
+          add(id, f.label || (g.id === 'personal' ? f.name : f.name.replace(/\.[^.]*$/, '')), g.label, Object.assign({ url: f.url, groupId: g.id }, craftSize(id) ? { famName: 'Craft Sans', famId: 'craft-sans', size: craftSize(id), style: 'regular' } : {}));
         }
       } catch (e) { /* no manifest: run node scripts/fontlist.cjs */ }
+    } else {
+      // from a file the face files cannot be fetched: list the Craft sizes anyway, greyed with the reason
+      for (const k of [12, 10, 8, 6, 5, 4]) add('CRAFT' + k, 'Craft Sans ' + k + ' px', 'Craft faces', { groupId: 'craft', needsHttp: true, famName: 'Craft Sans', famId: 'craft-sans', size: k, style: 'regular' });
     }
     refreshUser();
     notify();
   }
   function refreshUser() {
+    refreshMine();
     const u = userFonts();
     for (const id of Object.keys(u)) {
       if (faces[id] && !faces[id].user) continue;
+      if (faces[id] && faces[id].mineKey) continue;
       const f = add(id, id + ' (font editor)', 'Font editor (this browser)', { user: u[id], groupId: 'user' });
       if (f.user !== u[id]) { f.user = u[id]; f.state = 'new'; f.cache = {}; }
     }
   }
-  window.addEventListener('storage', (e) => { if (e.key === LS) { refreshUser(); notify(); } });
+  const resync = () => { refreshUser(); notify(); };
+  window.addEventListener('storage', (e) => { if (e.key === LS || e.key === MYKEY || e.key === MANKEY || e.key === null) resync(); });
+  window.addEventListener('focus', () => { if (refreshMine()) notify(); });
 
   // Minimal TrueType file from the bitmaps of a face (96 ASCII glyphs): each ink run is one rectangle, so the browser draws the pixel
   // face crisp at any size. 100 font units per pixel.
@@ -200,7 +299,10 @@
   }
 
   window.XFACE = {
-    faces, order, init, load, faceId, ttfOf, hqFont, fold,
+    faces, order, init, load, faceId, ttfOf, hqFont, fold, fill, statusOf, supportOf, labelOf, noteOf,
+    get version() { return version; },
+    get showAll() { return showAll; },
+    setShowAll(v) { showAll = !!v; try { localStorage.setItem(SHOWKEY, showAll ? '1' : '0'); } catch (e) { /* storage unavailable */ } notify(); },
     list: () => order.map((id) => faces[id]),
     get: (id) => (id ? faces[id] || faces[String(id).toUpperCase()] || null : null),
     // starts loading and returns the face once its bitmaps are ready (null before that)
