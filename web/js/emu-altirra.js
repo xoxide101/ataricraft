@@ -61,6 +61,8 @@ window.AC = window.AC || {};
     }
 
     static async boot(opt) {
+      const rs = ((AC.MODELS[opt.model] || {}).ram || []).find((r) => r.v === opt.ram);
+      if (rs && rs.no && rs.no.altirra) throw new Error(rs.label + ': ' + rs.no.altirra);
       const m = await loadModule();
       const emu = new AltEmu(m, opt);
       const a = emu.aw;
