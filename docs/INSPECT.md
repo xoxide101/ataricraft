@@ -51,12 +51,12 @@ Run from Inject, or `AC.Inspect.runProg('PING')`, or `node tools/ctl.cjs prog PI
 
 ![Inspector, Banks tab](screenshots/13-inspect-banks.png)
 
-The Banks tab (or `AC.Inspect.banks`: `scan()`, `read(bank, off, len)`, `write`, `fill`, `find`) shows every 16 KB bank behind the $4000 window. RAM sizes are 128, 320 (Rambo/Compy-Shop), 576 and 1088 K (4, 16, 32, 64 banks).
+The Banks tab (or `AC.Inspect.banks`: `scan()`, `read(bank, off, len)`, `write`, `fill`, `find`) shows every 16 KB bank behind the $4000 window. RAM sizes are 128, 192 (Compy-Shop), 320 (Rambo/Compy-Shop), 576 and 1088 K (4, 8, 16, 32, 64 banks); Axlon sizes are covered in Memory configurations below.
 
 - Neither WASM core exposes extended RAM, so a ~380-byte monitor (`tools/bankmon`, rebuilt with `node tools/bankmon/build.cjs`) is injected into a free page and hooks the VBI vector. Reading holds a bank mapped for about two frames.
 - Needs libatari800. On Altirra the page only gets a read-only copy of the 64 KB view, so it reports an error.
 - Programs that replace the NMI/VBI vector or disable OS interrupts will stop the monitor responding (it times out with an error).
-- There is no 256K or 512K option in the emulator; the sizes are 128, 320 (Rambo and Compy-Shop), 576 and 1088.
+- There is no 256K or 512K option in the emulator; the XL/XE sizes are 128, 192, 320 (Rambo and Compy-Shop), 576 and 1088.
 - Tested: `node scripts/bank-test.cjs` (libatari800 at 128, 320 Rambo, 576 and 1088K: every byte of every bank, write/readback, find) and `node scripts/inspect-ui-test.cjs` (the buttons). Not tested: 320 Compy-Shop banking, real hardware (a real machine would need the monitor loaded from disk and a way to read the bank out).
 - From outside: `node tools/ctl.cjs banks | bank N [OFF] [LEN] | bankfind "text" | bankwrite N OFF BYTE...`.
 
@@ -81,3 +81,19 @@ node tools/ctl.cjs shot out.png
 Under the hood it POSTs `{method,args}` to the relay's `/ctl/call`; the page long-polls `/ctl/poll`, runs the call from a fixed allow-list (see `AC.Remote` in `web/js/inspect.js`) and answers through `/ctl/result`. Every call needs the relay token. The relay only listens on 127.0.0.1.
 
 Test: `node scripts/inspect-test.cjs`. Not checked: a second machine on the LAN driving it, or real FujiNet software reading the changed IP.
+
+## Memory configurations (RAM dropdown)
+
+Entries a core cannot emulate stay in the list but are disabled, with the reason as a tooltip; the choice is remembered per core switch and in localStorage (c.ctl). Logic: web/js/ramsel.js; lists: XL_RAM/AXLON/ACX in web/js/emu.js, RAM in web/js/emu-altirra.js. Test: 
+ode scripts/ram-config-test.cjs.
+
+| Entry | libatari800 | AltirraSDL | Verified |
+|---|---|---|---|
+| Compy-Shop 192 KB (XL/XE) | yes, via a generated config file (RAM_SIZE=192; there is no CLI option) | no | PORTB memtest: 8 banks, 0 errors |
+| Axlon 2096 KB (2 MB) (400/800) | yes, -axlon 2080: 128 banks of 16 KB | no | $CFFF bank register: 128 distinct banks |
+| Axlon 4144 KB (4 MB) (400/800) | yes, -axlon 4128: 256 banks | no | $CFFF bank register: 256 distinct banks |
+| ACX 8192 KB (Ataricraft 8 MB) | no, disabled | no, disabled | not implementable |
+
+- Axlon: atari800 takes a total of 32 + 16 x banks KB with a power-of-two bank count up to 256, so the labels (2096, 4144) map to 2080 and 4128. The bank number is written to $CFFF; the window is $4000-.
+- Altirra: the WASM build only exposes ltirra_memory (8K to 64K, 128K, 256K, 320K, 576K, 1088K, Compy variants) plus Rapidus/65C816. There is no 192K or Axlon. Rapidus 65C816 high memory was tried; long-address stores hang in this build, so 8 MB could not be confirmed.
+- ACX 8192 is the Ataricraft product's own 8 MB RAM and is a placeholder here. Intended scheme (to be fixed for the real system): 512 banks of 16 KB behind a bank register selecting the $4000- window, i.e. an Axlon-style register extended to 9 bits. Booting it shows an explanatory message instead of starting.

@@ -6,21 +6,30 @@ window.AC = window.AC || {};
   const STATE_SIZE = 128 + 128 + 210000;
   const SCREEN_W = 384, SCREEN_H = 240, VIS_X1 = 24, VIS_W = 336;
 
+  // The ACX 8192 KB machine (Ataricraft's own 8 MB system) has no emulation yet: libatari800 tops out at 4 MB (Axlon) and the AltirraSDL core exposes no 8 MB memory option.
+  const ACX = { v: 'acx8192', label: 'ACX 8192 KB (Ataricraft 8 MB)', args: [], no: { atari800: 'libatari800 cannot do 8 MB: its largest banked RAM is 4 MB (Axlon, 800 only).', altirra: 'The AltirraSDL core exposes no 8 MB memory option (largest is 1088 KB; high memory is not reachable from its options).' } };
+  const AXLON = [
+    { v: 'ax2096', label: 'Axlon 2096 KB (2 MB)', args: ['-atari', '-axlon', '2080'], no: { altirra: 'AltirraSDL core has no Axlon option. Use the Atari800 core.' } },
+    { v: 'ax4144', label: 'Axlon 4144 KB (4 MB)', args: ['-atari', '-axlon', '4128'], no: { altirra: 'AltirraSDL core has no Axlon option. Use the Atari800 core.' } },
+    ACX,
+  ];
   const XL_RAM = [
     { v: '64', label: '64 KB', args: ['-xl'] },
     { v: '128', label: '128 KB (130XE)', args: ['-xe'] },
+    { v: '192', label: 'Compy-Shop 192 KB', args: [], cfg: 'MACHINE_TYPE=Atari XL/XE\nRAM_SIZE=192\n', no: { altirra: 'AltirraSDL has no 192 KB mode (its sizes are 64, 128, 320, 576 and 1088 KB). Use the Atari800 core.' } },
     { v: '320r', label: '320 KB (Rambo)', args: ['-rambo'] },
     { v: '320c', label: '320 KB (Compy-Shop)', args: ['-320xe'] },
     { v: '576', label: '576 KB', args: ['-576xe'] },
     { v: '1088', label: '1088 KB', args: ['-1088xe'] },
+    ACX,
   ];
   const MODELS = {
-    '800': { label: 'Atari 800', romFlag: '-osb_rom', osKind: '800', def: '48', ram: [{ v: '48', label: '48 KB', args: ['-atari'] }, { v: '52', label: '52 KB', args: ['-atari', '-c'] }] },
+    '800': { label: 'Atari 800', romFlag: '-osb_rom', osKind: '800', def: '48', ram: [{ v: '48', label: '48 KB', args: ['-atari'] }, { v: '52', label: '52 KB', args: ['-atari', '-c'] }, ...AXLON] },
     '800xl': { label: 'Atari 800XL', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: XL_RAM },
     '65xe': { label: 'Atari 65XE', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: XL_RAM },
     '130xe': { label: 'Atari 130XE', romFlag: '-xlxe_rom', osKind: 'xl', def: '128', ram: XL_RAM },
     '1200xl': { label: 'Atari 1200XL', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-1200'] }] },
-    '400': { label: 'Atari 400', romFlag: '-osb_rom', osKind: '800', def: '16', ram: [{ v: '16', label: '16 KB', args: ['-atari', '-ram', '16'] }, { v: '48', label: '48 KB', args: ['-atari'] }] },
+    '400': { label: 'Atari 400', romFlag: '-osb_rom', osKind: '800', def: '16', ram: [{ v: '16', label: '16 KB', args: ['-atari', '-ram', '16'] }, { v: '48', label: '48 KB', args: ['-atari'] }, ...AXLON] },
     '1400xl': { label: 'Atari 1400XL', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-xl'] }] },
     '1440xkd': { label: 'Atari 1440XKD', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-xl'] }] },
     '1450xld': { label: 'Atari 1450XLD', romFlag: '-xlxe_rom', osKind: 'xl', def: '64', ram: [{ v: '64', label: '64 KB', args: ['-xl'] }] },
@@ -44,7 +53,9 @@ window.AC = window.AC || {};
       const model = MODELS[opt.model];
       m.FS.writeFile('/os.rom', opt.os);
       const ram = model.ram.find((r) => r.v === opt.ram) || model.ram.find((r) => r.v === model.def);
+      if (ram.no && ram.no.atari800) throw new Error(ram.label + ': ' + ram.no.atari800);
       const args = ['atari800', opt.tv === 'pal' ? '-pal' : '-ntsc', ...ram.args, (opt.osA && model.osKind === '800' ? '-osa_rom' : model.romFlag), '/os.rom', '-H1', '/host',       '-hreadwrite', '-mouse', 'touch', '-directmouse'];
+      if (ram.cfg) { m.FS.writeFile('/ram.cfg', ram.cfg); args.push('-config', '/ram.cfg'); }
       m.FS.mkdir('/host');
       for (const [n, b] of Object.entries(opt.host || {})) m.FS.writeFile('/host/' + n, b);
       if (opt.basic) {
