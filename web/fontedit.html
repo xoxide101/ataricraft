@@ -9,6 +9,7 @@
 <body>
 <header id="top">
   <h1><b>Craft</b> Font Editor</h1>
+  <button id="bchoose" class="primary" title="Open the big font chooser: search, big samples, all sizes (Ctrl+Shift+O)"><span>Choose font</span> &#9662;</button>
   <button id="tgl" class="on" title="Show/hide the Fonts panel">Fonts</button>
   <input id="name" title="Name of the family (used for file names)" placeholder="family name">
   <button id="undo" title="Undo (Ctrl+Z)">Undo</button><button id="redo" title="Redo (Ctrl+Y)">Redo</button>
@@ -17,6 +18,7 @@
   <button id="emustat" class="emustat" title="Atari emulator link">Emulator not connected</button><span id="autosaved" class="dim"></span><button id="bautorestore" title="Reopen the last autosaved session">Restore autosave</button>
   <button id="bopen" title="Add a font: TTF, OTF, WOFF, BDF, PCF, PNG sheet, ACF, XCF, FNT charset. You can also drop files anywhere.">Import font...</button>
   <input id="file" type="file" multiple hidden>
+  <input id="romfile" type="file" hidden>
   <details class="menu"><summary>Export</summary><div class="pop">
     <h4>This size</h4>
     <button id="bsave" title="Craft ACF (all sizes of the family)">Craft .acf</button>
@@ -52,11 +54,12 @@
 <div id="main">
   <aside id="lpanel">
     <h3>Fonts</h3>
+    <button id="bbrowse" class="primary" style="width:100%" title="Big window with samples of every font">Browse all fonts...</button>
     <input id="fsearch" type="search" placeholder="Search fonts..." style="width:100%">
     <div id="fchips"></div>
     <div id="flist" role="listbox"></div>
 <details class="rawopt"><summary class="dim" title="Binary charsets carry no header: tell the editor the cell size and character order">Raw / binary import options</summary><div class="row dim">Raw binary files: cell <input id="rawcw" type="number" min="1" max="23" value="8" style="width:44px"> x <input id="rawch" type="number" min="1" max="26" value="8" style="width:44px"> <select id="raworder"><option value="seq">in order from code 0</option><option value="atari-screen">Atari screen-code order</option><option value="atascii">ATASCII order</option><option value="c64-screen">C64 screen codes</option></select></div></details>
-    <div class="row"><button id="bnew" title="A blank 12 px family to draw from scratch">+ New blank font</button><button id="bemurom" title="Read the standard Atari character set from the connected emulator">ROM charset from emulator</button><span id="fcount" class="dim"></span></div>
+    <div class="row"><button id="bnew" title="A blank 12 px family to draw from scratch">+ New blank font</button><button id="bemurom" title="Atari ROM character set: from the connected emulator, a ROM saved by the emulator page, or a ROM file you choose">Atari ROM charset</button><span id="fcount" class="dim"></span></div>
     <div id="imp" hidden>
       <b>Importing <span id="impname"></span></b>
       <div id="impinfo" class="dim"></div>
@@ -283,6 +286,17 @@
   </aside>
 </div>
 <div id="status"><span>Craft sizes 4-26 px + Atari 8x8</span><span class="sp"></span><span>Drop font files anywhere to add a family - press ? for shortcuts</span></div>
+<div id="chooser" hidden role="dialog" aria-modal="true" aria-label="Choose font">
+  <div class="chbox">
+    <div class="chtop"><b>Choose a font</b><input id="chq" type="search" placeholder="Search by name, tag or kind..." autocomplete="off">
+      <label class="dim">Sample <input id="chtext" value="Hamburgefonstiv 0123 ABC xyz" style="width:230px"></label>
+      <label class="dim">Size <input id="chsize" type="range" min="4" max="26" value="12"> <span id="chsizev">12 px</span></label>
+      <span class="seg"><button id="chgridb" title="Cards">Grid</button><button id="chlistb" title="One font per row">List</button></span>
+      <button id="chclose" title="Close (Esc)">&times;</button></div>
+    <div class="chbody"><div id="chtree"></div><div id="chgrid" class="chgrid grid" role="listbox"></div></div>
+    <div class="chbot"><span id="chcount" class="dim"></span><span class="dim">Up/Down to move, Enter or double-click to pick, Esc to close</span><span class="sp"></span><button id="chpick" class="primary" disabled>Select a font</button></div>
+  </div>
+</div>
 <div id="drop" hidden>Drop fonts to add families</div>
 <div id="help" hidden><div><div class="row"><h3 style="margin:0;flex:1">Keyboard shortcuts</h3><button id="helpclose">Close</button></div><div id="helpkeys"></div></div></div>
 <script src="js/fontlib.js?v=1"></script>
@@ -307,5 +321,6 @@
 <script src="js/fontedit/quality.js"></script>
 <script src="js/fontedit/validate.js"></script>
 <script src="js/fontedit/emulator.js"></script>
+<script src="js/fontedit/chooser.js"></script>
 </body>
 </html>

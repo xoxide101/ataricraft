@@ -89,6 +89,7 @@
   FE.srcs = new Map();
   FE.openEntry = async (id, size) => {
     const e = entries.get(id); if (!e) throw new Error('unknown font ' + id);
+    if (/atarirom\.fnt$/.test(id) && !e.fam && location.protocol === 'file:') { await FE.openRomCharset(); return; }
     if (!e.fam) {
       if (e.kind === 'craft') {
         if (id === 'zfont') { const meta = acwFaces().find((x) => x.id === 'zfont'), f = CF.parse(FE.b64ToBuf(meta.acf)); e.acw = new Map([[f, 'zfont']]); e.fam = CF.familyNew(f, 'ZFont'); }

@@ -280,6 +280,11 @@ The **Outline** tab edits the real outlines behind the pixels (`web/js/fontedit/
 | SVG font, UFO, Windows `.fon`, EOT/WOFF2 writers | not yet | not yet | - | planned |
 
 Export lives in the Export menu (*Retro and other formats*); import is drag and drop or *Import font...*. Binary files carry no header, so the cell size and character order come from *Raw / binary import options* under the Fonts list.
+
+### Choose font window and Atari ROM charset
+
+- The header button **Choose font** (shows the current font and size; Ctrl+Shift+O) and **Browse all fonts...** in the Fonts panel open a large window (about 85% of the screen): search box, one card per font with a sample drawn in that font (editable sample text, size slider 4-26, nearest existing size per font), Grid/List switch, a left tree (Family > Style > Size) with favourites and tag filters. Up/Down moves, Enter, double-click or Select picks, Esc closes. Stars share the favourites of the Manager tab (`craft.mgr`). Library files on `file://` cannot be read by the browser, so their sample appears after the font is opened. The small list in the Fonts panel stays as a quick strip. Code: `web/js/fontedit/chooser.js`.
+- **Atari ROM charset** (Fonts panel and Atari tab) tries, in order: the connected emulator; a ROM the emulator page saved in this browser (IndexedDB `ataricraft` / `roms`, XL OS first); the library file (http only); then a file window where you pick ATARIXL.ROM (16 KB, set at +0x2000 = $E000), a 400/800 OS ROM (10 KB, set at +0x800) or a 1024-byte `.fnt`. Anything else is searched for the standard first two glyphs; if no set is found the message says so. Test: `scripts/fontedit-ui7-test.cjs`.
 ## Font editor status (implemented / planned)
 
 | Area | State |
@@ -290,3 +295,4 @@ Export lives in the Export menu (*Retro and other formats*); import is drag and 
 | Outline layer: glyf/CFF/TTC contours, point editing, pen/knife/shapes, rasterize, TTF/OTF/WOFF export, pixel fonts as square contours | implemented (phase 4); anchors/composites, CFF2 planned |
 | Formats: PSF, PCF write, GEM, C64, ZX, MSX/CPC, raw, Atari orders, TTC, EOT, WOFF write, with round-trip tests | implemented (phase 5); SVG font, UFO, .fon, WOFF2 write planned |
 | Font manager (favourites, tags, collections, compare, coverage, duplicates, hand-off) | implemented (phase 6: Manager tab, tested by fontedit-ui6-test) |
+| Choose font window, Atari ROM charset without emulator | implemented (fontedit-ui7-test) |
