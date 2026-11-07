@@ -84,7 +84,14 @@ h5 cmp #$9B
  lda fpn
  beq h5a
  jsr o_fsplit
-h5a lda #13
+h5a ldx pvf
+ beq h5b
+ lda #0
+ sta pend
+ lda #13
+ sta kk
+ jmp ptype
+h5b lda #13
  jmp insert
 h9 cmp #32
  bcc hx

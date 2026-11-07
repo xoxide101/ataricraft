@@ -94,7 +94,7 @@ Two overlaps reported by `xex-overlap.cjs` were real corruption, not overlay reu
 The zoom-view header and status lines (and the menu bar) still use the Atari OS text-mode charset. Switching them to the Standard face needs a second text blitter in the resident area (about 0.3 KB for the blitter plus a 768-byte charset in a bank); the resident area and overlay slot are full, so this is not done. Status: not implemented.
 
 
-## Cursor, redraw, status, fonts, version (0.1.5)
+## Cursor, redraw, status, fonts, version (0.1.5; 0.1.6 changes: save to D1 as .XCW, font in status, CAPS, typing styles and keys, colour fix)
 
 - **Cursor**: `word/cursor.inc`. A 5x8 XOR block blinks via RTCLOK in text mode (only its own cell toggles); it stays on while keys are pressed or idle. PAGE and zoom use a static XOR cursor.
 - **No flicker**: typing/moving redraws the cursor line in place through the row buffer `RB` (`redrawcur`, `qrw`), never clearing first. Ruler and status rows also redraw in place. Full redraw only on scroll, reflow, join/delete line, menu close, or **Ctrl-T** (force redraw).
