@@ -6,7 +6,10 @@ pdf = $BFEB
 pdn = $BFEC
 
 ; X = index into the key table styt: 0-3 style, 4-7 align, 8 Tab (indent on/off), 9-10 Shift-Tab / Ctrl-Tab (outdent)
-stykey cpx #4
+stykey cpx #11
+ bne sk0
+ jmp selmap
+sk0 cpx #4
  bcs sk3
  stx pcx
  jsr showsty
@@ -84,3 +87,53 @@ pc2 inx
  rts
 pcb dta b(1),b(2),b(4),b($40)
 sal dta b(20),b(21),b(22),b(23)
+
+; Selection keys (called from handle when a selection exists or Shift is down). Returns A = 1: toggle the mark
+; (Shift+arrow with no selection starts one, a plain arrow ends a Shift selection), A = 2: delete the selected
+; text first (typing over it), A = 0: nothing. Windows clipboard keys are translated to the ^D ^Y ^P commands.
+shsel = $BFEF
+selmap lda kk
+ cmp #$1C
+ bcc sm5
+ cmp #$20
+ bcs sm5
+ lda keyshift
+ bne sm1
+ lda ed_on
+ and shsel
+ beq sm9
+ lda #0
+ sta shsel
+ lda #1
+sm9 rts
+sm1 lda ed_on
+ bne sm0
+ lda #1
+ sta shsel
+ rts
+sm5 lda kk
+ ldx #0
+ stx shsel
+ ldy ed_on
+ beq sm0
+ ldx #3
+sm6 cmp smk,x
+ beq sm7
+ dex
+ bpl sm6
+ cmp #32
+ bcc sm0
+ cmp #125
+ bcc sm8
+ cmp #$9B
+ bne sm0
+sm8 lda #2
+ rts
+sm7 lda smt,x
+ sta kk
+sm0 lda #0
+ rts
+smk dta 24,3,22,126
+smt dta 4,25,16,4
+arc dta 6,7,14,15
+ard dta 30,31,28,29

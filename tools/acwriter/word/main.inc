@@ -130,7 +130,7 @@ lhelp lda RTCLOK+2
  jmp lgotk
 lc2 lda CH
  cmp #$FF
- bne lcx
+ bne lckc
  jsr cuidle
  jsr capsck
  lda sd
@@ -144,7 +144,18 @@ lc2 lda CH
  sta sd
  jsr status
  jmp loop
-lcx jmp lckc
+lckc jsr capskey
+ bcc lckn
+ jsr capsck
+ jmp loop
+lckn lda CH
+ and #$40
+ sta keyshift
+ beq lgot
+ lda CH
+ bpl lgot
+ and #$BF
+ sta CH
 lgot
  lda RTCLOK+2
  sta tm

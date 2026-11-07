@@ -7,6 +7,17 @@ hn_s lda ed_rp
  beq hn_r
  jmp exrkey
 hn_r lda ed_on
+ ora keyshift
+ beq hn_e
+ ldx #11
+ jsr stykey
+ beq hn_r1
+ lsr
+ bcc hn_r2
+ jsr exmark
+ bne hn_r1
+hn_r2 jsr excut
+hn_r1 lda ed_on
  beq hn_e
  lda kk
  ldx #3
