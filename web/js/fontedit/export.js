@@ -99,6 +99,7 @@
     files.push([base + '/family.manifest.json', Buffer.from(FE.manifestJson())]);
     const f8 = (!target || FE.targetOn(8, target, fam0)) && FE.atari8(false); if (f8) files.push([base + '/' + base + '8.fnt', Buffer.from(CF.toFnt(f8))]);
     if (Object.keys(st.kern).length) files.push([base + '/kerning.json', Buffer.from(JSON.stringify(st.kern, null, 1))]);
+    const cr = FE.creditsText && FE.creditsText(st.fam.name); if (cr) files.push([base + '/CREDITS.txt', Buffer.from(cr)]);
     files.push([base + '/README.txt', Buffer.from('Craft font family "' + fam.name + '"\nSizes' + (target ? ' for ' + target : '') + ': ' + Object.keys(fam.sizes).join(', ') + ' px (master ' + fam.master + ')\nMade with the Craft Font Editor (docs/FONT.md).\n.acf = Craft ACF2, .bdf/.ttf = lossless pixel exports, .xcf = whole family, .fnt = Atari 1K charset (8x8).\n')]);
     return { name: base + '.zip', zip: Buffer.from(XCW.zipStore(files)), count: files.length };
   };

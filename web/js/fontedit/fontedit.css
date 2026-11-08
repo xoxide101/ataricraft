@@ -139,3 +139,11 @@ details.sec>summary{display:inline-block}details.sec>.pbar{display:inline-flex;b
 .laybar{display:inline-flex;gap:2px;margin:0 6px}.laybar button.on{background:var(--acc,#4af);color:#000}
 @media (max-width:900px){.pbar button[data-a=float]{display:none}.pbar button[data-a=max]{min-width:28px}}
 .hpick{display:inline-flex;gap:2px}.hpick select{max-width:170px}#hfam{font-weight:600}
+/* sheets, copy and system fonts */
+.shbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid var(--line)}.shbar label{display:block;margin:2px 0;font-size:12px}.shbar .col{display:flex;flex-direction:column;gap:3px}
+#shfonts{min-width:220px}#shinfo{padding:6px 10px;font-size:12px}#shsum{padding:0 10px}#shsum table{margin:6px 0}.shpv{overflow:auto;padding:10px}.shpv canvas{display:block;background:#fff;image-rendering:pixelated;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+.cpgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;padding:10px}.cpgrid fieldset{border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;gap:5px}.cpgrid label{font-size:12px}
+.cpbar{display:flex;gap:8px;align-items:center;padding:0 10px;flex-wrap:wrap}#cpinfo{padding:6px 10px;font-size:12px}#cplog{padding:0 10px;font-size:12px}#cplog .ok{color:var(--ok,#1a7f37);padding:2px 0}
+#sysdlg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:51;display:flex;align-items:center;justify-content:center}#sysdlg[hidden]{display:none}
+.syslist{width:340px;flex:none;overflow:auto;border-right:1px solid var(--line);padding:6px}.syslist .fitem{display:flex;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:5px;cursor:pointer;font-size:13px}.syslist .fitem:hover{background:var(--panel2)}.syslist .fitem.on{background:var(--panel2);outline:1px solid var(--acc)}.syslist .fb{display:flex;gap:4px;align-items:center}.syslist .empty{padding:14px;color:var(--dim)}
+.sysside{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}.sysside .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sysside canvas{align-self:flex-start;image-rendering:pixelated;max-width:100%;background:#fff;border:1px solid var(--line)}

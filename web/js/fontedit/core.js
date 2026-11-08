@@ -34,20 +34,25 @@
     const tab = tgt === 1 ? f.sup : f.sub, c = FE.codeOfSlot(slot);
     if (rows) tab[c] = rows.slice(); else delete tab[c];
   };
-  const metaOf = (f) => ({ head: f.head, xTop: f.xTop, base: f.base, desc: f.desc, supUp: f.supUp, subDown: f.subDown });
+  const metaOf = (f) => ({ head: f.head, xTop: f.xTop, base: f.base, desc: f.desc, supUp: f.supUp, subDown: f.subDown, advs: Object.assign({}, f.advs) });
+  const kernClone = () => JSON.parse(JSON.stringify(st.kern));
+  // restore the kerning tables in place: fam.kern may be the same object as st.kern
+  const kernSet = (k) => { for (const x of Object.keys(st.kern)) delete st.kern[x]; Object.assign(st.kern, JSON.parse(JSON.stringify(k))); };
 
   // ---- undo history (per font) ----------------------------------------------------------------------------------------
   const H = new WeakMap();
   const hist = (f = st.f) => H.get(f) || (H.set(f, { undo: [], redo: [] }), H.get(f));
   FE.hist = hist;
   // Call before changing glyph rows (slots) and/or metrics (meta = true); `label` appears in the History list.
-  FE.push = (label, slots, meta) => {
+  // `kern` = true also snapshots the kerning tables (copy/merge between fonts changes them)
+  FE.push = (label, slots, meta, kern) => {
     const h = hist(), tgt = st.tgt;
-    h.undo.push({ label, items: (slots || []).map((s) => ({ slot: s, tgt, rows: rowsOf(s, tgt) })), meta: meta ? metaOf(st.f) : null });
+    h.undo.push({ label, items: (slots || []).map((s) => ({ slot: s, tgt, rows: rowsOf(s, tgt) })), meta: meta ? metaOf(st.f) : null, kern: kern ? kernClone() : null });
     h.redo = []; if (h.undo.length > 200) h.undo.shift();
   };
   const apply = (e) => {
-    const inv = { label: e.label, items: [], meta: null };
+    const inv = { label: e.label, items: [], meta: null, kern: null };
+    if (e.kern) { inv.kern = kernClone(); kernSet(e.kern); }
     if (e.meta) { inv.meta = metaOf(st.f); Object.assign(st.f, e.meta); }
     for (const it of e.items) { inv.items.push({ slot: it.slot, tgt: it.tgt, rows: rowsOf(it.slot, it.tgt) }); setRows(it.slot, it.tgt, it.rows); }
     if (e.items[0]) { st.slot = e.items[0].slot; st.tgt = e.items[0].tgt; document.querySelectorAll('.tgt').forEach((b) => b.classList.toggle('on', +b.dataset.t === st.tgt)); }
