@@ -43,7 +43,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   watch(hub, 'hub'); await hub.waitForLoadState(); await wait(1500);
   ok(/tools\.html/.test(hub.url()), 'Tools button opens the hub');
   ok(/Emulator connected/.test(await hub.innerText('#status')), 'hub reports emulator connected', await hub.innerText('#status'));
-  ok((await hub.locator('.card').count()) === 11, 'hub lists 11 tools');
+  ok((await hub.locator('.card').count()) === 12, 'hub lists 12 tools');
   ok((await hub.locator('.card', { hasText: 'Font editor' }).count()) === 1, 'hub has the Font editor card'); ok((await hub.locator('.card', { hasText: /^Font\b(?! editor)/ }).count()) === 0, 'no second Font card');
   await hub.fill('#q', 'midi'); ok((await hub.locator('.card').count()) === 1, 'search filters');
   await hub.fill('#q', '');
