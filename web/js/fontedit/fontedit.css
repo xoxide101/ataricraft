@@ -138,3 +138,4 @@ details.sec>summary{display:inline-block}details.sec>.pbar{display:inline-flex;b
 .pph{padding:8px;font-size:12px;opacity:.7;border:1px dashed var(--line,#888);margin:4px}
 .laybar{display:inline-flex;gap:2px;margin:0 6px}.laybar button.on{background:var(--acc,#4af);color:#000}
 @media (max-width:900px){.pbar button[data-a=float]{display:none}.pbar button[data-a=max]{min-width:28px}}
+.hpick{display:inline-flex;gap:2px}.hpick select{max-width:170px}#hfam{font-weight:600}

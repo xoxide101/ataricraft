@@ -243,7 +243,9 @@ sf3 lda #' '
  sta tp+1
  lda #ROWS
  sta rr
- jmp stgo
+ jsr stgo
+ ldx #12
+ jmp stykey
 
 s1 dta c'Ln ',b(0)
 s2 dta c' Col ',b(0)

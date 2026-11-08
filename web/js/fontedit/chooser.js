@@ -144,12 +144,14 @@
     const cards = [...$('chgrid').querySelectorAll('.chcard')]; if (!cards.length) return;
     let i = cards.findIndex((c) => c.dataset.id === view.sel);
     const step = view.mode === 'grid' && (dir === 'left' || dir === 'right') ? 1 : 1;
-    i = dir === 'up' || dir === 'left' ? Math.max(0, (i < 0 ? 0 : i) - step) : Math.min(cards.length - 1, i + step);
-    view.sel = cards[i].dataset.id; view.selSize = null; markSel();
+    const c0 = i < 0 ? 0 : i;
+    i = dir === 'home' ? 0 : dir === 'end' ? cards.length - 1 : dir === 'pgup' ? Math.max(0, c0 - 8) : dir === 'pgdn' ? Math.min(cards.length - 1, c0 + 8) : dir === 'up' || dir === 'left' ? Math.max(0, c0 - step) : Math.min(cards.length - 1, i + step);
+    view.sel = cards[i].dataset.id; view.selSize = null; markSel(); view.live = true;
+    FE.liveOpen(view.sel);
   };
 
   function open() {
-    $('chooser').hidden = false; view.sel = st.entry || view.sel; draw(); $('chq').focus(); $('chq').select();
+    $('chooser').hidden = false; view.sel = st.entry || view.sel; view.orig = st.entry; view.live = false; draw(); $('chq').focus(); $('chq').select();
   }
   function close() { $('chooser').hidden = true; }
   FE.openChooser = open; FE.closeChooser = close;
@@ -163,7 +165,8 @@
     $('chsize').oninput = () => { view.px = +$('chsize').value; $('chsizev').textContent = view.px + ' px'; redrawSamples(); };
     $('chgridb').onclick = () => { view.mode = 'grid'; draw(); }; $('chlistb').onclick = () => { view.mode = 'list'; draw(); };
     $('chooser').addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); close(); if (view.live && view.orig && st.entry !== view.orig) FE.openEntry(view.orig).catch(() => {}); view.live = false; }
+      else if (['PageDown', 'PageUp', 'Home', 'End'].includes(ev.key) && !/^(INPUT|SELECT)$/.test(ev.target.tagName)) { ev.preventDefault(); move({ PageDown: 'pgdn', PageUp: 'pgup', Home: 'home', End: 'end' }[ev.key]); }
       else if (ev.key === 'ArrowDown' || ev.key === 'ArrowRight') { if (ev.target.id === 'chtext' || ev.target.id === 'chsize') return; ev.preventDefault(); move('down'); }
       else if (ev.key === 'ArrowUp' || ev.key === 'ArrowLeft') { if (ev.target.id === 'chtext' || ev.target.id === 'chsize') return; ev.preventDefault(); move('up'); }
       else if (ev.key === 'Enter' && ev.target.tagName !== 'BUTTON') { ev.preventDefault(); choose(); }

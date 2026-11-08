@@ -94,7 +94,7 @@ Two overlaps reported by `xex-overlap.cjs` were real corruption, not overlay reu
 The zoom-view header and status lines (and the menu bar) still use the Atari OS text-mode charset. Switching them to the Standard face needs a second text blitter in the resident area (about 0.3 KB for the blitter plus a 768-byte charset in a bank); the resident area and overlay slot are full, so this is not done. Status: not implemented.
 
 
-## Cursor, redraw, status, fonts, version (0.1.5; 0.1.6 changes: save to D1 as .XCW, font in status, CAPS, typing styles and keys, colour fix)
+## Cursor, redraw, status, fonts, version (0.1.5; 0.1.7 changes: PC letter case, Shift+arrow selection with Windows clipboard keys, page map; 0.1.6 changes: save to D1 as .XCW, font in status, CAPS, typing styles and keys, colour fix)
 
 - **Cursor**: `word/cursor.inc`. A 5x8 XOR block blinks via RTCLOK in text mode (only its own cell toggles); it stays on while keys are pressed or idle. PAGE and zoom use a static XOR cursor.
 - **No flicker**: typing/moving redraws the cursor line in place through the row buffer `RB` (`redrawcur`, `qrw`), never clearing first. Ruler and status rows also redraw in place. Full redraw only on scroll, reflow, join/delete line, menu close, or **Ctrl-T** (force redraw).
@@ -104,7 +104,7 @@ The zoom-view header and status lines (and the menu bar) still use the Atari OS 
 - **Version**: single source `word/version.inc`; shown on the start menu and Help; build script prints it and writes `ACWRITER.VERSION.txt`. Bump on every rebuild.
 
 
-## Keys (0.1.6)
+## Keys (0.1.7)
 
 ACWriter 0.1.5 had these Ctrl bindings (before): ^X command line, ^B bold, ^I italic, ^U underline (these inserted codes at the cursor), ^K spell check, ^T force redraw, and in Edit mode ^A home, ^D cut, ^E end of line, ^S mark, ^F find, ^G next find, ^L goto line, ^R replace, ^P paste, ^Y copy, ^N / ^O next/previous segment, Tab = ribbon next.
 
@@ -131,3 +131,10 @@ Moved to the Esc menu only: goto line (Search), replace (Search), spell check (S
 Style keys work like Word: with no selection they set the style of the text typed next (status line shows inverse B I U S for the pending style; it clears when the cursor moves elsewhere). With a ^S selection they style the selection (one paragraph only). Styles combine.
 
 Status line also shows the current font and size and a CAPS indicator (inverse when Caps lock is on).
+
+### 0.1.7 additions
+
+- **Case**: Caps Lock starts off. Letters are lower case, Shift gives upper case, Caps Lock inverts exactly like a PC (Shift+letter with Caps on is lower case). Digits and symbols are not affected. The web emulator does not sync the PC Caps Lock state (see the report: app.js keydown handler should compare e.getModifierState('CapsLock') with SHFLOK bit 6).
+- **Selection**: Shift+arrow starts or extends a selection (inverse highlight); a plain arrow ends it. On a real Atari this is Shift+Ctrl+cursor, which ACWriter decodes. The web emulator needs keycode: CURSOR[e.code] | (e.shiftKey ? 0x40 : 0) in the CURSOR branch of its keydown handler to send it. ^S mark still works.
+- With a selection: ^X cut (without a selection ^X is the command line), ^C copy, ^V paste (the browser may keep ^C and ^V; ^Y copy and ^P paste always work), Delete or Backspace removes the selection, typing replaces it. Delete and type-over put the text on the clipboard.
+- **Page map**: a 24 x 8 pixel box at the right end of the status row in text and zoom mode: the document laid out left to right, a tick for each page break and a thick bar for the part on screen. It updates whenever the status line is redrawn. PAGE mode keeps its own page and viewport box. Test: scripts/acwriter-pagemap.cjs.
