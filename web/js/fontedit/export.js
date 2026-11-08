@@ -3,6 +3,13 @@
 (() => {
   'use strict';
   const FE = window.FE, CF = FE.CF, FP = FE.FP, $ = FE.$, st = FE.state;
+  // Publish the current 8x8 set as an in-memory buffer so other tools (ASM `.INCLUDE "assets/font.fnt"`) see unsaved edits without a disk save.
+  FE.publishBuffer = () => {
+    try { const B = window.AC && window.AC.Buffers, f = B && FE.atari8(true); if (f) { const b = Uint8Array.from(CF.toFnt(f)); B.set('assets/font.fnt', b, { source: 'fontedit', name: FE.fname() + '.fnt' }); B.set('assets/' + FE.fname().toLowerCase() + '.fnt', b, { source: 'fontedit' }); } } catch (e) { /* export errors must not break editing */ }
+  };
+  let pubT = 0; const prevChanged = FE.changed;
+  FE.changed = function () { const r = prevChanged.apply(this, arguments); clearTimeout(pubT); pubT = setTimeout(FE.publishBuffer, 150); return r; };
+  setTimeout(FE.publishBuffer, 600);
   FE.download = (name, data, type) => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: type || 'application/octet-stream' })); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();

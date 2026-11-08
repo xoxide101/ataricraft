@@ -123,6 +123,24 @@
     0xD400: 'DMACTL', 0xD401: 'CHACTL', 0xD402: 'DLISTL', 0xD403: 'DLISTH', 0xD404: 'HSCROL', 0xD405: 'VSCROL', 0xD407: 'PMBASE', 0xD409: 'CHBASE', 0xD40A: 'WSYNC', 0xD40B: 'VCOUNT', 0xD40C: 'PENH', 0xD40D: 'PENV', 0xD40E: 'NMIEN', 0xD40F: 'NMIST',
     0xE400: 'EDITRV', 0xE410: 'SCRENV', 0xE420: 'KEYBDV', 0xE430: 'PRINTV', 0xE440: 'CASETV', 0xE450: 'DISKIV', 0xE453: 'DSKINV', 0xE456: 'CIOV', 0xE459: 'SIOV', 0xE45C: 'SETVBV', 0xE45F: 'SYSVBV', 0xE462: 'XITVBV', 0xE465: 'SIOINV', 0xE468: 'SENDEV', 0xE46B: 'INTINV', 0xE46E: 'CIOINV', 0xE471: 'BLKBDV', 0xE474: 'WARMSV', 0xE477: 'COLDSV', 0xE47A: 'RBLOKV', 0xE47D: 'CSOPIV', 0xE480: 'PUPDIV',
   };
+  // GTIA / POKEY / ANTIC registers missing above (write names; shared addresses keep the write name).
+  Object.assign(T.ATARI_LABELS, {
+    0xD005: 'HPOSM1', 0xD006: 'HPOSM2', 0xD007: 'HPOSM3', 0xD009: 'SIZEP1', 0xD00A: 'SIZEP2', 0xD00B: 'SIZEP3', 0xD00C: 'SIZEM', 0xD00E: 'GRAFP1', 0xD00F: 'GRAFP2', 0xD010: 'GRAFP3', 0xD011: 'GRAFM',
+    0xD013: 'COLPM1', 0xD014: 'COLPM2', 0xD015: 'COLPM3', 0xD01C: 'VDELAY',
+    0xD20B: 'POTGO', 0xD20C: 'STIMER', 0xD209: 'KBCODE', 0xD20E: 'IRQEN', 0xD210: 'NMIRES', 0xE480: 'PUPDIV', 0xD20D: 'SEROUT', 0xD210: 'NMIRES',
+  });
+  // More OS page-0/2/3 equates (public names from the Atari OS manual; addresses only, no OS code).
+  Object.assign(T.ATARI_LABELS, {
+    0x11: 'BRKKEY', 0x42: 'CRITIC', 0x4D: 'ATRACT', 0x4E: 'DRKMSK', 0x4F: 'COLRSH', 0x50: 'TMPCHR', 0x51: 'HOLD1', 0x52: 'LMARGN', 0x53: 'RMARGN', 0x54: 'ROWCRS', 0x55: 'COLCRS', 0x57: 'DINDEX',
+    0x232: 'SSKCTL', 0x234: 'LPENH', 0x235: 'LPENV', 0x236: 'BRKKY', 0x244: 'COLDST', 0x290: 'TXTROW', 0x291: 'TXTCOL', 0x293: 'TINDEX', 0x294: 'TXTMSC', 0x2BE: 'SHFLOK', 0x2BF: 'BOTSCR',
+    0x2D9: 'KRPDEL', 0x2DA: 'KEYREP', 0x2DB: 'NOCLIK', 0x2DC: 'HELPFG', 0x2DD: 'DMASK', 0x2F1: 'KEYDEL', 0x2FD: 'FILDAT', 0x2FE: 'DSPFLG', 0x2FF: 'SSFLAG', 0x31A: 'HATABS',
+    0xD208: 'AUDCTL', 0xD20C: 'STIMER',
+  });
+  // Text of an include-able equates file ("atari.inc"): NAME = $ADDR, sorted by address.
+  T.equatesInc = function () { const e = T.atariEquates(); return '; Atari 8-bit hardware and OS equates (generated)\n' + Object.keys(e).sort((a, b) => e[a] - e[b] || (a < b ? -1 : 1)).map((k) => k + ' = ' + h4(e[k])).join('\n') + '\n'; };
+  T.opInfo = (op) => OPS[op] || null;
+  // Name -> address for the assembler (skips names with an offset such as RTCLOK+2).
+  T.atariEquates = function () { const o = {}; for (const a in T.ATARI_LABELS) if (/^[A-Za-z_]\w*$/.test(T.ATARI_LABELS[a])) o[T.ATARI_LABELS[a]] = +a; return o; };
   const h4 = (n) => '$' + n.toString(16).toUpperCase().padStart(4, '0'), h2 = (n) => '$' + hx(n);
   // Split an Atari binary load file into segments: [{start, end, data}] plus trailing junk info. Returns null if not a binary load file.
   T.parseSegments = function (d) {
