@@ -77,3 +77,12 @@ Please keep this separation when contributing: tools that humans click and the A
 - Licence: GPL-2.0 overall. The RMT player port is GPL-3.0 and whether the combined work can stay GPL-2.0 is unresolved (see `README.md`).
 
 - Languages and compilers plan: [LANGUAGES.md](LANGUAGES.md)
+
+## ASM / IDE and Craft Studio
+
+- **Assembler** (`web/js/asm6502.js`): two-pass with zero-page vs absolute resolution, `$FFFF` segment headers, `.RUN`/`.INIT`, MADS/dasm directives (`DTA`, `DC.B/DC.W/DS.B`), macros (`.MACRO name p1,p2` ... `.ENDM`, params `:p1`/`:1`, `\@` unique id for local labels), `.INCLUDE`/`.INCBIN` through `opts.resolve(name)` (string = source, `Uint8Array` = bytes), `cpu:'65c02'` or `processor 65c02` (BRA, STZ, PHX/PHY/PLX/PLY, TSB/TRB, `INC A`, `(zp)`, `JMP (abs,X)`, `BIT #`), predefined hardware/OS names (`WTools.atariEquates()`, include-able as `atari.inc` in the panel). Errors report the source line and, inside includes, the file.
+- **Buffers** (`web/js/buffers.js`): `AC.Buffers` in-memory registry synced between tabs (BroadcastChannel `ataricraft-buffers`) and announced as `craft:buffer` DOM events. The Font editor publishes its working 8x8 set as `assets/font.fnt` on every edit, so `.INCLUDE "assets/font.fnt"` in the IDE sees unsaved edits and F5 runs with them; no disk save.
+- **Simulator** (`web/js/sim6502.js`, also used by tests): NMOS 6502 core with an estimated cycle count; the panel runs N cycles (default 29868, one 60 Hz frame) per `requestAnimationFrame`, with breakpoints, step into/over, register status bar, disassembly view and RAM watch. It is not the emulator core (no ANTIC/POKEY, hardware registers are plain RAM); the libatari800 core exposes no CPU stepping.
+- **Craft Studio** (`web/studio.html`, `web/js/studio.js`): persistent header (machine profile, transport Run/Step/Pause/Reset, footprint and vector checks), tab strip with Alt+1..4, one 40px ribbon of `.ribbon-group` cards per tab. Tabs: 4-Pane Manager (embeds `index.html`), Web 6502 IDE (`AsmPanel` docked), Font / Glyph Studio (embeds `fontedit.html`), Disk & Flux Inspector (stub). Embedded pages stay loaded when switching tabs.
+- **Deferred:** XE bank select, SIO speed/FujiNet status in the header (shown as pointers), Font Studio invert/mirror/2-bit ANTIC 4/40-col preview commands, Manager flux/container/batch-transcode buttons (disabled stubs), real flux hardware, 65C02 in the disassembler, `.PROC`/`.IF`.
+- Tests: `node tools/tests/asmdas.test.cjs`, browser test `node scripts/asmpanel-test.cjs` (env `PW_CORE`, `CHROME`; needs no ROMs).

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Craft Studio</title>
+<link rel="icon" href="logo.svg">
+<style>
+:root{--bg:#14161a;--panel:#1e2128;--line:#2c313b;--fg:#d8dce4;--dim:#8a93a3;--acc:#e8a33d}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:13px system-ui,sans-serif;display:flex;flex-direction:column}
+button,select{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:4px;font:inherit;height:24px;padding:0 8px;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){border-color:var(--acc)}button:disabled,select:disabled{opacity:.45;cursor:default}
+#hdr{display:flex;align-items:center;gap:12px;height:42px;min-height:42px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;white-space:nowrap}
+#hdr img{height:22px}#hdr b{color:var(--acc)}
+#hdr .tel{color:var(--dim);font:11px Consolas,monospace}
+.sp{flex:1}
+#tabs{display:flex;gap:2px;padding:4px 10px 0;background:var(--panel)}
+#tabs button{border-radius:6px 6px 0 0;border-bottom:0;height:28px;background:#171a20}
+#tabs button.on{background:var(--bg);color:var(--acc);border-color:var(--acc)}
+#tabs kbd,.ribbon-group kbd{font:9px Consolas,monospace;background:#0d0f12;border:1px solid #4a5160;border-radius:3px;padding:0 3px;margin-left:5px;color:#9bd1ff}
+#ribbon{height:40px;min-height:40px;display:flex;align-items:center;gap:6px;padding:0 8px;background:#14161a;border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden}
+#ribbon>.row{display:none;gap:6px;align-items:center;height:40px}#ribbon>.row.on{display:flex;flex:1}
+.ribbon-group{display:flex;flex-direction:column;justify-content:space-between;height:35px;padding:2px 5px 0;border:1px solid #3a4150;border-radius:5px;flex:none}
+.ribbon-group .items{display:flex;gap:4px;align-items:center;height:21px}.ribbon-group button,.ribbon-group select{height:21px;padding:0 6px}
+.ribbon-group .lbl{font:9px system-ui;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);line-height:9px;text-align:center}
+#panes{flex:1;position:relative;min-height:0}
+.pane{position:absolute;inset:0;display:none}.pane.on{display:block}
+.pane iframe{width:100%;height:100%;border:0;background:#fff}
+#ide{background:var(--bg)}
+.stub{padding:24px;color:var(--dim);max-width:760px;line-height:1.5}.stub h2{color:var(--acc);font-size:14px}
+</style></head><body>
+<div id="hdr">
+  <img src="logo.svg" alt=""><b>Craft Studio</b>
+  <label title="Target machine profile: used for the footprint and vector checks (the emulator model itself is set in the Manager tab)">Machine
+    <select id="profile"><option value="130xe">Atari 130XE 128K</option><option value="800xl">Atari 800XL 64K</option><option value="1088">1088XEL 1 MB</option></select></label>
+  <label title="SIO speed is configured in the emulator (Manager tab); shown here for reference">SIO <select id="sio" disabled><option>Standard 19200</option></select></label>
+  <span class="tel" id="fuji">FujiNet: see Manager tab</span>
+  <span class="sp"></span>
+  <button id="tRun" title="Assemble and run (F5)">Run</button><button id="tStep" title="Step over (F10)">Step</button><button id="tPause" title="Pause simulator (F6)">Pause</button><button id="tReset" title="Reset simulator and rebuild">Reset</button>
+  <span class="tel" id="tel">footprint: -</span><span class="tel" id="link">emulator: -</span>
+</div>
+<div id="tabs"></div>
+<div id="ribbon"></div>
+<div id="panes">
+  <div class="pane" id="p-mgr"></div>
+  <div class="pane" id="p-ide"></div>
+  <div class="pane" id="p-font"></div>
+  <div class="pane" id="p-disk"><div class="stub"><h2>Disk &amp; Flux Inspector</h2>
+    Placeholder. The flux tools need a Greaseweazle (WebUSB) and are not implemented yet; the ribbon controls are disabled stubs showing the planned layout.
+    Sector-level work on disk images is available today in the Manager tab (File manager / WebAFM) and in <a href="fujiexplorer.html" target="_blank" style="color:var(--acc)">FujiNet Explorer</a>.</div></div>
+</div>
+<script src="js/buffers.js"></script>
+<script src="js/fontlib.js?v=1"></script>
+<script src="js/wtools.js"></script>
+<script src="js/sim6502.js"></script>
+<script src="js/asm6502.js"></script>
+<script src="js/toolshub-link.js?v=1"></script>
+<script src="js/asmpanel.js"></script>
+<script src="js/studio.js"></script>
+</body></html>

@@ -3,6 +3,7 @@
   const AC = window.AC;
   const T = [
     { id: 'basic', g: 'Development', n: 'BASIC', d: 'Atari BASIC editor and compiler; compile and run on the connected emulator.', k: 'basic compiler editor program', panel: () => AC.BasicPanel.open(), emu: 1 },
+    { id: 'studio', g: 'Development', n: 'Craft Studio', d: 'Tabbed workbench: emulator manager, 6502 IDE with simulator/debugger, Font studio and disk inspector, one ribbon per tab (Alt+1..4).', k: 'studio ide workbench shell tabs ribbon', url: 'studio.html' },
     { id: 'asm', g: 'Development', n: 'ASM', d: '6502 assembler with listing; assemble and inject into emulator memory.', k: 'assembler 6502 macro listing', panel: () => AC.AsmPanel.open(), emu: 1 },
     { id: 'insp', g: 'Development', n: 'Inspect', d: 'RAM page map, N: network log, IP settings, extended banks, memory poke/dump, remote control.', k: 'inspect ram memory network banks remote debug', panel: () => AC.InspectPanel.open(), emu: 1 },
     { id: 'wb', g: 'Data in/out', n: 'Workbench', d: 'MIDI to POKEY converter and SAP editor.', k: 'workbench midi pokey sap music audio', url: 'workbench.html' },

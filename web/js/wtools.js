@@ -129,6 +129,16 @@
     0xD013: 'COLPM1', 0xD014: 'COLPM2', 0xD015: 'COLPM3', 0xD01C: 'VDELAY',
     0xD20B: 'POTGO', 0xD20C: 'STIMER', 0xD209: 'KBCODE', 0xD20E: 'IRQEN', 0xD210: 'NMIRES', 0xE480: 'PUPDIV', 0xD20D: 'SEROUT', 0xD210: 'NMIRES',
   });
+  // More OS page-0/2/3 equates (public names from the Atari OS manual; addresses only, no OS code).
+  Object.assign(T.ATARI_LABELS, {
+    0x11: 'BRKKEY', 0x42: 'CRITIC', 0x4D: 'ATRACT', 0x4E: 'DRKMSK', 0x4F: 'COLRSH', 0x50: 'TMPCHR', 0x51: 'HOLD1', 0x52: 'LMARGN', 0x53: 'RMARGN', 0x54: 'ROWCRS', 0x55: 'COLCRS', 0x57: 'DINDEX',
+    0x232: 'SSKCTL', 0x234: 'LPENH', 0x235: 'LPENV', 0x236: 'BRKKY', 0x244: 'COLDST', 0x290: 'TXTROW', 0x291: 'TXTCOL', 0x293: 'TINDEX', 0x294: 'TXTMSC', 0x2BE: 'SHFLOK', 0x2BF: 'BOTSCR',
+    0x2D9: 'KRPDEL', 0x2DA: 'KEYREP', 0x2DB: 'NOCLIK', 0x2DC: 'HELPFG', 0x2DD: 'DMASK', 0x2F1: 'KEYDEL', 0x2FD: 'FILDAT', 0x2FE: 'DSPFLG', 0x2FF: 'SSFLAG', 0x31A: 'HATABS',
+    0xD208: 'AUDCTL', 0xD20C: 'STIMER',
+  });
+  // Text of an include-able equates file ("atari.inc"): NAME = $ADDR, sorted by address.
+  T.equatesInc = function () { const e = T.atariEquates(); return '; Atari 8-bit hardware and OS equates (generated)\n' + Object.keys(e).sort((a, b) => e[a] - e[b] || (a < b ? -1 : 1)).map((k) => k + ' = ' + h4(e[k])).join('\n') + '\n'; };
+  T.opInfo = (op) => OPS[op] || null;
   // Name -> address for the assembler (skips names with an offset such as RTCLOK+2).
   T.atariEquates = function () { const o = {}; for (const a in T.ATARI_LABELS) if (/^[A-Za-z_]\w*$/.test(T.ATARI_LABELS[a])) o[T.ATARI_LABELS[a]] = +a; return o; };
   const h4 = (n) => '$' + n.toString(16).toUpperCase().padStart(4, '0'), h2 = (n) => '$' + hx(n);
