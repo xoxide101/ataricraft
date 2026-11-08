@@ -18,6 +18,7 @@
   <button id="bkeep" title="Store this family in My fonts (this browser)">Keep in My fonts</button>
   <span class="sp"></span>
   <button id="emustat" class="emustat" title="Atari emulator link">Emulator not connected</button><span id="autosaved" class="dim"></span><button id="bautorestore" title="Reopen the last autosaved session">Restore autosave</button>
+  <button id="bsys" title="Browse fonts installed on this computer, or pick font files / a folder, and add them to the working set">System fonts...</button>
   <button id="bopen" title="Add a font: TTF, OTF, WOFF, BDF, PCF, PNG sheet, ACF, XCF, FNT charset. You can also drop files anywhere.">Import font...</button>
   <input id="file" type="file" multiple hidden>
   <input id="romfile" type="file" hidden>
@@ -30,6 +31,7 @@
     <button id="bpng">PNG glyph sheet</button>
     <button id="bprev">PNG of the preview</button>
     <button id="bspec">PNG specimen sheet</button>
+    <button id="bsheet" title="Print or save a font sheet at 150-4800 dpi (Ctrl+P)">Print / font sheet...</button>
     <button id="bxcf">xCWriter .xcf</button>
     <button id="bbdf">BDF bitmap font</button>
     <button id="bttf">TrueType (.ttf)</button>
@@ -107,7 +109,7 @@
       <div id="sizes" role="tablist" aria-label="Craft sizes 4-26 px"></div>
     </div>
     <nav id="tabs">
-      <button class="tabbtn on" data-tab="edit">Glyphs</button><button class="tabbtn" data-tab="family">Family</button><button class="tabbtn" data-tab="specimen">Specimen</button><button class="tabbtn" data-tab="atari">Atari</button><button class="tabbtn" data-tab="outline" title="Real outlines behind the pixels: points, curves, rasterize to any size">Outline</button><button class="tabbtn" data-tab="kern">Kerning</button><button class="tabbtn" data-tab="quality">Quality</button><button class="tabbtn" data-tab="manager" title="All your fonts: favourites, tags, collections, compare, coverage, duplicates">Manager</button>
+      <button class="tabbtn on" data-tab="edit">Glyphs</button><button class="tabbtn" data-tab="family">Family</button><button class="tabbtn" data-tab="specimen">Specimen</button><button class="tabbtn" data-tab="atari">Atari</button><button class="tabbtn" data-tab="outline" title="Real outlines behind the pixels: points, curves, rasterize to any size">Outline</button><button class="tabbtn" data-tab="kern">Kerning</button><button class="tabbtn" data-tab="sheets" title="Print or save font sheets at 150-4800 dpi: glyph chart, size comparison chart, font diff">Sheets</button><button class="tabbtn" data-tab="copy" title="Copy glyphs, ranges, metrics and kerning from one font to another">Copy</button><button class="tabbtn" data-tab="quality">Quality</button><button class="tabbtn" data-tab="manager" title="All your fonts: favourites, tags, collections, compare, coverage, duplicates">Manager</button>
     </nav>
     <div id="views">
       <div class="view" id="v-edit">
@@ -247,7 +249,63 @@
           <div class="row"><select id="mgA"></select> vs <select id="mgB"></select><label>px <select id="mgpx"><option>4</option><option>5</option><option>6</option><option selected>8</option><option>10</option><option>12</option><option>14</option><option>16</option><option>18</option><option>20</option><option>22</option><option>24</option><option>26</option></select></label><input id="mgtext" value="Hamburgefonstiv 0123"><button id="mgcmp">Compare</button><button id="mgwfgo">Waterfall of selected</button></div>
           <div id="mgcmpinfo" class="dim"></div><canvas id="mgcA"></canvas><br><canvas id="mgcB"></canvas><div id="mgwf"></div>
         </details>
-      </div>      <div class="view" id="v-quality" hidden>
+      </div>      <div class="view" id="v-sheets" hidden>
+        <div class="shbar">
+          <label>Sheet <select id="shtype"><option value="glyphs">Glyph chart</option><option value="sizes">Size comparison chart</option><option value="diff">Font diff (A vs B, C ...)</option></select></label>
+          <label>Fonts <span class="dim">(Ctrl/Shift-click for several)</span><select id="shfonts" multiple size="7"></select></label>
+          <span class="col"><button id="shall">All</button><button id="shcur">Current</button></span>
+          <span class="col">
+            <label id="shdiffrow">Reference (A) <select id="shref"></select> <select id="shalign" title="How glyphs of different heights line up"><option value="baseline">align baselines</option><option value="top">align tops</option></select> <label><input type="checkbox" id="shonly"> only differences</label></label>
+            <label>Sizes (px) <input id="shsizes" size="14" title="Craft sizes, e.g. 8 12 16 24. Glyph chart and diff use the first."></label>
+            <label id="shsetrow">Glyphs <select id="shset"></select> <input id="shcodes" placeholder="A-Z 0-9 U+00C0-00FF #200" size="24"></label>
+            <label id="shtextrow">Text <textarea id="shtext" rows="2" cols="34"></textarea> <label><input type="checkbox" id="shkern"> use kerning</label></label>
+          </span>
+          <span class="col">
+            <label>Resolution <select id="shdpi"></select></label>
+            <label>Paper <select id="shpaper"><option value="letter">Letter</option><option value="a4">A4</option><option value="legal">Legal</option><option value="a3">A3</option><option value="tabloid">Tabloid</option></select> <label><input type="checkbox" id="shland"> landscape</label></label>
+            <label>Zoom <input id="shzoom" type="number" min="1" max="24" value="6" style="width:52px"> units per font pixel <label><input type="checkbox" id="shguides" checked> guides</label></label>
+          </span>
+        </div>
+        <div class="shbar">
+          <select id="shpage"></select><input id="shpvw" type="range" min="300" max="1400" value="700" title="Preview width">
+          <button id="shpng" class="primary" title="Pixel-exact PNG, streamed: 4800 dpi works">Save PNG</button><button id="shpngall">All pages</button>
+          <label>Tiles <select id="shtile" title="Split huge pictures into several PNGs (zip)"><option value="0">one file</option><option value="16384">16384 dots</option><option value="8192">8192 dots</option><option value="4096">4096 dots</option></select></label>
+          <button id="shsvg" title="Vector: scales to any dpi">SVG</button>
+          <button id="shprint" title="Ctrl+P">Print</button><select id="shprintmode"><option value="vector">vector (printer resolution)</option><option value="raster">picture at chosen dpi</option></select>
+          <button id="shcsv" hidden>Diff CSV</button><button id="shjson" hidden>Diff JSON</button><progress id="shprog" max="1" value="0" hidden></progress>
+        </div>
+        <div id="shinfo" class="dim"></div><div id="shsum"></div>
+        <div class="shpv"><canvas id="shcv" width="1" height="1"></canvas></div>
+      </div>
+      <div class="view" id="v-copy" hidden>
+        <div class="cpgrid">
+          <fieldset><legend>From (source)</legend><select id="cpsrc"></select> <select id="cpsrcsz"></select><div id="cpsrcinfo" class="dim"></div></fieldset>
+          <fieldset><legend>To (target)</legend><select id="cptgt"></select> <select id="cptgtsz"></select> <button id="cpswap" title="Swap source and target">&#8646;</button><div id="cptgtinfo" class="dim"></div></fieldset>
+          <fieldset><legend>What</legend>
+            <label><input type="checkbox" id="cpglyph" checked> Glyphs</label> <label><input type="checkbox" id="cpadv" checked> their advance widths</label>
+            <label><input type="checkbox" id="cpmetrics"> Vertical metrics (cap, x-height, baseline, descender, super/sub)</label>
+            <label><input type="checkbox" id="cpkern"> Kerning pairs of those glyphs</label>
+          </fieldset>
+          <fieldset><legend>Glyph set</legend>
+            <select id="cpset"></select> <input id="cpcodes" placeholder="A-Z 0-9 U+00C0-00FF #200 (blank = selection)" size="28">
+            <label>Put at <input id="cpat" placeholder="same slots, or e.g. a  (A-Z lands on a-z), +32, #128" size="14" title="Target for the first glyph: a character, #code, or +N / -N offset"></label>
+          </fieldset>
+          <fieldset><legend>How</legend>
+            <label>Fit <select id="cpfit"><option value="copy">pixel for pixel (clip at the cell)</option><option value="scale">scale by cap height</option><option value="raster">re-rasterize the outline at the target size</option></select></label>
+            <label>Baseline <select id="cpbase"><option value="1">aligned</option><option value="0">top aligned</option></select></label>
+            <label>Threshold <input id="cpth" type="number" min="5" max="100" value="50" style="width:52px"> %</label>
+            <label>Weight <input id="cpw" type="number" min="-2" max="2" step="0.25" value="0" style="width:52px"></label>
+            <label><input type="checkbox" id="cphint"> hinting</label>
+            <label>Overwrite <select id="cpover"><option value="all">all target glyphs</option><option value="empty">only empty target glyphs</option></select></label>
+          </fieldset>
+        </div>
+        <div class="cpbar"><button id="cpprev">Preview</button><button id="cpapply" class="primary">Copy</button><button id="cpundo">Undo last copy</button><button id="cpsys">System fonts...</button>
+          <label id="cplicrow" hidden><input type="checkbox" id="cplic"> <span id="cplictxt"></span></label></div>
+        <div id="cpinfo" class="dim"></div>
+        <div class="shpv"><canvas id="cppv" width="1" height="1"></canvas></div>
+        <div id="cplog"></div>
+      </div>
+      <div class="view" id="v-quality" hidden>
         <div class="row"><label>Coverage set <select id="qcov"></select></label><label><input id="qall" type="checkbox"> all sizes of the family</label><button id="qrun">Check</button><button id="qcsv">Save report</button><span id="qsum"></span></div>
         <div id="qres"></div>
       </div>
@@ -299,6 +357,24 @@
     <div class="chbot"><span id="chcount" class="dim"></span><span class="dim">Up/Down to move, Enter or double-click to pick, Esc to close</span><span class="sp"></span><button id="chpick" class="primary" disabled>Select a font</button></div>
   </div>
 </div>
+<div id="sysdlg" hidden role="dialog" aria-modal="true" aria-label="System fonts">
+  <div class="chbox" style="height:80vh">
+    <div class="chtop"><b>System and local fonts</b>
+      <button id="sysq" title="Chrome / Edge: lists every installed font after you allow it">Installed fonts</button><button id="sysfile">Pick font files</button><button id="sysdir">Pick a folder</button>
+      <input id="sysfilter" type="search" placeholder="Filter..." autocomplete="off"><span id="syscount" class="dim"></span><span class="sp" style="flex:1"></span><button id="sysclose" title="Close (Esc)">&times;</button>
+      <input id="sysfiles" type="file" accept=".ttf,.otf,.ttc,.woff" multiple hidden><input id="sysdirin" type="file" webkitdirectory multiple hidden></div>
+    <div class="chbody"><div id="syslist" class="syslist" tabindex="0"></div>
+      <div class="sysside">
+        <div class="row"><label>Size <select id="syssize"></select></label><label>Threshold <input id="systh" type="number" min="5" max="250" value="128" style="width:56px"></label><label>Weight <input id="sysw" type="number" min="-2" max="2" step="0.25" value="0" style="width:56px"></label><label><input type="checkbox" id="sysh"> hinting</label></div>
+        <textarea id="systext" rows="2" style="width:100%">Hamburgefonstiv 0123
+Quick brown fox</textarea>
+        <canvas id="syspv" width="1" height="1"></canvas>
+        <div id="sysinfo" class="dim">Pick a font to preview it as Atari bitmap glyphs.</div>
+        <div class="row"><label><input type="checkbox" id="syskeep" checked> keep in the library</label><label><input type="checkbox" id="sysdirect" checked> rasterize the chosen size now</label></div>
+        <div class="row"><button id="sysadd" class="primary">Add to working set</button><button id="sysassrc">Add as copy source</button><button id="sysastgt">Add as copy target</button><button id="syscmp">Add and compare...</button></div>
+      </div></div>
+  </div>
+</div>
 <div id="drop" hidden>Drop fonts to add families</div>
 <div id="help" hidden><div><div class="row"><h3 style="margin:0;flex:1">Keyboard shortcuts</h3><button id="helpclose">Close</button></div><div id="helpkeys"></div></div></div>
 <script src="js/fontlib.js?v=1"></script>
@@ -326,6 +402,11 @@
 <script src="js/fontedit/emulator.js"></script>
 <script src="js/fontedit/chooser.js"></script>
 <script src="js/fontedit/picker.js"></script>
+<script src="js/fontedit/sheetcore.js"></script>
+<script src="js/fontedit/fontdiff.js"></script>
+<script src="js/fontedit/sheets.js"></script>
+<script src="js/fontedit/transfer.js"></script>
+<script src="js/fontedit/sysfonts.js"></script>
 <script src="js/fontedit/panels.js"></script>
 </body>
 </html>
