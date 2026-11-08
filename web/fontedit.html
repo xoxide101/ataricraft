@@ -10,7 +10,8 @@
 <header id="top">
   <h1><b>Craft</b> Font Editor</h1>
   <button id="bchoose" class="primary" title="Open the big font chooser: search, big samples, all sizes (Ctrl+Shift+O)"><span>Choose font</span> &#9662;</button>
-  <span id="laybar" class="laybar"></span>
+  <span id="hpick" class="hpick"><select id="hfam" title="Font family: Up/Down arrows load the next font, Enter keeps it, Esc goes back. Type to find." aria-label="Font family"></select><select id="hstyle" title="Style" aria-label="Style"></select><select id="hsize" title="Size" aria-label="Size"></select></span>
+<span id="laybar" class="laybar"></span>
 <button id="tgl" class="on" title="Show/hide the Fonts panel">Fonts</button>
   <input id="name" title="Name of the family (used for file names)" placeholder="family name">
   <button id="undo" title="Undo (Ctrl+Z)">Undo</button><button id="redo" title="Redo (Ctrl+Y)">Redo</button>
@@ -323,6 +324,7 @@
 <script src="js/fontedit/validate.js"></script>
 <script src="js/fontedit/emulator.js"></script>
 <script src="js/fontedit/chooser.js"></script>
+<script src="js/fontedit/picker.js"></script>
 <script src="js/fontedit/panels.js"></script>
 </body>
 </html>
