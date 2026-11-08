@@ -92,7 +92,7 @@ const pngInfo = (u8) => { // validate signature, IHDR, IDAT inflate size
   await pg.evaluate(() => FE.undo()); await pg.waitForTimeout(200);
   const st2 = await state(); if (st2 !== st0) console.log('before', st0, '\nafter ', st2);
   ok(st2 === st0, 'undo restores glyphs, metrics, advances and kerning tables');
-  ok(await pg.evaluate(() => FE.credits.of('Craft Sans').length >= 1 && FE.creditsText('Craft Sans').includes('Liberation')), 'credits record names the source font');
+  ok(await pg.evaluate((imp) => FE.credits.of('Craft Sans').length >= 1 && FE.creditsText('Craft Sans').includes(FE.entries.get(imp).name), imp), 'credits record names the source font');
 
   // ---- system fonts dialog (file pick path)
   await pg.click('#bsys'); await pg.waitForTimeout(300);
