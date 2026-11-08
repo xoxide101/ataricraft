@@ -2,6 +2,8 @@
 // Supported: labels (with or without ':'), NAME = expr / EQU, ORG or * = expr, .BYTE/.BY .WORD/.WO .TEXT .FILL .DS .END,
 // expressions with + - * / % & | ^ << >> ~, unary < (low) and > (high), * for the current address, $hex 0xhex %bin decimal,
 // 'c' (ATASCII) and "c" (screen code); in .BYTE/.TEXT "text" is screen codes and 'text' is ATASCII, as in MADS.
+// Also: .RUN expr / .INIT expr write the RUNAD ($2E0) / INITAD ($2E2) segment; assemble(text, {symbols:{NAME:value}}) predefines names (e.g. hardware registers).
+// MADS/dasm compatibility: DTA b()/a()/l()/h()/c'', DC.B, DC.W, DS.B; PROCESSOR/OPT/LIST/SEG are ignored.
 // Not supported: macros, .PROC/.IF, include files, undocumented opcodes.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) module.exports = factory();
@@ -93,18 +95,21 @@
     return { mode: 'm', expr: t };
   }
 
-  function assemble(text) {
+  function assemble(text, opts) {
+    opts = opts || {};
     const lines = String(text).split(/\r?\n/), syms = new Map(), listing = [];
-    let segs, prev = '', finalNext = false;
+    let segs, prev = '', finalNext = false, all = [];
+    const pre = opts.symbols || {};
     for (let pass = 1; pass <= 8; pass++) {
       const last = finalNext || pass === 8;
-      let pc = 0x2000, seg = null; segs = []; listing.length = 0;
+      let pc = 0x2000, seg = null; segs = []; listing.length = 0; all = [];
+      for (const k in pre) if (!syms.has(k)) syms.set(k, pre[k]);
       const org = (a) => { pc = a & 0xFFFF; seg = null; };
-      const emit = (b) => { if (!seg) { seg = { addr: pc, bytes: [] }; segs.push(seg); } seg.bytes.push(b & 255); pc = (pc + 1) & 0xFFFF; };
+      const emit = (b) => { if (!seg) { seg = { addr: pc, bytes: [] }; segs.push(seg); } seg.bytes.push(b & 255); all.push(b & 255); pc = (pc + 1) & 0xFFFF; };
       const ctx = { get pc() { return pc; }, syms }, seen = new Set();
       for (let ln = 0; ln < lines.length; ln++) {
         const raw = stripComment(lines[ln]); if (!raw.trim()) continue;
-        const start = pc;
+        const start = pc, ai = all.length;
         try {
           let body = raw, label = null, m;
           if ((m = /^\s*\*\s*=\s*(.+)$/.exec(raw))) { org(evalExpr(m[1], ctx).v); continue; }
@@ -113,10 +118,28 @@
           if ((m = /^(?:=|equ\b)\s*(.+)$/i.exec(t)) && label) { const r = evalExpr(m[1], ctx); if (last && !r.known) throw new Error('undefined symbol in ' + m[1]); syms.set(label, r.v); continue; }
           if (label) { if (seen.has(label)) throw new Error('duplicate label ' + label); seen.add(label); syms.set(label, pc); }
           if (!t) continue;
-          m = /^(\S+)\s*(.*)$/.exec(t); const mn = m[1].toUpperCase().replace(/^\./, ''), rest = m[2];
+          m = /^(\S+)\s*(.*)$/.exec(t); const mn = ({ 'DC.B': 'BYTE', 'DC.W': 'WORD', 'DS.B': 'DS' })[m[1].toUpperCase().replace(/^\./, '')] || m[1].toUpperCase().replace(/^\./, ''), rest = m[2];
           const dot = m[1][0] === '.';
+          if (mn === 'PROCESSOR' || mn === 'OPT' || mn === 'LIST' || mn === 'SEG' || mn === 'SEG.U' || mn === 'MAC' || mn === 'ENDM') { if (mn === 'MAC' || mn === 'ENDM') throw new Error('macros are not supported'); continue; }
+          if (mn === 'DTA') {
+            for (const a of splitArgs(rest)) {
+              const d = /^([baclhBACLH])\s*\((.*)\)$/.exec(a) || /^([cC])\s*(["'].*["'])$/.exec(a);
+              if (!d) { const r = evalExpr(a, ctx); if (last && !r.known) throw new Error('undefined symbol in ' + a); emit(r.v); continue; }
+              const k = d[1].toLowerCase();
+              if (k === 'c') { const q = d[2]; for (const c of q.slice(1, -1)) emit(q[0] === '"' ? screen(c.charCodeAt(0)) : c.charCodeAt(0)); continue; }
+              for (const e of splitArgs(d[2])) {
+                const r = evalExpr(e, ctx); if (last && !r.known) throw new Error('undefined symbol in ' + e);
+                if (k === 'b') emit(r.v); else if (k === 'l') emit(r.v); else if (k === 'h') emit(r.v >> 8); else { emit(r.v); emit(r.v >> 8); }
+              }
+            }
+            continue;
+          }
           if (mn === 'ORG') { org(evalExpr(rest, ctx).v); continue; }
           if (mn === 'END') break;
+          if (mn === 'RUN' || mn === 'INIT') {
+            const r = evalExpr(rest, ctx); if (last && !r.known) throw new Error('undefined symbol in ' + rest);
+            const keep = pc; pc = mn === 'RUN' ? 0x2E0 : 0x2E2; seg = null; emit(r.v); emit(r.v >> 8); pc = keep; seg = null; continue;
+          }
           if (mn === 'BYTE' || mn === 'BY' || mn === 'TEXT' || mn === 'WORD' || mn === 'WO') {
             for (const a of splitArgs(rest)) {
               if ((mn === 'BYTE' || mn === 'BY' || mn === 'TEXT') && a.length > 1 && (a[0] === '"' || (a[0] === "'" && a.length > 3)) && a.endsWith(a[0])) { for (const c of a.slice(1, -1)) emit(a[0] === '"' ? screen(c.charCodeAt(0)) : c.charCodeAt(0)); continue; }
@@ -148,14 +171,17 @@
           if (mode === 'imm' || mode === 'zp' || mode === 'zpx' || mode === 'zpy' || mode === 'izx' || mode === 'izy') { if (last && (r.v < -128 || r.v > 255)) throw new Error('value does not fit in a byte'); emit(r.v); }
           else { emit(r.v); emit(r.v >> 8); }
         } catch (e) { if (e instanceof AsmError) throw e; throw new AsmError(ln + 1, e.message); }
-        finally { if (last && pc !== start) listing.push({ line: ln + 1, addr: start, len: ((pc - start) & 0xFFFF) }); }
+        finally { if (last && all.length !== ai) listing.push({ line: ln + 1, addr: start, len: all.length - ai, bytes: all.slice(ai) }); }
       }
       const now = JSON.stringify([...syms]);
       if (last) break;
       if (now === prev) finalNext = true;
       prev = now;
     }
-    return { segments: segs.filter((s) => s.bytes.length), symbols: Object.fromEntries(syms), listing, xex: toXex(segs) };
+    const user = Object.fromEntries([...syms].filter(([k]) => !(k in pre)));
+    const hx = (n, w) => n.toString(16).toUpperCase().padStart(w, '0');
+    const listingText = listing.map((l) => `${String(l.line).padStart(4)} ${hx(l.addr, 4)}  ${l.bytes.slice(0, 4).map((b) => hx(b, 2)).join(' ').padEnd(11)}${l.bytes.length > 4 ? '+' : ' '} ${lines[l.line - 1].trimEnd()}`).join('\n');
+    return { segments: segs.filter((s) => s.bytes.length), symbols: user, listing, listingText, xex: toXex(segs) };
   }
 
   function toXex(segs) {

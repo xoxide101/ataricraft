@@ -26,7 +26,7 @@ start   inc $d01a        ; COLBK
     const build = () => {
       localStorage.setItem('ac.asm.src', ed.value);
       try {
-        const r = AC.Asm.assemble(ed.value); last = r;
+        const r = AC.Asm.assemble(ed.value, { symbols: AC.WTools ? AC.WTools.atariEquates() : {} }); last = r;
         const segs = r.segments.map((s) => `$${s.addr.toString(16).toUpperCase().padStart(4, '0')}-$${(s.addr + s.bytes.length - 1).toString(16).toUpperCase().padStart(4, '0')}  ${s.bytes.length} bytes`);
         const syms = Object.entries(r.symbols).map(([k, v]) => `${k} = $${(v & 0xFFFF).toString(16).toUpperCase()}`).join('   ');
         out.style.color = '#9bd1ff'; out.textContent = `OK, ${r.xex.length} bytes\n${segs.join('\n')}\n\n${syms}`; return r;
@@ -42,14 +42,29 @@ start   inc $d01a        ; COLBK
       if (!emu) { out.textContent += '\n\nThe Atari is not running. Boot it first (Boot button), then press Run.'; return; }
       emu.bootFile('PROGRAM.XEX', r.xex); out.textContent += '\n\nStarted on the Atari.';
     };
+    const show = (txt) => { out.style.color = '#9bd1ff'; out.textContent = txt; };
+    const listing = () => { const r = build(); if (r) show(r.listingText || '(no code)'); };
+    const disasm = () => {
+      const W = AC.WTools; if (!W) { show('Disassembler (wtools.js) is not loaded.'); return; }
+      const r = build(); if (r) show(W.disasmFile(r.xex, 0x2000));
+    };
+    const disasmRam = () => {
+      const W = AC.WTools, emu = host.emu && host.emu();
+      if (!W) { show('Disassembler (wtools.js) is not loaded.'); return; }
+      if (!emu) { show('The Atari is not running. Boot it first (Boot button).'); return; }
+      const v = prompt('Disassemble RAM: start address (hex) and length (hex), e.g. 2000 80', '2000 80'); if (!v) return;
+      const [a, n] = v.trim().split(/\s+/).map((x) => parseInt(x.replace(/^\$/, ''), 16));
+      if (!(a >= 0 && a < 65536) || !(n > 0)) { show('Give a start address and a length in hex.'); return; }
+      const len = Math.min(n, 65536 - a); show(W.disasm(emu.peek(a, len), a, {}));
+    };
     const fi = el('input'); fi.type = 'file'; fi.accept = '.asm,.s,.txt,.a65'; fi.style.display = 'none';
     fi.onchange = async () => { if (fi.files[0]) ed.value = (await fi.files[0].text()).replace(/\r\n?/g, '\n'); fi.value = ''; };
     const dl = (name, parts, type) => { const a = el('a'); a.href = URL.createObjectURL(new Blob(parts, { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
-    bar.append(el('b', '', 'ASM 6502'), btn('Assemble', build), btn('Run on Atari', run, 'Assemble and boot the program in the running emulator'),
+    bar.append(el('b', '', 'ASM 6502'), btn('Assemble', build), btn('Listing', listing, 'Assemble and show addresses, bytes and source'), btn('Disasm', disasm, 'Assemble and disassemble the result'), btn('Disasm RAM', disasmRam, 'Disassemble memory of the running Atari'), btn('Run on Atari', run, 'Assemble and boot the program in the running emulator'),
       btn('Save .XEX', () => { const r = build(); if (r) dl('PROGRAM.XEX', [r.xex], 'application/octet-stream'); }),
       btn('Load .ASM', () => fi.click()), btn('Save .ASM', () => dl('PROGRAM.ASM', [ed.value.replace(/\n/g, '\r\n')], 'text/plain')),
       btn('Sample', () => { ed.value = SAMPLE; }), el('span', 'flex:1'), btn('X', () => { win.style.display = 'none'; }));
-    win.append(bar, ed, out, el('div', 'padding:3px 8px;background:#14161a;color:#8a93a3;font-size:11px', 'MADS-style subset: labels, ORG, .BYTE/.WORD/.TEXT/.FILL, expressions. No macros or includes. Output matches MADS on the tests so far.'), fi);
+    win.append(bar, ed, out, el('div', 'padding:3px 8px;background:#14161a;color:#8a93a3;font-size:11px', 'MADS-style subset: labels, ORG, .BYTE/.WORD/.TEXT/.FILL, .RUN/.INIT, Atari register names (COLBK, AUDF1, ...), expressions. No macros or includes. Output matches MADS on the tests so far.'), fi);
     let dx = 0, dy = 0, drag = false;
     bar.onmousedown = (e) => { if (e.target !== bar) return; drag = true; const r = win.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top; };
     window.addEventListener('mousemove', (e) => { if (drag) { win.style.left = e.clientX - dx + 'px'; win.style.top = e.clientY - dy + 'px'; win.style.right = 'auto'; } });

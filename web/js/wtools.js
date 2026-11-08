@@ -123,6 +123,14 @@
     0xD400: 'DMACTL', 0xD401: 'CHACTL', 0xD402: 'DLISTL', 0xD403: 'DLISTH', 0xD404: 'HSCROL', 0xD405: 'VSCROL', 0xD407: 'PMBASE', 0xD409: 'CHBASE', 0xD40A: 'WSYNC', 0xD40B: 'VCOUNT', 0xD40C: 'PENH', 0xD40D: 'PENV', 0xD40E: 'NMIEN', 0xD40F: 'NMIST',
     0xE400: 'EDITRV', 0xE410: 'SCRENV', 0xE420: 'KEYBDV', 0xE430: 'PRINTV', 0xE440: 'CASETV', 0xE450: 'DISKIV', 0xE453: 'DSKINV', 0xE456: 'CIOV', 0xE459: 'SIOV', 0xE45C: 'SETVBV', 0xE45F: 'SYSVBV', 0xE462: 'XITVBV', 0xE465: 'SIOINV', 0xE468: 'SENDEV', 0xE46B: 'INTINV', 0xE46E: 'CIOINV', 0xE471: 'BLKBDV', 0xE474: 'WARMSV', 0xE477: 'COLDSV', 0xE47A: 'RBLOKV', 0xE47D: 'CSOPIV', 0xE480: 'PUPDIV',
   };
+  // GTIA / POKEY / ANTIC registers missing above (write names; shared addresses keep the write name).
+  Object.assign(T.ATARI_LABELS, {
+    0xD005: 'HPOSM1', 0xD006: 'HPOSM2', 0xD007: 'HPOSM3', 0xD009: 'SIZEP1', 0xD00A: 'SIZEP2', 0xD00B: 'SIZEP3', 0xD00C: 'SIZEM', 0xD00E: 'GRAFP1', 0xD00F: 'GRAFP2', 0xD010: 'GRAFP3', 0xD011: 'GRAFM',
+    0xD013: 'COLPM1', 0xD014: 'COLPM2', 0xD015: 'COLPM3', 0xD01C: 'VDELAY',
+    0xD20B: 'POTGO', 0xD20C: 'STIMER', 0xD209: 'KBCODE', 0xD20E: 'IRQEN', 0xD210: 'NMIRES', 0xE480: 'PUPDIV', 0xD20D: 'SEROUT', 0xD210: 'NMIRES',
+  });
+  // Name -> address for the assembler (skips names with an offset such as RTCLOK+2).
+  T.atariEquates = function () { const o = {}; for (const a in T.ATARI_LABELS) if (/^[A-Za-z_]\w*$/.test(T.ATARI_LABELS[a])) o[T.ATARI_LABELS[a]] = +a; return o; };
   const h4 = (n) => '$' + n.toString(16).toUpperCase().padStart(4, '0'), h2 = (n) => '$' + hx(n);
   // Split an Atari binary load file into segments: [{start, end, data}] plus trailing junk info. Returns null if not a binary load file.
   T.parseSegments = function (d) {
