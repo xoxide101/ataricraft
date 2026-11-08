@@ -8,12 +8,16 @@
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-  [string]$Target = $(if ($env:CRAFT_DEPLOY_TARGET) { $env:CRAFT_DEPLOY_TARGET } elseif (Test-Path (Join-Path $PSScriptRoot '..\deploy.local.txt')) { (Get-Content (Join-Path $PSScriptRoot '..\deploy.local.txt') -TotalCount 1).Trim() } else { '' }),
+  [string]$Target = $env:CRAFT_DEPLOY_TARGET,
   [switch]$NoPersonal,
   [switch]$IncludeSoftware,
   [switch]$Quiet
 )
 $ErrorActionPreference = 'Stop'
+if (-not $Target) {
+  $localCfg = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) '..\deploy.local.txt'
+  if (Test-Path $localCfg) { $Target = (Get-Content $localCfg -TotalCount 1).Trim() }
+}
 if (-not $Target) { throw 'No deploy target. Pass -Target, set CRAFT_DEPLOY_TARGET, or put the path on the first line of deploy.local.txt (gitignored).' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $web = Join-Path $root 'web'
