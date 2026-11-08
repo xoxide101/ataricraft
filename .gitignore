@@ -35,3 +35,6 @@ font_personal/
 # EBookCraft optional OCR add-on (tesseract.js, installed by scripts/ebookcraft-install-ocr.cjs)
 tools/ebookcraft/ocr/
 web/js/ebookcraft/ocr/
+
+# Private deploy target (never commit server addresses)
+deploy.local.txt

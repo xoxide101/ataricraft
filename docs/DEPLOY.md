@@ -1,6 +1,7 @@
 # Deploying to the private test server
 
-The server (`[private-deploy-target]\`, live at [private-server]) is **private web testing**.
+The server is **private web testing**. Its address is never stored in git: pass `-Target`, set `CRAFT_DEPLOY_TARGET`, or put the
+path on the first line of `deploy.local.txt` (gitignored).
 **Git is the only restricted channel:** gitignored and personal material (personal fonts, ROMs/OS images, disk images, samples,
 generated manifests) stays out of commits and pushes, but it may be copied to the server because the apps need it there.
 
@@ -45,4 +46,4 @@ The xCWriter bundle (`web\js\xcwriter\core\xcw-core.js`) must be current: the sc
 
 ## Not verified
 
-The dry run is the only thing executed. The real copy, and loading the pages from http://[private-server]/, are unverified until run.
+The dry run is the only thing executed. The real copy and loading the deployed pages are unverified until run.

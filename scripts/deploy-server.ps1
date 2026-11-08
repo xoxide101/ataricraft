@@ -8,12 +8,13 @@
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-  [string]$Target = '[private-deploy-target]',
+  [string]$Target = $(if ($env:CRAFT_DEPLOY_TARGET) { $env:CRAFT_DEPLOY_TARGET } elseif (Test-Path (Join-Path $PSScriptRoot '..\deploy.local.txt')) { (Get-Content (Join-Path $PSScriptRoot '..\deploy.local.txt') -TotalCount 1).Trim() } else { '' }),
   [switch]$NoPersonal,
   [switch]$IncludeSoftware,
   [switch]$Quiet
 )
 $ErrorActionPreference = 'Stop'
+if (-not $Target) { throw 'No deploy target. Pass -Target, set CRAFT_DEPLOY_TARGET, or put the path on the first line of deploy.local.txt (gitignored).' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $web = Join-Path $root 'web'
 $srvRoot = Split-Path $Target -Parent          # ROMs live next to web/ (the app also probes ../roms/)
