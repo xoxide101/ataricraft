@@ -145,7 +145,7 @@ font    .include "assets/font.fnt"
         if (!st.last && !c) build(true);
         let a = c ? c.pc : (segSel.value ? +segSel.value : st.last && st.last.segments[0] ? st.last.segments[0].addr : 0x2000), txt = [];
         const L = labels(), m = st.mem || (st.last ? (() => { const x = new Uint8Array(65536); for (const s of st.last.segments) x.set(s.bytes, s.addr); return x; })() : new Uint8Array(65536));
-        for (let k = 0; k < 24 && a < 65536; k++) { const r = W.disasm1(m, a, a, { labels: L }); txt.push((c && a === c.pc ? '▶ ' : '  ') + (L[a] && a !== (c && c.pc) ? (L[a] + ':\n  ') : '') + hx(a, 4) + '  ' + r.bytes.map((b) => hx(b, 2)).join(' ').padEnd(8) + '  ' + r.text); a += r.len; }
+        for (let k = 0; k < 24 && a < 65536; k++) { const r = W.disasm1(m, a, a, { labels: L, cpu: cpuSel.value }); txt.push((c && a === c.pc ? '▶ ' : '  ') + (L[a] && a !== (c && c.pc) ? (L[a] + ':\n  ') : '') + hx(a, 4) + '  ' + r.bytes.map((b) => hx(b, 2)).join(' ').padEnd(8) + '  ' + r.text); a += r.len; }
         dis.textContent = txt.join('\n');
       }
       if (st.toggles.watch) {
@@ -193,7 +193,7 @@ font    .include "assets/font.fnt"
       const v = prompt('Disassemble RAM: start address (hex) and length (hex), e.g. 2000 80', '2000 80'); if (!v) return;
       const [a, n] = v.trim().split(/\s+/).map((x) => parseInt(x.replace(/^\$/, ''), 16));
       if (!(a >= 0 && a < 65536) || !(n > 0)) return msg('Give a start address and a length in hex.', true);
-      msg(W.disasm(e.peek(a, Math.min(n, 65536 - a)), a, {}));
+      msg(W.disasm(e.peek(a, Math.min(n, 65536 - a)), a, { cpu: cpuSel.value }));
     }, 'Disassemble memory of the running Atari');
     bar.append(
       grp('Build & Emit', kbtn('Assemble', 'F7', () => { build(); refresh(); }, 'Assemble (F7)'), btn('Clean&Link', cleanBuild, 'Reset the simulator and rebuild'), btn('.XEX', () => exportAs('XEX'), 'Export Atari binary load file'), btn('.COM', () => exportAs('COM'), 'Export as DOS .COM'),

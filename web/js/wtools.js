@@ -106,7 +106,16 @@
     const imp = { BRK: 0x00, PHP: 0x08, CLC: 0x18, PLP: 0x28, SEC: 0x38, RTI: 0x40, PHA: 0x48, CLI: 0x58, RTS: 0x60, PLA: 0x68, SEI: 0x78, DEY: 0x88, TXA: 0x8a, TYA: 0x98, TXS: 0x9a, TAY: 0xa8, TAX: 0xaa, CLV: 0xb8, TSX: 0xba, INY: 0xc8, DEX: 0xca, CLD: 0xd8, INX: 0xe8, NOP: 0xea, SED: 0xf8 };
     for (const m in imp) OPS[imp[m]] = [m, 'imp'];
   })();
-  const LEN = { imp: 1, acc: 1, imm: 2, zp: 2, zpx: 2, zpy: 2, izx: 2, izy: 2, rel: 2, abs: 3, abx: 3, aby: 3, ind: 3 };
+  // 65C02 additions (opts.cpu = '65c02'); the same set the assembler accepts. Opcodes not listed here keep their 6502 meaning.
+  const OPS02 = {};
+  (function () {
+    const g = (m, list) => { for (const [op, mo] of list) OPS02[op] = [m, mo]; };
+    for (const [m, op] of [['ORA', 0x12], ['AND', 0x32], ['EOR', 0x52], ['ADC', 0x72], ['STA', 0x92], ['LDA', 0xb2], ['CMP', 0xd2], ['SBC', 0xf2]]) g(m, [[op, 'izp']]);
+    g('BIT', [[0x89, 'imm'], [0x34, 'zpx'], [0x3c, 'abx']]); g('JMP', [[0x7c, 'iax']]); g('INC', [[0x1a, 'acc']]); g('DEC', [[0x3a, 'acc']]);
+    g('STZ', [[0x64, 'zp'], [0x74, 'zpx'], [0x9c, 'abs'], [0x9e, 'abx']]); g('TRB', [[0x14, 'zp'], [0x1c, 'abs']]); g('TSB', [[0x04, 'zp'], [0x0c, 'abs']]);
+    g('BRA', [[0x80, 'rel']]); g('PHX', [[0xda, 'imp']]); g('PHY', [[0x5a, 'imp']]); g('PLX', [[0xfa, 'imp']]); g('PLY', [[0x7a, 'imp']]);
+  })();
+  const LEN = { imp: 1, acc: 1, imm: 2, zp: 2, zpx: 2, zpy: 2, izx: 2, izy: 2, izp: 2, rel: 2, abs: 3, abx: 3, aby: 3, ind: 3, iax: 3 };
   // Well-known Atari OS / hardware addresses used to label operands.
   T.ATARI_LABELS = {
     0x0A: 'WARMST', 0x0C: 'DOSVEC', 0x0E: 'DOSINI', 0x10: 'POKMSK', 0x12: 'RTCLOK', 0x14: 'RTCLOK+2', 0x43: 'CASINI', 0x58: 'SAVMSC', 0x5A: 'OLDROW', 0x5C: 'OLDCOL', 0x5D: 'OLDCHR',     0x5E: 'OLDADR',
@@ -157,9 +166,9 @@
     }
     return { segs, bad };
   };
-  // Disassemble one instruction at data[i] (address pc). opts.labels: map addr->name. Returns {len, bytes, text, target}.
+  // Disassemble one instruction at data[i] (address pc). opts.labels: map addr->name; opts.cpu '65c02' adds the CMOS opcodes. Returns {len, bytes, text, target}.
   T.disasm1 = function (data, i, pc, opts) {
-    const L = (opts && opts.labels) || T.ATARI_LABELS, op = data[i], def = OPS[op];
+    const L = (opts && opts.labels) || T.ATARI_LABELS, op = data[i], def = (opts && /^65c02$/i.test(opts.cpu || '') && OPS02[op]) || OPS[op];
     if (!def) return { len: 1, bytes: [op], text: '.BYTE ' + h2(op), target: null, data: true };
     const [m, mo] = def, len = LEN[mo];
     if (i + len > data.length) return { len: 1, bytes: [op], text: '.BYTE ' + h2(op), target: null, data: true };
@@ -174,6 +183,7 @@
       case 'abs': arg = nm(w); if (m === 'JMP' || m === 'JSR') target = w; break;
       case 'abx': arg = nm(w) + ',X'; break; case 'aby': arg = nm(w) + ',Y'; break;
       case 'ind': arg = '(' + nm(w) + ')'; break;
+      case 'izp': arg = '(' + nm(b1, 1) + ')'; break; case 'iax': arg = '(' + nm(w) + ',X)'; break;
     }
     return { len, bytes: Array.from(data.subarray(i, i + len)), text: m + (arg ? ' ' + arg : ''), target };
   };
@@ -182,11 +192,11 @@
     opts = opts || {}; const useL = opts.labels !== false ? T.ATARI_LABELS : {};
     const lines = [], tg = new Set();
     // pass 1: find branch/jump targets inside the block
-    for (let i = 0, pc = origin; i < data.length;) { const r = T.disasm1(data, i, pc, { labels: useL }); if (r.target != null && r.target >= origin && r.target < origin + data.length) tg.add(r.target); i += r.len; pc += r.len; }
+    for (let i = 0, pc = origin; i < data.length;) { const r = T.disasm1(data, i, pc, { labels: useL, cpu: opts.cpu }); if (r.target != null && r.target >= origin && r.target < origin + data.length) tg.add(r.target); i += r.len; pc += r.len; }
     const lab = Object.assign({}, useL); for (const t of tg) if (!lab[t]) lab[t] = 'L' + t.toString(16).toUpperCase().padStart(4, '0');
     for (let i = 0, pc = origin & 0xffff; i < data.length;) {
       if (tg.has(pc)) lines.push((lab[pc] || '') + ':');
-      const r = T.disasm1(data, i, pc, { labels: lab });
+      const r = T.disasm1(data, i, pc, { labels: lab, cpu: opts.cpu });
       lines.push('  ' + h4(pc).slice(1) + '  ' + r.bytes.map(hx).join(' ').padEnd(8) + '  ' + r.text);
       i += r.len; pc = (pc + r.len) & 0xffff;
     }

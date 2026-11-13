@@ -17,6 +17,7 @@ const progs = [
   ...['KEYTEST', 'SNDTEST', 'GFXTEST', 'MEMTEST', 'CPUTEST', 'MIDIPLAY', 'MP3PLAY'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
   ...['PING', 'NSLOOKUP', 'TRACERT', 'WHOIS', 'IPCONFIG'].map((n) => [n + '.COM', 'tools/net/' + n.toLowerCase() + '.com']),
   ...['WGET', 'CURL', 'LYNX', 'JQ', 'MAIL', 'NC'].map((n) => [n + '.COM', 'tools/tests/bin/' + n + '.COM']),
+  ['ACWRITER.COM', 'tools/acwriter/ACWRITER.COM'], ['WPUT.COM', 'tools/tests/bin/WPUT.COM'], ['NHTEST.COM', 'tools/tests/bin/NHTEST.COM'], ['TUIDEMO.COM', 'tools/tui/tuidemo.com'],
   ['TEST.PMD', 'tools/tests/TEST.PMD'], ['DEMO.PMD', 'tools/tests/DEMO.PMD'], ['DEMO.MID', 'tools/tests/DEMO.MID'],
   ['MP3DEMO.SMP', 'tools/tests/audio/MP3DEMO.SMP'], ['DUAL.SMP', 'tools/tests/audio/DUAL.SMP'],
   ['MONO.WAV', 'tools/tests/audio/MONO.WAV'], ['STEREO.WAV', 'tools/tests/audio/STEREO.WAV'],
@@ -47,6 +48,7 @@ CMD.COM    DOS-style command shell:
 
 TEXT AND UTILITIES
 NANO.COM   text editor: NANO FILE.TXT
+ACWRITER.COM  ACWriter word processor
 CALC.COM   calculator: type a sum, Return
 80COL.COM  80 columns: 80COL /ON or /OFF
 VIEW.COM   read a text file: VIEW FILE.TXT
@@ -75,6 +77,9 @@ LYNX url          text web browser.
 JQ /path url      pick one value out of JSON.
 MAIL L|R|D|S ... POP3 / SMTP mail (plain text).
 NC host port     netcat. NC -l port listens.
+WPUT             upload a file to a web server.
+NHTEST           N: handler check.
+TUIDEMO          text-mode UI demo.
   Tools take their arguments from CMD.COM or a prompt.
 
 HARDWARE TESTS (PASS/FAIL colours)
