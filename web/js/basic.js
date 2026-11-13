@@ -40,11 +40,19 @@
       this.idx = new Map(this.order.map((n, i) => [n, i]));
       this.prog = this.order.map((n) => this.compile(n, this.lines.get(n)));
       this.data = []; this.dataRef = [];
-      this.prog.forEach((p, li) => p.forEach((s, si) => { if (s.kw === 'DATA') for (const v of splitTop(s.rest, ',')) this.data.push(v.trim()); }));
+      this.prog.forEach((p, li) => p.forEach((s, si) => { if (s.kw === 'DATA') for (const v of splitTop(s.rest, ',')) { this.data.push(v.trim()); this.dataRef.push(this.order[li]); } }));
     }
 
     // Enter a program line or an immediate command. Returns an async result for immediate ones.
-    load(text) { for (const l of String(text).split(/\r?\n/)) { const m = /^\s*(\d+)\s?(.*)$/.exec(l); if (m) { if (m[2].trim()) this.lines.set(+m[1], m[2]); else this.lines.delete(+m[1]); } } this.reset(); }
+    // Pasted listings often carry typographic quotes and markdown-escaped asterisks; both are normalised to plain ASCII.
+    load(text) {
+      let last = 0;
+      for (const l0 of String(text).split(/\r?\n/)) {
+        const l = l0.replace(/[\u201c\u201d\u201e\u2033]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\\([*_#<>~`])/g, '$1'); const m = /^\s*(\d+)\s?(.*)$/.exec(l);
+        if (m) { last = +m[1]; if (m[2].trim()) this.lines.set(last, m[2]); else this.lines.delete(last); } else if (last && l.trim() && this.lines.has(last) && !/^\s*(RUN|LIST|NEW|CONT|CLR|END|SAVE|LOAD)\b/i.test(l)) this.lines.set(last, this.lines.get(last) + l.trim()); // wrapped listing line
+      }
+      this.reset();
+    }
     list() { return this.order.map((n) => n + ' ' + this.lines.get(n)).join('\n'); }
 
     compile(n, text) {
@@ -120,7 +128,7 @@
         case 'WEND': { const f = this.stack[this.stack.length - 1]; if (!f || f.t !== 'W') throw new BasicError(13); if (this.ev(f.cond)) return { li: f.li, si: f.si + 1 }; this.stack.pop(); return; }
         case 'DIM': return this.dim(r);
         case 'READ': return this.read(r);
-        case 'RESTORE': this.dptr = 0; return;
+        case 'RESTORE': { const ln = r.trim() ? Math.floor(this.ev(r)) : 0; const k = this.dataRef.findIndex((n) => n >= ln); this.dptr = ln ? (k < 0 ? this.data.length : k) : 0; return; }
         case 'POKE': { const a = splitTop(r, ','); const ad = Math.floor(this.ev(a[0])), v = Math.floor(this.ev(a[1])) & 255; this.mem[ad & 65535] = v; if (this.hooks.poke) this.hooks.poke(ad, v); return; }
         case 'GRAPHICS': case 'PLOT': case 'DRAWTO': case 'COLOR': case 'SETCOLOR': case 'SOUND': case 'POSITION': {
           const h = this.hooks[s.kw.toLowerCase()]; if (h) h(...splitTop(r, ',').map((x) => Math.floor(this.ev(x)))); return;
