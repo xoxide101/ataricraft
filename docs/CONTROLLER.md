@@ -47,6 +47,18 @@ A second controller is just a second port: every section has a port setting, and
 
 The Stick tab keeps its own USB gamepad handling; with an active profile both apply (OR-merged), which is harmless but can double-fire.
 
+## Device classification
+
+`Core.classifyDevice({name, mapping, buttons, axes, hid})` guesses what a connected device is (trackball, mouse, paddle, driving, keypad, joystick, gamepad, flight stick, wheel, arcade, keyboard) from its name, then HID usage, then Gamepad API shape. The diagnostics page shows it as "looks like: ..." with a suggested preset. It is a hint only.
+
+## On-screen Trackball tab
+
+The keyboard panel has a **Trackball** tab (`web/js/ctrlvirt.js`): drag the ball (or wheel / shift+wheel) and use the Fire, Fire 2, Start, Select, Option, Reset, Coin, Pause and four Aux buttons. It builds a normal controller profile from synthetic sources, so ports (1/2), protocols (trak, ST, Amiga), speed and Invert Y behave like a real trackball profile. Settings persist in `ac.kbtrack`.
+
+## Fill the screen (right-click)
+
+Right-click the video display or the keyboard panel and choose "Stretch ... to fill (ignore aspect ratio)". The view then fills all available space without letterboxing; choose "Restore ... aspect ratio" to undo. The choice persists in `ac.fill`. With the touch pad over the screen, Shift+right-click reaches the menu.
+
 ## Exports (all untested on hardware)
 
 Verified against upstream sources, not against the device:

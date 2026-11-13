@@ -143,7 +143,24 @@
   #padarea.off { opacity:.4; }
   #kbmode { display:flex; gap:6px; margin-bottom:6px; } #kbmode button { flex:1; padding:5px 8px; opacity:.6; } #kbmode button.on { opacity:1; border-color:var(--acc); }
   #karrows { display:flex; gap:calc(14px*var(--as,1)); align-items:center; justify-content:center; flex-wrap:wrap; padding:6px 0; }
-  #karrows[hidden], #kpad[hidden], #kjoy[hidden], #kbd[hidden], #kmini[hidden] { display:none; }
+  #karrows[hidden], #kpad[hidden], #kjoy[hidden], #ktrack[hidden], #kbd[hidden], #kmini[hidden] { display:none; }
+  #ktrack { --ts:200px; display:flex; gap:14px; align-items:center; justify-content:center; padding:8px; flex-wrap:wrap; }
+  #ktrack .trkleft { display:flex; flex-direction:column; gap:6px; }
+  #ktrack .tball { width:var(--ts); height:var(--ts); border-radius:50%; cursor:grab; touch-action:none; user-select:none;
+    background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 35%), repeating-radial-gradient(circle at 50% 50%, #b22 0 6px, #922 6px 12px);
+    box-shadow:inset -8px -10px 18px rgba(0,0,0,.55), 0 4px 10px rgba(0,0,0,.5); }
+  #ktrack .tball.dn { cursor:grabbing; }
+  #ktrack .trkbtns { display:grid; grid-template-columns:repeat(4, auto); gap:6px; }
+  #ktrack .trkb { padding:10px 12px; min-width:54px; touch-action:none; user-select:none; }
+  #ktrack .trkb.down { filter:brightness(1.6); }
+  /* right-click "stretch to fill": ignore aspect ratio and use all available space */
+  @media (min-width:901px) {
+    body.fillscr .center { height:100%; align-items:stretch; }
+    body.fillscr #stage { flex:1 1 0; min-height:0; align-self:stretch; display:flex; }
+    body.fillscr #screen { width:100%; height:100%; min-width:0; max-width:none; aspect-ratio:auto; }
+  }
+  @media (max-width:900px) { body.fillscr #screen { width:100%; height:60dvh; aspect-ratio:auto; } }
+  body.fillkbd #kbdwrap { max-width:none; width:100%; align-self:stretch; }
   .jplayers { display:flex; gap:12px; justify-content:center; align-items:flex-start; flex-wrap:wrap; }
 .jplayer { flex:1 1 260px; min-width:0; border:1px solid #333a46; border-radius:8px; padding:4px 6px; }
 .jbar { display:flex; gap:6px; justify-content:center; margin-bottom:4px; } .jbar button.on, .jkeys.on { background:#3d6a3d; }
@@ -437,7 +454,7 @@
         <div id="cartbar"></div>
     <div id="kbdwrap">
       <div id="kbview"><span>Show:</span><button data-v="base" title="Lower-case glyphs">a Lower</button><button data-v="shift" title="Capital glyphs">A Caps</button><button data-v="ctrl" title="Control/special graphics">♥ Special</button></div>
-      <div id="kbmode"><button data-m="keys" class="on">⌨ Keys</button><button data-m="arrows">✥ Arrows</button><button data-m="pad">🖱 Pad</button><button data-m="joy">🕹 Stick</button><button data-m="paddle">◐ Paddle</button><button data-m="drive">☸ Driving</button></div>
+      <div id="kbmode"><button data-m="keys" class="on">⌨ Keys</button><button data-m="arrows">✥ Arrows</button><button data-m="pad">🖱 Pad</button><button data-m="joy">🕹 Stick</button><button data-m="paddle">◐ Paddle</button><button data-m="drive">☸ Driving</button><button data-m="track">🖲 Trackball</button></div>
       <div id="kbd"></div>
       <div id="karrows" hidden></div>
       <div id="kpad" hidden>
@@ -451,6 +468,7 @@
         <div id="padcon" class="jcon"></div>
       </div>
       <div id="kjoy" hidden></div>
+      <div id="ktrack" hidden></div>
       <div id="kmini"></div>
       <div class="legend">Legends come from the Atari's character set. <b class="s">Orange</b> = Shift, <b class="c">teal</b> = Control. Click Shift or Control, then a key.</div>
     </div>
@@ -503,8 +521,9 @@
 <script src="js/printer.js?v=20261103a"></script>
 <script src="js/transport.js"></script><script src="js/fxhost.js"></script>
 <script src="js/drivesets.js?v=1"></script>
-<script src="js/app.js?v=20261106a"></script>
-<script src="js/ctrlcore.js?v=1"></script><script src="js/ctrlinput.js?v=1"></script><script src="js/ctrlhook.js?v=1"></script>
+<script src="js/ctrlcore.js?v=1"></script><script src="js/ctrlvirt.js?v=1"></script>
+<script src="js/app.js?v=20261107b"></script>
+<script src="js/ctrlinput.js?v=1"></script><script src="js/ctrlhook.js?v=1"></script>
 <script src="js/ramsel.js?v=1"></script>
 <script src="js/toolshub-host.js?v=1"></script>
 <script>
@@ -515,7 +534,7 @@
     root.style.setProperty('--uh',h+'px');
     root.style.removeProperty('--scrmax');
     var c=document.querySelector('.center'), s=document.getElementById('screen');
-    if(!c||!s||innerWidth<=900) return;
+    if(!c||!s||innerWidth<=900||document.body.classList.contains('fillscr')) return;
     var w=s.getBoundingClientRect().width, n=0;
     while(c.scrollHeight>c.clientHeight+1 && w>200 && n++<60){ w-=16; root.style.setProperty('--scrmax',w+'px'); }
   }

@@ -350,5 +350,38 @@
     return { name: id, vendorId: null, productId: null };
   }
 
-  return { registerAdapter, ADAPTERS, AUX_ACTIONS, AUX_SLOTS, FORMAT, VERSION, PHYS, KEYPAD_KEYS, KP5200, QTAB, GRAY, POT_MAX, PRESETS, SRC_RE, blank, sanitize, validate, fromPreset, applyDeviceMap, createRuntime, createStore, sourcesOf, isDelta, parsePadId, down };
+  // Best-guess device class for the diagnostics page. d = { name, mapping, buttons, axes, hid: [{ usagePage, usage }] }.
+  // Order: explicit name -> HID usage -> Gamepad API shape. Always returns { kind, label, profile } where profile is a suggested preset key.
+  const KINDS = {
+    trackball: ['Trackball', 'trackball'], mouse: ['Mouse / pointer', 'trackball'], paddle: ['Paddle', 'paddle-axis'], driving: ['Driving controller / spinner', 'spinner'],
+    keypad: ['Keypad / 5200 controller', 'keypad-5200-full'], joystick: ['Joystick (digital or analog)', 'atari-joystick'], gamepad: ['Gamepad', 'atari-joystick'],
+    flight: ['Flight stick / throttle', 'atari-joystick'], wheel: ['Steering wheel', 'paddle-axis'], arcade: ['Arcade stick / button box', 'coin-aux'], keyboard: ['Keyboard', ''], unknown: ['Unknown device', ''],
+  };
+  function classifyDevice(d) {
+    d = d || {};
+    const n = String(d.name || '').toLowerCase(), b = d.buttons | 0, a = d.axes | 0, hid = d.hid || [];
+    const has = (page, usage) => hid.some((u) => u.usagePage === page && (usage == null || u.usage === usage));
+    let k;
+    if (/track\s*-?ball|cx-?22|cx-?80|kensington/.test(n)) k = 'trackball';
+    else if (/driving|spinner|cx-?20|rotary|encoder/.test(n)) k = 'driving';
+    else if (/paddle|cx-?30/.test(n)) k = 'paddle';
+    else if (/keypad|5200/.test(n)) k = 'keypad';
+    else if (/wheel|steering|pedal/.test(n)) k = 'wheel';
+    else if (/flight|hotas|throttle|yoke|rudder/.test(n)) k = 'flight';
+    else if (/arcade|fight\s*stick|button\s*box|i-?pac|encoder/.test(n)) k = 'arcade';
+    else if (/mouse/.test(n) || has(1, 2)) k = 'mouse';
+    else if (has(1, 4)) k = 'joystick';
+    else if (has(1, 5)) k = 'gamepad';
+    else if (has(1, 6) || has(7)) k = a === 0 && b === 0 ? 'keyboard' : 'keypad';
+    else if (d.mapping === 'standard') k = 'gamepad';
+    else if (a >= 4 && b >= 12) k = 'flight';
+    else if (a === 1 && b <= 2) k = 'paddle';
+    else if (a >= 2 && a <= 3 && b <= 6) k = 'joystick';
+    else if (a === 0 && b >= 8) k = 'arcade';
+    else if (a >= 2 && b >= 6) k = 'gamepad';
+    else k = 'unknown';
+    return { kind: k, label: KINDS[k][0], profile: KINDS[k][1] };
+  }
+
+  return { registerAdapter, ADAPTERS, AUX_ACTIONS, AUX_SLOTS, FORMAT, VERSION, PHYS, KEYPAD_KEYS, KP5200, QTAB, GRAY, POT_MAX, PRESETS, SRC_RE, blank, sanitize, validate, fromPreset, applyDeviceMap, createRuntime, createStore, sourcesOf, isDelta, parsePadId, down, classifyDevice };
 });

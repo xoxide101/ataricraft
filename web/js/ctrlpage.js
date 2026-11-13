@@ -21,12 +21,16 @@
     if (!pads.length) box.textContent = 'None. Press a button on the controller to wake it.';
     pads.forEach((g) => {
       const info = AC.CtrlCore.parsePadId(g.id);
-      box.append(el('div', { textContent: `#${g.index} ${info.name} ${info.vendorId === null ? '' : 'VID ' + info.vendorId.toString(16).padStart(4, '0') + ' PID ' + info.productId.toString(16).padStart(4, '0')} | mapping: ${g.mapping || 'raw (non-standard)'} | ${g.buttons.length} buttons, ${g.axes.length} axes` }));
+      const cls = AC.CtrlCore.classifyDevice({ name: info.name, mapping: g.mapping, buttons: g.buttons.length, axes: g.axes.length });
+      box.append(el('div', { textContent: `#${g.index} ${info.name} ${info.vendorId === null ? '' : 'VID ' + info.vendorId.toString(16).padStart(4, '0') + ' PID ' + info.productId.toString(16).padStart(4, '0')} | mapping: ${g.mapping || 'raw (non-standard)'} | ${g.buttons.length} buttons, ${g.axes.length} axes | looks like: ${cls.label}${cls.profile ? ' (preset: ' + cls.profile + ')' : ''}` }));
     });
     const h = $('hids'); h.textContent = '';
     const list = inp.hidDevices();
     if (!list.length) h.textContent = 'None connected.';
-    list.forEach((d) => h.append(el('div', { textContent: `${d.name} VID ${d.vendorId.toString(16).padStart(4, '0')} PID ${d.productId.toString(16).padStart(4, '0')} ${d.opened ? '(open)' : ''} ${d.error} | ` + d.collections.map((c) => `usagePage 0x${c.usagePage.toString(16)} usage 0x${c.usage.toString(16)} reports [${c.inputReports}]`).join('; ') })));
+    list.forEach((d) => {
+      const cls = AC.CtrlCore.classifyDevice({ name: d.name, hid: d.collections });
+      h.append(el('div', { textContent: `${d.name} VID ${d.vendorId.toString(16).padStart(4, '0')} PID ${d.productId.toString(16).padStart(4, '0')} ${d.opened ? '(open)' : ''} ${d.error} | looks like: ${cls.label} | ` + d.collections.map((c) => `usagePage 0x${c.usagePage.toString(16)} usage 0x${c.usage.toString(16)} reports [${c.inputReports}]`).join('; ') }));
+    });
   }
   let lastHid = '';
   function frame() {

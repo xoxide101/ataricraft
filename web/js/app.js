@@ -2611,7 +2611,70 @@
   window.addEventListener('keydown', kbHandler(true), true);
   window.addEventListener('keyup', kbHandler(false), true);
   joyRenderAll();
-  // Keyboard panel tabs: Keys / Arrows / Pad / Stick. Pad turns the touch pad on while shown and restores the previous state after.
+  // ---- Trackball tab: on-screen ball plus fire / console / aux buttons, driven through the controller-profile runtime (ctrlvirt.js) ----
+  const TRK = (() => {
+    let cfg = { port: 2, protocol: 'trak', sensitivity: 0.7, invertX: false, invertY: false };
+    try { Object.assign(cfg, JSON.parse(localStorage.getItem('ac.kbtrack') || '{}')); } catch (e) { /* defaults */ }
+    let virt = null, timer = 0, held = new Set(), had = false, built = false;
+    const box = () => $('ktrack');
+    const ensure = () => (virt = virt || AC.CtrlVirtual.create(cfg));
+    const save = () => { localStorage.setItem('ac.kbtrack', JSON.stringify(cfg)); ensure().configure(cfg); };
+    function tick() {
+      const emu = S.emu; if (!emu || !virt) return;
+      const out = virt.tick({ model: $('model') ? $('model').value : '', dtMs: 16 });
+      if (Object.keys(out.fields).length) { emu.down('vtrack', out.fields); had = true; } else if (had) { emu.keys.delete('vtrack'); had = false; }
+      const now = new Set();
+      for (const [k, f] of Object.entries(out.keys)) { const id = 'vtrack:' + k; now.add(id); if (!held.has(id)) emu.down(id, f); }
+      held.forEach((id) => { if (!now.has(id)) emu.up(id); });
+      held = now;
+    }
+    function build() {
+      built = true;
+      const el = box(); el.innerHTML = '';
+      const left = document.createElement('div'); left.className = 'trkleft';
+      const mkSel = (title, opts, val, on) => { const s = document.createElement('select'); s.title = title; opts.forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; s.append(o); }); s.value = String(val); s.onchange = () => on(s.value); return s; };
+      left.append(
+        mkSel('Joystick port the trackball is plugged into', [[1, 'Port 1'], [2, 'Port 2']], cfg.port, (v) => { cfg.port = +v; save(); }),
+        mkSel('What the trackball looks like to the program', AC.CtrlVirtual.PROTOCOLS, cfg.protocol, (v) => { cfg.protocol = v; save(); }),
+        mkSel('Speed', [[0.35, 'Slow'], [0.7, 'Normal'], [1.4, 'Fast'], [2.5, 'Very fast']], cfg.sensitivity, (v) => { cfg.sensitivity = +v; save(); }));
+      const inv = document.createElement('label'); inv.className = 'dim'; inv.style.cssText = 'font-size:11px;display:flex;gap:4px;align-items:center';
+      const ic = document.createElement('input'); ic.type = 'checkbox'; ic.checked = cfg.invertY; ic.onchange = () => { cfg.invertY = ic.checked; save(); };
+      inv.append(ic, 'Invert Y'); left.append(inv);
+      const mid = document.createElement('div'); mid.className = 'trkmid';
+      const ball = document.createElement('div'); ball.className = 'tball'; ball.title = 'Drag to roll the ball (or use the mouse wheel / shift+wheel)';
+      let last = null, spin = [0, 0];
+      const roll = (dx, dy) => { ensure().move(dx, dy); spin[0] -= dx; spin[1] -= dy; ball.style.backgroundPosition = `${spin[0]}px ${spin[1]}px, 0 0`; };
+      ball.addEventListener('pointerdown', (e) => { e.preventDefault(); ball.setPointerCapture(e.pointerId); last = [e.clientX, e.clientY]; ball.classList.add('dn'); });
+      ball.addEventListener('pointermove', (e) => { if (!last) return; roll(e.clientX - last[0], e.clientY - last[1]); last = [e.clientX, e.clientY]; });
+      const end = () => { last = null; ball.classList.remove('dn'); };
+      ball.addEventListener('pointerup', end); ball.addEventListener('pointercancel', end);
+      ball.addEventListener('wheel', (e) => { e.preventDefault(); roll(e.shiftKey ? e.deltaY / 4 : 0, e.shiftKey ? 0 : e.deltaY / 4); }, { passive: false });
+      ball.addEventListener('contextmenu', (e) => e.preventDefault());
+      mid.append(ball);
+      const btns = document.createElement('div'); btns.className = 'trkbtns';
+      AC.CtrlVirtual.BUTTONS.forEach((b) => {
+        const x = document.createElement('button'); x.type = 'button'; x.textContent = b.label; x.dataset.b = b.id;
+        x.className = 'trkb ' + (b.cls || 'ckey');
+        x.addEventListener('pointerdown', (e) => { e.preventDefault(); x.setPointerCapture(e.pointerId); ensure().press(b.id, true); x.classList.add('down'); });
+        const up = () => { ensure().press(b.id, false); x.classList.remove('down'); };
+        x.addEventListener('pointerup', up); x.addEventListener('pointercancel', up);
+        btns.append(x);
+      });
+      el.append(left, mid, btns);
+    }
+    return {
+      show(on) {
+        if (on) { if (!built) build(); ensure().configure(cfg); if (!timer) timer = setInterval(tick, 16); }
+        else {
+          if (timer) clearInterval(timer); timer = 0;
+          if (virt) virt.release();
+          const emu = S.emu; if (emu) { held.forEach((id) => emu.up(id)); emu.keys.delete('vtrack'); }
+          held = new Set(); had = false;
+        }
+      },
+    };
+  })();
+  // Keyboard panel tabs: Keys / Arrows / Pad / Stick / Trackball. Pad turns the touch pad on while shown and restores the previous state after.
   {
     let padBefore = null;
     const setMode = (m) => {
@@ -2624,7 +2687,8 @@
         const prev = joyForce; joyForce = null;
         players.forEach((p, i) => { if (p.JOY.dev !== prev[i]) p.setDev(prev[i]); });
       }
-      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kjoy').hidden = !(m === 'joy' || forced); $('kmini').hidden = m !== 'keys';
+      $('kbd').hidden = m !== 'keys'; $('karrows').hidden = m !== 'arrows'; $('kpad').hidden = m !== 'pad'; $('kjoy').hidden = !(m === 'joy' || forced); $('kmini').hidden = m !== 'keys'; $('ktrack').hidden = m !== 'track';
+      TRK.show(m === 'track');
       $('kbview').style.display = m === 'keys' ? '' : 'none';
       fitPanel();
       if (m === 'pad' && padBefore == null) { padBefore = PAD.on; PAD.on = true; syncPadUi(); applyPad(); }
@@ -2654,7 +2718,12 @@
     };
     const fitPanel = () => {
       const H = keysArea(); if (H < 120) return;
-      const pad = $('kpad'), ar = $('karrows'), jy = $('kjoy');
+      const pad = $('kpad'), ar = $('karrows'), jy = $('kjoy'), tk = $('ktrack');
+      if (!tk.hidden) {
+        tk.style.minHeight = '';
+        fitTo(tk, H, (v) => tk.style.setProperty('--ts', Math.round(v) + 'px'), 90, 360, 220);
+        tk.style.minHeight = H + 'px';
+      }
       if (!ar.hidden) {
         ar.style.minHeight = ''; ar.style.flexWrap = 'nowrap';
         fitTo(ar, H, (v) => ar.style.setProperty('--as', v.toFixed(3)), 0.4, 1.7, 1);
@@ -4072,7 +4141,7 @@
   AC.keyboard.build($('kbd'), handle);
   AC.keyboard.buildArrows($('karrows'), handle, false);
   AC.keyboard.buildArrows($('kmini'), handle, true);
-  window.AC_setKbMode(['keys', 'arrows', 'pad', 'joy', 'paddle', 'drive'].includes(localStorage.getItem('ac.kbmode')) ? localStorage.getItem('ac.kbmode') : 'keys');
+  window.AC_setKbMode(['keys', 'arrows', 'pad', 'joy', 'paddle', 'drive', 'track'].includes(localStorage.getItem('ac.kbmode')) ? localStorage.getItem('ac.kbmode') : 'keys');
   $('kblayout').onchange = (e) => AC.keyboard.build($('kbd'), handle, e.target.value);
   $('romfiles').onchange = (e) => addRoms(e.target.files);
   $('model').onchange = () => { fillRomSelects(); syncBasicUi(); if ($('model').value === '5200' && $('core').value === 'altirra') { $('core').value = 'atari800'; log('5200 carts only run on the Atari800 core so far; switched core'); } const m = $('model').value; if ([...$('kblayout').options].some((o) => o.value === m)) { $('kblayout').value = m; AC.keyboard.build($('kbd'), handle, m); } };
@@ -4468,15 +4537,34 @@
     e.preventDefault();
     pasteText((e.clipboardData && e.clipboardData.getData('text')) || '');
   });
+  // Fill mode: stretch the video display and/or the keyboard panel to the full available area, ignoring the aspect ratio (persisted).
+  const FILL = (() => { let o = {}; try { o = JSON.parse(localStorage.getItem('ac.fill') || '{}'); } catch (e) { /* defaults */ } return { screen: !!o.screen, kbd: !!o.kbd }; })();
+  function applyFill() {
+    document.body.classList.toggle('fillscr', FILL.screen);
+    document.body.classList.toggle('fillkbd', FILL.kbd);
+    try { localStorage.setItem('ac.fill', JSON.stringify(FILL)); } catch (e) { /* storage unavailable */ }
+    if (window.acFitView) window.acFitView();
+    if (window.AC_fitPanel) window.AC_fitPanel();
+  }
+  const fillItem = (what, name) => ({ label: FILL[what] ? `Restore ${name} aspect ratio` : `Stretch ${name} to fill (ignore aspect ratio)`, run: () => { FILL[what] = !FILL[what]; applyFill(); } });
+  AC.fill = { state: FILL, toggle: (what) => { FILL[what] = !FILL[what]; applyFill(); } };
+  applyFill();
   // Right-click on the Atari screen: Paste / Copy (not while the screen is acting as a pad or mouse).
   cv.addEventListener('contextmenu', (e) => {
-    if (PAD.on && PAD.screen) return;
+    if (PAD.on && PAD.screen && !e.shiftKey) return;
     e.preventDefault();
     openPick(e.clientX, e.clientY, 'Atari screen', [
+      fillItem('screen', 'video'),
       { label: 'Paste (type into the Atari)', run: clip(async () => pasteText(await navigator.clipboard.readText())) },
       { label: 'Copy screen text', run: clip(copyScreenText) },
       { label: 'Copy screen image', run: clip(copyScreenImage) },
       { label: 'Stop pasting', run: () => { S.typeQ.length = 0; log('paste cancelled'); } }]);
+  });
+  // Right-click on the keyboard panel (any tab); controls with their own menu keep it.
+  $('kbdwrap').addEventListener('contextmenu', (e) => {
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    openPick(e.clientX, e.clientY, 'Keyboard', [fillItem('kbd', 'keyboard')]);
   });
   $('pastebtn').onclick = clip(async () => pasteText(await navigator.clipboard.readText()));
   $('copytxt').onclick = clip(copyScreenText);

@@ -168,8 +168,26 @@ hin.requestHid().then(() => {
   ok(/,a:b0,b:b1,x:b2,y:b3,/.test(sd.line) && /,platform:Linux,$/.test(sd.line), 'SDL mapping fields: ' + sd.line);
   eq(Exp.sdlGuid(0x045e, 0x028e, 0x0114, 3), '030000005e0400008e02000014010000', 'SDL GUID matches the documented Xbox 360 example');
   const unk = Exp.sdl(Core.fromPreset('gamestation')); ok(/placeholder/.test(unk.text), 'SDL placeholder GUID when ids unknown');
+  // -- virtual trackball panel, device classification, fill mode --
+  const Virt = require('../web/js/ctrlvirt.js');
+  { const v = Virt.create({ port: 2, protocol: 'trak' });
+    let moved = false; v.move(40, 0); for (let i = 0; i < 6; i++) { const t = v.tick({}); if (t.fields.joy1 !== undefined && t.fields.joy1 !== 0xf) moved = true; }
+    ok(moved, 'virtual ball motion produces quadrature on port 2 (joy1)');
+    v.press('fire', true); eq(v.tick({}).fields.trig1, 1, 'virtual fire -> trig1'); v.press('fire', false);
+    v.press('start', true); eq(v.tick({}).fields.start, 1, 'virtual Start -> console start'); v.release();
+    v.press('aux2', true); eq(v.tick({}).fields.special, 5, 'aux2 = Break'); v.release();
+    const p1 = Virt.create({ port: 1 }); p1.press('fire', true); eq(p1.tick({}).fields.trig0, 1, 'port 1 fire -> trig0');
+    eq(Virt.BUTTONS.length, 12, '12 virtual buttons'); }
+  eq(Core.classifyDevice({ name: 'Kensington Expert Mouse Trackball' }).kind, 'trackball', 'classify trackball');
+  eq(Core.classifyDevice({ name: 'Atari CX30 Paddle' }).kind, 'paddle', 'classify paddle');
+  eq(Core.classifyDevice({ name: 'Xbox 360 Controller', mapping: 'standard', buttons: 17, axes: 4 }).kind, 'gamepad', 'classify gamepad');
+  ok(Core.classifyDevice({ name: 'zzz' }).kind === 'unknown' || Core.classifyDevice({ name: 'zzz' }).kind, 'classify fallback');
+  ok(/AC\.fill/.test(app) && /fillscr/.test(app) && /fillkbd/.test(app) && /kbdwrap/.test(app), 'app wires fill mode on screen and keyboard');
+  ok(/body\.fillscr #screen \{[^}]*aspect-ratio:auto/.test(web('index.html')) && /body\.fillkbd #kbdwrap/.test(web('index.html')), 'fill CSS ignores aspect ratio');
+  ok(/data-m="track"/.test(web('index.html')) && /id="ktrack"/.test(web('index.html')), 'trackball tab present');
+  ok(web('index.html').indexOf('ctrlvirt.js') < web('index.html').indexOf('js/app.js'), 'ctrlvirt loads before app.js');
   // -- repo hygiene --
-  const files = ['js/ctrlcore.js', 'js/ctrlinput.js', 'js/ctrlexport.js', 'js/ctrlhook.js', 'js/ctrlpage.js', 'controller.html', '../docs/CONTROLLER.md', '../scripts/controller-test.cjs'];
+  const files = ['js/ctrlcore.js', 'js/ctrlvirt.js', 'js/ctrlinput.js', 'js/ctrlexport.js', 'js/ctrlhook.js', 'js/ctrlpage.js', 'controller.html', '../docs/CONTROLLER.md', '../scripts/controller-test.cjs'];
   files.forEach((f) => { let t = ''; try { t = web(f); } catch (e) { return; } ok(!new RegExp('is' + 'fx|\\b(192\\.168|10\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01]))\\.\\d+', 'i').test(t), 'no private address in ' + f); });
   ok(/controller\.html/.test(web('tools.html')) && /controller\.html/.test(web('studio.html')), 'links from tools and studio');
   ok(/ctrlhook\.js/.test(web('index.html')), 'index loads the hook');
