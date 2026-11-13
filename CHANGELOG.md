@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BASIC panel: `DIM A(X,Y)` two-dimensional numeric arrays (read, assign, DIM ERR 9 on bad bounds), `CALL addr[,args]` (statement and `CALL(` form, optional host `call` hook), `ADR`, `DPEEK`, and accepted-but-inert `OPEN`, `CLOSE`, `XIO`, `NOTE`, `POINT`, `LOCATE`, `GET`, `PUT`, `BYE`, `DOS`, `LPRINT`, `PRINT #n`. Test: `node scripts/basic-run-test.cjs`.
+
 - **8.2.0-beta.6:** on-screen **Trackball** tab in the keyboard panel (ball, Fire/Fire 2, Start/Select/Option/Reset, Coin, Pause, 4 Aux; port, protocol, speed and invert persisted); the controller diagnostics page now shows a "looks like" device type and suggested preset (`classifyDevice`); right-click the video display or the keyboard to stretch it to fill the area ignoring aspect ratio, and again to restore. See [docs/CONTROLLER.md](docs/CONTROLLER.md). Tested with `scripts/controller-test.cjs` and browser checks; not tried on real hardware.
 
 - **ASM/IDE and Craft Studio:** assembler gains `.RUN`/`.INIT`, MADS/dasm directives, macros, `.INCLUDE`/`.INCBIN`, 65C02 mode and listings; in-memory buffer registry (`AC.Buffers`) so the Font editor's unsaved 8x8 set can be `.INCLUDE`d as `assets/font.fnt`; 6502 simulator/debugger; `studio.html` tabbed shell with per-tab ribbons. See [docs/WORKBENCH.md](docs/WORKBENCH.md). Browser test `scripts/asmpanel-test.cjs`.

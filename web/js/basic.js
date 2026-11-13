@@ -7,7 +7,8 @@
   else { root.AC = root.AC || {}; root.AC.Basic = factory(); }
 })(typeof self !== 'undefined' ? self : this, function () {
   const KW = ['PRINT', 'INPUT', 'LET', 'IF', 'THEN', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'ON', 'DIM', 'END', 'STOP', 'REM', 'DATA', 'READ', 'RESTORE',
-    'POKE', 'GRAPHICS', 'PLOT', 'DRAWTO', 'COLOR', 'SETCOLOR', 'SOUND', 'POSITION', 'CLR', 'WHILE', 'WEND', 'POP', 'TRAP', 'DEG', 'RAD', 'CLS', 'RANDOMIZE'];
+    'POKE', 'GRAPHICS', 'PLOT', 'DRAWTO', 'COLOR', 'SETCOLOR', 'SOUND', 'POSITION', 'CLR', 'WHILE', 'WEND', 'POP', 'TRAP', 'DEG', 'RAD', 'CLS', 'RANDOMIZE',
+    'CALL', 'OPEN', 'CLOSE', 'XIO', 'NOTE', 'POINT', 'LOCATE', 'GET', 'PUT', 'BYE', 'DOS', 'LPRINT'];
   const ERR = { 3: 'VALUE ERR', 5: 'STRING LENGTH ERR', 6: 'OUT OF DATA', 7: 'LINE NUMBER > 32767', 8: 'INPUT STMT ERR', 9: 'DIM ERR', 11: 'FP OVERFLOW',
     12: 'LINE NOT FOUND', 13: 'NO MATCHING FOR', 14: 'LINE TOO LONG', 15: 'GOSUB/FOR DELETED', 16: 'RETURN ERR', 17: 'SYNTAX ERR' };
 
@@ -33,7 +34,7 @@
     }
     new() { this.lines = new Map(); this.reset(); }
     reset() {
-      this.vars = new Map(); this.strs = new Map(); this.arrs = new Map(); this.dims = new Map();
+      this.vars = new Map(); this.strs = new Map(); this.arrs = new Map(); this.dims = new Map(); this.adim = new Map();
       this.stack = []; this.data = []; this.dptr = 0; this.col = 0; this.running = false; this.stopFlag = false; this.rad = true; this.trap = 0;
       this.order = [...this.lines.keys()].sort((a, b) => a - b);
       this.idx = new Map(this.order.map((n, i) => [n, i]));
@@ -94,7 +95,12 @@
       switch (s.kw) {
         case 'REM': case 'DATA': case 'DEG': if (s.kw === 'DEG') this.rad = false; return;
         case 'RAD': this.rad = true; return;
-        case 'CLR': this.vars.clear(); this.strs.clear(); this.arrs.clear(); this.dims.clear(); return;
+        case 'CLR': this.vars.clear(); this.strs.clear(); this.arrs.clear(); this.dims.clear(); this.adim.clear(); return;
+        case 'CALL': { const a = splitTop(r.trim().replace(/^\((.*)\)$/s, '$1'), ',').filter((x) => x.trim()).map((x) => this.ev(x)); if (this.hooks.call) this.hooks.call(...a); return; }
+        case 'OPEN': case 'CLOSE': case 'XIO': case 'NOTE': case 'POINT': case 'PUT': case 'BYE': case 'DOS': return;
+        case 'LOCATE': { const a = splitTop(r, ','); if (a.length > 2) this.store(a[2].trim(), 0); return; }
+        case 'GET': { const a = splitTop(r, ','); if (a.length > 1) this.store(a[1].trim(), 0); return; }
+        case 'LPRINT': return this.print(r);
         case 'CLS': this.out('\f'); return;
         case 'RANDOMIZE': return;
         case 'END': case 'STOP': return 'END';
@@ -176,16 +182,24 @@
     dim(r) {
       for (const d of splitTop(r, ',')) {
         const m = /^\s*([A-Za-z][A-Za-z0-9]*)(\$?)\s*\((.*)\)\s*$/s.exec(d); if (!m) throw new BasicError(17);
-        const n = m[1].toUpperCase() + m[2], sz = Math.floor(this.ev(m[3]));
-        if (sz < 0 || sz > 32767) throw new BasicError(9);
-        if (m[2]) this.strs.set(n, ''), this.dims.set(n, sz); else this.arrs.set(n, new Array(sz + 1).fill(0));
+        const n = m[1].toUpperCase() + m[2], sizes = splitTop(m[3], ',').map((x) => Math.floor(this.ev(x)));
+        if (sizes.length > 2 || sizes.some((z) => !(z >= 0 && z <= 32767))) throw new BasicError(9);
+        if (m[2]) { this.strs.set(n, ''); this.dims.set(n, sizes[sizes.length - 1]); continue; }
+        if (sizes.length === 2) { this.adim.set(n, [sizes[0] + 1, sizes[1] + 1]); this.arrs.set(n, new Array((sizes[0] + 1) * (sizes[1] + 1)).fill(0)); } else { this.adim.delete(n); this.arrs.set(n, new Array(sizes[0] + 1).fill(0)); }
       }
+    }
+    // Element offset for A(i) or A(i,j); every mismatch is DIM ERR (9) like the real interpreter.
+    aidx(n, ix) {
+      const arr = this.arrs.get(n); if (!arr) throw new BasicError(9);
+      const dm = this.adim.get(n);
+      if (dm ? ix.length !== 2 || ix[0] < 0 || ix[1] < 0 || ix[0] >= dm[0] || ix[1] >= dm[1] : ix.length !== 1 || ix[0] < 0 || ix[0] >= arr.length) throw new BasicError(9);
+      return dm ? ix[0] * dm[1] + ix[1] : ix[0];
     }
     read(r) { for (const t of splitTop(r, ',')) { if (this.dptr >= this.data.length) throw new BasicError(6); const raw = this.data[this.dptr++]; this.store(t.trim(), /\$\s*(\(|$)/.test(t) ? unq(raw) : this.num(raw)); } }
     num(s) { const n = Number(s); if (s === '' || Number.isNaN(n)) throw new BasicError(8); return n; }
 
     print(r) {
-      let nl = true, i = 0; const s = r;
+      let nl = true, i = 0; const s = r.replace(/^\s*#\s*\d+\s*[,;]?/, '');
       while (i < s.length) {
         while (s[i] === ' ') i++;
         if (i >= s.length) break;
@@ -229,8 +243,7 @@
       if (typeof v !== 'number') throw new BasicError(3);
       if (m[3] === undefined) { this.vars.set(n, v); return; }
       const arr = this.arrs.get(n); if (!arr) throw new BasicError(9);
-      const i = Math.floor(this.ev(m[3])); if (i < 0 || i >= arr.length) throw new BasicError(9);
-      arr[i] = v;
+      arr[this.aidx(n, splitTop(m[3], ',').map((x) => Math.floor(this.nv(this.ev(x)))))] = v;
     }
 
     // ---- expressions ----
@@ -286,7 +299,11 @@
         if (a < 1 || b > cur.length || a > b + 1) throw new BasicError(5);
         return cur.slice(a - 1, b);
       }
-      if (s[p.i] === '(') { p.i++; const i = Math.floor(this.nv(this.or(p))); skip(p); if (s[p.i] !== ')') throw new BasicError(17); p.i++; const arr = this.arrs.get(name); if (!arr || i < 0 || i >= arr.length) throw new BasicError(9); return arr[i]; }
+      if (s[p.i] === '(') {
+        p.i++; const ix = []; for (;;) { ix.push(Math.floor(this.nv(this.or(p)))); skip(p); if (s[p.i] === ',') { p.i++; continue; } break; }
+        if (s[p.i] !== ')') throw new BasicError(17); p.i++;
+        return this.arrs.get(name)[this.aidx(name, ix)];
+      }
       return this.vars.has(name) ? this.vars.get(name) : (() => { throw new BasicError(9, 'VARIABLE ' + name + ' NOT SET'); })();
     }
     loose(key) { if (this.dialect === 'atari') throw new BasicError(9); this.dims.set(key, 255); this.strs.set(key, ''); return 255; }
@@ -299,7 +316,9 @@
     ATN(x) { const r = Math.atan(x); return this.rad ? r : r * 180 / Math.PI; },
     LOG: (x) => { if (x <= 0) throw new BasicError(3); return Math.log(x); }, CLOG: (x) => { if (x <= 0) throw new BasicError(3); return Math.log10(x); },
     EXP: (x) => Math.exp(x), RND: () => Math.random(), FRE: () => 30000, PEEK(a) { a = Math.floor(a) & 65535; return this.hooks.peek ? this.hooks.peek(a) : this.mem[a]; },
-    PADDLE: () => 228, STICK: () => 15, STRIG: () => 1, USR: () => 0, ERR: () => 0,
+    PADDLE: () => 228, STICK: () => 15, STRIG: () => 1, ERR: () => 0, ADR: () => 1536,
+    USR(...a) { return this.hooks.usr ? Number(this.hooks.usr(...a)) || 0 : 0; },
+    DPEEK(a) { a = Math.floor(a) & 65535; const pk = (x) => (this.hooks.peek ? this.hooks.peek(x & 65535) : this.mem[x & 65535]); return pk(a) + 256 * pk(a + 1); },
     LEN(s) { if (typeof s !== 'string') throw new BasicError(3); return s.length; }, ASC(s) { if (typeof s !== 'string' || !s.length) throw new BasicError(3); return s.charCodeAt(0) & 255; },
     VAL(s) { if (typeof s !== 'string') throw new BasicError(3); const n = Number(s.trim()); if (Number.isNaN(n)) throw new BasicError(8); return n; },
     STR$: (x) => fmt(x), CHR$: (x) => String.fromCharCode(Math.floor(x) & 255),
