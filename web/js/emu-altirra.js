@@ -118,7 +118,7 @@ window.AC = window.AC || {};
       const merged = {};
       for (const [id, k] of this.keys) {
         for (const [f, v] of Object.entries(k.fields)) {
-          if (f === 'joy0' || f === 'joy1') merged[f] = (merged[f] || 0) | v;
+          if (f === 'joy0' || f === 'joy1' || f === 'trig0' || f === 'trig1') merged[f] = (merged[f] || 0) | v;
           else merged[f] = v;
         }
         if (k.ttl !== Infinity && --k.ttl <= 0) this.keys.delete(id);

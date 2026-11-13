@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Controller profiles and diagnostics - Ataricraft</title>
+<style>
+:root{--bg:#14161b;--pn:#1d2027;--fg:#dde1e8;--mut:#8c94a3;--line:#323844;--acc:#5aa9ff;--warn:#ffb454;--ok:#6fd08c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px system-ui,sans-serif}
+header{display:flex;gap:12px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line)}header h1{font-size:16px;margin:0}header a{color:var(--acc)}
+main{padding:12px 14px;display:grid;gap:12px;max-width:1200px;margin:auto}
+section{background:var(--pn);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+h2{font-size:14px;margin:0 0 8px}h3{font-size:12px;margin:10px 0 4px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+button,select,input,textarea{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:4px 8px;font:inherit}
+button{cursor:pointer}button:hover{border-color:var(--acc)}button.rec{border-color:var(--warn);color:var(--warn)}
+input[type=text],input:not([type]){min-width:0}input[type=checkbox]{padding:0}
+.warn{background:#3a2d12;border:1px solid var(--warn);color:var(--warn);padding:6px 10px;border-radius:4px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:3px 0}.row>label{min-width:120px;color:var(--mut)}.row input.src{flex:1;min-width:180px;font-family:ui-monospace,monospace}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
+.btn1{padding:3px 6px;border:1px solid var(--line);border-radius:4px;text-align:center;font-family:ui-monospace,monospace}.btn1.on{background:var(--acc);color:#000}
+.bar{height:8px;background:#0006;border-radius:4px;position:relative}.bar i{position:absolute;top:0;height:8px;background:var(--acc);border-radius:4px}
+pre,.log{background:#0c0e12;border:1px solid var(--line);border-radius:4px;padding:6px;margin:0;font:12px ui-monospace,monospace;overflow:auto;max-height:220px;white-space:pre-wrap}
+.mut{color:var(--mut)}.chg{color:var(--warn);font-weight:bold}table{border-collapse:collapse;width:100%}td,th{padding:2px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+#capture{height:70px;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--mut);cursor:crosshair}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+</style></head>
+<body>
+<header><h1>Controller profiles &amp; diagnostics</h1><a href="tools.html">Tools</a><a href="index.html">Emulator</a><a href="studio.html">Studio</a></header>
+<main>
+<div class="warn">Untested on hardware. These tools were built for the Atari Gamestation Gamepad (DGUNL-7152) before it was available. How it enumerates (HID gamepad, keyboard/mouse or custom) is unknown; use the diagnostics below to find out. The pad has a digital d-pad only (no analog stick).</div>
+
+<section><h2>1. Devices</h2>
+<div class="row"><button id="hidBtn">Connect HID device (WebHID)</button><span class="mut" id="hidSupport"></span></div>
+<div class="cols"><div><h3>Gamepads (Gamepad API)</h3><div id="pads" class="mut">None. Press a button on the controller to wake it.</div></div>
+<div><h3>WebHID devices</h3><div id="hids" class="mut">None connected.</div></div></div>
+<h3>Mouse / trackball</h3><div id="capture" tabindex="0">Click to capture the pointer (trackball deltas, wheel). Esc releases.</div>
+</section>
+
+<section><h2>2. Live view</h2>
+<div class="cols">
+<div><h3>Gamepad buttons</h3><div id="lbtn" class="grid"></div><h3>Axes (absolute / relative verdict)</h3><div id="laxes"></div></div>
+<div><h3>Mouse</h3><div id="lmouse" class="mut"></div><h3>Keyboard</h3><div id="lkey" class="mut"></div><h3>Raw HID reports (changed bytes highlighted)</h3><div id="lhid" class="log" style="min-height:40px"></div></div>
+</div>
+<h3>Event log</h3><div id="log" class="log"></div>
+</section>
+
+<section><h2>3. Record the physical controls ("press this control")</h2>
+<p class="mut">Click Record, then press the button or move the control. Digital controls detect a button/key/HID bit; analog ones detect an axis, mouse movement, wheel or HID byte. Esc cancels. The result is saved in the profile's device map.</p>
+<div class="row"><button id="applyMap">Apply device map to profile bindings</button><span class="mut">Fills joystick, console, aux, trackball, spinner and keypad from the recorded controls.</span></div>
+<table id="phys"></table></section>
+
+<section><h2>4. Profile</h2>
+<div class="row"><select id="plist"></select><button id="pNew">New from preset</button><select id="ppre"></select><button id="pSave">Save</button><button id="pDel">Delete</button><button id="pUse">Use in emulator</button><span id="active" class="mut"></span></div>
+<div class="row"><button id="pExp">Export JSON</button><button id="pExpAll">Export all</button><label class="mut" for="pImp">Import JSON</label><input id="pImp" type="file" accept=".json,application/json"></div>
+<div id="warns"></div><div id="editor"></div></section>
+
+<section><h2>5. Runtime preview</h2><p class="mut">What the active editor profile would send to the emulator right now (model: 800XL unless you pick 5200).</p>
+<div class="row"><label>Model</label><select id="pm"><option value="800">8-bit computer</option><option value="5200">5200</option></select></div><pre id="rt"></pre></section>
+
+<section><h2>6. Export for other emulators</h2>
+<div class="warn">Untested on hardware. Formats follow the upstream sources (see docs/CONTROLLER.md) but nothing has been tried with the real controller. Button/axis numbers come from the browser and may differ from what MAME/RetroArch/SDL see.</div>
+<div class="row"><button data-x="mame">MAME ctrlr .cfg</button><button data-x="racfg">RetroArch autoconfig .cfg</button><button data-x="rarmap">RetroArch .rmap</button><button data-x="sdl">SDL gamecontrollerdb line</button></div>
+<div id="xnotes" class="mut"></div><pre id="xout"></pre></section>
+</main>
+<script src="js/ctrlcore.js?v=1"></script><script src="js/ctrlinput.js?v=1"></script><script src="js/ctrlexport.js?v=1"></script><script src="js/ctrlpage.js?v=1"></script>
+</body></html>

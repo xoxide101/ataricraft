@@ -264,6 +264,7 @@
     dlg.showModal();
   }
   window.AC_sysCheck = sysCheck;
+  window.AC_getEmu = () => S.emu; // used by ctrlhook.js (controller profiles)
 
   // First-run guide: shown once when no original ROMs are found and no ROM folder has been chosen. Never in automated browsers, and ?nowiz skips it.
   async function setupGuide(force) {
