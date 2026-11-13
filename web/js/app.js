@@ -4492,7 +4492,7 @@
     return c.toDataURL(format || 'image/png');
   }
 
-  const VERSION = '8.2.0-beta.3', BUILD = '2026-11-07';
+  const VERSION = '8.2.0-beta.4', BUILD = '2026-11-07';
   { const h = $('appver'); if (h) { h.title = `Ataricraft v${VERSION}, built ${BUILD}`; h.querySelector('small').textContent = `v${VERSION} · ${BUILD}`; } console.log(`Ataricraft v${VERSION} (${BUILD})`); }
   AC.Inspect.attach(() => S.emu);
   // pdfview.html posts a program here (works from file:// too, where window.opener is cross-origin)
