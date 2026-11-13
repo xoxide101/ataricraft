@@ -8,7 +8,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   const KW = ['PRINT', 'INPUT', 'LET', 'IF', 'THEN', 'FOR', 'NEXT', 'GOTO', 'GOSUB', 'RETURN', 'ON', 'DIM', 'END', 'STOP', 'REM', 'DATA', 'READ', 'RESTORE',
     'POKE', 'GRAPHICS', 'PLOT', 'DRAWTO', 'COLOR', 'SETCOLOR', 'SOUND', 'POSITION', 'CLR', 'WHILE', 'WEND', 'POP', 'TRAP', 'DEG', 'RAD', 'CLS', 'RANDOMIZE',
-    'CALL', 'OPEN', 'CLOSE', 'XIO', 'NOTE', 'POINT', 'LOCATE', 'GET', 'PUT', 'BYE', 'DOS', 'LPRINT'];
+    'CALL', 'OPEN', 'CLOSE', 'XIO', 'NOTE', 'POINT', 'LOCATE', 'GET', 'PUT', 'BYE', 'DOS', 'LPRINT', 'COM', 'SAVE', 'CSAVE', 'CLOAD', 'STATUS'];
   const ERR = { 3: 'VALUE ERR', 5: 'STRING LENGTH ERR', 6: 'OUT OF DATA', 7: 'LINE NUMBER > 32767', 8: 'INPUT STMT ERR', 9: 'DIM ERR', 11: 'FP OVERFLOW',
     12: 'LINE NOT FOUND', 13: 'NO MATCHING FOR', 14: 'LINE TOO LONG', 15: 'GOSUB/FOR DELETED', 16: 'RETURN ERR', 17: 'SYNTAX ERR' };
 
@@ -27,6 +27,7 @@
       this.out = opts.print || (() => {});
       this.inp = opts.input || (async () => '');
       this.hooks = opts.hooks || {};
+      this.onStep = opts.onStep || null; // debugger hook: awaited before every statement with (line, statement)
       this.dialect = opts.dialect || 'atari';
       this.maxSteps = opts.slice || 20000;
       this.mem = new Uint8Array(65536);
@@ -73,6 +74,12 @@
 
     stop() { this.stopFlag = true; }
 
+    // Read-only view of program state for a debugger.
+    snapshot() {
+      const arrs = {}; for (const [k, v] of this.arrs) arrs[k] = Array.from(v).slice(0, 64);
+      return { line: this.cur, vars: Object.fromEntries(this.vars), strs: Object.fromEntries(this.strs), arrs, gosub: this.stack.length, data: this.dptr + '/' + this.data.length, trap: this.trap };
+    }
+
     async run() {
       this.reset(); this.vars.clear();
       let li = 0, si = 0, steps = 0; this.running = true; this.stopFlag = false;
@@ -81,6 +88,8 @@
           const st = this.prog[li][si];
           if (!st) { li++; si = 0; continue; }
           this.cur = this.order[li];
+          if (this.onStep) await this.onStep(this.cur, st);
+          if (this.stopFlag) break;
           let jump;
           try { jump = await this.exec(st, li, si); }
           catch (e) {
@@ -105,7 +114,7 @@
         case 'RAD': this.rad = true; return;
         case 'CLR': this.vars.clear(); this.strs.clear(); this.arrs.clear(); this.dims.clear(); this.adim.clear(); return;
         case 'CALL': { const a = splitTop(r.trim().replace(/^\((.*)\)$/s, '$1'), ',').filter((x) => x.trim()).map((x) => this.ev(x)); if (this.hooks.call) this.hooks.call(...a); return; }
-        case 'OPEN': case 'CLOSE': case 'XIO': case 'NOTE': case 'POINT': case 'PUT': case 'BYE': case 'DOS': return;
+        case 'OPEN': case 'CLOSE': case 'XIO': case 'NOTE': case 'POINT': case 'PUT': case 'BYE': case 'DOS': case 'SAVE': case 'CSAVE': case 'CLOAD': case 'STATUS': return;
         case 'LOCATE': { const a = splitTop(r, ','); if (a.length > 2) this.store(a[2].trim(), 0); return; }
         case 'GET': { const a = splitTop(r, ','); if (a.length > 1) this.store(a[1].trim(), 0); return; }
         case 'LPRINT': return this.print(r);
@@ -126,7 +135,7 @@
         case 'NEXT': return this.next(r);
         case 'WHILE': { const f = { t: 'W', li, si, cond: r }; if (this.ev(r)) { this.stack.push(f); return; } return this.skipTo('WEND', li, si); }
         case 'WEND': { const f = this.stack[this.stack.length - 1]; if (!f || f.t !== 'W') throw new BasicError(13); if (this.ev(f.cond)) return { li: f.li, si: f.si + 1 }; this.stack.pop(); return; }
-        case 'DIM': return this.dim(r);
+        case 'DIM': case 'COM': return this.dim(r);
         case 'READ': return this.read(r);
         case 'RESTORE': { const ln = r.trim() ? Math.floor(this.ev(r)) : 0; const k = this.dataRef.findIndex((n) => n >= ln); this.dptr = ln ? (k < 0 ? this.data.length : k) : 0; return; }
         case 'POKE': { const a = splitTop(r, ','); const ad = Math.floor(this.ev(a[0])), v = Math.floor(this.ev(a[1])) & 255; this.mem[ad & 65535] = v; if (this.hooks.poke) this.hooks.poke(ad, v); return; }

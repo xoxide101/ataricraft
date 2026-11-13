@@ -28,7 +28,20 @@
     const cv = el('canvas', 'width:320px;height:192px;image-rendering:pixelated;background:#000;margin:6px;align-self:flex-start;border:1px solid #333');
     cv.width = 160; cv.height = 96;
     const inl = el('input', 'background:#0d0f12;color:#e6e6e6;border:0;border-top:1px solid #2c313b;padding:6px 8px;font:13px Consolas,monospace;display:none');
-    mid.append(out, cv);
+    const dbgPane = el('pre', 'width:220px;margin:0;padding:6px;background:#10141a;color:#c9d4e5;font:12px Consolas,monospace;overflow:auto;white-space:pre-wrap;border-left:1px solid #2c313b;display:none');
+    mid.append(out, cv, dbgPane);
+    const dbg = { on: false, stepping: true, breaks: new Set(), release: null };
+    const bpIn = el('input', 'width:90px;background:#0d0f12;color:#e6e6e6;border:1px solid #3a4150;border-radius:5px;padding:3px;font:inherit;display:none'); bpIn.placeholder = 'break @ lines';
+    const showState = (line, st) => {
+      if (!B) return; const s = B.snapshot(), f = (o) => Object.keys(o).sort().map((k) => `${k} = ${JSON.stringify(o[k])}`).join('\n');
+      dbgPane.textContent = `LINE ${line}${st ? '  ' + st.kw + st.rest : ''}\nGOSUB/FOR depth ${s.gosub}   DATA ${s.data}${s.trap ? '   TRAP ' + s.trap : ''}\n\n-- numeric --\n${f(s.vars)}\n\n-- strings --\n${f(s.strs)}\n\n-- arrays (first 64) --\n${f(s.arrs)}`;
+    };
+    const onStep = (line, st) => {
+      if (!dbg.on || !(dbg.stepping || dbg.breaks.has(line))) return undefined;
+      dbg.stepping = true; showState(line, st);
+      return new Promise((res) => { dbg.release = res; });
+    };
+    const go = (stepping) => () => { dbg.stepping = stepping; if (dbg.release) { const r = dbg.release; dbg.release = null; r(); } };
     let B = null, scr = { w: 40, h: 24, cols: [[0, 0, 0], [224, 160, 48], [64, 160, 224], [96, 192, 96]], col: 1, x: 0, y: 0 }, aud = null, osc = [];
     const g = cv.getContext('2d');
     const say = (s) => { if (s === '\f') { out.textContent = ''; return; } out.textContent += s; out.scrollTop = out.scrollHeight; };
@@ -54,9 +67,9 @@
     const killSound = () => osc.forEach((s) => { if (s) try { s.o.stop(); } catch (e) { /* ignore */ } }); 
     const runBtn = btn('Run', async () => {
       localStorage.setItem('ac.basic.src', ed.value); out.textContent = '';
-      B = new AC.Basic.Basic({ print: say, hooks, dialect: dial.value, input: (p) => new Promise((res) => { say(p); inl.style.display = ''; inl.value = ''; inl.focus(); inl.onkeydown = (ev) => { if (ev.key === 'Enter') { inl.style.display = 'none'; say(inl.value + '\n'); res(inl.value); } }; }) });
-      B.load(ed.value); runBtn.disabled = true;
-      try { await B.run(); } finally { runBtn.disabled = false; inl.style.display = 'none'; }
+      B = new AC.Basic.Basic({ print: say, hooks, dialect: dial.value, onStep, input: (p) => new Promise((res) => { say(p); inl.style.display = ''; inl.value = ''; inl.focus(); inl.onkeydown = (ev) => { if (ev.key === 'Enter') { inl.style.display = 'none'; say(inl.value + '\n'); res(inl.value); } }; }) });
+      B.load(ed.value); runBtn.disabled = true; dbg.stepping = dbg.breaks.size === 0;
+      try { await B.run(); } finally { runBtn.disabled = false; inl.style.display = 'none'; dbg.release = null; if (dbg.on) showState(B.cur); }
     }, 'Run the program');
     const dl = (name, txt) => { const a = el('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
     const fi = el('input'); fi.type = 'file'; fi.accept = '.bas,.txt,.lst'; fi.style.display = 'none';
@@ -74,7 +87,15 @@
       if (!emu) { out.textContent = 'The Atari is not running. Boot it first, then compile and run.'; return; }
       emu.bootFile('PROGRAM.XEX', r.xex); out.textContent = `Compiled ${r.xex.length} bytes and started on the Atari.`;
     }, 'Compile to 6502 and boot it in the running emulator (integers and strings, no floats)');
-    bar.append(el('b', '', 'BASIC'), dial, runBtn, btn('Stop', () => { if (B) B.stop(); killSound(); }), btn('Clear', () => { out.textContent = ''; g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); }),
+    const dbgBtns = [];
+    const dbgBtn = (t, f, tip) => { const b = btn(t, f, tip); b.style.display = 'none'; dbgBtns.push(b); return b; };
+    const dbgToggle = btn('Debug', () => {
+      dbg.on = !dbg.on; dbgPane.style.display = dbg.on ? '' : 'none'; bpIn.style.display = dbg.on ? '' : 'none';
+      dbgBtns.forEach((b) => { b.style.display = dbg.on ? '' : 'none'; }); dbgToggle.style.background = dbg.on ? '#3b5b8c' : '#2a2f39';
+      if (!dbg.on) go(false)();
+    }, 'Show variables and step through the program one statement at a time');
+    bpIn.onchange = () => { dbg.breaks = new Set(bpIn.value.split(/[ ,]+/).filter(Boolean).map(Number)); };
+    bar.append(el('b', '', 'BASIC'), dial, runBtn, btn('Stop', () => { if (B) B.stop(); go(false)(); killSound(); }), dbgToggle, dbgBtn('Step', go(true), 'Run the next statement'), dbgBtn('Continue', go(false), 'Run until a breakpoint'), bpIn, btn('Clear', () => { out.textContent = ''; g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); }),
       compRun, btn('Save .XEX', () => { out.textContent = ''; const r = comp(); if (r) dlb('PROGRAM.XEX', r.xex); }, 'Compile and download an Atari executable'),
       btn('Save .ASM', () => { out.textContent = ''; const r = comp(); if (r) dlb('PROGRAM.ASM', r.asm.replace(/\n/g, '\r\n')); }, 'Compile and download MADS-style assembly source'),
       btn('Load .BAS', () => fi.click(), 'Load a text listing'), btn('Save .BAS', () => dl('PROGRAM.BAS', ed.value.replace(/\n/g, '\r\n')), 'Save the listing as text'),

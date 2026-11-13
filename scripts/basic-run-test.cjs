@@ -17,6 +17,12 @@ const eq = (a, b, m) => { n++; if (a !== b) { fail++; console.log('FAIL', m, '\n
   eq(called && called.join('|'), '1536|1600,5,6', 'CALL passes address and args to host hook');
   eq(await run('10 PRINT USR(1536)\n20 PRINT DPEEK(0)'), '0\n0\n', 'USR/DPEEK without host');
   eq(await run('10 OPEN #1,4,0,"K:"\n20 GET #1,K\n30 PRINT #1;"X"\n40 CLOSE #1\n50 PRINT "DONE"'), 'X\nDONE\n', 'OPEN/GET/PRINT#/CLOSE are accepted');
+  eq(await run('10 COM A(3),B$(5)\n20 A(2)=4:PRINT A(2)\n30 SAVE "D:X"\n40 PRINT "OK"'), '4\nOK\n', 'COM declares like DIM; SAVE is inert');
+  {
+    let seen = []; const b = new (require('../web/js/basic.js').Basic)({ print() {}, onStep: async (l) => { seen.push(l); } });
+    b.load('10 A=1\n20 DIM B$(5):B$="HI"\n30 DIM C(2):C(1)=5'); await b.run(); const s = b.snapshot();
+    eq(seen.join(','), '10,20,20,30,30', 'onStep sees every statement'); eq(JSON.stringify([s.vars.A, s.strs['B$'], s.arrs.C[1]]), '[1,"HI",5]', 'snapshot exposes variables');
+  }
   {
     const fx = require('fs').readFileSync(require('path').join(__dirname, 'fixtures', 'game-starter.bas'), 'utf8');
     const o = await run('5 SC=0:BYLAD=0\n' + fx);
