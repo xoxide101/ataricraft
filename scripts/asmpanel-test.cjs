@@ -57,6 +57,31 @@ const ok = (c, m, x) => { if (!c) { bad++; console.log('FAIL', m, x === undefine
   ok(/0080: 42/.test(await p.locator('pre').nth(2).innerText()), 'watch shows $80', await p.locator('pre').nth(2).innerText());
   await p.locator('select').first().selectOption('65c02'); await setSrc(' org $2000\n stz $10\n'); await p.keyboard.press('F7');
   ok(/OK, 8 bytes/.test(await out()), '65C02 dialect from ribbon', await out());
+  const dis = (src, cpu) => p.evaluate(([b, c]) => AC.WTools.disasm1(Uint8Array.from(b), 0, 0x2000, { cpu: c, labels: {} }).text, [src, cpu]);
+  const cmos = [[[0x64, 0x10], 'STZ $10'], [[0x80, 0x02], 'BRA $2004'], [[0x1A], 'INC A'], [[0x3A], 'DEC A'], [[0xDA], 'PHX'], [[0x7A], 'PLY'], [[0xB2, 0x20], 'LDA ($20)'],
+    [[0x7C, 0x34, 0x12], 'JMP ($1234,X)'], [[0x89, 0x01], 'BIT #$01'], [[0x34, 0x40], 'BIT $40,X'], [[0x9E, 0x00, 0x30], 'STZ $3000,X'], [[0x1C, 0x00, 0x30], 'TRB $3000'], [[0x04, 0x50], 'TSB $50']];
+  const got = []; for (const [b, t] of cmos) got.push(await dis(b, '65c02') === t);
+  ok(got.every(Boolean), '65C02 disassembly of the CMOS opcodes', got);
+  ok(/^\.BYTE/.test(await dis([0x64, 0x10], '6502')) && await dis([0xA9, 0x01], '65c02') === 'LDA #$01', 'CMOS opcodes stay data on a 6502; shared opcodes unchanged');
+  await p.locator('select').first().selectOption('6502');
+
+  // conditional assembly and procedures
+  await setSrc(' org $2000\nDBG = 1\n .if DBG == 1 && 2 > 1\n lda #1\n .else\n lda #2\n .endif\n .ifdef NOPE\n nop\n .endif\n .if DBG <> 1\n dex\n .elseif DBG >= 1\n inx\n .endif\n'); await btn('Assemble').click();
+  ok(JSON.stringify(await p.evaluate(() => AC.AsmPanel.state.last.segments[0].bytes)) === '[169,1,232]', '.IF/.ELSEIF/.ELSE/.ENDIF/.IFDEF choose the right branch', await out());
+  await setSrc(' org $2000\n .if 0\n .proc ghost\n .endp\n lda #9\n .endif\n nop\n'); await btn('Assemble').click();
+  ok(/OK, 7 bytes/.test(await out()), 'skipped branch emits nothing and defines nothing', await out());
+  await setSrc(' org $2000\n .if 1\n nop\n'); await btn('Assemble').click();
+  ok(/missing \.ENDIF/.test(await out()), 'unclosed .IF is an error', await out());
+  await setSrc(' org $2000\n .if 1\n .error "stop here"\n .endif\n'); await btn('Assemble').click();
+  ok(/line 3: stop here/.test(await out()), '.ERROR stops the build', await out());
+  await setSrc(' org $2000\nloop nop\n jsr sub.go\n jmp loop\n .proc sub\nloop dex\ngo bne loop\n rts\n .endp\n'); await btn('Assemble').click();
+  ok(/OK, 17 bytes/.test(await out()), '.PROC/.ENDP assemble', await out());
+  const sy = await p.evaluate(() => AC.AsmPanel.state.last.symbols);
+  ok(sy.loop === 0x2000 && sy['sub.loop'] === 0x2007 && sy['sub.go'] === 0x2008 && sy.sub === 0x2007, 'proc labels are scoped (local label hides the global one inside, name.label outside)', sy);
+  const b2 = await p.evaluate(() => Array.from(AC.AsmPanel.state.last.segments[0].bytes));
+  ok(b2[2] === 0x08 && b2[3] === 0x20 && b2[9] === 0xFD, 'jsr sub.go targets the local label; bne reaches the local loop', b2);
+  await setSrc(' org $2000\n .endp\n'); await btn('Assemble').click();
+  ok(/\.ENDP without \.PROC/.test(await out()), 'stray .ENDP is an error', await out());
 
   // Studio shell: tabs, Alt+1..4, one ribbon row per tab, font buffer from the embedded Font editor feeds .INCLUDE
   const sp = await ctx.newPage(); const serrs = []; sp.on('pageerror', (e) => serrs.push(e.message));

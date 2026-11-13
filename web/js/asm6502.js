@@ -5,7 +5,10 @@
 // Also: .RUN expr / .INIT expr write the RUNAD ($2E0) / INITAD ($2E2) segment; assemble(text, {symbols:{NAME:value}}) predefines names (e.g. hardware registers).
 // MADS/dasm compatibility: DTA b()/a()/l()/h()/c'', DC.B, DC.W, DS.B; OPT/LIST/SEG are ignored; PROCESSOR 65c02 selects the dialect.
 // Macros: .MACRO name p1,p2 ... .ENDM, called as `name a,b`; params :p1 / :1; \@ = unique id. .INCLUDE/.INCBIN via opts.resolve(name) -> string | Uint8Array.
-// 65C02: assemble(text, {cpu:'65c02'}) or `processor 65c02`. Not supported: .PROC/.IF, undocumented opcodes.
+// 65C02: assemble(text, {cpu:'65c02'}) or `processor 65c02`. Not supported: undocumented opcodes.
+// Conditional assembly: .IF expr / .IFDEF name / .IFNDEF name / .ELSEIF expr / .ELSE / .ENDIF (.EIF); conditions may use == = != <> < > <= >= && ||
+// and need symbols that are already defined (an undefined name is an error on the last pass). .ERROR "text" stops the build when it is reached.
+// Procedures: .PROC name ... .ENDP (.ENDPROC) opens a scope. Labels inside are local, reached from outside as name.label; inside, a local label hides a global one of the same name.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) module.exports = factory();
   else { root.AC = root.AC || {}; root.AC.Asm = factory(); }
@@ -41,7 +44,7 @@
     const ws = () => { while (s[i] === ' ' || s[i] === '\t') i++; };
     const prim = () => {
       ws(); const c = s[i];
-      if (c === '(') { i++; const v = or(); ws(); if (s[i] !== ')') throw new Error('missing )'); i++; return v; }
+      if (c === '(') { i++; const v = lor(); ws(); if (s[i] !== ')') throw new Error('missing )'); i++; return v; }
       if (c === '-') { i++; return -prim(); } if (c === '+') { i++; return prim(); } if (c === '~') { i++; return ~prim(); }
       if (c === '<') { i++; return prim() & 255; } if (c === '>') { i++; return (prim() >> 8) & 255; }
       if (c === '*') { i++; return ctx.pc; }
@@ -62,10 +65,21 @@
     const mulE = () => { let a = prim(); for (;;) { ws(); const c = s[i]; if (c === '*' ) { i++; a *= prim(); } else if (c === '/') { i++; const b = prim(); a = b ? Math.trunc(a / b) : 0; } else if (c === '%') { i++; const b = prim(); a = b ? a % b : 0; } else return a; } };
     const addE = () => { let a = mulE(); for (;;) { ws(); const c = s[i]; if (c === '+') { i++; a += mulE(); } else if (c === '-') { i++; a -= mulE(); } else return a; } };
     const shE = () => { let a = addE(); for (;;) { ws(); if (s.startsWith('<<', i)) { i += 2; a <<= addE(); } else if (s.startsWith('>>', i)) { i += 2; a >>= addE(); } else return a; } };
-    const and = () => { let a = shE(); for (;;) { ws(); if (s[i] === '&') { i++; a &= shE(); } else return a; } };
+    const and = () => { let a = shE(); for (;;) { ws(); if (s[i] === '&' && s[i + 1] !== '&') { i++; a &= shE(); } else return a; } };
     const xor = () => { let a = and(); for (;;) { ws(); if (s[i] === '^') { i++; a ^= and(); } else return a; } };
-    const or = () => { let a = xor(); for (;;) { ws(); if (s[i] === '|') { i++; a |= xor(); } else return a; } };
-    const v = or(); ws(); if (i < s.length) throw new Error('unexpected: ' + s.slice(i));
+    const or = () => { let a = xor(); for (;;) { ws(); if (s[i] === '|' && s[i + 1] !== '|') { i++; a |= xor(); } else return a; } };
+    // comparisons give 1 or 0; && and || bind loosest
+    const cmp = () => {
+      let a = or();
+      for (;;) {
+        ws(); const m = /^(==|!=|<>|<=|>=|=|<|>)/.exec(s.slice(i)); if (!m) return a;
+        i += m[0].length; const b = or();
+        a = ({ '==': a === b, '=': a === b, '!=': a !== b, '<>': a !== b, '<': a < b, '>': a > b, '<=': a <= b, '>=': a >= b })[m[0]] ? 1 : 0;
+      }
+    };
+    const land = () => { let a = cmp(); for (;;) { ws(); if (s.startsWith('&&', i)) { i += 2; const b = cmp(); a = a && b ? 1 : 0; } else return a; } };
+    const lor = () => { let a = land(); for (;;) { ws(); if (s.startsWith('||', i)) { i += 2; const b = land(); a = a || b ? 1 : 0; } else return a; } };
+    const v = lor(); ws(); if (i < s.length) throw new Error('unexpected: ' + s.slice(i));
     return { v, known };
   }
 
@@ -180,17 +194,45 @@
       for (const k in pre) if (!syms.has(k)) syms.set(k, pre[k]);
       const org = (a) => { pc = a & 0xFFFF; seg = null; };
       const emit = (b) => { if (!seg) { seg = { addr: pc, bytes: [] }; segs.push(seg); } seg.bytes.push(b & 255); all.push(b & 255); pc = (pc + 1) & 0xFFFF; };
-      const ctx = { get pc() { return pc; }, syms }, seen = new Set();
+      const scope = [], cond = [];
+      const find = (n) => { for (let k = scope.length; k >= 0; k--) { const q = scope.slice(0, k).concat(n).join('.'); if (syms.has(q)) return q; } return null; };
+      const ctx = { get pc() { return pc; }, syms: { has: (n) => find(n) !== null, get: (n) => syms.get(find(n)) } }, seen = new Set();
+      const qual = (n) => scope.concat(n).join('.');
+      const act = () => !cond.length || cond[cond.length - 1].active;
+      const evalCond = (e) => { if (!e.trim()) throw new Error('missing condition'); const r = evalExpr(e, ctx); if (last && !r.known) throw new Error('undefined symbol in ' + e); return r.v !== 0; };
       for (let ln = 0; ln < lines.length; ln++) {
         const raw = stripComment(lines[ln]); if (!raw.trim()) continue;
         const start = pc, ai = all.length;
         try {
           let body = raw, label = null, m;
+          if ((m = /^\s*\.(if|ifdef|ifndef|elseif|else|endif|eif|proc|endp|endproc|error)\b\s*(.*)$/i.exec(raw))) {
+            const dn = m[1].toLowerCase(), arg = m[2].trim(), top = cond[cond.length - 1];
+            if (dn === 'if' || dn === 'ifdef' || dn === 'ifndef') {
+              const pa = act(); let v = false;
+              if (pa) v = dn === 'if' ? evalCond(arg) : (dn === 'ifdef') === (find(arg) !== null);
+              cond.push({ parent: pa, taken: v, active: v });
+            } else if (dn === 'elseif' || dn === 'else') {
+              if (!top) throw new Error('.' + dn.toUpperCase() + ' without .IF');
+              const v = top.parent && !top.taken && (dn === 'else' || evalCond(arg));
+              top.active = v; top.taken = top.taken || v;
+            } else if (dn === 'endif' || dn === 'eif') {
+              if (!top) throw new Error('.ENDIF without .IF');
+              cond.pop();
+            } else if (!act()) continue;
+            else if (dn === 'error') throw new Error(arg.replace(/^["'](.*)["']$/, '$1') || '.ERROR');
+            else if (dn === 'proc') {
+              if (!/^[A-Za-z_][\w]*$/.test(arg)) throw new Error('.PROC needs a name');
+              const q = qual(arg); if (seen.has(q)) throw new Error('duplicate label ' + arg); seen.add(q); syms.set(q, pc);
+              scope.push(arg);
+            } else { if (!scope.length) throw new Error('.ENDP without .PROC'); scope.pop(); }
+            continue;
+          }
+          if (!act()) continue;
           if ((m = /^\s*\*\s*=\s*(.+)$/.exec(raw))) { org(evalExpr(m[1], ctx).v); continue; }
           if (/^\S/.test(raw)) { m = /^([A-Za-z_][A-Za-z0-9_.]*):?(.*)$/.exec(raw); if (!m) throw new Error('bad label'); label = m[1]; body = m[2]; }
           let t = body.trim();
-          if ((m = /^(?:=|equ\b)\s*(.+)$/i.exec(t)) && label) { const r = evalExpr(m[1], ctx); if (last && !r.known) throw new Error('undefined symbol in ' + m[1]); syms.set(label, r.v); continue; }
-          if (label) { if (seen.has(label)) throw new Error('duplicate label ' + label); seen.add(label); syms.set(label, pc); }
+          if ((m = /^(?:=|equ\b)\s*(.+)$/i.exec(t)) && label) { const r = evalExpr(m[1], ctx); if (last && !r.known) throw new Error('undefined symbol in ' + m[1]); syms.set(qual(label), r.v); continue; }
+          if (label) { const q = qual(label); if (seen.has(q)) throw new Error('duplicate label ' + label); seen.add(q); syms.set(q, pc); }
           if (!t) continue;
           m = /^(\S+)\s*(.*)$/.exec(t); const mn = ({ 'DC.B': 'BYTE', 'DC.W': 'WORD', 'DS.B': 'DS' })[m[1].toUpperCase().replace(/^\./, '')] || m[1].toUpperCase().replace(/^\./, ''), rest = m[2];
           const dot = m[1][0] === '.';
@@ -249,6 +291,8 @@
         } catch (e) { if (e instanceof AsmError) throw e; throw new AsmError(pl[ln].line, e.message + (pl[ln].file ? ` (in ${pl[ln].file})` : '')); }
         finally { if (last && all.length !== ai) listing.push({ src: lines[ln], line: pl[ln].line, file: pl[ln].file, addr: start, len: all.length - ai, bytes: all.slice(ai) }); }
       }
+      if (cond.length) throw new AsmError(pl.length, 'missing .ENDIF');
+      if (scope.length) throw new AsmError(pl.length, 'missing .ENDP for ' + scope[scope.length - 1]);
       const now = JSON.stringify([...syms]);
       if (last) break;
       if (now === prev) finalNext = true;
