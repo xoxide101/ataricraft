@@ -2,7 +2,7 @@
 //   node scripts/build-basic-exe.cjs program.bas [out.exe]
 // Uses Node's single-executable-application support (Node 20+) and postject (fetched with npx on first use).
 // The .exe is a console program: PRINT goes to stdout, INPUT reads stdin. Graphics, sound and PEEK/POKE to hardware are not available.
-// It is not a DOS program: DOS needs a 16-bit toolchain, which this build does not provide.
+// For a DOS .exe use tools/dos-basic (Open Watcom, 16-bit C runtime) instead.
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), cp = require('child_process');
 
