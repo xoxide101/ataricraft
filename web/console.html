@@ -47,9 +47,24 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
   }
   addEventListener('keydown', (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (k === 'c' && !e.repeat && con) { con.input.color ^= 1; } if (map[k] || k === 'Enter' || k === 'Shift') { keys.add(k); if (e.target === document.body || k.startsWith('Arrow') || k === ' ') e.preventDefault(); } });
   addEventListener('keyup', (e) => { keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key); });
+  // Core registry: every system exposes create(rom, opt) -> { input, applyInput(), runFrame(), frame() -> {w,h,px}, drainAudio(), rate, describe() }.
+  // Shared features (keys, gamepad, fill, audio, pause, reset) live in this page; new cores only register here.
+  const CORES = {
+    '2600': {
+      name: 'Atari 2600',
+      create(rom, opt) {
+        const c = new A.Console2600(); c.load(rom, opt);
+        return Object.assign(c, {
+          rate: 15720,
+          frame() { const w = c.window(), n = w.height * 160, px = new Uint32Array(n); px.set(c.tia.out.subarray(w.top * 160, w.top * 160 + n)); return { w: 160, h: w.height, px }; },
+          describe: () => 'Mapper ' + c.mapper + ', ' + rom.length + ' bytes'
+        });
+      }
+    }
+  };
   function start() {
-    if (!rom) return; con = new A.Console2600(); con.load(rom, $('map').value || undefined);
-    info.textContent = 'Mapper ' + con.mapper + ', ' + rom.length + ' bytes';
+    if (!rom) return; con = CORES['2600'].create(rom, $('map').value || undefined);
+    info.textContent = con.describe();
   }
   function sniff(b, name) {
     const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase(), h = (o, n) => String.fromCharCode(...b.slice(o, o + n));
@@ -73,7 +88,7 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
     if (!samples.length) return;
     if (!actx) { try { actx = new AudioContext(); } catch (e) { return; } }
     if (actx.state === 'suspended') actx.resume();
-    const b = actx.createBuffer(1, samples.length, 15720); b.getChannelData(0).set(samples);
+    const b = actx.createBuffer(1, samples.length, con ? con.rate : 15720); b.getChannelData(0).set(samples);
     const s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination);
     const now = actx.currentTime; if (nextT < now || nextT > now + .2) nextT = now + .03;
     s.start(nextT); nextT += b.duration;
@@ -83,9 +98,8 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
     requestAnimationFrame(loop);
     if (!con || paused || t - last < 16) return; last = t;
     applyKeys(); con.runFrame();
-    const w = con.window(); if (img.height !== w.height) { cv.height = w.height; }
-    const out = con.tia.out, id = ctx.createImageData(160, w.height), u = new Uint32Array(id.data.buffer);
-    for (let y = 0; y < w.height; y++) for (let x = 0; x < 160; x++) u[y * 160 + x] = out[(w.top + y) * 160 + x];
+    const f = con.frame(); if (cv.width !== f.w || cv.height !== f.h) { cv.width = f.w; cv.height = f.h; }
+    const id = ctx.createImageData(f.w, f.h); new Uint32Array(id.data.buffer).set(f.px);
     ctx.putImageData(id, 0, 0); sound(con.drainAudio());
   }
   requestAnimationFrame(loop);
