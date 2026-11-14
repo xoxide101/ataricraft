@@ -29,5 +29,10 @@ const eq = (a, b, m) => { n++; if (a !== b) { fail++; console.log('FAIL', m, '\n
     eq(/ERROR- 8/.test(o), false, 'pasted listing (smart quotes, \\*, wrapped line, RESTORE n) has no ERROR 8');
     eq(/SCORE:0/.test(o), true, 'pasted listing prints SCORE');
   }
+  {
+    const qs = ['1,2', '3']; const b = new (require('../web/js/basic.js').Basic)({ print() {}, input: async () => qs.shift() });
+    b.load('10 INPUT X,Y,Z\n20 PRINT X;Y;Z'); let o = ''; b.print = (t) => { o += t; }; await b.run();
+    eq(b.vars.get('X') + ',' + b.vars.get('Y') + ',' + b.vars.get('Z'), '1,2,3', 'INPUT keeps earlier values when more are requested');
+  }
   console.log(`basic-run-test: ${n} checks, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();

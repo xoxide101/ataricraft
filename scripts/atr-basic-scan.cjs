@@ -49,7 +49,7 @@ function detok(b) {
 }
 
 async function tryRun(src) {
-  let out = ''; const b = new Basic({ print: (t) => (out += t), input: () => new Promise((r) => setImmediate(() => r('1'))), hooks: { peek: () => 0, poke() {}, call() {}, usr: () => 0 } });
+  let out = '', steps = 0; const b = new Basic({ print: (t) => (out += t), input: () => new Promise((r) => setImmediate(() => r('1'))), onStep: async () => { if (++steps > 300000) b.stopFlag = true; if (steps % 5000 === 0) await new Promise((r) => setImmediate(r)); }, hooks: { peek: () => 0, poke() {}, call() {}, usr: () => 0 } });
   try { b.load(src); } catch (e) { return 'LOAD: ' + e.message; }
   const t = setTimeout(() => { b.stopFlag = true; }, 800);
   try { await b.run(); } catch (e) { clearTimeout(t); return 'THROW: ' + e.message; }
@@ -69,6 +69,7 @@ async function tryRun(src) {
       const data = v.read(e); const src = /\.LST$/i.test(e.name) ? Buffer.from(data).toString('latin1') : detok(data);
       if (!src) continue;
       total++; if (process.env.DUMP && e.name === process.env.DUMP) console.log(src);
+      if (process.env.TRACE) console.log('run', e.name);
       const r = await tryRun(src);
       if (!r) clean++; else { const k = r.replace(/AT LINE \d+/, '').replace(/\(.*$/, '').trim(); (tally[k] = tally[k] || []).push(e.name + ' ' + (/LINE (\d+)/.exec(r) || [])[0]); }
       if (r && process.env.SHOW) { const ln = /LINE (\d+)/.exec(r)[1]; console.log('==', e.name, r, '\n   >> ' + (src.split('\n').find((l) => l.startsWith(ln + ' ')) || '').slice(0, 160)); }

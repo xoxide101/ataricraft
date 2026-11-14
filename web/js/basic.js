@@ -235,7 +235,7 @@
       let line = await this.inp(prompt === '?' ? '? ' : prompt), parts = splitTop(line, ',');
       for (let i = 0; i < vars.length; i++) {
         const t = vars[i].trim(), isS = /\$\s*(\(|$)/.test(t);
-        if (!isS && i >= parts.length) { line = await this.inp('?? '); parts = splitTop(line, ','); i = -1; continue; }
+        if (!isS && i >= parts.length) { if (this.stopFlag) return; line = await this.inp('?? '); parts = parts.concat(splitTop(line, ',')); i--; continue; }
         this.store(t, isS ? (vars.length === 1 ? line : (parts[i] || '').trim()) : this.num(parts[i].trim()));
       }
     }
