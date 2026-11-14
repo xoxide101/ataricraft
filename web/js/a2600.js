@@ -17,7 +17,7 @@
       const gray = pal ? h < 2 || h > 13 : h === 0;
       if (!gray) {
         const step = pal ? (h - 2) : (h - 1), n = pal ? 12 : 15;
-        const th = (pal ? 2.55 : 2.15) + step * (Math.PI * 2 / n) * (pal ? 1 : 0.96);
+        const th = (pal ? 2.55 : 5.77) + step * (Math.PI * 2 / n) * (pal ? 1 : 0.96);
         const i = Math.cos(th) * 0.27, q = Math.sin(th) * 0.27;
         r = y + 0.956 * i + 0.621 * q; g = y - 0.272 * i - 0.647 * q; b = y - 1.106 * i + 1.703 * q;
       }
@@ -258,7 +258,7 @@
     constructor(opts) {
       opts = opts || {};
       this.tia = new Tia(opts.pal); this.ram = new Uint8Array(128); this.cart = null;
-      this.cpu = new Cpu6502(this); this.pal = !!opts.pal;
+      this.cpu = new Cpu6502(this); this.pal = !!opts.pal; this.breakpoints = new Set(); this.bpHit = -1;
       this.swcha = 0xff; this.swchb = 0x3f | 0xc0; this.timer = { cycles: 0, interval: 1024, flag: false, set: false };
       this.ddra = 0; this.outA = 0xff; this.frames = 0; this.cycles = 0;
       this.input = { p0: { up: 0, down: 0, left: 0, right: 0, fire: 0 }, p1: { up: 0, down: 0, left: 0, right: 0, fire: 0 }, reset: 0, select: 0, color: 1, diff0: 1, diff1: 1 };
@@ -306,17 +306,24 @@
         }
       } else if ((addr & 3) === 0) this.outA = v; else if ((addr & 3) === 1) this.ddra = v;
     }
-    // Runs until the TIA completes a frame; returns false if it ran far past a plausible frame without one.
+    // Runs until the TIA completes a frame; returns false if it ran far past a plausible frame without one or a breakpoint was hit (bpHit = pc).
     runFrame() {
-      const t = this.tia, cpu = this.cpu; t.frameReady = false;
+      const t = this.tia, cpu = this.cpu, bp = this.breakpoints; t.frameReady = false; this.bpHit = -1;
       let guard = 0;
       while (!t.frameReady && guard++ < 200000) {
         if (t.wsync) { this.tick(); continue; }
         if (cpu.halted) { this.tick(); continue; }
+        if (bp.size && bp.has(cpu.pc)) { this.bpHit = cpu.pc; return false; }
         cpu.step();
       }
       if (t.frameReady) this.frames++;
       return t.frameReady;
+    }
+    // Debugger single step: finishes any WSYNC wait, then runs one instruction. Ignores breakpoints so you can step off one.
+    stepInstruction() {
+      const t = this.tia; let g = 0;
+      while ((t.wsync || this.cpu.halted) && g++ < 400) this.tick();
+      this.cpu.step(); return this.cpu.pc;
     }
     // Visible window of the finished frame: { top, height } chosen from the active lines.
     window() {

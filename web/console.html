@@ -12,6 +12,12 @@ button,select,input{background:#2a2f39;color:var(--fg);border:1px solid var(--li
 canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
 #stage.fill canvas{width:100%;height:70vh}
 .mut{color:var(--mut)}kbd{background:#2a2f39;border:1px solid var(--line);border-radius:3px;padding:0 4px}
+.dev{border:1px solid var(--line);border-radius:6px;padding:8px;display:grid;gap:8px}.devgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dev textarea{width:100%;background:#0f1115;color:var(--fg);border:1px solid var(--line);border-radius:4px;font:12px/1.35 Consolas,monospace;tab-size:8}
+.dev pre{margin:0;font:12px/1.35 Consolas,monospace;white-space:pre-wrap;overflow:auto;max-height:420px}
+.grid{display:grid;grid-template-columns:repeat(8,18px);gap:1px;width:max-content}.grid.pfg{grid-template-columns:repeat(20,14px)}
+.grid i{width:100%;aspect-ratio:1;background:#0f1115;border:1px solid var(--line);cursor:pointer}.grid i.on{background:var(--acc)}
+@media(max-width:800px){.devgrid{grid-template-columns:1fr}}
 </style></head>
 <body>
 <header><h1>Consoles</h1><a href="index.html">Emulator</a><a href="controller.html">Controllers</a><a href="tools.html">Tools</a></header>
@@ -20,14 +26,29 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
   <label>System <select id="sys"><option value="2600">Atari 2600</option></select></label>
   <input type="file" id="file" accept=".a26,.bin,.rom,.a52,.a78,.lnx,.j64">
   <label data-feat="mapper">Mapper <select id="map"><option value="">auto</option></select></label>
-  <button id="reset" data-feat="reset">Reset</button><button id="pause" data-feat="pause">Pause</button><button id="fill" data-feat="fill">Fill</button>
+  <button id="reset" data-feat="reset">Reset</button><button id="pause" data-feat="pause">Pause</button><button id="fill" data-feat="fill">Fill</button><button id="newprog">New 2600 program</button>
   <span id="info" class="mut">Load a cartridge (.a26 / .bin).</span>
 </div>
 <div id="stage"><canvas id="cv" width="160" height="192"></canvas></div>
 <div class="mut">Joystick: <kbd>arrows</kbd> + <kbd>Space</kbd> fire &middot; P2: <kbd>W A S D</kbd> + <kbd>G</kbd> &middot; <kbd>Enter</kbd> reset switch &middot; <kbd>Shift</kbd> select &middot; <kbd>C</kbd> colour/B&amp;W &middot; gamepads work too. The 2600 core covers TIA, RIOT and the 2K/4K/F8/F6/F4/FA/EF/E0/3F cartridge types. 7800 and 5200 are not in this page yet (5200 runs in the main emulator).</div>
+<section id="dev" data-feat="dev" class="dev">
+  <div class="bar"><b>2600 Dev Kit</b>
+    <button id="asm">Assemble &amp; Run</button><button id="step">Step</button><button id="stepf">Step frame</button>
+    <label>Breakpoint $<input id="bp" size="5" placeholder="F000"></label><button id="bpset">Toggle</button><button id="dl">Download .a26</button>
+    <span id="bplist" class="mut"></span></div>
+  <div class="devgrid">
+    <textarea id="src" spellcheck="false" rows="22"></textarea>
+    <div><pre id="errs" class="mut">TIA/RIOT register names (COLUBK, GRP0, WSYNC, SWCHA...) are predefined. Labels, EQU, ORG, .byte, .word, DS supported.</pre><pre id="state"></pre></div>
+  </div>
+  <div class="bar"><b>Graphics</b> <label>Rows <select id="rows"><option>8</option><option>16</option></select></label>
+    <button id="spclr">Clear</button><button id="spins">Insert sprite</button><button id="pfins">Insert playfield</button></div>
+  <div class="devgrid"><div><div class="mut">Player / missile / ball bitmap (click to toggle)</div><div id="sprite" class="grid"></div><pre id="spout"></pre></div>
+    <div><div class="mut">Playfield, 20 cells = left half (PF0 4, PF1 8, PF2 8)</div><div id="pf" class="grid pfg"></div><pre id="pfout"></pre></div></div>
+</section>
 </main>
 <script src="js/cpu6502.js"></script>
 <script src="js/a2600.js"></script>
+<script src="js/a2600dev.js"></script>
 <script>
 (() => {
   const A = AC.A2600, $ = (id) => document.getElementById(id);
@@ -52,7 +73,7 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
   const CORES = {
     '2600': {
       name: 'Atari 2600',
-      features: ['reset', 'pause', 'fill', 'audio', 'mapper', 'joy2', 'select', 'colorbw', 'gamepad'],
+      features: ['reset', 'pause', 'fill', 'audio', 'mapper', 'joy2', 'select', 'colorbw', 'gamepad', 'dev'],
       create(rom, opt) {
         const c = new A.Console2600(); c.load(rom, opt);
         return Object.assign(c, {
@@ -107,15 +128,69 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
     const now = actx.currentTime; if (nextT < now || nextT > now + .2) nextT = now + .03;
     s.start(nextT); nextT += b.duration;
   }
-  let last = 0; const img = ctx.createImageData(160, 192);
+  let last = 0, dtick = 0;
   function loop(t) {
     requestAnimationFrame(loop);
     if (!con || paused || t - last < 16) return; last = t;
-    applyKeys(); con.runFrame();
+    applyKeys();
+    if (!con.runFrame() && con.bpHit >= 0) { paused = true; $('pause').textContent = 'Resume'; devRefresh(); return; }
     const f = con.frame(); if (cv.width !== f.w || cv.height !== f.h) { cv.width = f.w; cv.height = f.h; }
     const id = ctx.createImageData(f.w, f.h); new Uint32Array(id.data.buffer).set(f.px);
     ctx.putImageData(id, 0, 0); sound(con.drainAudio());
+    if (feats.has('dev') && ++dtick % 6 === 0) devRefresh();
   }
   requestAnimationFrame(loop);
+
+  // ---- 2600 dev kit: assembler, debugger, graphics editors (uses AC.A2600Dev) ----
+  const Dev = AC.A2600Dev, hex = (v, n) => v.toString(16).toUpperCase().padStart(n, '0');
+  $('src').value = Dev.STARTER;
+  function devRefresh() {
+    if (!con || !con.cpu || !feats.has('dev')) return;
+    const s = Dev.inspect(con), c = s.cpu, P = s.playfield;
+    const dis = Dev.disasm((a) => con.read(a), c.pc, 6).map((d, i) => (i ? '  ' : '> ') + hex(d.addr, 4) + '  ' + d.bytes.map((b) => hex(b, 2)).join(' ').padEnd(8) + ' ' + d.text).join('\n');
+    const o = (p, i) => 'P' + i + ' x=' + p.x + ' grp=%' + p.grp.toString(2).padStart(8, '0') + ' col=$' + hex(p.color, 2) + ' nusiz=' + p.nusiz + (p.reflect ? ' refl' : '') + ' hm=' + p.hmove;
+    $('state').textContent = [
+      'A=' + hex(c.a, 2) + ' X=' + hex(c.x, 2) + ' Y=' + hex(c.y, 2) + ' SP=' + hex(c.sp, 2) + ' PC=' + hex(c.pc, 4) + ' ' + c.flags + ' cyc=' + c.cycles,
+      'line ' + s.beam.scanline + ' clock ' + s.beam.colorClock + (s.beam.vsync ? ' VSYNC' : '') + (s.beam.vblank ? ' VBLANK' : ''), '',
+      dis, '', o(s.players[0], 0), o(s.players[1], 1),
+      ...s.missiles.map((m, i) => 'M' + i + ' x=' + m.x + (m.enabled ? ' on' : ' off') + ' hm=' + m.hmove),
+      'BL x=' + s.ball.x + (s.ball.enabled ? ' on' : ' off') + ' size=' + P.ballSize,
+      'PF0=%' + P.pf0.toString(2).padStart(8, '0') + ' PF1=%' + P.pf1.toString(2).padStart(8, '0') + ' PF2=%' + P.pf2.toString(2).padStart(8, '0') + (P.mirror ? ' mirror' : '') + (P.score ? ' score' : '') + (P.priority ? ' pri' : ''),
+      'COLUPF=$' + hex(P.colorFg, 2) + ' COLUBK=$' + hex(P.colorBg, 2), '', 'RAM $80-$FF',
+      ...Array.from({ length: 8 }, (_, r) => hex(0x80 + r * 16, 2) + ': ' + s.ram.slice(r * 16, r * 16 + 16).map((b) => hex(b, 2)).join(' '))
+    ].join('\n');
+    $('bplist').textContent = con.breakpoints.size ? 'breakpoints: ' + [...con.breakpoints].map((a) => '$' + hex(a, 4)).join(' ') : '';
+  }
+  function runSource() {
+    const r = Dev.assemble($('src').value);
+    $('errs').textContent = r.ok ? 'OK: ' + r.size + ' bytes assembled' + (r.symbols.Start !== undefined ? ', Start=$' + hex(r.symbols.Start, 4) : '') : r.errors.map((e) => 'line ' + e.line + ': ' + e.message).join('\n');
+    if (!r.ok) return; rom = r.rom; $('map').value = '4K'; paused = false; $('pause').textContent = 'Pause'; start(); devRefresh();
+    window.devROM = r.rom;
+  }
+  $('asm').onclick = runSource; $('newprog').onclick = runSource;
+  function pauseNow() { paused = true; $('pause').textContent = 'Resume'; }
+  $('step').onclick = () => { if (!con) return; pauseNow(); con.stepInstruction(); devRefresh(); };
+  $('stepf').onclick = () => { if (!con) return; pauseNow(); con.runFrame(); devRefresh(); };
+  $('bpset').onclick = () => {
+    const a = parseInt($('bp').value, 16); if (!con || isNaN(a)) return;
+    con.breakpoints.has(a) ? con.breakpoints.delete(a) : con.breakpoints.add(a); devRefresh();
+  };
+  $('dl').onclick = () => { if (!con) return; const bl = new Blob([rom], { type: 'application/octet-stream' }), a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = 'program.a26'; a.click(); };
+  // Graphics editors: toggle cells, output updates live.
+  const sprite = [], pfc = new Array(20).fill(0);
+  function buildGrid() {
+    const n = +$('rows').value, g = $('sprite'); g.textContent = ''; sprite.length = 0;
+    for (let i = 0; i < n * 8; i++) { const c = document.createElement('i'); c.onclick = () => { sprite[i] ^= 1; c.classList.toggle('on'); gfxOut(); }; sprite.push(0); g.appendChild(c); }
+    gfxOut();
+  }
+  function gfxOut() {
+    const rows = []; for (let r = 0; r < sprite.length / 8; r++) rows.push(sprite.slice(r * 8, r * 8 + 8).join(''));
+    $('spout').textContent = Dev.spriteAsm(rows, 'Sprite');
+    $('pfout').textContent = Dev.playfieldAsm(pfc.join(''), 'PF').asm;
+  }
+  for (let i = 0; i < 20; i++) { const c = document.createElement('i'); c.onclick = () => { pfc[i] ^= 1; c.classList.toggle('on'); gfxOut(); }; $('pf').appendChild(c); }
+  $('rows').onchange = buildGrid; $('spclr').onclick = buildGrid; buildGrid();
+  const insert = (t) => { const s = $('src'); s.value = s.value.replace(/\s*$/, '\n\n') + t + '\n'; };
+  $('spins').onclick = () => insert($('spout').textContent); $('pfins').onclick = () => insert($('pfout').textContent);
 })();
 </script></body></html>
