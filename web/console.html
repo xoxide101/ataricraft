@@ -18,7 +18,7 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
 <main>
 <div class="bar">
   <label>System <select id="sys"><option value="2600">Atari 2600</option></select></label>
-  <input type="file" id="file" accept=".a26,.bin,.rom">
+  <input type="file" id="file" accept=".a26,.bin,.rom,.a52,.a78,.lnx,.j64">
   <label>Mapper <select id="map"><option value="">auto</option></select></label>
   <button id="reset">Reset</button><button id="pause">Pause</button><button id="fill">Fill</button>
   <span id="info" class="mut">Load a cartridge (.a26 / .bin).</span>
@@ -51,7 +51,20 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
     if (!rom) return; con = new A.Console2600(); con.load(rom, $('map').value || undefined);
     info.textContent = 'Mapper ' + con.mapper + ', ' + rom.length + ' bytes';
   }
-  $('file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; rom = new Uint8Array(await f.arrayBuffer()); $('map').value = ''; start(); };
+  function sniff(b, name) {
+    const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase(), h = (o, n) => String.fromCharCode(...b.slice(o, o + n));
+    if (h(1, 9) === 'ATARI7800' || ext === '.a78') return ['Atari 7800', '7800 core is not implemented yet.'];
+    if (h(0, 4) === 'LYNX' || ext === '.lnx') return ['Atari Lynx', 'Lynx core is not implemented yet.'];
+    if (ext === '.j64' || ext === '.jag') return ['Atari Jaguar', 'Jaguar core is not implemented yet.'];
+    if (ext === '.a52') return ['Atari 5200', '5200 runs in the main emulator: open Emulator, pick Atari 5200 and load the cartridge (needs the 5200 BIOS).'];
+    return null;
+  }
+  $('file').onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return; rom = new Uint8Array(await f.arrayBuffer());
+    const o = sniff(rom, f.name);
+    if (o) { con = null; rom = null; info.textContent = o[0] + ': ' + o[1]; return; }
+    $('map').value = ''; start();
+  };
   $('map').onchange = start; $('reset').onclick = start;
   $('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; };
   $('fill').onclick = () => $('stage').classList.toggle('fill');

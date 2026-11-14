@@ -4,7 +4,9 @@
 |---|---|
 | Atari 2600 | `web/console.html` + `web/js/a2600.js` (own core) |
 | Atari 5200 | Main emulator (atari800 core, needs 5200 BIOS) |
-| Atari 7800 | Not implemented |
+| Atari 7800 | Not implemented (console.html recognises `.a78` and says so) |
+| Atari Lynx / Jaguar | Not implemented (recognised by `.lnx` / `.j64`) |
+| Atari ST / Falcon / TT / Mega | Not implemented; planned next (68000 core first) |
 
 ## 2600
 
