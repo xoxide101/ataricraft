@@ -1,0 +1,14 @@
+const assert = require('assert'), { identify } = require('./romname.cjs');
+let n = 0; const t = (name, got, sys, ext) => { assert.strictEqual(got && got.system, sys, name); assert.strictEqual(got && got.ext, ext, name); n++; };
+const a78 = Buffer.alloc(200); a78.write('ATARI7800', 1);
+t('7800 header', identify(a78, 'x.bin'), '7800', '.a78');
+const k = Buffer.alloc(4096); k[4093] = 0xf0; k[4095] = 0xf0;
+t('2600 bin', identify(k, 'game.bin'), '2600', '.a26');
+const c = Buffer.alloc(8192); c[8191] = 0x40;
+t('5200 bin', identify(c, 'game.bin'), '5200', '.a52');
+t('alias', identify(Buffer.alloc(10), 'g.vcs'), '2600', '.a26');
+t('xex', identify(Buffer.from([0xff, 0xff, 0, 6, 1, 6, 0, 0]), 'g.com'), 'Atari 8-bit exe', '.xex');
+t('atr', identify(Buffer.concat([Buffer.from([0x96, 0x02]), Buffer.alloc(30)]), 'd.xfd'), 'Atari 8-bit disk', '.atr');
+t('nes', identify(Buffer.concat([Buffer.from('NES\x1a', 'latin1'), Buffer.alloc(20)]), 'z.bin'), 'NES', '.nes');
+t('unknown', identify(Buffer.alloc(777), 'q.bin'), 'unknown', null);
+console.log(n + ' checks, 0 failed');

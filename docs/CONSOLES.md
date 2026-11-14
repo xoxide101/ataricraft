@@ -15,6 +15,11 @@
 - Controls: arrows + Space (P1), WASD + G (P2), Enter reset, Shift select, C colour/B&W, gamepad 0.
 - Right-click the display (or press Fill) to stretch ignoring aspect ratio.
 
+## File extensions
+
+Canonical names: `.a26` (2600), `.a52` (5200), `.a78` (7800), `.atr/.xex/.car/.cas` (Atari 8-bit), `.lnx`, `.j64`, `.nes`, `.gb/.gbc/.gba`, `.sms/.gg`, `.md`, `.sfc`.
+`node tools/rom-namer/romname.cjs <file|folder> [--apply]` identifies files by header, extension alias (`.vcs`, `.xfd`, `.smd`...) or, for bare `.bin/.rom`, a size/vector guess. Dry run by default; guesses are reported but never auto-renamed. Test: `node tools/rom-namer/romname-test.cjs`. This is detection and renaming only, not format conversion (e.g. headerless to `.a78`).
+
 ## Tests
 
 `node scripts/a2600-test.cjs` (25 checks). `A2600_ROM=<file>` adds ROM checks (27).
