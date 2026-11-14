@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Consoles - Ataricraft</title>
+<style>
+:root{--bg:#14161b;--pn:#1d2027;--fg:#dde1e8;--mut:#8c94a3;--line:#323844;--acc:#5aa9ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px system-ui,sans-serif}
+header{display:flex;gap:12px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line)}header h1{font-size:16px;margin:0}header a{color:var(--acc)}
+main{padding:12px 14px;display:grid;gap:10px;max-width:960px;margin:auto}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button,select,input{background:#2a2f39;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:4px 8px;font:inherit}button{cursor:pointer}
+#stage{background:#000;border:1px solid var(--line);border-radius:6px;display:flex;justify-content:center;padding:6px}
+canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
+#stage.fill canvas{width:100%;height:70vh}
+.mut{color:var(--mut)}kbd{background:#2a2f39;border:1px solid var(--line);border-radius:3px;padding:0 4px}
+</style></head>
+<body>
+<header><h1>Consoles</h1><a href="index.html">Emulator</a><a href="controller.html">Controllers</a><a href="tools.html">Tools</a></header>
+<main>
+<div class="bar">
+  <label>System <select id="sys"><option value="2600">Atari 2600</option></select></label>
+  <input type="file" id="file" accept=".a26,.bin,.rom">
+  <label>Mapper <select id="map"><option value="">auto</option></select></label>
+  <button id="reset">Reset</button><button id="pause">Pause</button><button id="fill">Fill</button>
+  <span id="info" class="mut">Load a cartridge (.a26 / .bin).</span>
+</div>
+<div id="stage"><canvas id="cv" width="160" height="192"></canvas></div>
+<div class="mut">Joystick: <kbd>arrows</kbd> + <kbd>Space</kbd> fire &middot; P2: <kbd>W A S D</kbd> + <kbd>G</kbd> &middot; <kbd>Enter</kbd> reset switch &middot; <kbd>Shift</kbd> select &middot; <kbd>C</kbd> colour/B&amp;W &middot; gamepads work too. The 2600 core covers TIA, RIOT and the 2K/4K/F8/F6/F4/FA/EF/E0/3F cartridge types. 7800 and 5200 are not in this page yet (5200 runs in the main emulator).</div>
+</main>
+<script src="js/cpu6502.js"></script>
+<script src="js/a2600.js"></script>
+<script>
+(() => {
+  const A = AC.A2600, $ = (id) => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d'), info = $('info');
+  let con = null, paused = false, rom = null, actx = null, nextT = 0;
+  for (const m of ['2K', '4K', 'F8', 'F6', 'F4', 'FA', 'EF', 'E0', '3F']) { const o = document.createElement('option'); o.value = m; o.textContent = m; $('map').appendChild(o); }
+  const keys = new Set();
+  const map = { ArrowUp: ['p0', 'up'], ArrowDown: ['p0', 'down'], ArrowLeft: ['p0', 'left'], ArrowRight: ['p0', 'right'], ' ': ['p0', 'fire'], w: ['p1', 'up'], s: ['p1', 'down'], a: ['p1', 'left'], d: ['p1', 'right'], g: ['p1', 'fire'] };
+  function applyKeys() {
+    if (!con) return; const i = con.input;
+    for (const p of ['p0', 'p1']) for (const k of ['up', 'down', 'left', 'right', 'fire']) i[p][k] = 0;
+    for (const k of keys) { const m = map[k]; if (m) i[m[0]][m[1]] = 1; }
+    i.reset = keys.has('Enter') ? 1 : 0; i.select = keys.has('Shift') ? 1 : 0;
+    const gp = (navigator.getGamepads ? navigator.getGamepads() : [])[0];
+    if (gp) { const a = gp.axes; if (a[0] < -.5 || gp.buttons[14]?.pressed) i.p0.left = 1; if (a[0] > .5 || gp.buttons[15]?.pressed) i.p0.right = 1; if (a[1] < -.5 || gp.buttons[12]?.pressed) i.p0.up = 1; if (a[1] > .5 || gp.buttons[13]?.pressed) i.p0.down = 1; if (gp.buttons[0]?.pressed || gp.buttons[2]?.pressed) i.p0.fire = 1; if (gp.buttons[9]?.pressed) i.reset = 1; if (gp.buttons[8]?.pressed) i.select = 1; }
+    con.applyInput();
+  }
+  addEventListener('keydown', (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (k === 'c' && !e.repeat && con) { con.input.color ^= 1; } if (map[k] || k === 'Enter' || k === 'Shift') { keys.add(k); if (e.target === document.body || k.startsWith('Arrow') || k === ' ') e.preventDefault(); } });
+  addEventListener('keyup', (e) => { keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key); });
+  function start() {
+    if (!rom) return; con = new A.Console2600(); con.load(rom, $('map').value || undefined);
+    info.textContent = 'Mapper ' + con.mapper + ', ' + rom.length + ' bytes';
+  }
+  $('file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; rom = new Uint8Array(await f.arrayBuffer()); $('map').value = ''; start(); };
+  $('map').onchange = start; $('reset').onclick = start;
+  $('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; };
+  $('fill').onclick = () => $('stage').classList.toggle('fill');
+  $('stage').oncontextmenu = (e) => { e.preventDefault(); $('stage').classList.toggle('fill'); };
+  function sound(samples) {
+    if (!samples.length) return;
+    if (!actx) { try { actx = new AudioContext(); } catch (e) { return; } }
+    if (actx.state === 'suspended') actx.resume();
+    const b = actx.createBuffer(1, samples.length, 15720); b.getChannelData(0).set(samples);
+    const s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination);
+    const now = actx.currentTime; if (nextT < now || nextT > now + .2) nextT = now + .03;
+    s.start(nextT); nextT += b.duration;
+  }
+  let last = 0; const img = ctx.createImageData(160, 192);
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (!con || paused || t - last < 16) return; last = t;
+    applyKeys(); con.runFrame();
+    const w = con.window(); if (img.height !== w.height) { cv.height = w.height; }
+    const out = con.tia.out, id = ctx.createImageData(160, w.height), u = new Uint32Array(id.data.buffer);
+    for (let y = 0; y < w.height; y++) for (let x = 0; x < 160; x++) u[y * 160 + x] = out[(w.top + y) * 160 + x];
+    ctx.putImageData(id, 0, 0); sound(con.drainAudio());
+  }
+  requestAnimationFrame(loop);
+})();
+</script></body></html>
