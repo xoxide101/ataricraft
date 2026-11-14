@@ -321,7 +321,7 @@
         if (s[p.i] !== ')') throw new BasicError(17); p.i++;
         return this.arrs.get(name)[this.aidx(name, ix)];
       }
-      return this.vars.has(name) ? this.vars.get(name) : (() => { throw new BasicError(9, 'VARIABLE ' + name + ' NOT SET'); })();
+      return this.vars.has(name) ? this.vars.get(name) : 0;
     }
     loose(key) { if (this.dialect === 'atari') throw new BasicError(9); this.dims.set(key, 255); this.strs.set(key, ''); return 255; }
     nv(v) { if (typeof v !== 'number') throw new BasicError(3); return v; }

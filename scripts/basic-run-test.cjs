@@ -3,7 +3,7 @@
 const { Basic } = require('../web/js/basic.js');
 let fail = 0, n = 0;
 async function run(src, hooks, dialect) {
-  let out = ''; const b = new Basic({ print: (t) => { out += t; }, hooks: hooks || {}, dialect });
+  let out = '', steps = 0; const b = new Basic({ print: (t) => { out += t; }, hooks: hooks || {}, dialect, onStep: async () => { if (++steps > 20000) b.stopFlag = true; } });
   b.load(src); await b.run(); return out;
 }
 const eq = (a, b, m) => { n++; if (a !== b) { fail++; console.log('FAIL', m, '\n  got ', JSON.stringify(a), '\n  want', JSON.stringify(b)); } };
@@ -34,5 +34,6 @@ const eq = (a, b, m) => { n++; if (a !== b) { fail++; console.log('FAIL', m, '\n
     b.load('10 INPUT X,Y,Z\n20 PRINT X;Y;Z'); let o = ''; b.print = (t) => { o += t; }; await b.run();
     eq(b.vars.get('X') + ',' + b.vars.get('Y') + ',' + b.vars.get('Z'), '1,2,3', 'INPUT keeps earlier values when more are requested');
   }
+  eq(await run('10 PRINT FLAG+1\n20 IF NOT FLAG THEN PRINT "UNSET"'), '1\nUNSET\n', 'unset numeric variable reads as 0');
   console.log(`basic-run-test: ${n} checks, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();
