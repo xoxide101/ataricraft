@@ -19,8 +19,8 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
 <div class="bar">
   <label>System <select id="sys"><option value="2600">Atari 2600</option></select></label>
   <input type="file" id="file" accept=".a26,.bin,.rom,.a52,.a78,.lnx,.j64">
-  <label>Mapper <select id="map"><option value="">auto</option></select></label>
-  <button id="reset">Reset</button><button id="pause">Pause</button><button id="fill">Fill</button>
+  <label data-feat="mapper">Mapper <select id="map"><option value="">auto</option></select></label>
+  <button id="reset" data-feat="reset">Reset</button><button id="pause" data-feat="pause">Pause</button><button id="fill" data-feat="fill">Fill</button>
   <span id="info" class="mut">Load a cartridge (.a26 / .bin).</span>
 </div>
 <div id="stage"><canvas id="cv" width="160" height="192"></canvas></div>
@@ -42,16 +42,17 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
     for (const k of keys) { const m = map[k]; if (m) i[m[0]][m[1]] = 1; }
     i.reset = keys.has('Enter') ? 1 : 0; i.select = keys.has('Shift') ? 1 : 0;
     const gp = (navigator.getGamepads ? navigator.getGamepads() : [])[0];
-    if (gp) { const a = gp.axes; if (a[0] < -.5 || gp.buttons[14]?.pressed) i.p0.left = 1; if (a[0] > .5 || gp.buttons[15]?.pressed) i.p0.right = 1; if (a[1] < -.5 || gp.buttons[12]?.pressed) i.p0.up = 1; if (a[1] > .5 || gp.buttons[13]?.pressed) i.p0.down = 1; if (gp.buttons[0]?.pressed || gp.buttons[2]?.pressed) i.p0.fire = 1; if (gp.buttons[9]?.pressed) i.reset = 1; if (gp.buttons[8]?.pressed) i.select = 1; }
+    if (gp && feats.has('gamepad')) { const a = gp.axes; if (a[0] < -.5 || gp.buttons[14]?.pressed) i.p0.left = 1; if (a[0] > .5 || gp.buttons[15]?.pressed) i.p0.right = 1; if (a[1] < -.5 || gp.buttons[12]?.pressed) i.p0.up = 1; if (a[1] > .5 || gp.buttons[13]?.pressed) i.p0.down = 1; if (gp.buttons[0]?.pressed || gp.buttons[2]?.pressed) i.p0.fire = 1; if (gp.buttons[9]?.pressed) i.reset = 1; if (gp.buttons[8]?.pressed) i.select = 1; }
     con.applyInput();
   }
-  addEventListener('keydown', (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (k === 'c' && !e.repeat && con) { con.input.color ^= 1; } if (map[k] || k === 'Enter' || k === 'Shift') { keys.add(k); if (e.target === document.body || k.startsWith('Arrow') || k === ' ') e.preventDefault(); } });
+  addEventListener('keydown', (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (k === 'c' && !e.repeat && con && feats.has('colorbw')) { con.input.color ^= 1; } if (map[k] || k === 'Enter' || k === 'Shift') { keys.add(k); if (e.target === document.body || k.startsWith('Arrow') || k === ' ') e.preventDefault(); } });
   addEventListener('keyup', (e) => { keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key); });
   // Core registry: every system exposes create(rom, opt) -> { input, applyInput(), runFrame(), frame() -> {w,h,px}, drainAudio(), rate, describe() }.
   // Shared features (keys, gamepad, fill, audio, pause, reset) live in this page; new cores only register here.
   const CORES = {
     '2600': {
       name: 'Atari 2600',
+      features: ['reset', 'pause', 'fill', 'audio', 'mapper', 'joy2', 'select', 'colorbw', 'gamepad'],
       create(rom, opt) {
         const c = new A.Console2600(); c.load(rom, opt);
         return Object.assign(c, {
@@ -62,10 +63,23 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
       }
     }
   };
-  function start() {
-    if (!rom) return; con = CORES['2600'].create(rom, $('map').value || undefined);
-    info.textContent = con.describe();
+  // Turns UI on/off from the active core's feature list; elements opt in with data-feat="name".
+  let feats = new Set();
+  function applyFeatures(core) {
+    feats = new Set(core ? core.features : []);
+    for (const el of document.querySelectorAll('[data-feat]')) {
+      const on = feats.has(el.dataset.feat);
+      el.hidden = !on && el.tagName !== 'BUTTON'; el.disabled = !on;
+    }
+    $('sys').value = core ? core.id : $('sys').value;
   }
+  function start() {
+    if (!rom) return; const core = CORES['2600'];
+    con = core.create(rom, $('map').value || undefined); con.core = core;
+    applyFeatures(core); info.textContent = con.describe();
+  }
+  for (const k in CORES) CORES[k].id = k;
+  applyFeatures(null);
   function sniff(b, name) {
     const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase(), h = (o, n) => String.fromCharCode(...b.slice(o, o + n));
     if (h(1, 9) === 'ATARI7800' || ext === '.a78') return ['Atari 7800', '7800 core is not implemented yet.'];
@@ -77,13 +91,13 @@ canvas{image-rendering:pixelated;width:640px;height:auto;max-width:100%}
   $('file').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return; rom = new Uint8Array(await f.arrayBuffer());
     const o = sniff(rom, f.name);
-    if (o) { con = null; rom = null; info.textContent = o[0] + ': ' + o[1]; return; }
+    if (o) { con = null; rom = null; applyFeatures(null); info.textContent = o[0] + ': ' + o[1]; return; }
     $('map').value = ''; start();
   };
   $('map').onchange = start; $('reset').onclick = start;
   $('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; };
   $('fill').onclick = () => $('stage').classList.toggle('fill');
-  $('stage').oncontextmenu = (e) => { e.preventDefault(); $('stage').classList.toggle('fill'); };
+  $('stage').oncontextmenu = (e) => { e.preventDefault(); if (feats.has('fill')) $('stage').classList.toggle('fill'); };
   function sound(samples) {
     if (!samples.length) return;
     if (!actx) { try { actx = new AudioContext(); } catch (e) { return; } }
