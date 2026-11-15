@@ -29,7 +29,7 @@ const safe = (s) => s.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '
 const unesc = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 
 function parseSoftlist(file) {
-  const t = fs.readFileSync(file, 'latin1'), out = [], re = /<software name="([^"]+)"([^>]*)>([\s\S]*?)<\/software>/g; let m;
+  const t = fs.readFileSync(file, 'utf8'), out = [], re = /<software name="([^"]+)"([^>]*)>([\s\S]*?)<\/software>/g; let m;
   while ((m = re.exec(t))) {
     const cl = /cloneof="([^"]+)"/.exec(m[2]), body = m[3];
     const desc = /<description>([\s\S]*?)<\/description>/.exec(body); if (!desc) continue;
