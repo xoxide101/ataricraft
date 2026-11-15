@@ -8,13 +8,13 @@
   const SPECIAL_RE = /^(F(1[3-9]|2[0-4])|Audio\w+|Media\w+|Volume\w+|Launch\w+|Browser\w+|BrightnessUp|BrightnessDown|Lang\d|Intl\w+|Convert|NonConvert|KanaMode|ContextMenu|Fn|FnLock|Power|Sleep|WakeUp|Help|Again|Props|Undo|Cut|Copy|Paste|Find|Open|Select)$/;
   const isSpecial = (code) => SPECIAL_RE.test(code || '');
 
-  // 8 macro slots: 4 side keys (L1-L4, top to bottom) and 4 bottom keys (B1-B4, left to right).
-  // Default actions mirror the side buttons of the Atari consoles: START / SELECT / OPTION / RESET on the side, PAUSE / BREAK / HELP / CREDIT below.
+  // 8 macro slots = the keyboard's G1-G4 (left side, top to bottom) and G5-G8 (bottom row, left to right).
+  // The NuPhyIO Basic list has no F13+, so the defaults are numpad keys, which do not exist on this 75% board.
   const MACRO_SLOTS = [
-    { id: 'L1', label: 'Side 1', action: 'start', code: 'F13' }, { id: 'L2', label: 'Side 2', action: 'select', code: 'F14' },
-    { id: 'L3', label: 'Side 3', action: 'option', code: 'F15' }, { id: 'L4', label: 'Side 4', action: 'reset', code: 'F16' },
-    { id: 'B1', label: 'Bottom 1', action: 'pause', code: 'F17' }, { id: 'B2', label: 'Bottom 2', action: 'break', code: 'F18' },
-    { id: 'B3', label: 'Bottom 3', action: 'help', code: 'F19' }, { id: 'B4', label: 'Bottom 4', action: 'credit', code: 'F20' },
+    { id: 'G1', label: 'Side 1', action: 'start', code: 'Numpad1' }, { id: 'G2', label: 'Side 2', action: 'select', code: 'Numpad2' },
+    { id: 'G3', label: 'Side 3', action: 'option', code: 'Numpad3' }, { id: 'G4', label: 'Side 4', action: 'reset', code: 'Numpad4' },
+    { id: 'G5', label: 'Bottom 1', action: 'pause', code: 'Numpad5' }, { id: 'G6', label: 'Bottom 2', action: 'break', code: 'Numpad6' },
+    { id: 'G7', label: 'Bottom 3', action: 'help', code: 'Numpad7' }, { id: 'G8', label: 'Bottom 4', action: 'credit', code: 'Numpad8' },
   ];
 
   const KEYBOARDS = {
@@ -23,7 +23,7 @@
       keys: 83, wiredOnly: true, pollingHz: 8000, rollover: 'NKRO',
       macroSlots: 8,
       notes: [
-        'Map the 8 custom keys to F13-F20 in the NuPhyIO web driver (one per slot) so the browser reports distinct codes; this page then binds them to Atari functions.',
+        'In NuPhyIO > Key Bindings, assign G1-G8 (side and bottom keys) to Numpad 1-8 (Basic list). They are not on a 75% board, so they never clash with typing. The Basic list has no F13-F20.',
         'Rapid Trigger and SOCD run in the keyboard firmware: opposing keys (left/right, up/down) may be cleaned or re-fired before the emulator sees them. Turn them off for joystick use or test with the held-keys view.',
         '8000 Hz polling can deliver bursts of events; the rate meter below shows the peak seen by the browser (browsers usually coalesce well below 8000).',
         'The knob normally sends volume keys (AudioVolumeUp/Down, mute). They are listed as special keys and are not bound by default.',
@@ -40,7 +40,7 @@
       if (repeat) return;
       S.downs++; S.seen.add(code); S.held.add(code); S.downAt.set(code, t);
       if (S.held.size > S.peak) S.peak = S.held.size;
-      if (isSpecial(code)) S.special.set(code, (S.special.get(code) || 0) + 1);
+      if (isSpecial(code) || MACRO_SLOTS.some((s) => s.code === code)) S.special.set(code, (S.special.get(code) || 0) + 1);
       S.recent.push(t); while (S.recent.length && t - S.recent[0] > 1000) S.recent.shift();
       if (S.recent.length > S.peakRate) S.peakRate = S.recent.length;
     };

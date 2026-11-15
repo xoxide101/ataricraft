@@ -17,18 +17,18 @@ const Kbd = require('../web/js/ctrlkbd.js');
   st.down('KeyA', 11, true);
   eq(st.report().peak, 10, 'rollover peak counts held keys, repeats ignored'); ok(/Full N-key/.test(Kbd.rolloverVerdict(10)), 'NKRO verdict');
   ok(/ghosting/.test(Kbd.rolloverVerdict(3)), 'low rollover verdict warns');
-  st.up('KeyA', 12); st.down('F13', 20); st.up('F13', 23); st.down('AudioVolumeUp', 30);
-  const r = st.report(); eq(r.shortestHoldMs, 3, 'shortest hold (Rapid Trigger taps)'); eq(r.special.map((s) => s.code).sort(), ['AudioVolumeUp', 'F13'], 'macro and knob keys listed as special');
+  st.up('KeyA', 12); st.down('Numpad1', 20); st.up('Numpad1', 23); st.down('AudioVolumeUp', 30);
+  const r = st.report(); eq(r.shortestHoldMs, 3, 'shortest hold (Rapid Trigger taps)'); eq(r.special.map((s) => s.code).sort(), ['AudioVolumeUp', 'Numpad1'], 'macro and knob keys listed as special');
   ok(!Kbd.isSpecial('KeyA') && !Kbd.isSpecial('F12') && Kbd.isSpecial('F24'), 'special key detection');
   st.reset(); eq(st.report().held, [], 'blur releases held keys');
-  const slots = Kbd.MACRO_SLOTS; eq(slots.length, 8, '4 side + 4 bottom macro slots'); eq(slots.map((s) => s.id), ['L1', 'L2', 'L3', 'L4', 'B1', 'B2', 'B3', 'B4'], 'slot ids');
+  const slots = Kbd.MACRO_SLOTS; eq(slots.length, 8, '4 side + 4 bottom macro slots'); eq(slots.map((s) => s.id), ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8'], 'slot ids');
   const mp = Core.fromPreset('keyboard-macros');
   eq(mp.aux.map((a) => a.source[0]), slots.map((s) => 'kb:' + s.code), 'preset sources match CtrlKbd slots'); eq(mp.aux.map((a) => a.action), slots.map((s) => s.action), 'preset actions match CtrlKbd slots');
   eq(Core.sanitize(JSON.parse(JSON.stringify(mp))), mp, 'macro preset round-trips sanitize');
   const upd = (lv, ctx) => Core.createRuntime(mp).update(S(lv, {}), ctx || {});
-  const o = upd({ 'kb:F13': 1, 'kb:F14': 1, 'kb:F15': 1, 'kb:F18': 1 });
+  const o = upd({ 'kb:Numpad1': 1, 'kb:Numpad2': 1, 'kb:Numpad3': 1, 'kb:Numpad6': 1 });
   eq([o.fields.start, o.fields.select, o.fields.option, o.fields.special], [1, 1, 1, 5], 'side macro keys drive START/SELECT/OPTION, bottom macro drives BREAK');
-  ok(upd({ 'kb:F17': 1 }, { model: '5200' }).keys.cpause, 'bottom macro PAUSE reaches the 5200');
+  ok(upd({ 'kb:Numpad5': 1 }, { model: '5200' }).keys.cpause, 'bottom macro PAUSE reaches the 5200');
 }
 
 // -- tables match the emulator's existing code --
