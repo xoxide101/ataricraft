@@ -11,6 +11,8 @@ const SYSTEMS = [
   { id: '5200', match: /Atari 5200 - Games/i, ext: '.a52', from: ['.a52', '.bin'], dir: 'Atari - 5200' },
   { id: '7800', match: /Atari 7800 - Games/i, ext: '.a78', from: ['.a78'], dir: 'Atari - 7800' },
   { id: 'Lynx', match: /Atari Lynx - Games - \[LNX\]/i, ext: '.lnx', from: ['.lnx'], dir: 'Atari - Lynx' },
+  { id: 'Jaguar', match: /Atari Jaguar - Games - \[J64\]/i, ext: '.j64', from: ['.j64'], dir: 'Atari - Jaguar' },
+  { id: '8bit', match: /Atari 8bit - Games - \[ATR\]/i, ext: '.atr', from: ['.atr'], dir: 'Atari - 8-bit' },
 ];
 // Titles (lower case, start of name) that are played with paddles. Only listed systems get a paddle folder.
 const PADDLE = {
@@ -18,6 +20,8 @@ const PADDLE = {
   '5200': ['super breakout', 'breakout', 'paddle'],
   '7800': ['paddle'],
   'Lynx': [],
+  'Jaguar': [],
+  '8bit': ['paddle'],
 };
 const BAD = /\[(b|h|t|o|cr|m|a)\d*(?:\s[^\]]*)?\]/i;
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `build-set.cjs` also builds Jaguar (`.j64`) and Atari 8-bit (`.atr`) sets. New `tools/rom-namer/build-mame-set.cjs` builds long-named NES (iNES header rebuilt from the softlist), Game Boy, Game Boy Color, Game Boy Advance, Genesis, Master System and Game Gear sets from MAME software-list zips plus the MAME `hash` XMLs. Parents only unless `--clones`; unsupported NES mappers, multi-file and non-plain Genesis images are counted and skipped. Dry run by default.
+
 - `tools/rom-namer/build-set.cjs`: builds a clean long-named ROM set straight from TOSEC "Games" zips (including Zstandard zips, Node 22.15+): `.a26`, `.a52`, `.a78`, `.lnx` in one folder per system (`Atari - 2600`, ...), with a separate `... - Paddle` folder (by title or TOSEC `[paddle]` tag) and `Atari - 2600 - Supercharger` for tape images. Skips bad dumps, hacks, trained/cracked/modified and alternate copies unless `--all`. Dry run by default; `--apply` writes.
 
 - BASIC panel: Run now warns when a listing does not look like Atari BASIC (TI-99/4A `CALL SCREEN/CHAR/HCHAR/...`, `SEG$`, `ELSE`, `::` in PRINT, or Microsoft-style `LEFT$/MID$/RIGHT$` under the strict dialect), naming the suspect lines, then runs it anyway. `AC.Basic.detectDialect` / `dialectWarning`; tested in `scripts/basic-run-test.cjs`.
