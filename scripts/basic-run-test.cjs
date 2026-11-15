@@ -35,5 +35,15 @@ const eq = (a, b, m) => { n++; if (a !== b) { fail++; console.log('FAIL', m, '\n
     eq(b.vars.get('X') + ',' + b.vars.get('Y') + ',' + b.vars.get('Z'), '1,2,3', 'INPUT keeps earlier values when more are requested');
   }
   eq(await run('10 PRINT FLAG+1\n20 IF NOT FLAG THEN PRINT "UNSET"'), '1\nUNSET\n', 'unset numeric variable reads as 0');
+  {
+    const { detectDialect, dialectWarning } = require('../web/js/basic.js');
+    const ti = '100 REM TI BASIC\n210 CALL SCREEN ()\n220 CALL CHAR(33,"E7E7")\n360 IF X<>2 THEN 390 ELSE 400\n460 PRINT TAB(3);T$\n470 M$=SEG$(A$,1,1)';
+    const d = detectDialect(ti); eq(d.system + ':' + d.issues.map((i) => i.line).join(','), 'ti:210,220,360,470', 'TI listing is flagged line by line');
+    eq(/WARNING.*TI-99\/4A BASIC/.test(dialectWarning(ti, 'atari')), true, 'warning names TI BASIC');
+    eq(detectDialect('10 CALL 1536\n20 A$="CALL SCREEN"\n30 REM CALL SCREEN\n40 DATA CALL SCREEN').system, null, 'Atari CALL addr, strings, REM, DATA are not flagged');
+    eq(detectDialect('10 A$=LEFT$(B$,2)', 'atari').system, 'ms', 'LEFT$ is suspect in strict Atari');
+    eq(detectDialect('10 A$=LEFT$(B$,2)', 'xl').system, null, 'LEFT$ is fine in the XL dialect');
+    eq(dialectWarning('10 PRINT "HI"', 'atari'), '', 'clean Atari code gives no warning');
+  }
   console.log(`basic-run-test: ${n} checks, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();

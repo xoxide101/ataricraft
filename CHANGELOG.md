@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- BASIC panel: Run now warns when a listing does not look like Atari BASIC (TI-99/4A `CALL SCREEN/CHAR/HCHAR/...`, `SEG$`, `ELSE`, `::` in PRINT, or Microsoft-style `LEFT$/MID$/RIGHT$` under the strict dialect), naming the suspect lines, then runs it anyway. `AC.Basic.detectDialect` / `dialectWarning`; tested in `scripts/basic-run-test.cjs`.
+
 - Consoles dev kit (2600): per-core `features` list that toggles the UI, `web/js/a2600dev.js` (assembler with TIA/RIOT symbols, disassembler, state inspector, sprite/playfield-to-asm), breakpoints and single-step on `Console2600`, and a Dev Kit panel in `console.html` (editor, Assemble & Run, step, live TIA/RAM view, bitmap editors, download `.a26`). Fixed the 2600 NTSC palette hue rotation (`$84` is now blue, `$1E` yellow). Test: `node scripts/a2600dev-test.cjs`.
 
 - Consoles: new `web/console.html` plays Atari 2600 cartridges with a from-scratch 6502 (`web/js/cpu6502.js`) and 2600 core (`web/js/a2600.js`: TIA, RIOT, mappers 2K/4K/F8/F6/F4/FA/EF/E0/3F). Keyboard and gamepad input, audio, Fill button / right-click fill. Test: `node scripts/a2600-test.cjs` (set `A2600_ROM` for a real ROM). Only 4K was tried in a browser; 7800 is not implemented and 5200 still runs only in the main emulator. See [docs/CONSOLES.md](docs/CONSOLES.md).

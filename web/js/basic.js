@@ -361,5 +361,32 @@
   // PRINT items end at ';' or ',' that is outside quotes and parentheses.
   function endOfExpr(s, i) { let d = 0, q = false; for (; i < s.length; i++) { const c = s[i]; if (c === '"') q = !q; else if (!q) { if (c === '(') d++; else if (c === ')') d--; else if ((c === ';' || c === ',') && d === 0) return i; } } return i; }
 
-  return { Basic, BasicError, fmt };
+  // Heuristic check for listings written for another machine. Returns { system, issues: [{ line, text, why }] };
+  // system is 'ti' (TI-99/4A BASIC), 'ms' (Microsoft-style string functions under strict Atari) or null when nothing looks foreign.
+  const TI_CALL = /\bCALL\s*(SCREEN|CHAR|HCHAR|VCHAR|COLOR|KEY|SOUND|CLEAR|GCHAR|JOYST|MAGNIFY|SPRITE|DELSPRITE|MOTION|PATTERN|LOCATE|COINC|DISTANCE|SAY|CHARPAT|CHARSET|PEEKV|POKEV|LOAD|INIT)\b/;
+  function detectDialect(text, dialect) {
+    const issues = []; let ti = 0, ms = 0, last = 0;
+    for (const l0 of String(text).split(/\r?\n/)) {
+      const l = l0.replace(/[\u201c\u201d\u201e\u2033]/g, '"').replace(/[\u2018\u2019]/g, "'"); const m = /^\s*(\d+)\s?(.*)$/.exec(l);
+      if (!m) continue; last = +m[1];
+      const body = m[2].replace(/"[^"]*"?/g, '""').toUpperCase().trim();
+      if (/^(REM|DATA)\b/.test(body) || body[0] === '.') continue;
+      const hit = (re, why, kind) => { if (re.test(body)) { issues.push({ line: last, text: m[2].trim().slice(0, 40), why }); if (kind === 'ti') ti++; else ms++; } };
+      hit(TI_CALL, 'CALL is a TI BASIC statement; Atari BASIC has no CALL ' + (TI_CALL.exec(body) || ['', ''])[1], 'ti');
+      hit(/\bSEG\$/, 'SEG$ is TI BASIC (Atari uses A$(start,end))', 'ti');
+      hit(/\bELSE\b/, 'ELSE does not exist in Atari BASIC', 'ti');
+      hit(/\b(DISPLAY|ACCEPT)\s+AT\b|\bOPTION\s+BASE\b|\bRPT\$/, 'TI BASIC statement', 'ti');
+      if (/^(PRINT|\?)/.test(body) && /::/.test(body)) { issues.push({ line: last, text: m[2].trim().slice(0, 40), why: ':: in PRINT is TI BASIC (blank-line separator)' }); ti++; }
+      if (dialect === 'atari' || !dialect) hit(/\b(LEFT|MID|RIGHT)\$/, 'Microsoft-style string function (strict Atari BASIC has none; try the XL dialect)', 'ms');
+    }
+    return { system: ti ? 'ti' : (ms ? 'ms' : null), issues };
+  }
+  function dialectWarning(text, dialect) {
+    const d = detectDialect(text, dialect); if (!d.system) return '';
+    const name = d.system === 'ti' ? 'TI-99/4A BASIC' : 'another BASIC (Microsoft-style)';
+    const shown = d.issues.slice(0, 4).map((i) => `  line ${i.line}: ${i.why}`).join('\n');
+    return `WARNING: this does not look like Atari BASIC; it looks like ${name} (${d.issues.length} suspect line${d.issues.length > 1 ? 's' : ''}).\n${shown}${d.issues.length > 4 ? '\n  ...' : ''}\nIt will probably stop with an error. The listing may be for a different machine.\n\n`;
+  }
+
+  return { Basic, BasicError, fmt, detectDialect, dialectWarning };
 });

@@ -68,7 +68,7 @@
     const runBtn = btn('Run', async () => {
       localStorage.setItem('ac.basic.src', ed.value); out.textContent = '';
       B = new AC.Basic.Basic({ print: say, hooks, dialect: dial.value, onStep, input: (p) => new Promise((res) => { say(p); inl.style.display = ''; inl.value = ''; inl.focus(); inl.onkeydown = (ev) => { if (ev.key === 'Enter') { inl.style.display = 'none'; say(inl.value + '\n'); res(inl.value); } }; }) });
-      B.load(ed.value); runBtn.disabled = true; dbg.stepping = dbg.breaks.size === 0;
+      B.load(ed.value); say(AC.Basic.dialectWarning(ed.value, dial.value)); runBtn.disabled = true; dbg.stepping = dbg.breaks.size === 0;
       try { await B.run(); } finally { runBtn.disabled = false; inl.style.display = 'none'; dbg.release = null; if (dbg.on) showState(B.cur); }
     }, 'Run the program');
     const dl = (name, txt) => { const a = el('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
