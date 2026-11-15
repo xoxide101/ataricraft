@@ -58,6 +58,13 @@ pre,.log{background:#0c0e12;border:1px solid var(--line);border-radius:4px;paddi
 <div class="warn">Untested on hardware. Formats follow the upstream sources (see docs/CONTROLLER.md) but nothing has been tried with the real controller. Button/axis numbers come from the browser and may differ from what MAME/RetroArch/SDL see.</div>
 <div class="row"><button data-x="mame">MAME ctrlr .cfg</button><button data-x="racfg">RetroArch autoconfig .cfg</button><button data-x="rarmap">RetroArch .rmap</button><button data-x="sdl">SDL gamecontrollerdb line</button></div>
 <div id="xnotes" class="mut"></div><pre id="xout"></pre></section>
+
+<section><h2>7. Keyboard diagnostics and macro keys</h2>
+<div class="row"><label>Keyboard</label><select id="kbModel"></select><button id="kbReset">Reset counters</button><button id="kbMacroApply">New profile: macro keys F13-F20 as console side buttons</button></div>
+<div class="mut" id="kbInfo"></div><div id="kbStats"></div><div id="kbVerdict"></div>
+<h3>Special keys seen (macro keys, knob, media)</h3><div class="mut" id="kbSpecial"></div>
+<h3>Macro slots (side L1-L4, bottom B1-B4)</h3><div id="kbMacros" class="grid"></div>
+<ul id="kbNotes" class="mut"></ul></section>
 </main>
-<script src="js/ctrlcore.js?v=1"></script><script src="js/ctrlinput.js?v=1"></script><script src="js/ctrlexport.js?v=1"></script><script src="js/ctrlpage.js?v=1"></script>
+<script src="js/ctrlcore.js?v=1"></script><script src="js/ctrlkbd.js?v=1"></script><script src="js/ctrlinput.js?v=1"></script><script src="js/ctrlexport.js?v=1"></script><script src="js/ctrlpage.js?v=1"></script>
 </body></html>
