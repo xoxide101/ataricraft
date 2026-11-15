@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `tools/rom-namer/build-set.cjs`: builds a clean long-named ROM set straight from TOSEC "Games" zips (including Zstandard zips, Node 22.15+): `.a26`, `.a52`, `.a78`, `.lnx` in one folder per system (`Atari - 2600`, ...), with a separate `... - Paddle` folder (by title or TOSEC `[paddle]` tag) and `Atari - 2600 - Supercharger` for tape images. Skips bad dumps, hacks, trained/cracked/modified and alternate copies unless `--all`. Dry run by default; `--apply` writes.
+
 - BASIC panel: Run now warns when a listing does not look like Atari BASIC (TI-99/4A `CALL SCREEN/CHAR/HCHAR/...`, `SEG$`, `ELSE`, `::` in PRINT, or Microsoft-style `LEFT$/MID$/RIGHT$` under the strict dialect), naming the suspect lines, then runs it anyway. `AC.Basic.detectDialect` / `dialectWarning`; tested in `scripts/basic-run-test.cjs`.
 
 - Consoles dev kit (2600): per-core `features` list that toggles the UI, `web/js/a2600dev.js` (assembler with TIA/RIOT symbols, disassembler, state inspector, sprite/playfield-to-asm), breakpoints and single-step on `Console2600`, and a Dev Kit panel in `console.html` (editor, Assemble & Run, step, live TIA/RAM view, bitmap editors, download `.a26`). Fixed the 2600 NTSC palette hue rotation (`$84` is now blue, `$1E` yellow). Test: `node scripts/a2600dev-test.cjs`.
