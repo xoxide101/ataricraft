@@ -9,6 +9,28 @@ const ok = (c, m) => eq(!!c, true, m);
 const S = (lv, dl) => ({ level: (i) => (lv || {})[i] || 0, delta: (i) => (dl || {})[i] || 0 });
 const web = (f) => fs.readFileSync(path.join(__dirname, '..', 'web', f), 'utf8');
 
+// -- keyboard diagnostics and macro keys --
+const Kbd = require('../web/js/ctrlkbd.js');
+{
+  const st = Kbd.createStats();
+  ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon'].forEach((c, i) => st.down(c, i));
+  st.down('KeyA', 11, true);
+  eq(st.report().peak, 10, 'rollover peak counts held keys, repeats ignored'); ok(/Full N-key/.test(Kbd.rolloverVerdict(10)), 'NKRO verdict');
+  ok(/ghosting/.test(Kbd.rolloverVerdict(3)), 'low rollover verdict warns');
+  st.up('KeyA', 12); st.down('Numpad1', 20); st.up('Numpad1', 23); st.down('AudioVolumeUp', 30);
+  const r = st.report(); eq(r.shortestHoldMs, 3, 'shortest hold (Rapid Trigger taps)'); eq(r.special.map((s) => s.code).sort(), ['AudioVolumeUp', 'Numpad1'], 'macro and knob keys listed as special');
+  ok(!Kbd.isSpecial('KeyA') && !Kbd.isSpecial('F12') && Kbd.isSpecial('F24'), 'special key detection');
+  st.reset(); eq(st.report().held, [], 'blur releases held keys');
+  const slots = Kbd.MACRO_SLOTS; eq(slots.length, 8, '4 side + 4 bottom macro slots'); eq(slots.map((s) => s.id), ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8'], 'slot ids');
+  const mp = Core.fromPreset('keyboard-macros');
+  eq(mp.aux.map((a) => a.source[0]), slots.map((s) => 'kb:' + s.code), 'preset sources match CtrlKbd slots'); eq(mp.aux.map((a) => a.action), slots.map((s) => s.action), 'preset actions match CtrlKbd slots');
+  eq(Core.sanitize(JSON.parse(JSON.stringify(mp))), mp, 'macro preset round-trips sanitize');
+  const upd = (lv, ctx) => Core.createRuntime(mp).update(S(lv, {}), ctx || {});
+  const o = upd({ 'kb:Numpad1': 1, 'kb:Numpad2': 1, 'kb:Numpad3': 1, 'kb:Numpad6': 1 });
+  eq([o.fields.start, o.fields.select, o.fields.option, o.fields.special], [1, 1, 1, 5], 'side macro keys drive START/SELECT/OPTION, bottom macro drives BREAK');
+  ok(upd({ 'kb:Numpad5': 1 }, { model: '5200' }).keys.cpause, 'bottom macro PAUSE reaches the 5200');
+}
+
 // -- tables match the emulator's existing code --
 const app = web('js/app.js');
 const qt = /const QTAB = (\{[^}]*\});/.exec(app);
@@ -187,7 +209,7 @@ hin.requestHid().then(() => {
   ok(/data-m="track"/.test(web('index.html')) && /id="ktrack"/.test(web('index.html')), 'trackball tab present');
   ok(web('index.html').indexOf('ctrlvirt.js') < web('index.html').indexOf('js/app.js'), 'ctrlvirt loads before app.js');
   // -- repo hygiene --
-  const files = ['js/ctrlcore.js', 'js/ctrlvirt.js', 'js/ctrlinput.js', 'js/ctrlexport.js', 'js/ctrlhook.js', 'js/ctrlpage.js', 'controller.html', '../docs/CONTROLLER.md', '../scripts/controller-test.cjs'];
+  const files = ['js/ctrlcore.js', 'js/ctrlvirt.js', 'js/ctrlkbd.js', 'js/ctrlinput.js', 'js/ctrlexport.js', 'js/ctrlhook.js', 'js/ctrlpage.js', 'controller.html', '../docs/CONTROLLER.md', '../scripts/controller-test.cjs'];
   files.forEach((f) => { let t = ''; try { t = web(f); } catch (e) { return; } ok(!new RegExp('is' + 'fx|\\b(192\\.168|10\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01]))\\.\\d+', 'i').test(t), 'no private address in ' + f); });
   ok(/controller\.html/.test(web('tools.html')) && /controller\.html/.test(web('studio.html')), 'links from tools and studio');
   ok(/ctrlhook\.js/.test(web('index.html')), 'index loads the hook');

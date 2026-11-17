@@ -142,6 +142,11 @@
       Object.assign(p.console, { enabled: true, credit: [B(16)], start: [B(9)], select: [B(8)] });
       [[2, 'option'], [3, 'break'], [4, 'pause'], [5, 'help'], [6, 'select'], [7, 'start']].forEach(([n, a], i) => { p.aux[i] = { source: [B(n)], action: a }; });
     } },
+    // 8 keyboard macro keys (NuPhy Field75 HE G1-G8 set to Numpad 1-8): side START/SELECT/OPTION/RESET, bottom PAUSE/BREAK/HELP/CREDIT. Keep in sync with CtrlKbd.MACRO_SLOTS. Do not combine with the 5200 keypad preset (same numpad codes).
+    'keyboard-macros': { label: 'Keyboard macro keys G1-G8 (Numpad 1-8) as console side buttons', apply(p) {
+      p.captureKeys = true;
+      ['start', 'select', 'option', 'reset', 'pause', 'break', 'help', 'credit'].forEach((a, i) => { p.aux[i] = { source: ['kb:Numpad' + (1 + i)], action: a }; });
+    } },
     'console-switches': { label: 'Console switches START / SELECT / OPTION / RESET', apply(p) { Object.assign(p.console, { enabled: true, start: [B(9)], select: [B(8)], option: [B(2)], reset: [B(3)], pause: [B(16)] }); } },
     // Template only: real sources come from the device map recorded on the Controller page.
     'gamestation': { label: 'Atari Gamestation Gamepad (template, record controls first)', apply(p) {

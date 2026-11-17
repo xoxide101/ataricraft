@@ -148,6 +148,28 @@
     download(r.filename, r.text, r.mime);
   }; });
 
+  // ---- keyboard diagnostics ----
+  const Kbd = window.CtrlKbd; let kst = Kbd.createStats();
+  const kbSel = $('kbModel'); Object.entries(Kbd.KEYBOARDS).forEach(([k, v]) => kbSel.append(el('option', { value: k, textContent: v.label })));
+  kbSel.value = 'nuphy-field75-he-v2';
+  const stamp = (e) => (typeof e.timeStamp === 'number' ? e.timeStamp : performance.now());
+  window.addEventListener('keydown', (e) => kst.down(e.code, stamp(e), e.repeat), true);
+  window.addEventListener('keyup', (e) => kst.up(e.code, stamp(e)), true);
+  window.addEventListener('blur', () => kst.reset());
+  $('kbReset').onclick = () => { kst = Kbd.createStats(); };
+  function renderKb() {
+    const kb = Kbd.KEYBOARDS[kbSel.value], r = kst.report();
+    $('kbInfo').textContent = `${kb.label}${kb.pollingHz ? ' | ' + kb.pollingHz + ' Hz' : ''}${kb.rollover !== 'unknown' ? ' | ' + kb.rollover : ''}${kb.wiredOnly ? ' | wired only' : ''}`;
+    $('kbStats').textContent = `held now ${r.held.join(' ') || '-'} | peak simultaneous ${r.peak} | presses ${r.downs} | distinct keys ${r.distinct} | peak presses/s ${r.peakPerSec} | shortest press ${r.shortestHoldMs === null ? '-' : r.shortestHoldMs.toFixed(1) + ' ms'}`;
+    $('kbVerdict').textContent = Kbd.rolloverVerdict(r.peak);
+    $('kbSpecial').textContent = r.special.length ? r.special.map((s) => `${s.code} x${s.n}`).join(', ') : 'None yet. Press the macro keys / turn the knob.';
+    const t = $('kbNotes'); if (t.dataset.k !== kbSel.value) { t.dataset.k = kbSel.value; t.textContent = ''; kb.notes.forEach((n) => t.append(el('li', { textContent: n }))); }
+    const m = $('kbMacros'); if (!m.children.length) Kbd.MACRO_SLOTS.forEach((s) => m.append(el('div', { className: 'btn1', textContent: `${s.id} ${s.code} > ${s.action}` })));
+    Kbd.MACRO_SLOTS.forEach((s, i) => m.children[i].classList.toggle('on', kst.held.has(s.code)));
+  }
+  setInterval(renderKb, 100);
+  $('kbMacroApply').onclick = () => { cur = Core.fromPreset('keyboard-macros'); renderAll(); };
+
   function renderAll() { renderList(); renderEditor(); renderPhys(); renderWarns(); renderRt(); }
   inp.start(); renderAll(); requestAnimationFrame(frame);
   window.AC_ctrlPage = { inp, get profile() { return cur; } };

@@ -59,6 +59,11 @@ The keyboard panel has a **Trackball** tab (`web/js/ctrlvirt.js`): drag the ball
 
 Right-click the video display or the keyboard panel and choose "Stretch ... to fill (ignore aspect ratio)". The view then fills all available space without letterboxing; choose "Restore ... aspect ratio" to undo. The choice persists in `ac.fill`. With the touch pad over the screen, Shift+right-click reaches the menu.
 
+## Keyboard diagnostics and macro keys
+Section 7 of `controller.html` (`web/js/ctrlkbd.js`) measures what a keyboard delivers: simultaneous keys held (rollover), shortest press (Rapid Trigger taps), peak presses per second (high polling rates) and special keys (macro keys, knob, media). A keyboard info entry exists for the NuPhy Field75 HE V2 (Hall effect, 83 keys, 8000 Hz, wired, NKRO) with setup notes.
+
+The keyboard has 8 custom keys: G1-G4 on the side and G5-G8 on the bottom. In NuPhyIO > Key Bindings > Basic there is no F13+, so assign them to Numpad 1-8 (numpad keys do not exist on this 75% board, so they never clash with typing), then use the `keyboard-macros` preset: side G1-G4 = START, SELECT, OPTION, RESET (Numpad 1-4), bottom G5-G8 = PAUSE, BREAK, HELP, CREDIT (Numpad 5-8). Do not combine it with the 5200 keypad preset (same numpad codes). Rebind any slot in the Profile editor or with "press this control". Rapid Trigger / SOCD run in the keyboard firmware; disable them for joystick-style use. The Macro Recording tab or other layers (M1-M6) may allow other codes; verify what the browser reports in section 7.
+
 ## Exports (all untested on hardware)
 
 Verified against upstream sources, not against the device:
