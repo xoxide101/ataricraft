@@ -169,3 +169,8 @@ WebAFM integration check (out/t_wint.cjs): import ROM to MyDOS, Make ZIP, Unpack
 - Circuit Runner puzzle 2: hold plate (tile 44, cols 348-349) keeps door (tile 45, cols 360-361) open only while someone stands on it; it won't close on a character. Emulator-tested only.
 
 - Circuit Runner: puzzle logic runs inside the VBI; extra tile lookups there overran vertical blank and broke DLI palettes and the sky. The hold-plate check is now gated by a proximity test (chkplate). Keep new per-frame work in the VBI cheap.
+
+## 2026-11-27: the Craft Hub
+- launcher.json: this app's card in the Craft Hub (the launcher at /craft/: an expanding pie of every app, read from each folder's launcher.json); launcher.png: its picture there
+- The Craft rail (the bar down the left) has the Craft Hub at the top, back to /craft/ from any page
+- See every app: https://github.com/xoxide101

@@ -35,5 +35,6 @@
    "name": "PDF viewer",
    "entry": "web/pdfview.html"
   }
- ]
+ ],
+ "shot": "launcher.png"
 }
