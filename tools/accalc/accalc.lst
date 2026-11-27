@@ -1,0 +1,5318 @@
+mads 2.1.9
+accalc.asm -o:accalc.xex -l:accalc.lst -t:accalc.lab 
+Source: accalc.asm
+     1 				; ACCalc - Atari-native spreadsheet for the 130XE (docs/ACCALC.md)
+     2 				 icl 'defs.inc'
+Source: defs.inc
+     1 				; ACCalc definitions: OS, floating point package, zero page, buffers, limits.
+     2 = 022F			SDMCTL = $022F
+     3 = 0230			SDLSTL = $0230
+     4 = 02C5			COLOR1 = $02C5
+     5 = 02C6			COLOR2 = $02C6
+     6 = 02C8			COLOR4 = $02C8
+     7 = 02FC			CH     = $02FC
+     8 = 0012			RTCLOK = $12
+     9 = 004D			ATRACT = $4D
+    10 = D301			PORTB  = $D301
+    11 = E456			CIOV   = $E456
+    12 = 0342			ICCOM  = $0342
+    13 = 0344			ICBAL  = $0344
+    14 = 0345			ICBAH  = $0345
+    15 = 0348			ICBLL  = $0348
+    16 = 0349			ICBLH  = $0349
+    17 = 034A			ICAX1  = $034A
+    18 = 034B			ICAX2  = $034B
+    19
+    20 				; OS floating point package (zero page FR0 $D4, FR1 $E0, CIX $F2, INBUFF $F3)
+    21 = 00D4			FR0    = $D4
+    22 = 00E0			FR1    = $E0
+    23 = 00F2			CIX    = $F2
+    24 = 00F3			INBUFF = $F3
+    25 = D800			AFP    = $D800                ; ASCII at INBUFF+CIX -> FR0
+    26 = D9AA			IFP    = $D9AA                ; integer in FR0/FR0+1 -> FP
+    27 = D9D2			FPI    = $D9D2                ; FR0 -> integer in FR0/FR0+1
+    28 = DA44			ZFR0   = $DA44
+    29 = DA60			FSUB   = $DA60                ; FR0 = FR0 - FR1
+    30 = DA66			FADD   = $DA66
+    31 = DADB			FMUL   = $DADB
+    32 = DB28			FDIV   = $DB28                ; FR0 = FR0 / FR1
+    33 = DD89			FLD0R  = $DD89                ; FR0 <- 6 bytes at (X lo, Y hi)
+    34 = DD98			FLD1R  = $DD98
+    35 = DDA7			FST0R  = $DDA7                ; 6 bytes at (X lo, Y hi) <- FR0
+    36 = DDB6			FMOVE  = $DDB6                ; FR1 <- FR0
+    37 = DDCC			EXP10  = $DDCC
+    38 = DED1			LOG10  = $DED1
+    39
+    40 				; limits (docs/ACCALC.md)
+    41 = 0080			NROWS  = 128
+    42 = 0010			NCOLS  = 16
+    43 = 0200			MAXF   = 512                  ; formula cells
+    44 = A060			SCR    = $A060                ; 320x192 1 bit screen, 7680 bytes
+    45 = 0015			VROWS  = 21                   ; grid rows on screen (text lines 2..22)
+    46
+    47 				; zero page
+    48 = 0080			ptr    = $80
+    49 = 0082			ptr2   = $82
+    50 = 0084			bp     = $84                  ; pointer into the $4000 bank window
+    51 = 0086			rp     = $86                  ; result pointer (heap string)
+    52 = 0088			gp     = $88                  ; glyph pointer
+    53 = 008A			scp    = $8A                  ; screen pointer
+    54 = 008C			dp     = $8C                  ; text source pointer
+    55 = 008E			qr     = $8E                  ; cell coordinates in use
+    56 = 008F			qc     = $8F
+    57 = 0090			cr     = $90                  ; cursor row / column
+    58 = 0091			cc     = $91
+    59 = 0092			vr0    = $92                  ; first visible row / column
+    60 = 0093			vc0    = $93
+    61 = 0094			nvc    = $94                  ; visible columns
+    62 = 0095			gx     = $95
+    63 = 0096			gy     = $96
+    64 = 0097			invm   = $97
+    65 = 0098			di     = $98
+    66 = 0099			dn     = $99
+    67 = 009A			cwd    = $9A
+    68 = 009B			t1     = $9B
+    69 = 009C			t2     = $9C
+    70 = 009D			t3     = $9D
+    71 = 009E			t4     = $9E
+    72 = 009F			mode   = $9F                  ; 0 navigate, 1 entry, 2 file prompt
+    73 = 00A0			pp     = $A0                  ; parse position in FBUF
+    74 = 00A1			vsp    = $A1                  ; value stack offset
+    75 = 00A2			opc    = $A2
+    76 = 00A3			fid    = $A3
+    77 = 00A4			evsp   = $A4                  ; hardware stack at evaluation start
+    78 = 00A5			rn     = $A5                  ; round digits (signed)
+    79 = 00A6			nh     = $A6
+    80 = 00A7			rmode  = $A7
+    81 = 00A8			rlost  = $A8
+    82 = 00A9			pl     = $A9
+    83 = 00AA			ph     = $AA
+    84 = 00AB			ru     = $AB
+    85 = 00AC			pb0    = $AC                  ; PORTB at start with BASIC off
+    86 = 00AD			elen   = $AD
+    87 = 00AE			key    = $AE
+    88 = 00AF			nd     = $AF                  ; decimals, $FF = general
+    89 = 00B0			fitw   = $B0
+    90 = 00B1			nlen   = $B1
+    91 = 00B2			dpi    = $B2                  ; integer digit count (signed 16)
+    92 = 00B3			dpih   = $B3
+    93 = 00B4			thou   = $B4
+    94 = 00B5			pct    = $B5
+    95 = 00B6			dol    = $B6
+    96 = 00B7			fcnt   = $B7                  ; formula count (2)
+    97 = 00B9			chg    = $B9
+    98 = 00BA			npass  = $BA
+    99 = 00BB			ferr   = $BB
+   100 = 00BC			acn    = $BC                  ; aggregate count (2)
+   101 = 00BE			fhave  = $BE
+   102 = 00BF			r1     = $BF                  ; range corners
+   103 = 00C0			c1     = $C0
+   104 = 00C1			r2     = $C1
+   105 = 00C2			c2     = $C2
+   106 = 00C3			fli    = $C3                  ; formula list index (2)
+   107 = 00C5			unsup  = $C5
+   108 = 00C6			hp     = $C6                  ; heap top (2)
+   109 = 00C8			nstr   = $C8                  ; pool strings (2)
+   110 = 00CA			pi     = $CA                  ; pool index (2)
+   111 = 00CC			w16    = $CC                  ; last 16 bit value read (2)
+   112 = 00CE			ldsp   = $CE
+   113 = 00CF			fx     = $CF
+   114
+   115 				; main RAM buffers (page 5 $0580 is the FP package's LBUFF: never touch)
+   116 = 0600			EBUF   = $0600                ; entry text
+   117 = 0680			FBUF   = $0680                ; formula being evaluated (0 terminated)
+   118 = 0700			RECB   = $0700                ; cell record working copy (16)
+   119 = 0710			OLDV   = $0710
+   120 = 0720			TMPS   = $0720                ; string work, len byte first (up to 127)
+   121 = 07B0			CELLB  = $07B0                ; one rendered cell (<= 12)
+   122 = 07C0			NUMS   = $07C0                ; formatted number
+   123 = 0900			LROWL  = $0900
+   124 = 0920			LROWH  = $0920
+   125 = 0940			VCX    = $0940
+   126 = 0950			VCW    = $0950
+   127 = 0960			CW     = $0960                ; effective column widths 4..12 (16)
+   128 = 0970			CWR    = $0970                ; raw widths from the file, 0 = default (16)
+   129 = 0800			VSTK   = $0800                ; value stack, 8 bytes per entry
+   130 = 0880			DG     = $0880                ; 11 BCD digits for rounding / formatting
+   131 = 0890			BV     = $0890                ; 6 byte working number
+   132 = 0898			TA     = $0898
+   133 = 089E			TB     = $089E
+   134 = 08A0			FACC   = $08A0
+   135 = 08A8			FBEST  = $08A8
+   136 = 0A00			IDIG   = $0A00                ; integer digit scratch (160)
+   137 = 0AB0			CFM    = $0AB0                ; custom format heap pointers (16 x 2)
+   138 = 0AD0			FNB    = $0AD0                ; file name (40)
+   139 = 0AF8			FNB2   = $0AF8
+   140 = 1000			FLL    = $1000                ; formula list, low bytes (512)
+   141 = 1200			FLH    = $1200                ; high bytes
+   142 = 1400			IOBUF  = $1400                ; 128 byte file buffer
+   143 = 1480			HDR    = $1480
+   144 				; sheet state
+   145 = 14A0			shname = $14A0                ; sheet name heap pointer (2)
+   146 = 14A2			sfr    = $14A2                ; frozen rows / cols
+   147 = 14A3			sfc    = $14A3
+   148 = 14A4			dcw    = $14A4                ; default column width
+   149 = 14A5			ncfm   = $14A5
+   150 = 14A6			fnl    = $14A6
+   151 = 14A7			rpos   = $14A7
+   152 = 14A8			rlen   = $14A8
+   153 = 14A9			remh   = $14A9                ; bytes left in the file payload (2)
+   154 = 14AB			crc    = $14AB                ; CRC-16 (2)
+   155 = 14AD			sum    = $14AD                ; plain sum (2)
+   156 = 14AF			hsum   = $14AF
+   157 = 14B1			ncell  = $14B1                ; cells loaded / written (2)
+   158 = 14B3			ndrop  = $14B3                ; cells dropped on load (2)
+   159 = 14B5			fdrop  = $14B5                ; formulas turned to values (cap)
+   160 = 14B6			lderr  = $14B6
+   161 = 14B7			nsheet = $14B7
+   162 = 14B8			sidx   = $14B8
+   163 = 14B9			skp    = $14B9
+   164 = 14BA			rrow   = $14BA
+   165 = 14BC			rcnt   = $14BC
+   166 = 14BD			ccnt   = $14BD
+   167 = 14BE			fl     = $14BE
+   168 = 14BF			fmt    = $14BF
+   169 = 14C0			sty8   = $14C0
+   170 = 14C1			dirty  = $14C1
+   171 = 14C2			msg    = $14C2
+   172 = 14C3			fln    = $14C3
+   173 = 14C5			nnm    = $14C5
+   174 = 14C6			ncht   = $14C6
+   175 = 14C7			nfm2   = $14C7
+   176 = 14C8			wrm    = $14C8                ; 0 = count/sum pass, 1 = write pass
+   177 = 14C9			nstro  = $14C9                ; strings counted (2)
+   178 = 14CB			pbytes = $14CB                ; pool bytes counted (2)
+   179 = 14CD			tlen   = $14CD                ; payload length counted (2)
+   180 = 14CF			tcells = $14CF
+   181 = 14D1			tnrows = $14D1
+   182 = 14D3			tmaxc  = $14D3
+   183 = 14D4			tmaxr  = $14D4
+   184 = 14D5			sidxp  = $14D5                ; running string index while writing (2)
+   185 = 14D7			wpos   = $14D7
+   186 = 14D8			slen   = $14D8
+   187 = 14D9			sfl    = $14D9
+   188 = 14DA			cwn    = $14DA
+   189 = 14DB			swr    = $14DB
+   190 = 14DC			sd     = $14DC
+   191 = 14DD			ndsv   = $14DD
+   192 = 14DE			rfx    = $14DE
+   193 = 14DF			rft    = $14DF
+   194 = 14E0			fname  = $14E0                ; last used file name (40)
+   195 = 1510			scrc   = $1510                ; CRC bytes found in the file (2)
+   196 = 08B0			BVS    = $08B0
+   197 = 1517			fnc    = $1517
+   198 = 1520			dxs    = $1520
+   199 = 1521			fbase  = $1521
+   200 = 1522			idl    = $1522
+   201 = 1523			er     = $1523
+   202 = 1524			ec     = $1524
+   203 = 1525			circm  = $1525
+   204 = 1526			rr     = $1526
+   205 = 1527			rc     = $1527
+   206 = 1528			aggid  = $1528
+   207 = 1529			cmpop  = $1529
+   208 = 152A			pwn    = $152A
+   209 = 152C			neg    = $152C
+   210 = 08C0			ID     = $08C0
+   211 = 08D0			FTMP   = $08D0
+   212 = 1530			svb    = $1530
+   213 = 1531			svw    = $1531
+   214 = 1532			svrow  = $1532
+   215 = 1533			svcol  = $1533
+   216 = 1534			svcnt  = $1534
+   217 = 1535			svi    = $1535
+   218 = 1536			sci    = $1536                ; running pool reference (2)
+   219 = 1538			svl    = $1538                ; payload length + CRC (2)
+     3
+     4 = 1514			or0 = $1514
+     5 = 1515			oc0 = $1515
+     6 = 1516			pch = $1516
+     7
+     8 				 org $2000
+     9
+    10 				start
+    11 FFFF> 2000-4C0F> AD 01 +  lda PORTB
+    12 2003 09 83		 ora #$83
+    13 2005 8D 01 D3		 sta PORTB
+    14 2008 85 AC		 sta pb0
+    15 200A A9 00		 lda #<dl
+    16 200C 8D 30 02		 sta SDLSTL
+    17 200F A9 16		 lda #>dl
+    18 2011 8D 31 02		 sta SDLSTL+1
+    19 2014 A9 22		 lda #$22
+    20 2016 8D 2F 02		 sta SDMCTL
+    21 2019 A9 0F		 lda #$0F
+    22 201B 8D C6 02		 sta COLOR2
+    23 201E A9 00		 lda #$00
+    24 2020 8D C5 02		 sta COLOR1
+    25 2023 A9 04		 lda #$04
+    26 2025 8D C8 02		 sta COLOR4
+    27 2028 20 14 28		 jsr mklines
+    28 202B 20 3B 28		 jsr clrscr
+    29 202E 20 65 20		 jsr openk
+    30 2031 20 89 22		 jsr clrgrid
+    31 2034 A9 00		 lda #0
+    32 2036 85 90		 sta cr
+    33 2038 85 91		 sta cc
+    34 203A 85 92		 sta vr0
+    35 203C 85 93		 sta vc0
+    36 203E 85 9F		 sta mode
+    37 2040 8D C2 14		 sta msg
+    38 2043 85 B7		 sta fcnt
+    39 2045 85 B8		 sta fcnt+1
+    40 2047 8D C1 14		 sta dirty
+    41 204A 85 AD		 sta elen
+    42 204C 85 C6		 sta hp
+    43 204E A9 40		 lda #$40
+    44 2050 85 C7		 sta hp+1
+    45 2052 A2 0F		 ldx #15
+    46 2054 A9 09		 lda #9
+    47 2056 9D 60 09		st1 sta CW,x
+    48 2059 CA			 dex
+    49 205A 10 FA		 bpl st1
+    50 205C 20 9B 28		 jsr visible
+    51 205F 20 6D 2D		 jsr drawall
+    52 2062 4C 98 20		 jmp loop
+    53
+    54 2065			openk
+    55 2065 A2 20		 ldx #$20
+    56 2067 A9 03		 lda #3
+    57 2069 9D 42 03		 sta ICCOM,x
+    58 206C A9 95		 lda #<kname
+    59 206E 9D 44 03		 sta ICBAL,x
+    60 2071 A9 20		 lda #>kname
+    61 2073 9D 45 03		 sta ICBAH,x
+    62 2076 A9 04		 lda #4
+    63 2078 9D 4A 03		 sta ICAX1,x
+    64 207B A9 00		 lda #0
+    65 207D 9D 4B 03		 sta ICAX2,x
+    66 2080 4C 56 E4		 jmp CIOV
+    67
+    68 2083			getkey
+    69 2083 A2 20		 ldx #$20
+    70 2085 A9 07		 lda #7
+    71 2087 9D 42 03		 sta ICCOM,x
+    72 208A A9 00		 lda #0
+    73 208C 9D 48 03		 sta ICBLL,x
+    74 208F 9D 49 03		 sta ICBLH,x
+    75 2092 4C 56 E4		 jmp CIOV
+    76
+    77 2095 4B 3A 9B		kname dta c'K:',b($9B)
+    78
+    79 2098			loop
+    80 2098 A9 00		 lda #0
+    81 209A 85 4D		 sta ATRACT
+    82 209C AD FC 02		 lda CH
+    83 209F C9 FF		 cmp #$FF
+    84 20A1 F0 F5		 beq loop
+    85 20A3 20 83 20		 jsr getkey
+    86 20A6 85 AE		 sta key
+    87 20A8 A5 9F		 lda mode
+    88 20AA C9 02		 cmp #2
+    89 20AC D0 06		 bne lp0
+    90 20AE 20 72 21		 jsr promptkey
+    91 20B1 4C 98 20		 jmp loop
+    92 20B4 C9 01		lp0 cmp #1
+    93 20B6 D0 06		 bne lp1
+    94 20B8 20 22 47		 jsr entrykey
+    95 20BB 4C 98 20		 jmp loop
+    96 20BE 20 C4 20		lp1 jsr navkey
+    97 20C1 4C 98 20		 jmp loop
+    98
+    99 				; ---- navigation
+   100 20C4			navkey
+   101 20C4 A5 90		 lda cr
+   102 20C6 8D 14 15		 sta or0
+   103 20C9 A5 91		 lda cc
+   104 20CB 8D 15 15		 sta oc0
+   105 20CE A5 AE		 lda key
+   106 20D0 C9 1C		 cmp #$1C
+   107 20D2 D0 09		 bne nk1
+   108 20D4 A5 90		 lda cr
+   109 20D6 F0 41		 beq nkx
+   110 20D8 C6 90		 dec cr
+   111 20DA 4C 30 21		 jmp moved
+   112 20DD C9 1D		nk1 cmp #$1D
+   113 20DF F0 39		 beq nkdn
+   114 20E1 C9 9B		 cmp #$9B
+   115 20E3 F0 35		 beq nkdn
+   116 20E5 C9 1E		 cmp #$1E
+   117 20E7 D0 09		 bne nk2
+   118 20E9 A5 91		 lda cc
+   119 20EB F0 2C		 beq nkx
+   120 20ED C6 91		 dec cc
+   121 20EF 4C 30 21		 jmp moved
+   122 20F2 C9 1F		nk2 cmp #$1F
+   123 20F4 F0 2F		 beq nkrt
+   124 20F6 C9 7F		 cmp #$7F
+   125 20F8 F0 2B		 beq nkrt
+   126 20FA C9 0F		 cmp #$0F
+   127 20FC D0 05		 bne nk3
+   128 20FE A9 4F		 lda #'O'
+   129 2100 4C 5C 21		 jmp askname
+   130 2103 C9 13		nk3 cmp #$13
+   131 2105 D0 05		 bne nk4
+   132 2107 A9 53		 lda #'S'
+   133 2109 4C 5C 21		 jmp askname
+   134 210C C9 12		nk4 cmp #$12
+   135 210E D0 06		 bne nk5
+   136 2110 20 1A 41		 jsr recalc
+   137 2113 4C 6D 2D		 jmp drawall
+   138 2116 4C E9 45		nk5 jmp edkey
+   139 2119 60			nkx rts
+   140 211A A5 90		nkdn lda cr
+   141 211C C9 7F		 cmp #NROWS-1
+   142 211E B0 F9		 bcs nkx
+   143 2120 E6 90		 inc cr
+   144 2122 4C 30 21		 jmp moved
+   145 2125 A5 91		nkrt lda cc
+   146 2127 C9 0F		 cmp #NCOLS-1
+   147 2129 B0 EE		 bcs nkx
+   148 212B E6 91		 inc cc
+   149 212D 4C 30 21		 jmp moved
+   150
+   151 2130			moved
+   152 2130 20 9B 28		 jsr visible
+   153 2133 F0 03		 beq mv1
+   154 2135 4C 6D 2D		 jmp drawall
+   155 2138 AD 14 15		mv1 lda or0
+   156 213B 85 8E		 sta qr
+   157 213D AD 15 15		 lda oc0
+   158 2140 85 8F		 sta qc
+   159 2142 20 56 2A		 jsr drawcell
+   160 2145 20 D6 2A		 jsr rowhdr
+   161 2148 A5 90		 lda cr
+   162 214A 85 8E		 sta qr
+   163 214C A5 91		 lda cc
+   164 214E 85 8F		 sta qc
+   165 2150 20 56 2A		 jsr drawcell
+   166 2153 20 D6 2A		 jsr rowhdr
+   167 2156 20 44 2B		 jsr drawhdr
+   168 2159 4C C4 2B		 jmp drawbar
+   169
+   170 				; ---- file name prompt (mode 2)
+   171 215C			askname
+   172 215C 8D 16 15		 sta pch
+   173 215F A9 02		 lda #2
+   174 2161 85 9F		 sta mode
+   175 2163 A9 00		 lda #0
+   176 2165 85 AD		 sta elen
+   177 2167 A9 0A		 lda #10
+   178 2169 8D C2 14		 sta msg
+   179 216C 20 C4 2B		 jsr drawbar
+   180 216F 4C 73 2C		 jmp drawstat
+   181
+   182 2172			promptkey
+   183 2172 A5 AE		 lda key
+   184 2174 C9 9B		 cmp #$9B
+   185 2176 F0 36		 beq pk_go
+   186 2178 C9 1B		 cmp #$1B
+   187 217A F0 23		 beq pk_esc
+   188 217C C9 7E		 cmp #$7E
+   189 217E F0 16		 beq pk_bs
+   190 2180 C9 21		 cmp #33
+   191 2182 90 0F		 bcc pk9
+   192 2184 C9 7F		 cmp #127
+   193 2186 B0 0B		 bcs pk9
+   194 2188 A6 AD		 ldx elen
+   195 218A E0 24		 cpx #36
+   196 218C B0 05		 bcs pk9
+   197 218E 9D 00 06		 sta EBUF,x
+   198 2191 E6 AD		 inc elen
+   199 2193 4C C4 2B		pk9 jmp drawbar
+   200 2196 A5 AD		pk_bs lda elen
+   201 2198 F0 F9		 beq pk9
+   202 219A C6 AD		 dec elen
+   203 219C 4C C4 2B		 jmp drawbar
+   204 219F A9 00		pk_esc lda #0
+   205 21A1 8D C2 14		 sta msg
+   206 21A4 A9 00		pk_end lda #0
+   207 21A6 85 9F		 sta mode
+   208 21A8 20 C4 2B		 jsr drawbar
+   209 21AB 4C 73 2C		 jmp drawstat
+   210 21AE 20 CB 21		pk_go jsr mkname
+   211 21B1 AD 16 15		 lda pch
+   212 21B4 C9 4F		 cmp #'O'
+   213 21B6 D0 0D		 bne pk_sv
+   214 21B8 20 68 2F		 jsr load
+   215 21BB A9 00		 lda #0
+   216 21BD 85 9F		 sta mode
+   217 21BF 20 9B 28		 jsr visible
+   218 21C2 4C 6D 2D		 jmp drawall
+   219 21C5 20 DD 44		pk_sv jsr save
+   220 21C8 4C A4 21		 jmp pk_end
+   221
+   222 				; EBUF text -> FNB (device D1: unless given, .XCS unless an extension is given)
+   223 21CB			mkname
+   224 21CB A2 00		 ldx #0
+   225 21CD A0 00		 ldy #0
+   226 21CF C4 AD		mn1 cpy elen
+   227 21D1 B0 0E		 bcs mn3
+   228 21D3 B9 00 06		 lda EBUF,y
+   229 21D6 C9 3A		 cmp #':'
+   230 21D8 F0 03		 beq mn2
+   231 21DA C8			 iny
+   232 21DB D0 F2		 bne mn1
+   233 21DD A0 00		mn2 ldy #0
+   234 21DF F0 11		 beq mn4
+   235 21E1 A9 44		mn3 lda #'D'
+   236 21E3 8D D0 0A		 sta FNB
+   237 21E6 A9 31		 lda #'1'
+   238 21E8 8D D1 0A		 sta FNB+1
+   239 21EB A9 3A		 lda #':'
+   240 21ED 8D D2 0A		 sta FNB+2
+   241 21F0 A2 03		 ldx #3
+   242 21F2 A0 00		mn4 ldy #0
+   243 21F4 84 9B		 sty t1
+   244 21F6 C4 AD		mn5 cpy elen
+   245 21F8 B0 1D		 bcs mn7
+   246 21FA B9 00 06		 lda EBUF,y
+   247 21FD C9 61		 cmp #'a'
+   248 21FF 90 07		 bcc mn6
+   249 2201 C9 7B		 cmp #'{'
+   250 2203 B0 03		 bcs mn6
+   251 2205 38			 sec
+   252 2206 E9 20		 sbc #$20
+   253 2208 9D D0 0A		mn6 sta FNB,x
+   254 220B C9 2E		 cmp #'.'
+   255 220D D0 04		 bne mn6a
+   256 220F 84 9B		 sty t1
+   257 2211 E6 9B		 inc t1
+   258 2213 E8			mn6a inx
+   259 2214 C8			 iny
+   260 2215 D0 DF		 bne mn5
+   261 2217 A5 9B		mn7 lda t1
+   262 2219 D0 0E		 bne mn8
+   263 221B A0 00		 ldy #0
+   264 221D B9 2F 22		mn7a lda xcs,y
+   265 2220 9D D0 0A		 sta FNB,x
+   266 2223 E8			 inx
+   267 2224 C8			 iny
+   268 2225 C0 04		 cpy #4
+   269 2227 D0 F4		 bne mn7a
+   270 2229 A9 9B		mn8 lda #$9B
+   271 222B 9D D0 0A		 sta FNB,x
+   272 222E 60			 rts
+   273 222F 2E 58 43 53		xcs dta c'.XCS'
+   274
+   275 2233			 icl 'bank.inc'
+Source: bank.inc
+     1 				; Extended RAM (130XE): the $4000-$7FFF window shows one of four 16 KB banks.
+     2 				;   bank 0, 1  cell records, 64 rows each, one 256 byte page per row, 16 records of 16 bytes
+     3 				;   bank 2     string pool index table (2 bytes per pool string, up to 8192)
+     4 				;   bank 3     string heap (len byte + Latin-1 text), append only
+     5 				; All code that opens the window lives outside $4000-$7FFF. PORTB bits 2,3 pick the bank, bit 4 = 0 lets the CPU see it,
+     6 				; bit 7 stays 1 (0 would map the self-test ROM at $5000), bit 0 keeps the OS ROM (floating point package) on.
+     7
+     8 2233			bopen
+     9 2233 0A			 asl
+    10 2234 0A			 asl
+    11 2235 29 0C		 and #$0C
+    12 2237 85 9E		 sta t4
+    13 2239 A5 AC		 lda pb0
+    14 223B 29 E3		 and #$E3
+    15 223D 05 9E		 ora t4
+    16 223F 8D 01 D3		 sta PORTB
+    17 2242 60			 rts
+    18
+    19 2243			bclose
+    20 2243 A5 AC		 lda pb0
+    21 2245 8D 01 D3		 sta PORTB
+    22 2248 60			 rts
+    23
+    24 				; bp = record address of (qr,qc); A = bank
+    25 2249			recaddr
+    26 2249 A5 8E		 lda qr
+    27 224B 29 3F		 and #$3F
+    28 224D 18			 clc
+    29 224E 69 40		 adc #$40
+    30 2250 85 85		 sta bp+1
+    31 2252 A5 8F		 lda qc
+    32 2254 0A			 asl
+    33 2255 0A			 asl
+    34 2256 0A			 asl
+    35 2257 0A			 asl
+    36 2258 85 84		 sta bp
+    37 225A A5 8E		 lda qr
+    38 225C 4A			 lsr
+    39 225D 4A			 lsr
+    40 225E 4A			 lsr
+    41 225F 4A			 lsr
+    42 2260 4A			 lsr
+    43 2261 4A			 lsr
+    44 2262 60			 rts
+    45
+    46 2263			rdrec
+    47 2263 20 49 22		 jsr recaddr
+    48 2266 20 33 22		 jsr bopen
+    49 2269 A0 0F		 ldy #15
+    50 226B B1 84		rr1 lda (bp),y
+    51 226D 99 00 07		 sta RECB,y
+    52 2270 88			 dey
+    53 2271 10 F8		 bpl rr1
+    54 2273 4C 43 22		 jmp bclose
+    55
+    56 2276			wrrec
+    57 2276 20 49 22		 jsr recaddr
+    58 2279 20 33 22		 jsr bopen
+    59 227C A0 0F		 ldy #15
+    60 227E B9 00 07		wr1 lda RECB,y
+    61 2281 91 84		 sta (bp),y
+    62 2283 88			 dey
+    63 2284 10 F8		 bpl wr1
+    64 2286 4C 43 22		 jmp bclose
+    65
+    66 				; zero both record banks
+    67 2289			clrgrid
+    68 2289 A9 00		 lda #0
+    69 228B 85 9D		 sta t3
+    70 228D A5 9D		cg0 lda t3
+    71 228F 20 33 22		 jsr bopen
+    72 2292 A9 00		 lda #0
+    73 2294 85 84		 sta bp
+    74 2296 A9 40		 lda #$40
+    75 2298 85 85		 sta bp+1
+    76 229A A2 40		 ldx #$40
+    77 229C A0 00		 ldy #0
+    78 229E 98			 tya
+    79 229F 91 84		cg1 sta (bp),y
+    80 22A1 C8			 iny
+    81 22A2 D0 FB		 bne cg1
+    82 22A4 E6 85		 inc bp+1
+    83 22A6 CA			 dex
+    84 22A7 D0 F6		 bne cg1
+    85 22A9 20 43 22		 jsr bclose
+    86 22AC E6 9D		 inc t3
+    87 22AE A5 9D		 lda t3
+    88 22B0 C9 02		 cmp #2
+    89 22B2 D0 D9		 bne cg0
+    90 22B4 60			 rts
+    91
+    92 				; append the string in TMPS (len byte first) to the heap; carry set = heap full. Returns the address in rp.
+    93 22B5			hput
+    94 22B5 AD 20 07		 lda TMPS
+    95 22B8 18			 clc
+    96 22B9 65 C6		 adc hp
+    97 22BB 85 9B		 sta t1
+    98 22BD A5 C7		 lda hp+1
+    99 22BF 69 00		 adc #0
+   100 22C1 85 9C		 sta t2
+   101 22C3 E6 9B		 inc t1
+   102 22C5 D0 02		 bne hp1
+   103 22C7 E6 9C		 inc t2
+   104 22C9 A5 9C		hp1 lda t2
+   105 22CB C9 80		 cmp #$80
+   106 22CD B0 2D		 bcs hpfull
+   107 22CF A5 C6		 lda hp
+   108 22D1 85 84		 sta bp
+   109 22D3 A5 C7		 lda hp+1
+   110 22D5 85 85		 sta bp+1
+   111 22D7 A9 03		 lda #3
+   112 22D9 20 33 22		 jsr bopen
+   113 22DC AC 20 07		 ldy TMPS
+   114 22DF B9 20 07		hp2 lda TMPS,y
+   115 22E2 91 84		 sta (bp),y
+   116 22E4 88			 dey
+   117 22E5 10 F8		 bpl hp2
+   118 22E7 20 43 22		 jsr bclose
+   119 22EA A5 C6		 lda hp
+   120 22EC 85 86		 sta rp
+   121 22EE A5 C7		 lda hp+1
+   122 22F0 85 87		 sta rp+1
+   123 22F2 A5 9B		 lda t1
+   124 22F4 85 C6		 sta hp
+   125 22F6 A5 9C		 lda t2
+   126 22F8 85 C7		 sta hp+1
+   127 22FA 18			 clc
+   128 22FB 60			 rts
+   129 22FC 38			hpfull sec
+   130 22FD 60			 rts
+   131
+   132 				; copy the heap string at rp to TMPS
+   133 22FE			hget
+   134 22FE A5 86		 lda rp
+   135 2300 85 84		 sta bp
+   136 2302 A5 87		 lda rp+1
+   137 2304 85 85		 sta bp+1
+   138 2306 A9 03		 lda #3
+   139 2308 20 33 22		 jsr bopen
+   140 230B A0 00		 ldy #0
+   141 230D B1 84		 lda (bp),y
+   142 230F 8D 20 07		 sta TMPS
+   143 2312 A8			 tay
+   144 2313 B1 84		hg1 lda (bp),y
+   145 2315 99 20 07		 sta TMPS,y
+   146 2318 88			 dey
+   147 2319 10 F8		 bpl hg1
+   148 231B 4C 43 22		 jmp bclose
+   149
+   150 231E			ptaddr
+   151 231E A5 CA		 lda pi
+   152 2320 0A			 asl
+   153 2321 85 84		 sta bp
+   154 2323 A5 CB		 lda pi+1
+   155 2325 2A			 rol
+   156 2326 09 40		 ora #$40
+   157 2328 85 85		 sta bp+1
+   158 232A 60			 rts
+   159
+   160 				; rp = pool address of string pi
+   161 232B			ptget
+   162 232B 20 1E 23		 jsr ptaddr
+   163 232E A9 02		 lda #2
+   164 2330 20 33 22		 jsr bopen
+   165 2333 A0 00		 ldy #0
+   166 2335 B1 84		 lda (bp),y
+   167 2337 85 86		 sta rp
+   168 2339 C8			 iny
+   169 233A B1 84		 lda (bp),y
+   170 233C 85 87		 sta rp+1
+   171 233E 4C 43 22		 jmp bclose
+   172
+   173 2341			ptset
+   174 2341 20 1E 23		 jsr ptaddr
+   175 2344 A9 02		 lda #2
+   176 2346 20 33 22		 jsr bopen
+   177 2349 A0 00		 ldy #0
+   178 234B A5 86		 lda rp
+   179 234D 91 84		 sta (bp),y
+   180 234F C8			 iny
+   181 2350 A5 87		 lda rp+1
+   182 2352 91 84		 sta (bp),y
+   183 2354 4C 43 22		 jmp bclose
+   276 2357			 icl 'fpu.inc'
+Source: fpu.inc
+     1 				; Number helpers on the 6 byte BCD (OS floating point) format: BV holds a number.
+     2 				;   byte 0 = sign<<7 | (exponent + 64), exponent in base 100; bytes 1-5 = ten BCD digits (first pair is the integer pair).
+     3 				; rounding and formatting work on the digits directly (exact); the OS ROM does the arithmetic.
+     4
+     5 				; BV digits -> DG[1..10] (DG[0] = 0, room for a carry)
+     6 2357			unpack
+     7 2357 A9 00		 lda #0
+     8 2359 8D 80 08		 sta DG
+     9 235C A2 00		 ldx #0
+    10 235E A0 01		 ldy #1
+    11 2360 BD 91 08		up1 lda BV+1,x
+    12 2363 48			 pha
+    13 2364 4A			 lsr
+    14 2365 4A			 lsr
+    15 2366 4A			 lsr
+    16 2367 4A			 lsr
+    17 2368 99 80 08		 sta DG,y
+    18 236B C8			 iny
+    19 236C 68			 pla
+    20 236D 29 0F		 and #$0F
+    21 236F 99 80 08		 sta DG,y
+    22 2372 C8			 iny
+    23 2373 E8			 inx
+    24 2374 E0 05		 cpx #5
+    25 2376 D0 E8		 bne up1
+    26 2378 60			 rts
+    27
+    28 				; BV = BV rounded to rn decimals (signed; negative = tens, hundreds). rmode 0 half away from zero, 1 truncate.
+    29 				; rlost <> 0 when nonzero digits were dropped.
+    30 2379			bround
+    31 2379 A9 00		 lda #0
+    32 237B 85 A8		 sta rlost
+    33 237D AD 91 08		 lda BV+1
+    34 2380 D0 01		 bne br1
+    35 2382 60			 rts
+    36 2383 20 57 23		br1 jsr unpack
+    37 2386 AD 90 08		 lda BV
+    38 2389 29 7F		 and #$7F
+    39 238B 38			 sec
+    40 238C E9 40		 sbc #64
+    41 238E 85 A9		 sta pl
+    42 2390 10 04		 bpl br3
+    43 2392 A9 FF		 lda #$FF
+    44 2394 D0 02		 bne br4
+    45 2396 A9 00		br3 lda #0
+    46 2398 85 AA		br4 sta ph
+    47 239A 06 A9		 asl pl
+    48 239C 26 AA		 rol ph
+    49 239E 18			 clc
+    50 239F A5 A9		 lda pl
+    51 23A1 69 02		 adc #2
+    52 23A3 85 A9		 sta pl
+    53 23A5 90 02		 bcc br5
+    54 23A7 E6 AA		 inc ph
+    55 23A9 A5 A5		br5 lda rn
+    56 23AB 10 04		 bpl br6
+    57 23AD A9 FF		 lda #$FF
+    58 23AF D0 02		 bne br7
+    59 23B1 A9 00		br6 lda #0
+    60 23B3 85 A6		br7 sta nh
+    61 23B5 18			 clc
+    62 23B6 A5 A9		 lda pl
+    63 23B8 65 A5		 adc rn
+    64 23BA 85 A9		 sta pl
+    65 23BC A5 AA		 lda ph
+    66 23BE 65 A6		 adc nh
+    67 23C0 85 AA		 sta ph
+    68 23C2 30 09		 bmi br5z
+    69 23C4 D0 06		 bne br5d
+    70 23C6 A5 A9		 lda pl
+    71 23C8 C9 0A		 cmp #10
+    72 23CA 90 04		 bcc br5ok
+    73 23CC 60			br5d rts
+    74 23CD 4C 64 24		br5z jmp brz
+    75 23D0 85 9D		br5ok sta t3
+    76 23D2 A8			 tay
+    77 23D3 C8			 iny
+    78 23D4 A9 00		 lda #0
+    79 23D6 85 AB		 sta ru
+    80 23D8 A5 A7		 lda rmode
+    81 23DA D0 09		 bne br8
+    82 23DC B9 80 08		 lda DG,y
+    83 23DF C9 05		 cmp #5
+    84 23E1 90 02		 bcc br8
+    85 23E3 E6 AB		 inc ru
+    86 23E5 B9 80 08		br8 lda DG,y
+    87 23E8 05 A8		 ora rlost
+    88 23EA 85 A8		 sta rlost
+    89 23EC A9 00		 lda #0
+    90 23EE 99 80 08		 sta DG,y
+    91 23F1 C8			 iny
+    92 23F2 C0 0B		 cpy #11
+    93 23F4 D0 EF		 bne br8
+    94 23F6 A5 AB		 lda ru
+    95 23F8 F0 1A		 beq brpack
+    96 23FA A4 9D		 ldy t3
+    97 23FC B9 80 08		brc lda DG,y
+    98 23FF 18			 clc
+    99 2400 69 01		 adc #1
+   100 2402 C9 0A		 cmp #10
+   101 2404 90 0B		 bcc brs
+   102 2406 A9 00		 lda #0
+   103 2408 99 80 08		 sta DG,y
+   104 240B 88			 dey
+   105 240C 10 EE		 bpl brc
+   106 240E 4C 14 24		 jmp brpack
+   107 2411 99 80 08		brs sta DG,y
+   108 2414			brpack
+   109 2414 AD 80 08		 lda DG
+   110 2417 D0 1A		 bne brcar
+   111 2419 A2 00		 ldx #0
+   112 241B A0 01		 ldy #1
+   113 241D B9 80 08		bk1 lda DG,y
+   114 2420 0A			 asl
+   115 2421 0A			 asl
+   116 2422 0A			 asl
+   117 2423 0A			 asl
+   118 2424 19 81 08		 ora DG+1,y
+   119 2427 9D 91 08		 sta BV+1,x
+   120 242A C8			 iny
+   121 242B C8			 iny
+   122 242C E8			 inx
+   123 242D E0 05		 cpx #5
+   124 242F D0 EC		 bne bk1
+   125 2431 F0 1E		 beq brchk
+   126 2433 8D 91 08		brcar sta BV+1
+   127 2436 A2 01		 ldx #1
+   128 2438 A0 01		 ldy #1
+   129 243A B9 80 08		bk2 lda DG,y
+   130 243D 0A			 asl
+   131 243E 0A			 asl
+   132 243F 0A			 asl
+   133 2440 0A			 asl
+   134 2441 19 81 08		 ora DG+1,y
+   135 2444 9D 91 08		 sta BV+1,x
+   136 2447 C8			 iny
+   137 2448 C8			 iny
+   138 2449 E8			 inx
+   139 244A E0 05		 cpx #5
+   140 244C D0 EC		 bne bk2
+   141 244E EE 90 08		 inc BV
+   142 2451 AD 91 08		brchk lda BV+1
+   143 2454 0D 92 08		 ora BV+2
+   144 2457 0D 93 08		 ora BV+3
+   145 245A 0D 94 08		 ora BV+4
+   146 245D 0D 95 08		 ora BV+5
+   147 2460 D0 10		 bne brdone
+   148 2462 F0 04		 beq brzero
+   149 2464 A9 01		brz lda #1
+   150 2466 85 A8		 sta rlost
+   151 2468 A2 05		brzero ldx #5
+   152 246A A9 00		 lda #0
+   153 246C 9D 90 08		bz1 sta BV,x
+   154 246F CA			 dex
+   155 2470 10 FA		 bpl bz1
+   156 2472 60			brdone rts
+   157
+   158 				; append A to NUMS
+   159 2473			putn
+   160 2473 A6 B1		 ldx nlen
+   161 2475 9D C0 07		 sta NUMS,x
+   162 2478 E6 B1		 inc nlen
+   163 247A 60			 rts
+   164
+   165 				; BV -> NUMS text (nlen chars). nd = decimals ($FF = as many as the digits give), thou = commas, dol = '$'.
+   166 				; Uses DG; scientific form when the exponent is very large or small (general) or the number has more than 12 integer digits.
+   167 247B			numgen
+   168 247B A9 00		 lda #0
+   169 247D 85 B1		 sta nlen
+   170 247F 85 9D		 sta t3                      ; t3 = sign flag
+   171 2481 AD 91 08		 lda BV+1
+   172 2484 D0 0E		 bne ng0
+   173 2486 A9 01		 lda #1                      ; zero: "0"
+   174 2488 85 B2		 sta dpi
+   175 248A A9 00		 lda #0
+   176 248C 85 B3		 sta dpih
+   177 248E 20 57 23		 jsr unpack
+   178 2491 4C C1 24		 jmp ng2
+   179 2494 AD 90 08		ng0 lda BV
+   180 2497 10 02		 bpl ng1
+   181 2499 E6 9D		 inc t3
+   182 249B 20 57 23		ng1 jsr unpack
+   183 249E AD 90 08		 lda BV
+   184 24A1 29 7F		 and #$7F
+   185 24A3 38			 sec
+   186 24A4 E9 40		 sbc #64
+   187 24A6 85 B2		 sta dpi
+   188 24A8 10 04		 bpl ng1a
+   189 24AA A9 FF		 lda #$FF
+   190 24AC D0 02		 bne ng1b
+   191 24AE A9 00		ng1a lda #0
+   192 24B0 85 B3		ng1b sta dpih
+   193 24B2 06 B2		 asl dpi
+   194 24B4 26 B3		 rol dpih
+   195 24B6 18			 clc
+   196 24B7 A5 B2		 lda dpi
+   197 24B9 69 02		 adc #2
+   198 24BB 85 B2		 sta dpi
+   199 24BD 90 02		 bcc ng2
+   200 24BF E6 B3		 inc dpih
+   201 24C1 A5 9D		ng2 lda t3
+   202 24C3 F0 05		 beq ng3
+   203 24C5 A9 2D		 lda #'-'
+   204 24C7 20 73 24		 jsr putn
+   205 24CA A5 B6		ng3 lda dol
+   206 24CC F0 05		 beq ng4
+   207 24CE A9 24		 lda #'$'
+   208 24D0 20 73 24		 jsr putn
+   209 24D3			ng4
+   210 				; first nonzero digit f -> t1 (11 when none)
+   211 24D3 A0 01		 ldy #1
+   212 24D5 B9 80 08		ng5 lda DG,y
+   213 24D8 D0 05		 bne ng6
+   214 24DA C8			 iny
+   215 24DB C0 0B		 cpy #11
+   216 24DD D0 F6		 bne ng5
+   217 24DF 84 9B		ng6 sty t1
+   218 24E1 C0 0B		 cpy #11
+   219 24E3 F0 37		 beq ngplain
+   220 				; x10 = dpi - f (signed 16) -> pl,ph
+   221 24E5 38			 sec
+   222 24E6 A5 B2		 lda dpi
+   223 24E8 E5 9B		 sbc t1
+   224 24EA 85 A9		 sta pl
+   225 24EC A5 B3		 lda dpih
+   226 24EE E9 00		 sbc #0
+   227 24F0 85 AA		 sta ph
+   228 24F2 A5 AF		 lda nd
+   229 24F4 C9 FF		 cmp #$FF
+   230 24F6 D0 1A		 bne ngfix
+   231 24F8 A5 AA		 lda ph
+   232 24FA 30 0A		 bmi ngneg
+   233 24FC D0 21		 bne ngsci
+   234 24FE A5 A9		 lda pl
+   235 2500 C9 0B		 cmp #11
+   236 2502 B0 1B		 bcs ngsci
+   237 2504 90 16		 bcc ngplain
+   238 2506 C9 FF		ngneg cmp #$FF
+   239 2508 D0 15		 bne ngsci
+   240 250A A5 A9		 lda pl
+   241 250C C9 F9		 cmp #$F9                    ; x10 < -7
+   242 250E 90 0F		 bcc ngsci
+   243 2510 B0 0A		 bcs ngplain
+   244 2512 A5 B3		ngfix lda dpih
+   245 2514 D0 06		 bne ngplain
+   246 2516 A5 B2		 lda dpi
+   247 2518 C9 0D		 cmp #13
+   248 251A B0 03		 bcs ngsci
+   249 251C 4C 8E 25		ngplain jmp ngp
+   250
+   251 				; scientific: d[.ddd]E+xx
+   252 251F			ngsci
+   253 251F A4 9B		 ldy t1
+   254 2521 B9 80 08		 lda DG,y
+   255 2524 18			 clc
+   256 2525 69 30		 adc #'0'
+   257 2527 20 73 24		 jsr putn
+   258 252A A0 0A		 ldy #10                     ; last nonzero digit
+   259 252C B9 80 08		ns1 lda DG,y
+   260 252F D0 03		 bne ns2
+   261 2531 88			 dey
+   262 2532 D0 F8		 bne ns1
+   263 2534 C4 9B		ns2 cpy t1
+   264 2536 F0 1E		 beq ns4
+   265 2538 A9 2E		 lda #'.'
+   266 253A 20 73 24		 jsr putn
+   267 253D 84 9C		 sty t2
+   268 253F A4 9B		 ldy t1
+   269 2541 C8			 iny
+   270 2542 84 9E		ns3 sty t4
+   271 2544 B9 80 08		 lda DG,y
+   272 2547 18			 clc
+   273 2548 69 30		 adc #'0'
+   274 254A 20 73 24		 jsr putn
+   275 254D A4 9E		 ldy t4
+   276 254F C8			 iny
+   277 2550 C4 9C		 cpy t2
+   278 2552 F0 02		 beq ns3x
+   279 2554 90 EC		 bcc ns3
+   280 2556			ns3x
+   281 2556 A9 45		ns4 lda #'E'
+   282 2558 20 73 24		 jsr putn
+   283 255B A5 AA		 lda ph
+   284 255D 10 0F		 bpl ns5
+   285 255F A9 2D		 lda #'-'
+   286 2561 20 73 24		 jsr putn
+   287 2564 38			 sec
+   288 2565 A9 00		 lda #0
+   289 2567 E5 A9		 sbc pl
+   290 2569 85 A9		 sta pl
+   291 256B 4C 73 25		 jmp ns6
+   292 256E A9 2B		ns5 lda #'+'
+   293 2570 20 73 24		 jsr putn
+   294 2573 A5 A9		ns6 lda pl
+   295 2575 A2 30		 ldx #'0'
+   296 2577 C9 0A		ns7 cmp #10
+   297 2579 90 05		 bcc ns8
+   298 257B E9 0A		 sbc #10
+   299 257D E8			 inx
+   300 257E D0 F7		 bne ns7
+   301 2580 85 9C		ns8 sta t2
+   302 2582 8A			 txa
+   303 2583 20 73 24		 jsr putn
+   304 2586 A5 9C		 lda t2
+   305 2588 18			 clc
+   306 2589 69 30		 adc #'0'
+   307 258B 4C 73 24		 jmp putn
+   308
+   309 				; plain decimal
+   310 258E			ngp
+   311 258E A5 B3		 lda dpih
+   312 2590 30 06		 bmi ngp0
+   313 2592 D0 04		 bne ngp0
+   314 2594 A5 B2		 lda dpi
+   315 2596 D0 0C		 bne ngp1
+   316 2598 A9 00		ngp0 lda #0                  ; integer part is 0 (dpi <= 0)
+   317 259A 8D 00 0A		 sta IDIG
+   318 259D A9 01		 lda #1
+   319 259F 85 9C		 sta t2                      ; digits in IDIG
+   320 25A1 4C 06 26		 jmp ngp4
+   321 25A4 85 9C		ngp1 sta t2
+   322 25A6 A2 00		 ldx #0
+   323 25A8 A0 01		 ldy #1
+   324 25AA C0 0B		ngp2 cpy #11
+   325 25AC B0 06		 bcs ngp2z
+   326 25AE B9 80 08		 lda DG,y
+   327 25B1 4C B6 25		 jmp ngp2s
+   328 25B4 A9 00		ngp2z lda #0
+   329 25B6 9D 00 0A		ngp2s sta IDIG,x
+   330 25B9 E8			 inx
+   331 25BA C8			 iny
+   332 25BB E4 9C		 cpx t2
+   333 25BD D0 EB		 bne ngp2
+   334 				; strip leading zeros, keep one
+   335 25BF A2 00		 ldx #0
+   336 25C1 A5 9C		ngp3 lda t2
+   337 25C3 C9 01		 cmp #1
+   338 25C5 F0 0B		 beq ngp3x
+   339 25C7 BD 00 0A		 lda IDIG,x
+   340 25CA D0 06		 bne ngp3x
+   341 25CC E8			 inx
+   342 25CD C6 9C		 dec t2
+   343 25CF 4C C1 25		 jmp ngp3
+   344 25D2			ngp3x
+   345 				 ; digits IDIG[x..x+t2) ; emit
+   346 25D2 86 9B		 stx t1
+   347 25D4 A5 9C		 lda t2
+   348 25D6 85 9E		 sta t4
+   349 25D8 A6 9B		ngp3e ldx t1
+   350 25DA BD 00 0A		 lda IDIG,x
+   351 25DD 18			 clc
+   352 25DE 69 30		 adc #'0'
+   353 25E0 20 73 24		 jsr putn
+   354 25E3 E6 9B		 inc t1
+   355 25E5 C6 9E		 dec t4
+   356 25E7 F0 26		 beq ngp5
+   357 25E9 A5 B4		 lda thou
+   358 25EB F0 EB		 beq ngp3e
+   359 25ED A5 9E		 lda t4
+   360 25EF C9 03		ngp3m cmp #3
+   361 25F1 90 08		 bcc ngp3n
+   362 25F3 F0 09		 beq ngp3c
+   363 25F5 38			 sec
+   364 25F6 E9 03		 sbc #3
+   365 25F8 4C EF 25		 jmp ngp3m
+   366 25FB 4C D8 25		ngp3n jmp ngp3e
+   367 25FE A9 2C		ngp3c lda #','
+   368 2600 20 73 24		 jsr putn
+   369 2603 4C D8 25		 jmp ngp3e
+   370 2606 AD 00 0A		ngp4 lda IDIG
+   371 2609 18			 clc
+   372 260A 69 30		 adc #'0'
+   373 260C 20 73 24		 jsr putn
+   374 260F			ngp5
+   375 				; fraction
+   376 260F A5 AF		 lda nd
+   377 2611 C9 FF		 cmp #$FF
+   378 2613 F0 43		 beq ngfg
+   379 2615 A5 AF		 lda nd
+   380 2617 D0 03		 bne ngfx
+   381 2619 4C BA 26		 jmp ngpct
+   382 261C A9 2E		ngfx lda #'.'
+   383 261E 20 73 24		 jsr putn
+   384 2621 A9 01		 lda #1
+   385 2623 85 9B		 sta t1
+   386 2625 A5 B2		ngf1 lda dpi
+   387 2627 18			 clc
+   388 2628 65 9B		 adc t1
+   389 262A 85 9C		 sta t2
+   390 262C A5 B3		 lda dpih
+   391 262E 69 00		 adc #0
+   392 2630 30 11		 bmi ngf2z
+   393 2632 D0 0F		 bne ngf2z
+   394 2634 A5 9C		 lda t2
+   395 2636 F0 0B		 beq ngf2z
+   396 2638 C9 0B		 cmp #11
+   397 263A B0 07		 bcs ngf2z
+   398 263C A8			 tay
+   399 263D B9 80 08		 lda DG,y
+   400 2640 4C 45 26		 jmp ngf2p
+   401 2643 A9 00		ngf2z lda #0
+   402 2645 18			ngf2p clc
+   403 2646 69 30		 adc #'0'
+   404 2648 20 73 24		 jsr putn
+   405 264B E6 9B		 inc t1
+   406 264D A5 9B		 lda t1
+   407 264F C5 AF		 cmp nd
+   408 2651 90 D2		 bcc ngf1
+   409 2653 F0 D0		 beq ngf1
+   410 2655 4C BA 26		 jmp ngpct
+   411 				; general: up to the last nonzero digit
+   412 2658 A0 0A		ngfg ldy #10
+   413 265A B9 80 08		ngg1 lda DG,y
+   414 265D D0 03		 bne ngg2
+   415 265F 88			 dey
+   416 2660 D0 F8		 bne ngg1
+   417 2662 84 9C		ngg2 sty t2                  ; last nonzero index (0 = none)
+   418 2664 A5 B3		 lda dpih
+   419 2666 30 0A		 bmi ngg3
+   420 2668 D0 50		 bne ngpct
+   421 266A A5 9C		 lda t2
+   422 266C C5 B2		 cmp dpi
+   423 266E 90 4A		 bcc ngpct
+   424 2670 F0 48		 beq ngpct
+   425 2672 A5 9C		ngg3 lda t2
+   426 2674 F0 44		 beq ngpct
+   427 2676 A9 2E		 lda #'.'
+   428 2678 20 73 24		 jsr putn
+   429 267B A9 01		 lda #1
+   430 267D 85 9B		 sta t1
+   431 267F A5 B2		ngg4 lda dpi
+   432 2681 18			 clc
+   433 2682 65 9B		 adc t1
+   434 2684 85 9E		 sta t4
+   435 2686 A5 B3		 lda dpih
+   436 2688 69 00		 adc #0
+   437 268A 30 0D		 bmi ngg5
+   438 268C D0 0B		 bne ngg5
+   439 268E A5 9E		 lda t4
+   440 2690 F0 07		 beq ngg5
+   441 2692 A8			 tay
+   442 2693 B9 80 08		 lda DG,y
+   443 2696 4C 9B 26		 jmp ngg6
+   444 2699 A9 00		ngg5 lda #0
+   445 269B 18			ngg6 clc
+   446 269C 69 30		 adc #'0'
+   447 269E 20 73 24		 jsr putn
+   448 26A1 E6 9B		 inc t1
+   449 26A3 A5 B2		 lda dpi
+   450 26A5 18			 clc
+   451 26A6 65 9B		 adc t1
+   452 26A8 85 9E		 sta t4
+   453 26AA A5 B3		 lda dpih
+   454 26AC 69 00		 adc #0
+   455 26AE 30 CF		 bmi ngg4
+   456 26B0 D0 08		 bne ngpct
+   457 26B2 A5 9E		 lda t4
+   458 26B4 C5 9C		 cmp t2
+   459 26B6 90 C7		 bcc ngg4
+   460 26B8 F0 C5		 beq ngg4
+   461 26BA A5 B5		ngpct lda pct
+   462 26BC F0 05		 beq ngend
+   463 26BE A9 25		 lda #'%'
+   464 26C0 20 73 24		 jsr putn
+   465 26C3 60			ngend rts
+   466
+   467 				; BV -> NUMS using the format table row in A; fits fitw characters, '#' when it cannot.
+   468 26C4			fmtnum
+   469 26C4 AA			 tax
+   470 26C5 BD 52 27		 lda FMND,x
+   471 26C8 85 AF		 sta nd
+   472 26CA 8D DD 14		 sta ndsv
+   473 26CD BD 82 27		 lda FMFL,x
+   474 26D0 48			 pha
+   475 26D1 29 01		 and #1
+   476 26D3 85 B4		 sta thou
+   477 26D5 68			 pla
+   478 26D6 48			 pha
+   479 26D7 4A			 lsr
+   480 26D8 29 01		 and #1
+   481 26DA 85 B5		 sta pct
+   482 26DC 68			 pla
+   483 26DD 4A			 lsr
+   484 26DE 4A			 lsr
+   485 26DF 29 01		 and #1
+   486 26E1 85 B6		 sta dol
+   487 26E3 AD 91 08		 lda BV+1
+   488 26E6 F0 07		 beq fn0
+   489 26E8 A5 B5		 lda pct
+   490 26EA F0 03		 beq fn0
+   491 26EC EE 90 08		 inc BV
+   492 26EF A2 05		fn0 ldx #5
+   493 26F1 BD 90 08		fn1 lda BV,x
+   494 26F4 9D B0 08		 sta BVS,x
+   495 26F7 CA			 dex
+   496 26F8 10 F7		 bpl fn1
+   497 26FA A9 00		 lda #0
+   498 26FC 85 A7		 sta rmode
+   499 26FE AD DD 14		 lda ndsv
+   500 2701 C9 FF		 cmp #$FF
+   501 2703 F0 10		 beq fngen
+   502 2705 85 A5		 sta rn
+   503 2707 20 79 23		 jsr bround
+   504 270A 20 7B 24		 jsr numgen
+   505 270D A5 B1		 lda nlen
+   506 270F C5 B0		 cmp fitw
+   507 2711 90 3E		 bcc fnok
+   508 2713 F0 3C		 beq fnok
+   509 2715 A9 FF		fngen lda #$FF
+   510 2717 85 AF		 sta nd
+   511 2719 A9 0F		 lda #15
+   512 271B 8D 17 15		 sta fnc
+   513 271E A2 05		fng1 ldx #5
+   514 2720 BD B0 08		fng2 lda BVS,x
+   515 2723 9D 90 08		 sta BV,x
+   516 2726 CA			 dex
+   517 2727 10 F7		 bpl fng2
+   518 2729 AD 17 15		 lda fnc
+   519 272C 85 A5		 sta rn
+   520 272E 20 79 23		 jsr bround
+   521 2731 20 7B 24		 jsr numgen
+   522 2734 A5 B1		 lda nlen
+   523 2736 C5 B0		 cmp fitw
+   524 2738 90 17		 bcc fnok
+   525 273A F0 15		 beq fnok
+   526 273C CE 17 15		 dec fnc
+   527 273F 10 DD		 bpl fng1
+   528 2741 A5 B0		 lda fitw
+   529 2743 85 B1		 sta nlen
+   530 2745 A9 23		 lda #'#'
+   531 2747 A6 B1		 ldx nlen
+   532 2749 CA			fnh dex
+   533 274A 30 05		 bmi fnok
+   534 274C 9D C0 07		 sta NUMS,x
+   535 274F 10 F8		 bpl fnh
+   536 2751 60			fnok rts
+   537
+   538 				; 0 General 1 0 2 0.00 3 #,##0 4 #,##0.00 5 0% 6 0.00% 7 $#,##0.00 (others show as General)
+   539 2752 FF 00 02 00 02 00 + FMND dta b($FF),b(0),b(2),b(0),b(2),b(0),b(2),b(2)
+   540 275A FF FF FF FF FF FF +  :40 dta b($FF)
+   541 2782 00 00 00 01 01 02 + FMFL dta b(0),b(0),b(0),b(1),b(1),b(2),b(2),b(5)
+   542 278A 00 00 00 00 00 00 +  :40 dta b(0)
+   277 27B2			 icl 'view.inc'
+Source: view.inc
+     1 				; Screen: ANTIC mode F, 320x192 1 bit, 40 text columns x 24 lines of 8x8 Craft glyphs (zfont).
+     2 				;   line 0 entry bar, line 1 column letters, lines 2..22 grid rows, line 23 status.
+     3 = 1511			lpi = $1511
+     4 = 1512			lpk = $1512
+     5 = 1513			xend = $1513
+     6
+     7 				; A = character 32..127 at (gx,gy), inverse when invm = $FF
+     8 27B2			putch
+     9 27B2 38			 sec
+    10 27B3 E9 20		 sbc #32
+    11 27B5 85 88		 sta gp
+    12 27B7 A9 00		 lda #0
+    13 27B9 85 89		 sta gp+1
+    14 27BB 06 88		 asl gp
+    15 27BD 26 89		 rol gp+1
+    16 27BF 06 88		 asl gp
+    17 27C1 26 89		 rol gp+1
+    18 27C3 06 88		 asl gp
+    19 27C5 26 89		 rol gp+1
+    20 27C7 18			 clc
+    21 27C8 A5 88		 lda gp
+    22 27CA 69 10		 adc #<zfont
+    23 27CC 85 88		 sta gp
+    24 27CE A5 89		 lda gp+1
+    25 27D0 69 49		 adc #>zfont
+    26 27D2 85 89		 sta gp+1
+    27 27D4 A6 96		 ldx gy
+    28 27D6 BD 00 09		 lda LROWL,x
+    29 27D9 18			 clc
+    30 27DA 65 95		 adc gx
+    31 27DC 85 8A		 sta scp
+    32 27DE BD 20 09		 lda LROWH,x
+    33 27E1 69 00		 adc #0
+    34 27E3 85 8B		 sta scp+1
+    35 27E5 A2 08		 ldx #8
+    36 27E7 A0 00		pc1 ldy #0
+    37 27E9 B1 88		 lda (gp),y
+    38 27EB 45 97		 eor invm
+    39 27ED 91 8A		 sta (scp),y
+    40 27EF E6 88		 inc gp
+    41 27F1 D0 02		 bne pc2
+    42 27F3 E6 89		 inc gp+1
+    43 27F5 A5 8A		pc2 lda scp
+    44 27F7 18			 clc
+    45 27F8 69 28		 adc #40
+    46 27FA 85 8A		 sta scp
+    47 27FC 90 02		 bcc pc3
+    48 27FE E6 8B		 inc scp+1
+    49 2800 CA			pc3 dex
+    50 2801 D0 E4		 bne pc1
+    51 2803 60			 rts
+    52
+    53 2804 C9 20		pcx cmp #32
+    54 2806 90 04		 bcc pq
+    55 2808 C9 80		 cmp #128
+    56 280A 90 02		 bcc pok
+    57 280C A9 3F		pq lda #'?'
+    58 280E 20 B2 27		pok jsr putch
+    59 2811 E6 95		 inc gx
+    60 2813 60			 rts
+    61
+    62 2814			mklines
+    63 2814 A9 60		 lda #<SCR
+    64 2816 85 80		 sta ptr
+    65 2818 A9 A0		 lda #>SCR
+    66 281A 85 81		 sta ptr+1
+    67 281C A2 00		 ldx #0
+    68 281E A5 80		ml1 lda ptr
+    69 2820 9D 00 09		 sta LROWL,x
+    70 2823 A5 81		 lda ptr+1
+    71 2825 9D 20 09		 sta LROWH,x
+    72 2828 18			 clc
+    73 2829 A5 80		 lda ptr
+    74 282B 69 40		 adc #<320
+    75 282D 85 80		 sta ptr
+    76 282F A5 81		 lda ptr+1
+    77 2831 69 01		 adc #>320
+    78 2833 85 81		 sta ptr+1
+    79 2835 E8			 inx
+    80 2836 E0 18		 cpx #24
+    81 2838 D0 E4		 bne ml1
+    82 283A 60			 rts
+    83
+    84 				; but each text line is 8 pixel lines = 8*40 bytes
+    85 				; (LROW is advanced by 320 bytes per text line)
+    86
+    87 283B			clrscr
+    88 283B A9 60		 lda #<SCR
+    89 283D 85 80		 sta ptr
+    90 283F A9 A0		 lda #>SCR
+    91 2841 85 81		 sta ptr+1
+    92 2843 A2 1E		 ldx #30                     ; 7680 bytes = 30 pages
+    93 2845 A0 00		 ldy #0
+    94 2847 98			 tya
+    95 2848 91 80		cs1 sta (ptr),y
+    96 284A C8			 iny
+    97 284B D0 FB		 bne cs1
+    98 284D E6 81		 inc ptr+1
+    99 284F CA			 dex
+   100 2850 D0 F6		 bne cs1
+   101 2852 60			 rts
+   102
+   103 				; ---- layout
+   104 2853			layout
+   105 2853 A9 00		 lda #0
+   106 2855 8D 11 15		 sta lpi
+   107 2858 A9 03		 lda #3
+   108 285A 85 9B		 sta t1
+   109 285C A5 93		lo1 lda vc0
+   110 285E 18			 clc
+   111 285F 6D 11 15		 adc lpi
+   112 2862 C9 10		 cmp #NCOLS
+   113 2864 B0 28		 bcs lo9
+   114 2866 AA			 tax
+   115 2867 BD 60 09		 lda CW,x
+   116 286A 85 9C		 sta t2
+   117 286C A5 9B		 lda t1
+   118 286E 18			 clc
+   119 286F 65 9C		 adc t2
+   120 2871 C9 29		 cmp #41
+   121 2873 B0 19		 bcs lo9
+   122 2875 85 9D		 sta t3
+   123 2877 AE 11 15		 ldx lpi
+   124 287A A5 9B		 lda t1
+   125 287C 9D 40 09		 sta VCX,x
+   126 287F A5 9C		 lda t2
+   127 2881 9D 50 09		 sta VCW,x
+   128 2884 A5 9D		 lda t3
+   129 2886 85 9B		 sta t1
+   130 2888 EE 11 15		 inc lpi
+   131 288B 4C 5C 28		 jmp lo1
+   132 288E AD 11 15		lo9 lda lpi
+   133 2891 D0 05		 bne lo10
+   134 				 ; a column wider than the screen cannot happen (widths are clamped to 12)
+   135 2893 A9 01		 lda #1
+   136 2895 8D 11 15		 sta lpi
+   137 2898 85 94		lo10 sta nvc
+   138 289A 60			 rts
+   139
+   140 				; make the cursor visible; returns A <> 0 when the view moved
+   141 289B			visible
+   142 289B A9 00		 lda #0
+   143 289D 85 9D		 sta t3
+   144 289F A5 90		 lda cr
+   145 28A1 C5 92		 cmp vr0
+   146 28A3 B0 04		 bcs vi1
+   147 28A5 85 92		 sta vr0
+   148 28A7 E6 9D		 inc t3
+   149 28A9 A5 92		vi1 lda vr0
+   150 28AB 18			 clc
+   151 28AC 69 15		 adc #VROWS
+   152 28AE C5 90		 cmp cr
+   153 28B0 F0 02		 beq vi2
+   154 28B2 B0 09		 bcs vi3
+   155 28B4 A5 90		vi2 lda cr
+   156 28B6 38			 sec
+   157 28B7 E9 14		 sbc #VROWS-1
+   158 28B9 85 92		 sta vr0
+   159 28BB E6 9D		 inc t3
+   160 28BD A5 91		vi3 lda cc
+   161 28BF C5 93		 cmp vc0
+   162 28C1 B0 04		 bcs vi4
+   163 28C3 85 93		 sta vc0
+   164 28C5 E6 9D		 inc t3
+   165 28C7 20 53 28		vi4 jsr layout
+   166 28CA A5 93		 lda vc0
+   167 28CC 18			 clc
+   168 28CD 65 94		 adc nvc
+   169 28CF C5 91		 cmp cc
+   170 28D1 F0 02		 beq vi5
+   171 28D3 B0 07		 bcs vi6
+   172 28D5 E6 93		vi5 inc vc0
+   173 28D7 E6 9D		 inc t3
+   174 28D9 4C C7 28		 jmp vi4
+   175 28DC A5 9D		vi6 lda t3
+   176 28DE 60			 rts
+   177
+   178 				; fill the rest of line gy from gx to the right edge with spaces
+   179 28DF			fillto
+   180 28DF A5 95		 lda gx
+   181 28E1 C9 28		 cmp #40
+   182 28E3 B0 08		 bcs fl9
+   183 28E5 A9 20		 lda #32
+   184 28E7 20 04 28		 jsr pcx
+   185 28EA 4C DF 28		 jmp fillto
+   186 28ED 60			fl9 rts
+   187
+   188 				; ---- cell text: record in RECB, fitw = width available; result in TMPS (len first)
+   189 28EE			ERRT
+   190 28EE 23 44 49 56 2F 30 +  dta c'#DIV/0!',b(0)
+   191 28F6 23 56 41 4C 55 45 +  dta c'#VALUE!',b(0)
+   192 28FE 23 52 45 46 21 00 +  dta c'#REF!',b(0),b(0),b(0)
+   193 2906 23 4E 41 4D 45 3F +  dta c'#NAME?',b(0),b(0)
+   194 290E 23 4E 55 4D 21 00 +  dta c'#NUM!',b(0),b(0),b(0)
+   195 2916 23 4E 2F 41 00 00 +  dta c'#N/A',b(0),b(0),b(0),b(0)
+   196 291E 23 43 49 52 43 21 +  dta c'#CIRC!',b(0),b(0)
+   197 2926 23 4E 55 4C 4C 21 +  dta c'#NULL!',b(0),b(0)
+   198 292E 23 50 41 52 53 45 +  dta c'#PARSE!',b(0)
+   199
+   200 2936			ctext
+   201 2936 AD 01 07		 lda RECB+1
+   202 2939 F0 10		 beq ct0
+   203 293B C9 01		 cmp #1
+   204 293D F0 1F		 beq ctn
+   205 293F C9 02		 cmp #2
+   206 2941 F0 0E		 beq cts
+   207 2943 C9 04		 cmp #4
+   208 2945 F0 3F		 beq cte
+   209 2947 C9 05		 cmp #5
+   210 2949 F0 5C		 beq ctb
+   211 294B A9 00		ct0 lda #0
+   212 294D 8D 20 07		 sta TMPS
+   213 2950 60			 rts
+   214 2951 AD 04 07		cts lda RECB+4
+   215 2954 85 86		 sta rp
+   216 2956 AD 05 07		 lda RECB+5
+   217 2959 85 87		 sta rp+1
+   218 295B 4C FE 22		 jmp hget
+   219 295E A2 05		ctn ldx #5
+   220 2960 BD 04 07		ctn1 lda RECB+4,x
+   221 2963 9D 90 08		 sta BV,x
+   222 2966 CA			 dex
+   223 2967 10 F7		 bpl ctn1
+   224 2969 AD 02 07		 lda RECB+2
+   225 296C C9 08		 cmp #8
+   226 296E 90 02		 bcc ctn2
+   227 2970 A9 00		 lda #0
+   228 2972 20 C4 26		ctn2 jsr fmtnum
+   229 2975			nums2t
+   230 2975 A6 B1		 ldx nlen
+   231 2977 8E 20 07		 stx TMPS
+   232 297A F0 09		 beq ctn4
+   233 297C BD BF 07		ctn3 lda NUMS-1,x
+   234 297F 9D 20 07		 sta TMPS,x
+   235 2982 CA			 dex
+   236 2983 D0 F7		 bne ctn3
+   237 2985 60			ctn4 rts
+   238 2986 AD 04 07		cte lda RECB+4
+   239 2989 C9 09		 cmp #9
+   240 298B 90 02		 bcc cte1
+   241 298D A9 01		 lda #1
+   242 298F 0A			cte1 asl
+   243 2990 0A			 asl
+   244 2991 0A			 asl
+   245 2992 AA			 tax
+   246 2993 A0 00		 ldy #0
+   247 2995 BD EE 28		cte2 lda ERRT,x
+   248 2998 F0 09		 beq cte3
+   249 299A C8			 iny
+   250 299B 99 20 07		 sta TMPS,y
+   251 299E E8			 inx
+   252 299F C0 08		 cpy #8
+   253 29A1 D0 F2		 bne cte2
+   254 29A3 8C 20 07		cte3 sty TMPS
+   255 29A6 60			 rts
+   256 29A7 AD 04 07		ctb lda RECB+4
+   257 29AA D0 11		 bne ctb1
+   258 29AC A2 05		 ldx #5
+   259 29AE BD D1 29		ctb0 lda BTXF-1,x
+   260 29B1 9D 20 07		 sta TMPS,x
+   261 29B4 CA			 dex
+   262 29B5 D0 F7		 bne ctb0
+   263 29B7 A9 05		 lda #5
+   264 29B9 8D 20 07		 sta TMPS
+   265 29BC 60			 rts
+   266 29BD A2 04		ctb1 ldx #4
+   267 29BF BD CD 29		ctb3 lda BTXT-1,x
+   268 29C2 9D 20 07		 sta TMPS,x
+   269 29C5 CA			 dex
+   270 29C6 D0 F7		 bne ctb3
+   271 29C8 A9 04		 lda #4
+   272 29CA 8D 20 07		 sta TMPS
+   273 29CD 60			 rts
+   274 29CE 54 52 55 45		BTXT dta c'TRUE'
+   275 29D2 46 41 4C 53 45	BTXF dta c'FALSE'
+   278 29D7			 icl 'view2.inc'
+Source: view2.inc
+     1 				; drawing of fields, cells, rows, headers, bar and status line
+     2
+     3 				; TMPS text into a field of cwd chars at gx,gy (last char is a gap); alignment from RECB
+     4 29D7			drawfield
+     5 29D7 A5 9A		 lda cwd
+     6 29D9 38			 sec
+     7 29DA E9 01		 sbc #1
+     8 29DC 85 9D		 sta t3
+     9 29DE AD 20 07		 lda TMPS
+    10 29E1 C5 9D		 cmp t3
+    11 29E3 90 02		 bcc df1
+    12 29E5 A5 9D		 lda t3
+    13 29E7 85 9C		df1 sta t2
+    14 29E9 A5 9D		 lda t3
+    15 29EB 38			 sec
+    16 29EC E5 9C		 sbc t2
+    17 29EE 85 9B		 sta t1                       ; free space
+    18 29F0 AD 03 07		 lda RECB+3
+    19 29F3 4A			 lsr
+    20 29F4 4A			 lsr
+    21 29F5 4A			 lsr
+    22 29F6 29 03		 and #3
+    23 29F8 D0 0D		 bne df2
+    24 29FA AD 01 07		 lda RECB+1
+    25 29FD C9 01		 cmp #1
+    26 29FF D0 04		 bne dfl
+    27 2A01 A9 03		 lda #3
+    28 2A03 D0 02		 bne df2
+    29 2A05 A9 01		dfl lda #1
+    30 2A07 C9 02		df2 cmp #2
+    31 2A09 F0 08		 beq dfc
+    32 2A0B C9 03		 cmp #3
+    33 2A0D F0 0A		 beq dfr
+    34 2A0F A9 00		 lda #0
+    35 2A11 F0 08		 beq dfs
+    36 2A13 A5 9B		dfc lda t1
+    37 2A15 4A			 lsr
+    38 2A16 4C 1B 2A		 jmp dfs
+    39 2A19 A5 9B		dfr lda t1
+    40 2A1B 85 9E		dfs sta t4                    ; left pad
+    41 2A1D 85 99		 sta dn
+    42 2A1F F0 09		 beq df4
+    43 2A21 A9 20		df3 lda #32
+    44 2A23 20 04 28		 jsr pcx
+    45 2A26 C6 99		 dec dn
+    46 2A28 D0 F7		 bne df3
+    47 2A2A A9 00		df4 lda #0
+    48 2A2C 85 98		 sta di
+    49 2A2E A5 98		df5 lda di
+    50 2A30 C5 9C		 cmp t2
+    51 2A32 B0 0C		 bcs df6
+    52 2A34 AA			 tax
+    53 2A35 BD 21 07		 lda TMPS+1,x
+    54 2A38 20 04 28		 jsr pcx
+    55 2A3B E6 98		 inc di
+    56 2A3D 4C 2E 2A		 jmp df5
+    57 2A40 A5 9A		df6 lda cwd
+    58 2A42 38			 sec
+    59 2A43 E5 9E		 sbc t4
+    60 2A45 38			 sec
+    61 2A46 E5 9C		 sbc t2
+    62 2A48 85 99		 sta dn
+    63 2A4A F0 09		 beq df8
+    64 2A4C A9 20		df7 lda #32
+    65 2A4E 20 04 28		 jsr pcx
+    66 2A51 C6 99		 dec dn
+    67 2A53 D0 F7		 bne df7
+    68 2A55 60			df8 rts
+    69
+    70 2A56			drawcell
+    71 2A56 A5 8F		 lda qc
+    72 2A58 38			 sec
+    73 2A59 E5 93		 sbc vc0
+    74 2A5B 90 41		 bcc dcx
+    75 2A5D C5 94		 cmp nvc
+    76 2A5F B0 3D		 bcs dcx
+    77 2A61 AA			 tax
+    78 2A62 BD 40 09		 lda VCX,x
+    79 2A65 85 95		 sta gx
+    80 2A67 BD 50 09		 lda VCW,x
+    81 2A6A 85 9A		 sta cwd
+    82 2A6C A5 8E		 lda qr
+    83 2A6E 38			 sec
+    84 2A6F E5 92		 sbc vr0
+    85 2A71 90 2B		 bcc dcx
+    86 2A73 C9 15		 cmp #VROWS
+    87 2A75 B0 27		 bcs dcx
+    88 2A77 18			 clc
+    89 2A78 69 02		 adc #2
+    90 2A7A 85 96		 sta gy
+    91 2A7C 20 63 22		 jsr rdrec
+    92 2A7F A9 00		 lda #0
+    93 2A81 85 97		 sta invm
+    94 2A83 A5 8E		 lda qr
+    95 2A85 C5 90		 cmp cr
+    96 2A87 D0 0A		 bne dc1
+    97 2A89 A5 8F		 lda qc
+    98 2A8B C5 91		 cmp cc
+    99 2A8D D0 04		 bne dc1
+   100 2A8F A9 FF		 lda #$FF
+   101 2A91 85 97		 sta invm
+   102 2A93 A6 9A		dc1 ldx cwd
+   103 2A95 CA			 dex
+   104 2A96 86 B0		 stx fitw
+   105 2A98 20 36 29		 jsr ctext
+   106 2A9B 4C D7 29		 jmp drawfield
+   107 2A9E 60			dcx rts
+   108
+   109 2A9F			drawrow
+   110 2A9F A9 00		 lda #0
+   111 2AA1 8D 12 15		 sta lpk
+   112 2AA4 AD 12 15		dr1 lda lpk
+   113 2AA7 C5 94		 cmp nvc
+   114 2AA9 B0 0E		 bcs dr2
+   115 2AAB 18			 clc
+   116 2AAC 65 93		 adc vc0
+   117 2AAE 85 8F		 sta qc
+   118 2AB0 20 56 2A		 jsr drawcell
+   119 2AB3 EE 12 15		 inc lpk
+   120 2AB6 4C A4 2A		 jmp dr1
+   121 2AB9 A6 94		dr2 ldx nvc
+   122 2ABB CA			 dex
+   123 2ABC BD 40 09		 lda VCX,x
+   124 2ABF 18			 clc
+   125 2AC0 7D 50 09		 adc VCW,x
+   126 2AC3 85 95		 sta gx
+   127 2AC5 A5 8E		 lda qr
+   128 2AC7 38			 sec
+   129 2AC8 E5 92		 sbc vr0
+   130 2ACA 18			 clc
+   131 2ACB 69 02		 adc #2
+   132 2ACD 85 96		 sta gy
+   133 2ACF A9 00		 lda #0
+   134 2AD1 85 97		 sta invm
+   135 2AD3 4C DF 28		 jmp fillto
+   136
+   137 				; row number header for row qr
+   138 2AD6			rowhdr
+   139 2AD6 A5 8E		 lda qr
+   140 2AD8 38			 sec
+   141 2AD9 E5 92		 sbc vr0
+   142 2ADB 18			 clc
+   143 2ADC 69 02		 adc #2
+   144 2ADE 85 96		 sta gy
+   145 2AE0 A9 00		 lda #0
+   146 2AE2 85 95		 sta gx
+   147 2AE4 A9 FF		 lda #$FF
+   148 2AE6 85 97		 sta invm
+   149 2AE8 A5 8E		 lda qr
+   150 2AEA C5 90		 cmp cr
+   151 2AEC D0 04		 bne rh1
+   152 2AEE A9 00		 lda #0
+   153 2AF0 85 97		 sta invm
+   154 2AF2 A5 8E		rh1 lda qr
+   155 2AF4 18			 clc
+   156 2AF5 69 01		 adc #1
+   157 2AF7 85 9E		 sta t4
+   158 2AF9 C9 64		 cmp #100
+   159 2AFB B0 10		 bcs rh3
+   160 2AFD A9 20		 lda #32
+   161 2AFF 20 04 28		 jsr pcx
+   162 2B02 A5 9E		 lda t4
+   163 2B04 C9 0A		 cmp #10
+   164 2B06 B0 05		 bcs rh3
+   165 2B08 A9 20		 lda #32
+   166 2B0A 20 04 28		 jsr pcx
+   167 2B0D A5 9E		rh3 lda t4
+   168 2B0F 4C 12 2B		 jmp prnum
+   169
+   170 				; 1..199 as decimal through pcx (t2 = leading digit seen)
+   171 2B12			prnum
+   172 2B12 A2 00		 ldx #0
+   173 2B14 86 9C		 stx t2
+   174 2B16 C9 64		 cmp #100
+   175 2B18 90 0B		 bcc pn1
+   176 2B1A E9 64		 sbc #100
+   177 2B1C 48			 pha
+   178 2B1D A9 31		 lda #'1'
+   179 2B1F 20 04 28		 jsr pcx
+   180 2B22 68			 pla
+   181 2B23 E6 9C		 inc t2
+   182 2B25 A2 30		pn1 ldx #'0'
+   183 2B27 C9 0A		pn2 cmp #10
+   184 2B29 90 05		 bcc pn3
+   185 2B2B E9 0A		 sbc #10
+   186 2B2D E8			 inx
+   187 2B2E D0 F7		 bne pn2
+   188 2B30 48			pn3 pha
+   189 2B31 E0 30		 cpx #'0'
+   190 2B33 D0 04		 bne pn4
+   191 2B35 A5 9C		 lda t2
+   192 2B37 F0 04		 beq pn5
+   193 2B39 8A			pn4 txa
+   194 2B3A 20 04 28		 jsr pcx
+   195 2B3D 68			pn5 pla
+   196 2B3E 18			 clc
+   197 2B3F 69 30		 adc #'0'
+   198 2B41 4C 04 28		 jmp pcx
+   199
+   200 2B44			drawhdr
+   201 2B44 A9 01		 lda #1
+   202 2B46 85 96		 sta gy
+   203 2B48 A9 00		 lda #0
+   204 2B4A 85 95		 sta gx
+   205 2B4C A9 FF		 lda #$FF
+   206 2B4E 85 97		 sta invm
+   207 2B50 A9 20		 lda #32
+   208 2B52 20 04 28		 jsr pcx
+   209 2B55 A9 20		 lda #32
+   210 2B57 20 04 28		 jsr pcx
+   211 2B5A A9 20		 lda #32
+   212 2B5C 20 04 28		 jsr pcx
+   213 2B5F A9 00		 lda #0
+   214 2B61 8D 12 15		 sta lpk
+   215 2B64 AD 12 15		dh1 lda lpk
+   216 2B67 C5 94		 cmp nvc
+   217 2B69 B0 52		 bcs dh9
+   218 2B6B AE 12 15		 ldx lpk
+   219 2B6E BD 40 09		 lda VCX,x
+   220 2B71 85 95		 sta gx
+   221 2B73 BD 50 09		 lda VCW,x
+   222 2B76 85 9A		 sta cwd
+   223 2B78 A9 FF		 lda #$FF
+   224 2B7A 85 97		 sta invm
+   225 2B7C A5 93		 lda vc0
+   226 2B7E 18			 clc
+   227 2B7F 6D 12 15		 adc lpk
+   228 2B82 C5 91		 cmp cc
+   229 2B84 D0 0A		 bne dh2
+   230 2B86 A9 00		 lda #0
+   231 2B88 85 97		 sta invm
+   232 2B8A A5 93		 lda vc0
+   233 2B8C 18			 clc
+   234 2B8D 6D 12 15		 adc lpk
+   235 2B90 18			dh2 clc
+   236 2B91 69 41		 adc #'A'
+   237 2B93 85 9E		 sta t4
+   238 2B95 A5 9A		 lda cwd
+   239 2B97 4A			 lsr
+   240 2B98 85 9D		 sta t3
+   241 2B9A A9 00		 lda #0
+   242 2B9C 85 98		 sta di
+   243 2B9E A5 98		dh3 lda di
+   244 2BA0 C5 9A		 cmp cwd
+   245 2BA2 B0 13		 bcs dh5
+   246 2BA4 C5 9D		 cmp t3
+   247 2BA6 D0 05		 bne dh4
+   248 2BA8 A5 9E		 lda t4
+   249 2BAA 4C AF 2B		 jmp dh4b
+   250 2BAD A9 20		dh4 lda #32
+   251 2BAF 20 04 28		dh4b jsr pcx
+   252 2BB2 E6 98		 inc di
+   253 2BB4 4C 9E 2B		 jmp dh3
+   254 2BB7 EE 12 15		dh5 inc lpk
+   255 2BBA 4C 64 2B		 jmp dh1
+   256 2BBD A9 00		dh9 lda #0
+   257 2BBF 85 97		 sta invm
+   258 2BC1 4C DF 28		 jmp fillto
+   259
+   260 				; entry bar: reference and content (navigation), or the text being typed (entry)
+   261 2BC4			drawbar
+   262 2BC4 A9 00		 lda #0
+   263 2BC6 85 95		 sta gx
+   264 2BC8 85 96		 sta gy
+   265 2BCA 85 97		 sta invm
+   266 2BCC A5 91		 lda cc
+   267 2BCE 18			 clc
+   268 2BCF 69 41		 adc #'A'
+   269 2BD1 20 04 28		 jsr pcx
+   270 2BD4 A5 90		 lda cr
+   271 2BD6 18			 clc
+   272 2BD7 69 01		 adc #1
+   273 2BD9 20 12 2B		 jsr prnum
+   274 2BDC A9 3A		 lda #':'
+   275 2BDE 20 04 28		 jsr pcx
+   276 2BE1 A5 9F		 lda mode
+   277 2BE3 C9 01		 cmp #1
+   278 2BE5 F0 3A		 beq db_ent
+   279 2BE7 C9 02		 cmp #2
+   280 2BE9 F0 5E		 beq db_file
+   281 2BEB A5 90		 lda cr
+   282 2BED 85 8E		 sta qr
+   283 2BEF A5 91		 lda cc
+   284 2BF1 85 8F		 sta qc
+   285 2BF3 20 63 22		 jsr rdrec
+   286 2BF6 AD 00 07		 lda RECB
+   287 2BF9 C9 03		 cmp #3
+   288 2BFB D0 15		 bne db1
+   289 2BFD A9 3D		 lda #'='
+   290 2BFF 20 04 28		 jsr pcx
+   291 2C02 AD 0A 07		 lda RECB+10
+   292 2C05 85 86		 sta rp
+   293 2C07 AD 0B 07		 lda RECB+11
+   294 2C0A 85 87		 sta rp+1
+   295 2C0C 20 FE 22		 jsr hget
+   296 2C0F 4C 1E 2C		 jmp db2
+   297 2C12 A9 1E		db1 lda #30
+   298 2C14 85 B0		 sta fitw
+   299 2C16 A9 00		 lda #0
+   300 2C18 8D 02 07		 sta RECB+2
+   301 2C1B 20 36 29		 jsr ctext
+   302 2C1E 4C 56 2C		db2 jmp db_txt
+   303 2C21			db_ent
+   304 2C21 A9 00		 lda #0
+   305 2C23 A6 AD		 ldx elen
+   306 2C25 E0 24		 cpx #36
+   307 2C27 90 04		 bcc db_e1
+   308 2C29 8A			 txa
+   309 2C2A 38			 sec
+   310 2C2B E9 23		 sbc #35
+   311 2C2D 85 98		db_e1 sta di
+   312 2C2F A5 98		db3 lda di
+   313 2C31 C5 AD		 cmp elen
+   314 2C33 B0 0C		 bcs db4
+   315 2C35 AA			 tax
+   316 2C36 BD 00 06		 lda EBUF,x
+   317 2C39 20 04 28		 jsr pcx
+   318 2C3C E6 98		 inc di
+   319 2C3E 4C 2F 2C		 jmp db3
+   320 2C41 A9 5F		db4 lda #'_'
+   321 2C43 20 04 28		 jsr pcx
+   322 2C46 4C DF 28		 jmp fillto
+   323 2C49			db_file
+   324 2C49 AD 16 15		 lda pch
+   325 2C4C 20 04 28		 jsr pcx
+   326 2C4F A9 00		 lda #0
+   327 2C51 85 98		 sta di
+   328 2C53 4C 2F 2C		 jmp db3
+   329 2C56			db_txt
+   330 2C56 A9 00		 lda #0
+   331 2C58 85 98		 sta di
+   332 2C5A A5 98		db5 lda di
+   333 2C5C CD 20 07		 cmp TMPS
+   334 2C5F B0 0F		 bcs db6
+   335 2C61 AA			 tax
+   336 2C62 BD 21 07		 lda TMPS+1,x
+   337 2C65 20 04 28		 jsr pcx
+   338 2C68 E6 98		 inc di
+   339 2C6A A5 95		 lda gx
+   340 2C6C C9 28		 cmp #40
+   341 2C6E 90 EA		 bcc db5
+   342 2C70 4C DF 28		db6 jmp fillto
+   343
+   344 2C73			drawstat
+   345 2C73 A9 17		 lda #23
+   346 2C75 85 96		 sta gy
+   347 2C77 A9 00		 lda #0
+   348 2C79 85 95		 sta gx
+   349 2C7B 85 97		 sta invm
+   350 2C7D A9 B7		 lda #<MSGS
+   351 2C7F 85 80		 sta ptr
+   352 2C81 A9 2C		 lda #>MSGS
+   353 2C83 85 81		 sta ptr+1
+   354 2C85 AE C2 14		 ldx msg
+   355 2C88 F0 16		 beq ds2
+   356 2C8A A0 00		ds1 ldy #0
+   357 2C8C B1 80		ds1a lda (ptr),y
+   358 2C8E C8			 iny
+   359 2C8F C9 00		 cmp #0
+   360 2C91 D0 F9		 bne ds1a
+   361 2C93 98			 tya
+   362 2C94 18			 clc
+   363 2C95 65 80		 adc ptr
+   364 2C97 85 80		 sta ptr
+   365 2C99 90 02		 bcc ds1b
+   366 2C9B E6 81		 inc ptr+1
+   367 2C9D CA			ds1b dex
+   368 2C9E D0 EA		 bne ds1
+   369 2CA0 A0 00		ds2 ldy #0
+   370 2CA2 B1 80		ds3 lda (ptr),y
+   371 2CA4 F0 0E		 beq ds4
+   372 2CA6 84 9B		 sty t1
+   373 2CA8 20 04 28		 jsr pcx
+   374 2CAB A4 9B		 ldy t1
+   375 2CAD C8			 iny
+   376 2CAE A5 95		 lda gx
+   377 2CB0 C9 28		 cmp #40
+   378 2CB2 90 EE		 bcc ds3
+   379 2CB4 4C DF 28		ds4 jmp fillto
+   380
+   381 2CB7			MSGS
+   382 2CB7 41 43 43 61 6C 63 +  dta c'ACCalc  ^O open  ^S save  ^R calc',b(0)
+   383 2CD9 4C 6F 61 64 65 64 +  dta c'Loaded',b(0)
+   384 2CE0 49 2F 4F 20 65 72 +  dta c'I/O error',b(0)
+   385 2CEA 4E 6F 74 20 61 20 +  dta c'Not a CRFT sheet',b(0)
+   386 2CFB 4E 6F 74 20 42 43 +  dta c'Not BCD mode',b(0)
+   387 2D08 53 61 76 65 64 00	 dta c'Saved',b(0)
+   388 2D0E 52 65 63 61 6C 63 +  dta c'Recalculated',b(0)
+   389 2D1B 43 68 65 63 6B 73 +  dta c'Checksum mismatch',b(0)
+   390 2D2D 53 68 6F 72 74 20 +  dta c'Short file',b(0)
+   391 2D38 48 65 61 70 20 66 +  dta c'Heap full',b(0)
+   392 2D42 46 69 6C 65 20 6E +  dta c'File name:',b(0)
+   393 2D4D 46 6F 72 6D 75 6C +  dta c'Formula error',b(0)
+   394 2D5B 54 6F 6F 20 6D 61 +  dta c'Too many formulas',b(0)
+   395
+   396 2D6D			drawall
+   397 2D6D 20 53 28		 jsr layout
+   398 2D70 20 44 2B		 jsr drawhdr
+   399 2D73 A9 00		 lda #0
+   400 2D75 85 CF		 sta fx
+   401 2D77 A5 92		da1 lda vr0
+   402 2D79 18			 clc
+   403 2D7A 65 CF		 adc fx
+   404 2D7C 85 8E		 sta qr
+   405 2D7E C9 80		 cmp #NROWS
+   406 2D80 B0 0E		 bcs da2
+   407 2D82 20 D6 2A		 jsr rowhdr
+   408 2D85 20 9F 2A		 jsr drawrow
+   409 2D88 E6 CF		 inc fx
+   410 2D8A A5 CF		 lda fx
+   411 2D8C C9 15		 cmp #VROWS
+   412 2D8E 90 E7		 bcc da1
+   413 2D90 20 C4 2B		da2 jsr drawbar
+   414 2D93 4C 73 2C		 jmp drawstat
+   279 2D96			 icl 'file.inc'
+Source: file.inc
+     1 				; .XCS loader (CIO, IOCB #3). Streams the payload through rdb; every failure unwinds to load's caller via ldabort.
+     2 				; The checksum and CRC are verified after parsing (a mismatch is reported, the data stays loaded).
+     3
+     4 2D96			fopen
+     5 2D96 85 9D		 sta t3
+     6 2D98 A2 30		 ldx #$30
+     7 2D9A A9 03		 lda #3
+     8 2D9C 9D 42 03		 sta ICCOM,x
+     9 2D9F A9 D0		 lda #<FNB
+    10 2DA1 9D 44 03		 sta ICBAL,x
+    11 2DA4 A9 0A		 lda #>FNB
+    12 2DA6 9D 45 03		 sta ICBAH,x
+    13 2DA9 A5 9D		 lda t3
+    14 2DAB 9D 4A 03		 sta ICAX1,x
+    15 2DAE A9 00		 lda #0
+    16 2DB0 9D 4B 03		 sta ICAX2,x
+    17 2DB3 4C 56 E4		 jmp CIOV
+    18
+    19 				; A = command, X/Y = buffer, w16 = length
+    20 2DB6			fblk
+    21 2DB6 8D 72 03		 sta ICCOM+$30
+    22 2DB9 8E 74 03		 stx ICBAL+$30
+    23 2DBC 8C 75 03		 sty ICBAH+$30
+    24 2DBF A5 CC		 lda w16
+    25 2DC1 8D 78 03		 sta ICBLL+$30
+    26 2DC4 A5 CD		 lda w16+1
+    27 2DC6 8D 79 03		 sta ICBLH+$30
+    28 2DC9 A2 30		 ldx #$30
+    29 2DCB 4C 56 E4		 jmp CIOV
+    30
+    31 2DCE			fclose
+    32 2DCE A2 30		 ldx #$30
+    33 2DD0 A9 0C		 lda #12
+    34 2DD2 9D 42 03		 sta ICCOM,x
+    35 2DD5 4C 56 E4		 jmp CIOV
+    36
+    37 				; A = message index
+    38 2DD8			ldabort
+    39 2DD8 48			 pha
+    40 2DD9 A6 CE		 ldx ldsp
+    41 2DDB 9A			 txs
+    42 2DDC 20 CE 2D		 jsr fclose
+    43 2DDF 68			 pla
+    44 2DE0 8D C2 14		 sta msg
+    45 2DE3 A9 01		 lda #1
+    46 2DE5 8D B6 14		 sta lderr
+    47 2DE8 60			 rts
+    48
+    49 2DE9			crcb
+    50 2DE9 4D AC 14		 eor crc+1
+    51 2DEC 8D AC 14		 sta crc+1
+    52 2DEF A2 08		 ldx #8
+    53 2DF1 0E AB 14		cb1 asl crc
+    54 2DF4 2E AC 14		 rol crc+1
+    55 2DF7 90 10		 bcc cb2
+    56 2DF9 AD AC 14		 lda crc+1
+    57 2DFC 49 10		 eor #$10
+    58 2DFE 8D AC 14		 sta crc+1
+    59 2E01 AD AB 14		 lda crc
+    60 2E04 49 21		 eor #$21
+    61 2E06 8D AB 14		 sta crc
+    62 2E09 CA			cb2 dex
+    63 2E0A D0 E5		 bne cb1
+    64 2E0C 60			 rts
+    65
+    66 				; fetch the next chunk of the payload into IOBUF (<= 128 bytes; never leaves 1 byte for the next chunk)
+    67 2E0D			refill
+    68 2E0D AD A9 14		 lda remh
+    69 2E10 0D AA 14		 ora remh+1
+    70 2E13 D0 05		 bne rf1
+    71 2E15 A9 08		 lda #8
+    72 2E17 4C D8 2D		 jmp ldabort
+    73 2E1A AD AA 14		rf1 lda remh+1
+    74 2E1D D0 0D		 bne rfbig
+    75 2E1F AD A9 14		 lda remh
+    76 2E22 C9 81		 cmp #129
+    77 2E24 90 08		 bcc rfset
+    78 2E26 D0 04		 bne rfbig
+    79 2E28 A9 7E		 lda #126
+    80 2E2A D0 02		 bne rfset
+    81 2E2C A9 80		rfbig lda #128
+    82 2E2E 8D A8 14		rfset sta rlen
+    83 2E31 C9 02		 cmp #2
+    84 2E33 B0 05		 bcs rf1a
+    85 2E35 A9 08		 lda #8
+    86 2E37 4C D8 2D		 jmp ldabort
+    87 2E3A 85 CC		rf1a sta w16
+    88 2E3C A9 00		 lda #0
+    89 2E3E 85 CD		 sta w16+1
+    90 2E40 A9 07		 lda #7
+    91 2E42 A2 00		 ldx #<IOBUF
+    92 2E44 A0 14		 ldy #>IOBUF
+    93 2E46 20 B6 2D		 jsr fblk
+    94 2E49 C0 80		 cpy #$80
+    95 2E4B 90 05		 bcc rf2
+    96 2E4D A9 02		 lda #2
+    97 2E4F 4C D8 2D		 jmp ldabort
+    98 2E52 38			rf2 sec
+    99 2E53 AD A9 14		 lda remh
+   100 2E56 ED A8 14		 sbc rlen
+   101 2E59 8D A9 14		 sta remh
+   102 2E5C B0 03		 bcs rf2a
+   103 2E5E CE AA 14		 dec remh+1
+   104 2E61 A9 00		rf2a lda #0
+   105 2E63 8D A7 14		 sta rpos
+   106 2E66 85 9D		 sta t3
+   107 2E68 AD A9 14		 lda remh
+   108 2E6B 0D AA 14		 ora remh+1
+   109 2E6E D0 08		 bne rf3
+   110 2E70 AD A8 14		 lda rlen
+   111 2E73 38			 sec
+   112 2E74 E9 02		 sbc #2
+   113 2E76 85 9D		 sta t3
+   114 2E78 AD A9 14		rf3 lda remh
+   115 2E7B 0D AA 14		 ora remh+1
+   116 2E7E F0 04		 beq rf3a
+   117 2E80 A9 FF		 lda #$FF
+   118 2E82 85 9D		 sta t3
+   119 2E84 A2 00		rf3a ldx #0
+   120 2E86 8E DE 14		rf4 stx rfx
+   121 2E89 BD 00 14		 lda IOBUF,x
+   122 2E8C 8D DF 14		 sta rft
+   123 2E8F 18			 clc
+   124 2E90 6D AD 14		 adc sum
+   125 2E93 8D AD 14		 sta sum
+   126 2E96 90 03		 bcc rf5
+   127 2E98 EE AE 14		 inc sum+1
+   128 2E9B AE DE 14		rf5 ldx rfx
+   129 2E9E E4 9D		 cpx t3
+   130 2EA0 90 0E		 bcc rf6
+   131 2EA2 8A			 txa
+   132 2EA3 38			 sec
+   133 2EA4 E5 9D		 sbc t3
+   134 2EA6 A8			 tay
+   135 2EA7 AD DF 14		 lda rft
+   136 2EAA 99 10 15		 sta scrc,y
+   137 2EAD 4C B6 2E		 jmp rf7
+   138 2EB0 AD DF 14		rf6 lda rft
+   139 2EB3 20 E9 2D		 jsr crcb
+   140 2EB6 AE DE 14		rf7 ldx rfx
+   141 2EB9 E8			 inx
+   142 2EBA EC A8 14		 cpx rlen
+   143 2EBD D0 C7		 bne rf4
+   144 2EBF 60			 rts
+   145
+   146 				; next payload byte in A (X, Y preserved)
+   147 2EC0			rdb
+   148 2EC0 8A			 txa
+   149 2EC1 48			 pha
+   150 2EC2 98			 tya
+   151 2EC3 48			 pha
+   152 2EC4 AD A7 14		 lda rpos
+   153 2EC7 CD A8 14		 cmp rlen
+   154 2ECA 90 21		 bcc rd2
+   155 2ECC A2 03		 ldx #3
+   156 2ECE B5 9B		rb1 lda t1,x
+   157 2ED0 48			 pha
+   158 2ED1 CA			 dex
+   159 2ED2 10 FA		 bpl rb1
+   160 2ED4 A5 CC		 lda w16
+   161 2ED6 48			 pha
+   162 2ED7 A5 CD		 lda w16+1
+   163 2ED9 48			 pha
+   164 2EDA 20 0D 2E		 jsr refill
+   165 2EDD 68			 pla
+   166 2EDE 85 CD		 sta w16+1
+   167 2EE0 68			 pla
+   168 2EE1 85 CC		 sta w16
+   169 2EE3 A2 00		 ldx #0
+   170 2EE5 68			rb2 pla
+   171 2EE6 95 9B		 sta t1,x
+   172 2EE8 E8			 inx
+   173 2EE9 E0 04		 cpx #4
+   174 2EEB D0 F8		 bne rb2
+   175 2EED AE A7 14		rd2 ldx rpos
+   176 2EF0 BD 00 14		 lda IOBUF,x
+   177 2EF3 EE A7 14		 inc rpos
+   178 2EF6 85 CF		 sta fx
+   179 2EF8 68			 pla
+   180 2EF9 A8			 tay
+   181 2EFA 68			 pla
+   182 2EFB AA			 tax
+   183 2EFC A5 CF		 lda fx
+   184 2EFE 60			 rts
+   185
+   186 2EFF			rd16
+   187 2EFF 20 C0 2E		 jsr rdb
+   188 2F02 85 CC		 sta w16
+   189 2F04 20 C0 2E		 jsr rdb
+   190 2F07 85 CD		 sta w16+1
+   191 2F09 60			 rts
+   192
+   193 				; skip w16 bytes
+   194 2F0A			skipw
+   195 2F0A A5 CC		 lda w16
+   196 2F0C 05 CD		 ora w16+1
+   197 2F0E F0 0E		 beq sk9
+   198 2F10 20 C0 2E		 jsr rdb
+   199 2F13 A5 CC		 lda w16
+   200 2F15 D0 02		 bne sk1
+   201 2F17 C6 CD		 dec w16+1
+   202 2F19 C6 CC		sk1 dec w16
+   203 2F1B 4C 0A 2F		 jmp skipw
+   204 2F1E 60			sk9 rts
+   205
+   206 				; w16 = A * X
+   207 2F1F			mulax
+   208 2F1F 85 9D		 sta t3
+   209 2F21 A9 00		 lda #0
+   210 2F23 85 CC		 sta w16
+   211 2F25 85 CD		 sta w16+1
+   212 2F27 A5 9D		 lda t3
+   213 2F29 F0 0E		 beq mx9
+   214 2F2B 8A			mx1 txa
+   215 2F2C 18			 clc
+   216 2F2D 65 CC		 adc w16
+   217 2F2F 85 CC		 sta w16
+   218 2F31 90 02		 bcc mx2
+   219 2F33 E6 CD		 inc w16+1
+   220 2F35 C6 9D		mx2 dec t3
+   221 2F37 D0 F2		 bne mx1
+   222 2F39 60			mx9 rts
+   223
+   224 				; rp = pool string address of index w16 (0 when out of range)
+   225 2F3A			pptr
+   226 2F3A A5 CC		 lda w16
+   227 2F3C 85 CA		 sta pi
+   228 2F3E A5 CD		 lda w16+1
+   229 2F40 85 CB		 sta pi+1
+   230 2F42 C9 20		 cmp #$20
+   231 2F44 90 07		 bcc pp1
+   232 2F46 A9 00		 lda #0
+   233 2F48 85 86		 sta rp
+   234 2F4A 85 87		 sta rp+1
+   235 2F4C 60			 rts
+   236 2F4D 4C 2B 23		pp1 jmp ptget
+   237
+   238 				; RECB,y <- rp
+   239 2F50			stptr
+   240 2F50 A5 86		 lda rp
+   241 2F52 99 00 07		 sta RECB,y
+   242 2F55 A5 87		 lda rp+1
+   243 2F57 99 01 07		 sta RECB+1,y
+   244 2F5A 60			 rts
+   245
+   246 				; clamp A to 4..12
+   247 2F5B			clampw
+   248 2F5B C9 04		 cmp #4
+   249 2F5D B0 02		 bcs cl1
+   250 2F5F A9 04		 lda #4
+   251 2F61 C9 0D		cl1 cmp #13
+   252 2F63 90 02		 bcc cl2
+   253 2F65 A9 0C		 lda #12
+   254 2F67 60			cl2 rts
+   255
+   256 2F68			load
+   257 2F68 BA			 tsx
+   258 2F69 86 CE		 stx ldsp
+   259 2F6B A9 00		 lda #0
+   260 2F6D 8D B6 14		 sta lderr
+   261 2F70 8D B1 14		 sta ncell
+   262 2F73 8D B2 14		 sta ncell+1
+   263 2F76 8D B3 14		 sta ndrop
+   264 2F79 8D B4 14		 sta ndrop+1
+   265 2F7C 8D B5 14		 sta fdrop
+   266 2F7F 85 B7		 sta fcnt
+   267 2F81 85 B8		 sta fcnt+1
+   268 2F83 85 C8		 sta nstr
+   269 2F85 85 C9		 sta nstr+1
+   270 2F87 8D A7 14		 sta rpos
+   271 2F8A 8D A8 14		 sta rlen
+   272 2F8D 8D A2 14		 sta sfr
+   273 2F90 8D A3 14		 sta sfc
+   274 2F93 8D A5 14		 sta ncfm
+   275 2F96 8D A0 14		 sta shname
+   276 2F99 8D A1 14		 sta shname+1
+   277 2F9C 85 C6		 sta hp
+   278 2F9E A9 40		 lda #$40
+   279 2FA0 85 C7		 sta hp+1
+   280 2FA2 A9 FF		 lda #$FF
+   281 2FA4 8D AB 14		 sta crc
+   282 2FA7 8D AC 14		 sta crc+1
+   283 2FAA A9 00		 lda #0
+   284 2FAC 8D AD 14		 sta sum
+   285 2FAF 8D AE 14		 sta sum+1
+   286 2FB2 20 89 22		 jsr clrgrid
+   287 2FB5 A2 0F		 ldx #15
+   288 2FB7 A9 09		 lda #9
+   289 2FB9 8D A4 14		 sta dcw
+   290 2FBC A9 09		ld0 lda #9
+   291 2FBE 9D 60 09		 sta CW,x
+   292 2FC1 A9 00		 lda #0
+   293 2FC3 9D 70 09		 sta CWR,x
+   294 2FC6 CA			 dex
+   295 2FC7 10 F3		 bpl ld0
+   296 2FC9 A9 04		 lda #4
+   297 2FCB 20 96 2D		 jsr fopen
+   298 2FCE C0 80		 cpy #$80
+   299 2FD0 90 05		 bcc ld1
+   300 2FD2 A9 02		 lda #2
+   301 2FD4 4C D8 2D		 jmp ldabort
+   302 2FD7 A9 10		ld1 lda #16
+   303 2FD9 85 CC		 sta w16
+   304 2FDB A9 00		 lda #0
+   305 2FDD 85 CD		 sta w16+1
+   306 2FDF A9 07		 lda #7
+   307 2FE1 A2 80		 ldx #<HDR
+   308 2FE3 A0 14		 ldy #>HDR
+   309 2FE5 20 B6 2D		 jsr fblk
+   310 2FE8 C0 80		 cpy #$80
+   311 2FEA 90 05		 bcc ld2
+   312 2FEC A9 03		 lda #3
+   313 2FEE 4C D8 2D		 jmp ldabort
+   314 2FF1 A2 03		ld2 ldx #3
+   315 2FF3 BD 80 14		ld3 lda HDR,x
+   316 2FF6 DD 6A 33		 cmp hmag,x
+   317 2FF9 F0 05		 beq ld3a
+   318 2FFB A9 03		 lda #3
+   319 2FFD 4C D8 2D		 jmp ldabort
+   320 3000 CA			ld3a dex
+   321 3001 10 F0		 bpl ld3
+   322 3003 AD 85 14		 lda HDR+5
+   323 3006 C9 53		 cmp #'S'
+   324 3008 F0 05		 beq ld3b
+   325 300A A9 03		 lda #3
+   326 300C 4C D8 2D		 jmp ldabort
+   327 300F AD 88 14		ld3b lda HDR+8
+   328 3012 8D A9 14		 sta remh
+   329 3015 AD 89 14		 lda HDR+9
+   330 3018 8D AA 14		 sta remh+1
+   331 301B AD 8E 14		 lda HDR+14
+   332 301E 8D AF 14		 sta hsum
+   333 3021 AD 8F 14		 lda HDR+15
+   334 3024 8D B0 14		 sta hsum+1
+   335 3027 20 C0 2E		 jsr rdb
+   336 302A C9 01		 cmp #1
+   337 302C F0 05		 beq ld4
+   338 302E A9 04		 lda #4
+   339 3030 4C D8 2D		 jmp ldabort
+   340 3033 20 C0 2E		ld4 jsr rdb
+   341 3036 8D B7 14		 sta nsheet
+   342 3039 20 C0 2E		 jsr rdb
+   343 303C 8D C5 14		 sta nnm
+   344 303F 20 C0 2E		 jsr rdb
+   345 3042 8D C7 14		 sta nfm2
+   346 3045 20 C0 2E		 jsr rdb
+   347 3048 8D C6 14		 sta ncht
+   348 304B 20 C0 2E		 jsr rdb
+   349 304E 20 FF 2E		 jsr rd16
+   350 3051 A5 CC		 lda w16
+   351 3053 85 C8		 sta nstr
+   352 3055 A5 CD		 lda w16+1
+   353 3057 85 C9		 sta nstr+1
+   354 3059 20 FF 2E		 jsr rd16
+   355 305C A9 00		 lda #0
+   356 305E 85 CA		 sta pi
+   357 3060 85 CB		 sta pi+1
+   358 				; string pool
+   359 3062 A5 CA		ls0 lda pi
+   360 3064 C5 C8		 cmp nstr
+   361 3066 D0 06		 bne ls1
+   362 3068 A5 CB		 lda pi+1
+   363 306A C5 C9		 cmp nstr+1
+   364 306C F0 4B		 beq ls9
+   365 306E 20 C0 2E		ls1 jsr rdb
+   366 3071 8D D8 14		 sta slen
+   367 3074 10 15		 bpl ls3
+   368 3076 29 7F		 and #$7F
+   369 3078 85 CD		 sta w16+1
+   370 307A 20 C0 2E		 jsr rdb
+   371 307D 85 CC		 sta w16
+   372 307F 20 0A 2F		 jsr skipw
+   373 3082 A9 00		 lda #0
+   374 3084 85 86		 sta rp
+   375 3086 85 87		 sta rp+1
+   376 3088 4C A7 30		 jmp ls6
+   377 308B 8D 20 07		ls3 sta TMPS
+   378 308E AA			 tax
+   379 308F F0 0C		 beq ls5
+   380 3091 A0 01		 ldy #1
+   381 3093 20 C0 2E		ls4 jsr rdb
+   382 3096 99 20 07		 sta TMPS,y
+   383 3099 C8			 iny
+   384 309A CA			 dex
+   385 309B D0 F6		 bne ls4
+   386 309D 20 B5 22		ls5 jsr hput
+   387 30A0 90 05		 bcc ls6
+   388 30A2 A9 0A		 lda #10
+   389 30A4 4C D8 2D		 jmp ldabort
+   390 30A7 A5 CB		ls6 lda pi+1
+   391 30A9 C9 20		 cmp #$20
+   392 30AB B0 03		 bcs ls7
+   393 30AD 20 41 23		 jsr ptset
+   394 30B0 E6 CA		ls7 inc pi
+   395 30B2 D0 AE		 bne ls0
+   396 30B4 E6 CB		 inc pi+1
+   397 30B6 4C 62 30		 jmp ls0
+   398 30B9			ls9
+   399 				; custom formats
+   400 30B9 A9 00		 lda #0
+   401 30BB 8D A6 14		 sta fnl
+   402 30BE 8D A5 14		 sta ncfm
+   403 30C1 AD A6 14		lf1 lda fnl
+   404 30C4 CD C7 14		 cmp nfm2
+   405 30C7 F0 25		 beq lf9
+   406 30C9 20 FF 2E		 jsr rd16
+   407 30CC AD A6 14		 lda fnl
+   408 30CF C9 10		 cmp #16
+   409 30D1 B0 15		 bcs lf2
+   410 30D3 20 3A 2F		 jsr pptr
+   411 30D6 AD A6 14		 lda fnl
+   412 30D9 0A			 asl
+   413 30DA AA			 tax
+   414 30DB A5 86		 lda rp
+   415 30DD 9D B0 0A		 sta CFM,x
+   416 30E0 A5 87		 lda rp+1
+   417 30E2 9D B1 0A		 sta CFM+1,x
+   418 30E5 EE A5 14		 inc ncfm
+   419 30E8 EE A6 14		lf2 inc fnl
+   420 30EB 4C C1 30		 jmp lf1
+   421 30EE AD C5 14		lf9 lda nnm
+   422 30F1 A2 04		 ldx #4
+   423 30F3 20 1F 2F		 jsr mulax
+   424 30F6 20 0A 2F		 jsr skipw
+   425 30F9 AD C6 14		 lda ncht
+   426 30FC A2 0B		 ldx #11
+   427 30FE 20 1F 2F		 jsr mulax
+   428 3101 20 0A 2F		 jsr skipw
+   429 				; sheets
+   430 3104 A9 00		 lda #0
+   431 3106 8D B8 14		 sta sidx
+   432 3109 AD B8 14		lsh lda sidx
+   433 310C CD B7 14		 cmp nsheet
+   434 310F D0 03		 bne lsh1
+   435 3111 4C 05 33		 jmp lfin
+   436 3114 A9 00		lsh1 lda #0
+   437 3116 8D B9 14		 sta skp
+   438 3119 AD B8 14		 lda sidx
+   439 311C F0 03		 beq lsh2
+   440 311E EE B9 14		 inc skp
+   441 3121 20 FF 2E		lsh2 jsr rd16
+   442 3124 AD B9 14		 lda skp
+   443 3127 D0 0D		 bne lsh3
+   444 3129 20 3A 2F		 jsr pptr
+   445 312C A5 86		 lda rp
+   446 312E 8D A0 14		 sta shname
+   447 3131 A5 87		 lda rp+1
+   448 3133 8D A1 14		 sta shname+1
+   449 3136 20 C0 2E		lsh3 jsr rdb
+   450 3139 AE B9 14		 ldx skp
+   451 313C D0 03		 bne lsh4
+   452 313E 8D A2 14		 sta sfr
+   453 3141 20 C0 2E		lsh4 jsr rdb
+   454 3144 AE B9 14		 ldx skp
+   455 3147 D0 03		 bne lsh5
+   456 3149 8D A3 14		 sta sfc
+   457 314C 20 C0 2E		lsh5 jsr rdb
+   458 314F AE B9 14		 ldx skp
+   459 3152 D0 0E		 bne lsh6
+   460 3154 8D A4 14		 sta dcw
+   461 3157 20 5B 2F		 jsr clampw
+   462 315A A2 0F		 ldx #15
+   463 315C 9D 60 09		lsh5a sta CW,x
+   464 315F CA			 dex
+   465 3160 10 FA		 bpl lsh5a
+   466 3162 20 C0 2E		lsh6 jsr rdb
+   467 3165 8D DA 14		 sta cwn
+   468 3168 AD DA 14		lcw lda cwn
+   469 316B F0 22		 beq lcw9
+   470 316D 20 C0 2E		 jsr rdb
+   471 3170 85 9B		 sta t1
+   472 3172 20 C0 2E		 jsr rdb
+   473 3175 AE B9 14		 ldx skp
+   474 3178 D0 0F		 bne lcw1
+   475 317A A6 9B		 ldx t1
+   476 317C E0 10		 cpx #NCOLS
+   477 317E B0 09		 bcs lcw1
+   478 3180 9D 70 09		 sta CWR,x
+   479 3183 20 5B 2F		 jsr clampw
+   480 3186 9D 60 09		 sta CW,x
+   481 3189 CE DA 14		lcw1 dec cwn
+   482 318C 4C 68 31		 jmp lcw
+   483 318F 20 FF 2E		lcw9 jsr rd16
+   484 3192 A5 CC		 lda w16
+   485 3194 8D BA 14		 sta rrow
+   486 3197 A5 CD		 lda w16+1
+   487 3199 8D BB 14		 sta rrow+1
+   488 319C AD BA 14		lrow lda rrow
+   489 319F 0D BB 14		 ora rrow+1
+   490 31A2 D0 03		 bne lrow1
+   491 31A4 4C FF 32		 jmp lnext
+   492 31A7 AD BA 14		lrow1 lda rrow
+   493 31AA D0 03		 bne lrow2
+   494 31AC CE BB 14		 dec rrow+1
+   495 31AF CE BA 14		lrow2 dec rrow
+   496 31B2 20 FF 2E		 jsr rd16
+   497 31B5 A5 CC		 lda w16
+   498 31B7 85 8E		 sta qr
+   499 31B9 A5 CD		 lda w16+1
+   500 31BB 85 BE		 sta fhave
+   501 31BD 20 C0 2E		 jsr rdb
+   502 31C0 8D BC 14		 sta rcnt
+   503 31C3 EE BC 14		 inc rcnt
+   504 31C6 AD BC 14		 lda rcnt
+   505 31C9 D0 00		 bne lcell
+   506 				 ; 256 cells: handled as rcnt = 0 -> loop 256 times
+   507 31CB 20 C0 2E		lcell jsr rdb
+   508 31CE 85 8F		 sta qc
+   509 31D0 20 C0 2E		 jsr rdb
+   510 31D3 8D BE 14		 sta fl
+   511 31D6 A2 0F		 ldx #15
+   512 31D8 A9 00		 lda #0
+   513 31DA 9D 00 07		lc0 sta RECB,x
+   514 31DD CA			 dex
+   515 31DE 10 FA		 bpl lc0
+   516 31E0 AD BE 14		 lda fl
+   517 31E3 29 07		 and #7
+   518 31E5 8D 00 07		 sta RECB
+   519 31E8 AD BE 14		 lda fl
+   520 31EB 29 08		 and #8
+   521 31ED F0 06		 beq lc1
+   522 31EF 20 C0 2E		 jsr rdb
+   523 31F2 8D 02 07		 sta RECB+2
+   524 31F5 AD BE 14		lc1 lda fl
+   525 31F8 29 10		 and #16
+   526 31FA F0 06		 beq lc2
+   527 31FC 20 C0 2E		 jsr rdb
+   528 31FF 8D 03 07		 sta RECB+3
+   529 3202 AD 00 07		lc2 lda RECB
+   530 3205 C9 01		 cmp #1
+   531 3207 F0 13		 beq lcnum
+   532 3209 C9 02		 cmp #2
+   533 320B F0 1A		 beq lcstr
+   534 320D C9 03		 cmp #3
+   535 320F F0 38		 beq lcfor
+   536 3211 C9 04		 cmp #4
+   537 3213 F0 25		 beq lcerr
+   538 3215 C9 05		 cmp #5
+   539 3217 F0 21		 beq lcerr
+   540 3219 4C 8E 32		 jmp lcst
+   541 321C 20 5C 33		lcnum jsr rdnum
+   542 321F A9 01		 lda #1
+   543 3221 8D 01 07		 sta RECB+1
+   544 3224 4C 8E 32		 jmp lcst
+   545 3227 20 FF 2E		lcstr jsr rd16
+   546 322A 20 3A 2F		 jsr pptr
+   547 322D A0 04		 ldy #4
+   548 322F 20 50 2F		 jsr stptr
+   549 3232 A9 02		 lda #2
+   550 3234 8D 01 07		 sta RECB+1
+   551 3237 4C 8E 32		 jmp lcst
+   552 323A 20 C0 2E		lcerr jsr rdb
+   553 323D 8D 04 07		 sta RECB+4
+   554 3240 AD 00 07		 lda RECB
+   555 3243 8D 01 07		 sta RECB+1
+   556 3246 4C 8E 32		 jmp lcst
+   557 3249 20 FF 2E		lcfor jsr rd16
+   558 324C 20 3A 2F		 jsr pptr
+   559 324F A0 0A		 ldy #10
+   560 3251 20 50 2F		 jsr stptr
+   561 3254 20 C0 2E		 jsr rdb
+   562 3257 C9 01		 cmp #1
+   563 3259 D0 0B		 bne lf_a
+   564 325B 20 5C 33		 jsr rdnum
+   565 325E A9 01		 lda #1
+   566 3260 8D 01 07		 sta RECB+1
+   567 3263 4C 8E 32		 jmp lcst
+   568 3266 C9 02		lf_a cmp #2
+   569 3268 D0 13		 bne lf_b
+   570 326A 20 FF 2E		 jsr rd16
+   571 326D 20 3A 2F		 jsr pptr
+   572 3270 A0 04		 ldy #4
+   573 3272 20 50 2F		 jsr stptr
+   574 3275 A9 02		 lda #2
+   575 3277 8D 01 07		 sta RECB+1
+   576 327A 4C 8E 32		 jmp lcst
+   577 327D C9 05		lf_b cmp #5
+   578 327F F0 04		 beq lf_c
+   579 3281 C9 04		 cmp #4
+   580 3283 D0 09		 bne lcst
+   581 3285 8D 01 07		lf_c sta RECB+1
+   582 3288 20 C0 2E		 jsr rdb
+   583 328B 8D 04 07		 sta RECB+4
+   584 328E AD B9 14		lcst lda skp
+   585 3291 D0 61		 bne lcdrop0
+   586 3293 A5 BE		 lda fhave
+   587 3295 D0 55		 bne lcdrop
+   588 3297 A5 8E		 lda qr
+   589 3299 C9 80		 cmp #NROWS
+   590 329B B0 4F		 bcs lcdrop
+   591 329D A5 8F		 lda qc
+   592 329F C9 10		 cmp #NCOLS
+   593 32A1 B0 49		 bcs lcdrop
+   594 32A3 AD 00 07		 lda RECB
+   595 32A6 C9 03		 cmp #3
+   596 32A8 D0 34		 bne lcput
+   597 32AA A5 B8		 lda fcnt+1
+   598 32AC C9 02		 cmp #>MAXF
+   599 32AE 90 0C		 bcc lcreg
+   600 				 ; formula list full: keep the cached value as a plain cell
+   601 32B0 AD 01 07		 lda RECB+1
+   602 32B3 8D 00 07		 sta RECB
+   603 32B6 EE B5 14		 inc fdrop
+   604 32B9 4C DE 32		 jmp lcput
+   605 32BC A5 B7		lcreg lda fcnt
+   606 32BE 85 80		 sta ptr
+   607 32C0 A5 B8		 lda fcnt+1
+   608 32C2 18			 clc
+   609 32C3 69 10		 adc #>FLL
+   610 32C5 85 81		 sta ptr+1
+   611 32C7 A0 00		 ldy #0
+   612 32C9 A5 8E		 lda qr
+   613 32CB 91 80		 sta (ptr),y
+   614 32CD A5 81		 lda ptr+1
+   615 32CF 18			 clc
+   616 32D0 69 02		 adc #>(FLH-FLL)
+   617 32D2 85 81		 sta ptr+1
+   618 32D4 A5 8F		 lda qc
+   619 32D6 91 80		 sta (ptr),y
+   620 32D8 E6 B7		 inc fcnt
+   621 32DA D0 02		 bne lcput
+   622 32DC E6 B8		 inc fcnt+1
+   623 32DE 20 76 22		lcput jsr wrrec
+   624 32E1 EE B1 14		 inc ncell
+   625 32E4 D0 03		 bne lcn
+   626 32E6 EE B2 14		 inc ncell+1
+   627 32E9 4C F4 32		lcn jmp lcdone
+   628 32EC EE B3 14		lcdrop inc ndrop
+   629 32EF D0 03		 bne lcdone
+   630 32F1 EE B4 14		 inc ndrop+1
+   631 32F4			lcdrop0
+   632 32F4 CE BC 14		lcdone dec rcnt
+   633 32F7 F0 03		 beq lcdn2
+   634 32F9 4C CB 31		 jmp lcell
+   635 32FC 4C 9C 31		lcdn2 jmp lrow
+   636 32FF EE B8 14		lnext inc sidx
+   637 3302 4C 09 31		 jmp lsh
+   638 3305			lfin
+   639 3305 AD A9 14		 lda remh
+   640 3308 0D AA 14		 ora remh+1
+   641 330B D0 0B		 bne lfin2
+   642 330D AD A7 14		 lda rpos
+   643 3310 18			 clc
+   644 3311 69 02		 adc #2
+   645 3313 CD A8 14		 cmp rlen
+   646 3316 B0 06		 bcs lfin3
+   647 3318 20 C0 2E		lfin2 jsr rdb
+   648 331B 4C 05 33		 jmp lfin
+   649 331E 20 CE 2D		lfin3 jsr fclose
+   650 3321 A9 01		 lda #1
+   651 3323 8D C2 14		 sta msg
+   652 3326 AD AB 14		 lda crc
+   653 3329 CD 10 15		 cmp scrc
+   654 332C D0 1B		 bne lbad
+   655 332E AD AC 14		 lda crc+1
+   656 3331 CD 11 15		 cmp scrc+1
+   657 3334 D0 13		 bne lbad
+   658 3336 AD AD 14		 lda sum
+   659 3339 CD AF 14		 cmp hsum
+   660 333C D0 0B		 bne lbad
+   661 333E AD AE 14		 lda sum+1
+   662 3341 CD B0 14		 cmp hsum+1
+   663 3344 D0 03		 bne lbad
+   664 3346 4C 4E 33		 jmp lend
+   665 3349 A9 07		lbad lda #7
+   666 334B 8D C2 14		 sta msg
+   667 334E A9 00		lend lda #0
+   668 3350 85 90		 sta cr
+   669 3352 85 91		 sta cc
+   670 3354 85 92		 sta vr0
+   671 3356 85 93		 sta vc0
+   672 3358 8D C1 14		 sta dirty
+   673 335B 60			 rts
+   674
+   675 335C			rdnum
+   676 335C A0 04		 ldy #4
+   677 335E 20 C0 2E		rn1 jsr rdb
+   678 3361 99 00 07		 sta RECB,y
+   679 3364 C8			 iny
+   680 3365 C0 0A		 cpy #10
+   681 3367 D0 F5		 bne rn1
+   682 3369 60			 rts
+   683
+   684 336A 43 52 46 54		hmag dta c'CRFT'
+   280 336E			 icl 'calc.inc'
+Source: calc.inc
+     1 				; Formula evaluator and recalculation. Numbers are the 6 byte OS floating point (BCD) format.
+     2 				; Value stack entries (8 bytes at VSTK + offset): byte 0 type, bytes 1.. payload
+     3 				;   0 blank, 1 number (6 bytes), 2 string (heap pointer), 4 error (code in byte 1), 5 bool (byte 1), 6 reference/range (r1,c1,r2,c2)
+     4 				; Excel precedence: comparison < + - < * / < ^ (left to right) < unary minus < %.
+     5
+     6 336E 40 01 00 00 00 00	K1   dta b($40),b($01),b(0),b(0),b(0),b(0)
+     7 3374 41 01 00 00 00 00	K100 dta b($41),b($01),b(0),b(0),b(0),b(0)
+     8 337A 40 10 00 00 00 00	K10  dta b($40),b($10),b(0),b(0),b(0),b(0)
+     9 3380 3F 50 00 00 00 00	KHF  dta b($3F),b($50),b(0),b(0),b(0),b(0)
+    10
+    11 3386			FTAB
+    12 3386 53 55 4D 00 01	 dta c'SUM',b(0,1)
+    13 338B 41 56 45 52 41 47 +  dta c'AVERAGE',b(0,2)
+    14 3394 4D 49 4E 00 03	 dta c'MIN',b(0,3)
+    15 3399 4D 41 58 00 04	 dta c'MAX',b(0,4)
+    16 339E 43 4F 55 4E 54 00 +  dta c'COUNT',b(0,5)
+    17 33A5 50 52 4F 44 55 43 +  dta c'PRODUCT',b(0,6)
+    18 33AE 41 42 53 00 07	 dta c'ABS',b(0,7)
+    19 33B3 49 4E 54 00 08	 dta c'INT',b(0,8)
+    20 33B8 53 51 52 54 00 09	 dta c'SQRT',b(0,9)
+    21 33BE 52 4F 55 4E 44 00 +  dta c'ROUND',b(0,10)
+    22 33C5 4D 4F 44 00 0B	 dta c'MOD',b(0,11)
+    23 33CA 49 46 00 0C		 dta c'IF',b(0,12)
+    24 33CE 41 4E 44 00 0D	 dta c'AND',b(0,13)
+    25 33D3 4F 52 00 0E		 dta c'OR',b(0,14)
+    26 33D7 4E 4F 54 00 0F	 dta c'NOT',b(0,15)
+    27 33DC 00			 dta b(0)
+    28
+    29 				; hard parse error: unwind to calccell and give #PARSE!
+    30 33DD			perr
+    31 33DD A6 A4		 ldx evsp
+    32 33DF 9A			 txs
+    33 33E0 A9 08		 lda #8
+    34 33E2 20 E8 33		 jsr seterr0
+    35 33E5 4C 5A 40		 jmp cfin
+    36
+    37 33E8			seterr0
+    38 33E8 8D 01 08		 sta VSTK+1
+    39 33EB A9 04		 lda #4
+    40 33ED 8D 00 08		 sta VSTK
+    41 33F0 A9 08		 lda #8
+    42 33F2 85 A1		 sta vsp
+    43 33F4 60			 rts
+    44
+    45 33F5			vpush
+    46 33F5 A5 A1		 lda vsp
+    47 33F7 18			 clc
+    48 33F8 69 08		 adc #8
+    49 33FA C9 80		 cmp #$80
+    50 33FC B0 DF		 bcs perr
+    51 33FE 85 A1		 sta vsp
+    52 3400 60			 rts
+    53
+    54 3401			nextc
+    55 3401 A6 A0		 ldx pp
+    56 3403 BD 80 06		nc1 lda FBUF,x
+    57 3406 C9 20		 cmp #32
+    58 3408 D0 03		 bne nc2
+    59 340A E8			 inx
+    60 340B D0 F6		 bne nc1
+    61 340D 86 A0		nc2 stx pp
+    62 340F C9 00		 cmp #0
+    63 3411 60			 rts
+    64
+    65 				; X = entry offset: FR0 / FR1 <- number of the entry
+    66 3412			vld0
+    67 3412 E8			 inx
+    68 3413 A0 08		 ldy #>VSTK
+    69 3415 4C 89 DD		 jmp FLD0R
+    70 3418			vld1
+    71 3418 E8			 inx
+    72 3419 A0 08		 ldy #>VSTK
+    73 341B 4C 98 DD		 jmp FLD1R
+    74
+    75 				; FR0 -> entry at offset X (type number)
+    76 341E			st0
+    77 341E A9 01		 lda #1
+    78 3420 9D 00 08		 sta VSTK,x
+    79 3423 E8			 inx
+    80 3424 A0 08		 ldy #>VSTK
+    81 3426 4C A7 DD		 jmp FST0R
+    82
+    83 				; entry X (number) -> BV / BV -> entry X
+    84 3429			e2bv
+    85 3429 A0 00		 ldy #0
+    86 342B BD 01 08		e2b1 lda VSTK+1,x
+    87 342E 99 90 08		 sta BV,y
+    88 3431 E8			 inx
+    89 3432 C8			 iny
+    90 3433 C0 06		 cpy #6
+    91 3435 D0 F4		 bne e2b1
+    92 3437 60			 rts
+    93 3438			bv2e
+    94 3438 A9 01		 lda #1
+    95 343A 9D 00 08		 sta VSTK,x
+    96 343D A0 00		 ldy #0
+    97 343F B9 90 08		b2e1 lda BV,y
+    98 3442 9D 01 08		 sta VSTK+1,x
+    99 3445 E8			 inx
+   100 3446 C8			 iny
+   101 3447 C0 06		 cpy #6
+   102 3449 D0 F4		 bne b2e1
+   103 344B 60			 rts
+   104
+   105 				; error in entry X
+   106 344C			puterr
+   107 344C 9D 01 08		 sta VSTK+1,x
+   108 344F A9 04		 lda #4
+   109 3451 9D 00 08		 sta VSTK,x
+   110 3454 60			 rts
+   111
+   112 				; replace the reference at X by the cell value
+   113 3455			derefx
+   114 3455 8E 20 15		 stx dxs
+   115 3458 BD 01 08		 lda VSTK+1,x
+   116 345B 85 8E		 sta qr
+   117 345D BD 02 08		 lda VSTK+2,x
+   118 3460 85 8F		 sta qc
+   119 3462 20 63 22		 jsr rdrec
+   120 3465 AE 20 15		 ldx dxs
+   121 3468 AD 01 07		 lda RECB+1
+   122 346B 9D 00 08		 sta VSTK,x
+   123 346E A0 00		 ldy #0
+   124 3470 B9 04 07		dvr1 lda RECB+4,y
+   125 3473 9D 01 08		 sta VSTK+1,x
+   126 3476 E8			 inx
+   127 3477 C8			 iny
+   128 3478 C0 06		 cpy #6
+   129 347A D0 F4		 bne dvr1
+   130 347C AE 20 15		 ldx dxs
+   131 347F 60			 rts
+   132
+   133 				; make entry X a number (type 1) or an error (type 4); carry set when it is an error
+   134 3480			getnumv
+   135 3480 BD 00 08		 lda VSTK,x
+   136 3483 C9 06		 cmp #6
+   137 3485 D0 06		 bne gn1
+   138 3487 20 55 34		 jsr derefx
+   139 348A BD 00 08		 lda VSTK,x
+   140 348D C9 01		gn1 cmp #1
+   141 348F F0 18		 beq gnok
+   142 3491 C9 04		 cmp #4
+   143 3493 F0 16		 beq gnerr
+   144 3495 C9 00		 cmp #0
+   145 3497 F0 0B		 beq gnblank
+   146 3499 C9 05		 cmp #5
+   147 349B F0 10		 beq gnbool
+   148 349D A9 01		 lda #1
+   149 349F 20 4C 34		 jsr puterr
+   150 34A2 38			 sec
+   151 34A3 60			 rts
+   152 34A4 A9 01		gnblank lda #1
+   153 34A6 9D 00 08		 sta VSTK,x
+   154 34A9 18			gnok clc
+   155 34AA 60			 rts
+   156 34AB 38			gnerr sec
+   157 34AC 60			 rts
+   158 34AD BD 01 08		gnbool lda VSTK+1,x
+   159 34B0 48			 pha
+   160 34B1 A9 01		 lda #1
+   161 34B3 9D 00 08		 sta VSTK,x
+   162 34B6 A9 00		 lda #0
+   163 34B8 9D 01 08		 sta VSTK+1,x
+   164 34BB 9D 02 08		 sta VSTK+2,x
+   165 34BE 68			 pla
+   166 34BF F0 E8		 beq gnok
+   167 34C1 A9 40		 lda #$40
+   168 34C3 9D 01 08		 sta VSTK+1,x
+   169 34C6 A9 01		 lda #1
+   170 34C8 9D 02 08		 sta VSTK+2,x
+   171 34CB 18			 clc
+   172 34CC 60			 rts
+   173
+   174 				; both operands (vsp-16, vsp-8) numeric. carry set: result (an error) is in the first slot and vsp was reduced.
+   175 34CD			prep2
+   176 34CD A6 A1		 ldx vsp
+   177 34CF 8A			 txa
+   178 34D0 38			 sec
+   179 34D1 E9 10		 sbc #16
+   180 34D3 AA			 tax
+   181 34D4 20 80 34		 jsr getnumv
+   182 34D7 B0 19		 bcs pe1
+   183 34D9 A6 A1		 ldx vsp
+   184 34DB 8A			 txa
+   185 34DC 38			 sec
+   186 34DD E9 08		 sbc #8
+   187 34DF AA			 tax
+   188 34E0 20 80 34		 jsr getnumv
+   189 34E3 90 16		 bcc pe2
+   190 				 ; b is an error: copy to a
+   191 34E5 BD 01 08		 lda VSTK+1,x
+   192 34E8 48			 pha
+   193 34E9 8A			 txa
+   194 34EA 38			 sec
+   195 34EB E9 08		 sbc #8
+   196 34ED AA			 tax
+   197 34EE 68			 pla
+   198 34EF 20 4C 34		 jsr puterr
+   199 34F2 A5 A1		pe1 lda vsp
+   200 34F4 38			 sec
+   201 34F5 E9 08		 sbc #8
+   202 34F7 85 A1		 sta vsp
+   203 34F9 38			 sec
+   204 34FA 60			 rts
+   205 34FB 18			pe2 clc
+   206 34FC 60			 rts
+   207
+   208 				; A = operator, operands on the stack
+   209 34FD			binop
+   210 34FD 85 A2		 sta opc
+   211 34FF 20 CD 34		 jsr prep2
+   212 3502 90 01		 bcc bo0
+   213 3504 60			 rts
+   214 3505 A5 A1		bo0 lda vsp
+   215 3507 38			 sec
+   216 3508 E9 08		 sbc #8
+   217 350A 85 A1		 sta vsp
+   218 350C 38			 sec
+   219 350D E9 08		 sbc #8
+   220 350F 85 9D		 sta t3                       ; offset of a
+   221 3511 A5 A2		 lda opc
+   222 3513 C9 5E		 cmp #'^'
+   223 3515 D0 03		 bne bo1
+   224 3517 4C 60 35		 jmp dopow
+   225 351A A6 9D		bo1 ldx t3
+   226 351C 20 12 34		 jsr vld0
+   227 351F A6 A1		 ldx vsp
+   228 3521 20 18 34		 jsr vld1
+   229 3524 A5 A2		 lda opc
+   230 3526 C9 2B		 cmp #'+'
+   231 3528 D0 06		 bne bo2
+   232 352A 20 66 DA		 jsr FADD
+   233 352D 4C 52 35		 jmp bofin
+   234 3530 C9 2D		bo2 cmp #'-'
+   235 3532 D0 06		 bne bo3
+   236 3534 20 60 DA		 jsr FSUB
+   237 3537 4C 52 35		 jmp bofin
+   238 353A C9 2A		bo3 cmp #'*'
+   239 353C D0 06		 bne bo4
+   240 353E 20 DB DA		 jsr FMUL
+   241 3541 4C 52 35		 jmp bofin
+   242 3544 A5 E1		bo4 lda FR1+1
+   243 3546 D0 07		 bne bo5
+   244 3548 A9 00		 lda #0
+   245 354A A6 9D		 ldx t3
+   246 354C 4C 4C 34		 jmp puterr
+   247 354F 20 28 DB		bo5 jsr FDIV
+   248 3552 90 07		bofin bcc bof2
+   249 3554 A9 04		 lda #4
+   250 3556 A6 9D		 ldx t3
+   251 3558 4C 4C 34		 jmp puterr
+   252 355B A6 9D		bof2 ldx t3
+   253 355D 4C 1E 34		 jmp st0
+   254
+   255 				; a ^ b : integer exponents by squaring, others through LOG10/EXP10
+   256 3560			dopow
+   257 3560 A6 A1		 ldx vsp
+   258 3562 20 29 34		 jsr e2bv
+   259 3565 AD 90 08		 lda BV
+   260 3568 29 80		 and #$80
+   261 356A 8D 2C 15		 sta neg
+   262 356D AD 90 08		 lda BV
+   263 3570 29 7F		 and #$7F
+   264 3572 8D 90 08		 sta BV
+   265 3575 A2 05		 ldx #5
+   266 3577 BD 90 08		dp0 lda BV,x
+   267 357A 9D 9E 08		 sta TB,x
+   268 357D CA			 dex
+   269 357E 10 F7		 bpl dp0
+   270 3580 A9 00		 lda #0
+   271 3582 85 A5		 sta rn
+   272 3584 A9 01		 lda #1
+   273 3586 85 A7		 sta rmode
+   274 3588 A5 9D		 lda t3
+   275 358A 48			 pha
+   276 358B 20 79 23		 jsr bround
+   277 358E 68			 pla
+   278 358F 85 9D		 sta t3
+   279 3591 A5 A8		 lda rlost
+   280 3593 F0 03		 beq dpint
+   281 3595 4C 56 36		 jmp dpfrac
+   282 3598			dpint
+   283 3598 A2 90		 ldx #<BV
+   284 359A A0 08		 ldy #>BV
+   285 359C 20 89 DD		 jsr FLD0R
+   286 359F 20 D2 D9		 jsr FPI
+   287 35A2 90 07		 bcc dpi1
+   288 35A4 A9 04		 lda #4
+   289 35A6 A6 9D		 ldx t3
+   290 35A8 4C 4C 34		 jmp puterr
+   291 35AB A5 D4		dpi1 lda FR0
+   292 35AD 8D 2A 15		 sta pwn
+   293 35B0 A5 D5		 lda FR0+1
+   294 35B2 8D 2B 15		 sta pwn+1
+   295 35B5 A6 9D		 ldx t3
+   296 35B7 20 29 34		 jsr e2bv
+   297 35BA A2 05		 ldx #5
+   298 35BC BD 90 08		dp1 lda BV,x
+   299 35BF 9D 98 08		 sta TA,x
+   300 35C2 CA			 dex
+   301 35C3 10 F7		 bpl dp1
+   302 35C5 A2 05		 ldx #5
+   303 35C7 BD 6E 33		dp2 lda K1,x
+   304 35CA 9D 9E 08		 sta TB,x
+   305 35CD CA			 dex
+   306 35CE 10 F7		 bpl dp2
+   307 35D0 AD 2A 15		dpl lda pwn
+   308 35D3 0D 2B 15		 ora pwn+1
+   309 35D6 F0 53		 beq dpend
+   310 35D8 AD 2A 15		 lda pwn
+   311 35DB 29 01		 and #1
+   312 35DD F0 1A		 beq dpsq
+   313 35DF A2 9E		 ldx #<TB
+   314 35E1 A0 08		 ldy #>TB
+   315 35E3 20 89 DD		 jsr FLD0R
+   316 35E6 A2 98		 ldx #<TA
+   317 35E8 A0 08		 ldy #>TA
+   318 35EA 20 98 DD		 jsr FLD1R
+   319 35ED 20 DB DA		 jsr FMUL
+   320 35F0 B0 32		 bcs dperr
+   321 35F2 A2 9E		 ldx #<TB
+   322 35F4 A0 08		 ldy #>TB
+   323 35F6 20 A7 DD		 jsr FST0R
+   324 35F9 4E 2B 15		dpsq lsr pwn+1
+   325 35FC 6E 2A 15		 ror pwn
+   326 35FF AD 2A 15		 lda pwn
+   327 3602 0D 2B 15		 ora pwn+1
+   328 3605 F0 24		 beq dpend
+   329 3607 A2 98		 ldx #<TA
+   330 3609 A0 08		 ldy #>TA
+   331 360B 20 89 DD		 jsr FLD0R
+   332 360E A2 98		 ldx #<TA
+   333 3610 A0 08		 ldy #>TA
+   334 3612 20 98 DD		 jsr FLD1R
+   335 3615 20 DB DA		 jsr FMUL
+   336 3618 B0 0A		 bcs dperr
+   337 361A A2 98		 ldx #<TA
+   338 361C A0 08		 ldy #>TA
+   339 361E 20 A7 DD		 jsr FST0R
+   340 3621 4C D0 35		 jmp dpl
+   341 3624 A9 04		dperr lda #4
+   342 3626 A6 9D		 ldx t3
+   343 3628 4C 4C 34		 jmp puterr
+   344 362B A2 9E		dpend ldx #<TB
+   345 362D A0 08		 ldy #>TB
+   346 362F 20 89 DD		 jsr FLD0R
+   347 3632 AD 2C 15		 lda neg
+   348 3635 F0 1A		 beq dpout
+   349 3637 A5 D5		 lda FR0+1
+   350 3639 D0 07		 bne dpinv
+   351 363B A9 00		 lda #0
+   352 363D A6 9D		 ldx t3
+   353 363F 4C 4C 34		 jmp puterr
+   354 3642 20 B6 DD		dpinv jsr FMOVE
+   355 3645 A2 6E		 ldx #<K1
+   356 3647 A0 33		 ldy #>K1
+   357 3649 20 89 DD		 jsr FLD0R
+   358 364C 20 28 DB		 jsr FDIV
+   359 364F B0 D3		 bcs dperr
+   360 3651 A6 9D		dpout ldx t3
+   361 3653 4C 1E 34		 jmp st0
+   362 3656			dpfrac
+   363 				 ; non-integer exponent: base must be positive
+   364 3656 A6 9D		 ldx t3
+   365 3658 20 29 34		 jsr e2bv
+   366 365B AD 91 08		 lda BV+1
+   367 365E D0 1C		 bne dpf1
+   368 3660 AD 2C 15		 lda neg
+   369 3663 D0 10		 bne dpz1
+   370 3665 A6 9D		 ldx t3                      ; 0 ^ positive = 0
+   371 3667 A9 01		 lda #1
+   372 3669 9D 00 08		 sta VSTK,x
+   373 366C A9 00		 lda #0
+   374 366E 9D 01 08		 sta VSTK+1,x
+   375 3671 9D 02 08		 sta VSTK+2,x
+   376 3674 60			 rts
+   377 3675 A9 00		dpz1 lda #0
+   378 3677 A6 9D		 ldx t3
+   379 3679 4C 4C 34		 jmp puterr
+   380 367C AD 90 08		dpf1 lda BV
+   381 367F 10 07		 bpl dpf2
+   382 3681 A9 04		 lda #4
+   383 3683 A6 9D		 ldx t3
+   384 3685 4C 4C 34		 jmp puterr
+   385 3688 A2 90		dpf2 ldx #<BV
+   386 368A A0 08		 ldy #>BV
+   387 368C 20 89 DD		 jsr FLD0R
+   388 368F 20 D1 DE		 jsr LOG10
+   389 3692 B0 90		 bcs dperr
+   390 3694 A2 9E		 ldx #<TB
+   391 3696 A0 08		 ldy #>TB
+   392 3698 20 98 DD		 jsr FLD1R
+   393 369B AD 2C 15		 lda neg
+   394 369E F0 06		 beq dpf3
+   395 36A0 A5 E0		 lda FR1
+   396 36A2 09 80		 ora #$80
+   397 36A4 85 E0		 sta FR1
+   398 36A6 20 DB DA		dpf3 jsr FMUL
+   399 36A9 B0 0A		 bcs dpe2
+   400 36AB 20 CC DD		 jsr EXP10
+   401 36AE B0 05		 bcs dpe2
+   402 36B0 A6 9D		 ldx t3
+   403 36B2 4C 1E 34		 jmp st0
+   404 36B5 4C 24 36		dpe2 jmp dperr
+   405
+   406 				; comparison: operator in cmpop
+   407 36B8			docmp
+   408 36B8 20 CD 34		 jsr prep2
+   409 36BB 90 01		 bcc dc0
+   410 36BD 60			 rts
+   411 36BE A5 A1		dc0 lda vsp
+   412 36C0 38			 sec
+   413 36C1 E9 08		 sbc #8
+   414 36C3 85 A1		 sta vsp
+   415 36C5 38			 sec
+   416 36C6 E9 08		 sbc #8
+   417 36C8 85 9D		 sta t3
+   418 36CA AA			 tax
+   419 36CB 20 12 34		 jsr vld0
+   420 36CE A6 A1		 ldx vsp
+   421 36D0 20 18 34		 jsr vld1
+   422 36D3 20 60 DA		 jsr FSUB
+   423 36D6 A6 9D		 ldx t3
+   424 36D8 A9 05		 lda #5
+   425 36DA 9D 00 08		 sta VSTK,x
+   426 				 ; t1 = 0 equal, 1 greater, 2 less
+   427 36DD A5 D5		 lda FR0+1
+   428 36DF D0 04		 bne dcc1
+   429 36E1 A0 00		 ldy #0
+   430 36E3 F0 0A		 beq dc3
+   431 36E5 A5 D4		dcc1 lda FR0
+   432 36E7 30 04		 bmi dc2
+   433 36E9 A0 01		 ldy #1
+   434 36EB D0 02		 bne dc3
+   435 36ED A0 02		dc2 ldy #2
+   436 36EF AD 29 15		dc3 lda cmpop
+   437 36F2 C9 01		 cmp #1
+   438 36F4 D0 06		 bne dq2
+   439 36F6 C0 00		 cpy #0
+   440 36F8 F0 32		 beq dqt
+   441 36FA D0 2C		 bne dqf
+   442 36FC C9 02		dq2 cmp #2
+   443 36FE D0 06		 bne dq3
+   444 3700 C0 01		 cpy #1
+   445 3702 F0 28		 beq dqt
+   446 3704 D0 22		 bne dqf
+   447 3706 C9 03		dq3 cmp #3
+   448 3708 D0 06		 bne dq4
+   449 370A C0 02		 cpy #2
+   450 370C F0 1E		 beq dqt
+   451 370E D0 18		 bne dqf
+   452 3710 C9 04		dq4 cmp #4
+   453 3712 D0 06		 bne dq5
+   454 3714 C0 01		 cpy #1
+   455 3716 D0 14		 bne dqt
+   456 3718 F0 0E		 beq dqf
+   457 371A C9 05		dq5 cmp #5
+   458 371C D0 06		 bne dq6
+   459 371E C0 02		 cpy #2
+   460 3720 D0 0A		 bne dqt
+   461 3722 F0 04		 beq dqf
+   462 3724 C0 00		dq6 cpy #0
+   463 3726 D0 04		 bne dqt
+   464 3728 A9 00		dqf lda #0
+   465 372A F0 02		 beq dqs
+   466 372C A9 01		dqt lda #1
+   467 372E A6 9D		dqs ldx t3
+   468 3730 9D 01 08		 sta VSTK+1,x
+   469 3733 60			 rts
+   470
+   471 				; ---- grammar
+   472 3734			fexpr
+   473 3734 20 8E 37		 jsr gadd
+   474 3737 20 01 34		fqc jsr nextc
+   475 373A A0 01		 ldy #1
+   476 373C C9 3D		 cmp #'='
+   477 373E F0 3C		 beq fq9
+   478 3740 C9 3E		 cmp #'>'
+   479 3742 D0 15		 bne fq1
+   480 3744 E6 A0		 inc pp
+   481 3746 A6 A0		 ldx pp
+   482 3748 BD 80 06		 lda FBUF,x
+   483 374B C9 3D		 cmp #'='
+   484 374D D0 06		 bne fq0
+   485 374F E6 A0		 inc pp
+   486 3751 A0 05		 ldy #5
+   487 3753 D0 29		 bne fq8
+   488 3755 A0 02		fq0 ldy #2
+   489 3757 D0 25		 bne fq8
+   490 3759 C9 3C		fq1 cmp #'<'
+   491 375B D0 30		 bne fqend
+   492 375D E6 A0		 inc pp
+   493 375F A6 A0		 ldx pp
+   494 3761 BD 80 06		 lda FBUF,x
+   495 3764 C9 3E		 cmp #'>'
+   496 3766 D0 06		 bne fq2
+   497 3768 E6 A0		 inc pp
+   498 376A A0 06		 ldy #6
+   499 376C D0 10		 bne fq8
+   500 376E C9 3D		fq2 cmp #'='
+   501 3770 D0 06		 bne fq3
+   502 3772 E6 A0		 inc pp
+   503 3774 A0 04		 ldy #4
+   504 3776 D0 06		 bne fq8
+   505 3778 A0 03		fq3 ldy #3
+   506 377A D0 02		 bne fq8
+   507 377C E6 A0		fq9 inc pp
+   508 377E 98			fq8 tya
+   509 377F 48			 pha
+   510 3780 20 8E 37		 jsr gadd
+   511 3783 68			 pla
+   512 3784 8D 29 15		 sta cmpop
+   513 3787 20 B8 36		 jsr docmp
+   514 378A 4C 37 37		 jmp fqc
+   515 378D 60			fqend rts
+   516
+   517 378E			gadd
+   518 378E 20 AA 37		 jsr gmul
+   519 3791 20 01 34		fa1 jsr nextc
+   520 3794 C9 2B		 cmp #'+'
+   521 3796 F0 04		 beq fa2
+   522 3798 C9 2D		 cmp #'-'
+   523 379A D0 0D		 bne fa9
+   524 379C E6 A0		fa2 inc pp
+   525 379E 48			 pha
+   526 379F 20 AA 37		 jsr gmul
+   527 37A2 68			 pla
+   528 37A3 20 FD 34		 jsr binop
+   529 37A6 4C 91 37		 jmp fa1
+   530 37A9 60			fa9 rts
+   531
+   532 37AA			gmul
+   533 37AA 20 C6 37		 jsr fpow
+   534 37AD 20 01 34		fm1 jsr nextc
+   535 37B0 C9 2A		 cmp #'*'
+   536 37B2 F0 04		 beq fm2
+   537 37B4 C9 2F		 cmp #'/'
+   538 37B6 D0 0D		 bne fm9
+   539 37B8 E6 A0		fm2 inc pp
+   540 37BA 48			 pha
+   541 37BB 20 C6 37		 jsr fpow
+   542 37BE 68			 pla
+   543 37BF 20 FD 34		 jsr binop
+   544 37C2 4C AD 37		 jmp fm1
+   545 37C5 60			fm9 rts
+   546
+   547 37C6			fpow
+   548 37C6 20 DE 37		 jsr funary
+   549 37C9 20 01 34		fp1 jsr nextc
+   550 37CC C9 5E		 cmp #'^'
+   551 37CE D0 0D		 bne fp9
+   552 37D0 E6 A0		 inc pp
+   553 37D2 20 DE 37		 jsr funary
+   554 37D5 A9 5E		 lda #'^'
+   555 37D7 20 FD 34		 jsr binop
+   556 37DA 4C C9 37		 jmp fp1
+   557 37DD 60			fp9 rts
+   558
+   559 37DE			funary
+   560 37DE 20 01 34		 jsr nextc
+   561 37E1 C9 2D		 cmp #'-'
+   562 37E3 D0 1F		 bne fu1
+   563 37E5 E6 A0		 inc pp
+   564 37E7 20 DE 37		 jsr funary
+   565 37EA A6 A1		 ldx vsp
+   566 37EC 8A			 txa
+   567 37ED 38			 sec
+   568 37EE E9 08		 sbc #8
+   569 37F0 AA			 tax
+   570 37F1 20 80 34		 jsr getnumv
+   571 37F4 B0 0D		 bcs fu9
+   572 37F6 BD 02 08		 lda VSTK+2,x
+   573 37F9 F0 08		 beq fu9
+   574 37FB BD 01 08		 lda VSTK+1,x
+   575 37FE 49 80		 eor #$80
+   576 3800 9D 01 08		 sta VSTK+1,x
+   577 3803 60			fu9 rts
+   578 3804 C9 2B		fu1 cmp #'+'
+   579 3806 D0 05		 bne fu2
+   580 3808 E6 A0		 inc pp
+   581 380A 4C DE 37		 jmp funary
+   582 380D 20 9E 38		fu2 jsr fprim
+   583 3810 20 01 34		fpc jsr nextc
+   584 3813 C9 25		 cmp #'%'
+   585 3815 D0 25		 bne fpc9
+   586 3817 E6 A0		 inc pp
+   587 3819 A6 A1		 ldx vsp
+   588 381B 8A			 txa
+   589 381C 38			 sec
+   590 381D E9 08		 sbc #8
+   591 381F AA			 tax
+   592 3820 20 80 34		 jsr getnumv
+   593 3823 B0 17		 bcs fpc9
+   594 3825 86 9D		 stx t3
+   595 3827 20 12 34		 jsr vld0
+   596 382A A2 74		 ldx #<K100
+   597 382C A0 33		 ldy #>K100
+   598 382E 20 98 DD		 jsr FLD1R
+   599 3831 20 28 DB		 jsr FDIV
+   600 3834 A6 9D		 ldx t3
+   601 3836 20 1E 34		 jsr st0
+   602 3839 4C 10 38		 jmp fpc
+   603 383C 60			fpc9 rts
+   604
+   605 				; read a cell reference at pp (letters A-P, digits); returns qr, qc; carry set when not a reference
+   606 383D			rdref
+   607 383D A6 A0		 ldx pp
+   608 383F BD 80 06		 lda FBUF,x
+   609 3842 C9 24		 cmp #'$'
+   610 3844 D0 04		 bne rf_a
+   611 3846 E8			 inx
+   612 3847 BD 80 06		 lda FBUF,x
+   613 384A 38			rf_a sec
+   614 384B E9 41		 sbc #'A'
+   615 384D C9 10		 cmp #NCOLS
+   616 384F B0 4B		 bcs rf_bad
+   617 3851 85 8F		 sta qc
+   618 3853 E8			 inx
+   619 3854 BD 80 06		 lda FBUF,x
+   620 3857 C9 24		 cmp #'$'
+   621 3859 D0 01		 bne rf_b
+   622 385B E8			 inx
+   623 385C A9 00		rf_b lda #0
+   624 385E 85 9B		 sta t1
+   625 3860 85 9C		 sta t2
+   626 3862 A0 00		 ldy #0
+   627 3864 BD 80 06		rf_c lda FBUF,x
+   628 3867 38			 sec
+   629 3868 E9 30		 sbc #'0'
+   630 386A C9 0A		 cmp #10
+   631 386C B0 19		 bcs rf_d
+   632 386E 85 9E		 sta t4
+   633 				 ; t1:t2 = t1:t2 * 10 + digit (row <= 255 enough, check later)
+   634 3870 A5 9B		 lda t1
+   635 3872 0A			 asl
+   636 3873 85 9D		 sta t3
+   637 3875 0A			 asl
+   638 3876 0A			 asl
+   639 3877 18			 clc
+   640 3878 65 9D		 adc t3
+   641 387A B0 20		 bcs rf_bad
+   642 387C 65 9E		 adc t4
+   643 387E B0 1C		 bcs rf_bad
+   644 3880 85 9B		 sta t1
+   645 3882 E8			 inx
+   646 3883 C8			 iny
+   647 3884 4C 64 38		 jmp rf_c
+   648 3887 C0 00		rf_d cpy #0
+   649 3889 F0 11		 beq rf_bad
+   650 388B 86 A0		 stx pp
+   651 388D A5 9B		 lda t1
+   652 388F F0 0B		 beq rf_bad
+   653 3891 38			 sec
+   654 3892 E9 01		 sbc #1
+   655 3894 C9 80		 cmp #NROWS
+   656 3896 B0 04		 bcs rf_bad
+   657 3898 85 8E		 sta qr
+   658 389A 18			 clc
+   659 389B 60			 rts
+   660 389C 38			rf_bad sec
+   661 389D 60			 rts
+   662
+   663 389E			fprim
+   664 389E 20 01 34		 jsr nextc
+   665 38A1 D0 03		 bne fpr0
+   666 38A3 4C DD 33		 jmp perr
+   667 38A6 C9 28		fpr0 cmp #'('
+   668 38A8 D0 15		 bne fpr1
+   669 38AA E6 A0		 inc pp
+   670 38AC 20 34 37		 jsr fexpr
+   671 38AF 20 01 34		 jsr nextc
+   672 38B2 C9 29		 cmp #')'
+   673 38B4 F0 03		 beq fpr0a
+   674 38B6 4C DD 33		 jmp perr
+   675 38B9 E6 A0		fpr0a inc pp
+   676 38BB 60			 rts
+   677 38BC 4C DD 33		fpr9b jmp perr
+   678 38BF C9 2E		fpr1 cmp #'.'
+   679 38C1 F0 08		 beq fnumb
+   680 38C3 C9 30		 cmp #'0'
+   681 38C5 90 29		 bcc fpr2
+   682 38C7 C9 3A		 cmp #'9'+1
+   683 38C9 B0 25		 bcs fpr2
+   684 38CB A9 80		fnumb lda #<FBUF
+   685 38CD 85 F3		 sta INBUFF
+   686 38CF A9 06		 lda #>FBUF
+   687 38D1 85 F4		 sta INBUFF+1
+   688 38D3 A5 A0		 lda pp
+   689 38D5 85 F2		 sta CIX
+   690 38D7 20 00 D8		 jsr AFP
+   691 38DA 90 03		 bcc fnn1
+   692 38DC 4C DD 33		 jmp perr
+   693 38DF A5 F2		fnn1 lda CIX
+   694 38E1 85 A0		 sta pp
+   695 38E3 20 F5 33		 jsr vpush
+   696 38E6 A6 A1		 ldx vsp
+   697 38E8 8A			 txa
+   698 38E9 38			 sec
+   699 38EA E9 08		 sbc #8
+   700 38EC AA			 tax
+   701 38ED 4C 1E 34		 jmp st0
+   702 38F0 C9 24		fpr2 cmp #'$'
+   703 38F2 F0 08		 beq fpr3
+   704 38F4 C9 41		 cmp #'A'
+   705 38F6 90 C4		 bcc fpr9b
+   706 38F8 C9 5B		 cmp #'Z'+1
+   707 38FA B0 C0		 bcs fpr9b
+   708 38FC			fpr3 ; identifier or reference
+   709 38FC A5 A0		 lda pp
+   710 38FE 48			 pha
+   711 38FF 20 3D 38		 jsr rdref
+   712 3902 B0 7B		 bcs fid1
+   713 				 ; a reference; check it is not followed by '(' (functions never start like a ref but "A1" could be a name)
+   714 3904 68			 pla
+   715 3905 20 F5 33		 jsr vpush
+   716 3908 A6 A1		 ldx vsp
+   717 390A 8A			 txa
+   718 390B 38			 sec
+   719 390C E9 08		 sbc #8
+   720 390E AA			 tax
+   721 390F A9 06		 lda #6
+   722 3911 9D 00 08		 sta VSTK,x
+   723 3914 A5 8E		 lda qr
+   724 3916 9D 01 08		 sta VSTK+1,x
+   725 3919 A5 8F		 lda qc
+   726 391B 9D 02 08		 sta VSTK+2,x
+   727 391E 20 01 34		 jsr nextc
+   728 3921 C9 3A		 cmp #':'
+   729 3923 F0 14		 beq frg
+   730 3925 A6 A1		 ldx vsp
+   731 3927 8A			 txa
+   732 3928 38			 sec
+   733 3929 E9 08		 sbc #8
+   734 392B AA			 tax
+   735 392C BD 01 08		 lda VSTK+1,x
+   736 392F 9D 03 08		 sta VSTK+3,x
+   737 3932 BD 02 08		 lda VSTK+2,x
+   738 3935 9D 04 08		 sta VSTK+4,x
+   739 3938 60			 rts
+   740 3939 E6 A0		frg inc pp
+   741 393B 20 01 34		 jsr nextc
+   742 393E 20 3D 38		 jsr rdref
+   743 3941 90 03		 bcc frg1
+   744 3943 4C DD 33		 jmp perr
+   745 3946 A6 A1		frg1 ldx vsp
+   746 3948 8A			 txa
+   747 3949 38			 sec
+   748 394A E9 08		 sbc #8
+   749 394C AA			 tax
+   750 				 ; normalise so that r1<=r2, c1<=c2
+   751 394D A5 8E		 lda qr
+   752 394F DD 01 08		 cmp VSTK+1,x
+   753 3952 B0 0E		 bcs frg2
+   754 3954 48			 pha
+   755 3955 BD 01 08		 lda VSTK+1,x
+   756 3958 9D 03 08		 sta VSTK+3,x
+   757 395B 68			 pla
+   758 395C 9D 01 08		 sta VSTK+1,x
+   759 395F 4C 65 39		 jmp frg3
+   760 3962 9D 03 08		frg2 sta VSTK+3,x
+   761 3965 A5 8F		frg3 lda qc
+   762 3967 DD 02 08		 cmp VSTK+2,x
+   763 396A B0 0C		 bcs frg4
+   764 396C 48			 pha
+   765 396D BD 02 08		 lda VSTK+2,x
+   766 3970 9D 04 08		 sta VSTK+4,x
+   767 3973 68			 pla
+   768 3974 9D 02 08		 sta VSTK+2,x
+   769 3977 60			 rts
+   770 3978 9D 04 08		frg4 sta VSTK+4,x
+   771 397B 60			 rts
+   772 397C 4C DD 33		fpr9 jmp perr
+   773 				; identifier: letters
+   774 397F 68			fid1 pla
+   775 3980 85 A0		 sta pp
+   776 3982 A0 00		 ldy #0
+   777 3984 A6 A0		 ldx pp
+   778 3986 BD 80 06		fid2 lda FBUF,x
+   779 3989 C9 41		 cmp #'A'
+   780 398B 90 10		 bcc fid3
+   781 398D C9 5B		 cmp #'Z'+1
+   782 398F B0 0C		 bcs fid3
+   783 3991 C0 09		 cpy #9
+   784 3993 B0 08		 bcs fid3
+   785 3995 99 C0 08		 sta ID,y
+   786 3998 C8			 iny
+   787 3999 E8			 inx
+   788 399A 4C 86 39		 jmp fid2
+   789 399D A9 00		fid3 lda #0
+   790 399F 99 C0 08		 sta ID,y
+   791 39A2 8C 22 15		 sty idl
+   792 39A5 C0 00		 cpy #0
+   793 39A7 D0 03		 bne fid4
+   794 39A9 4C DD 33		 jmp perr
+   795 39AC 86 A0		fid4 stx pp
+   796 39AE 20 01 34		 jsr nextc
+   797 39B1 C9 28		 cmp #'('
+   798 39B3 F0 44		 beq ffn
+   799 				 ; TRUE / FALSE
+   800 39B5 AD C0 08		 lda ID
+   801 39B8 C9 54		 cmp #'T'
+   802 39BA D0 0C		 bne fb1
+   803 39BC AD C1 08		 lda ID+1
+   804 39BF C9 52		 cmp #'R'
+   805 39C1 D0 27		 bne fnm
+   806 39C3 A9 01		 lda #1
+   807 39C5 4C D5 39		 jmp fbool
+   808 39C8 C9 46		fb1 cmp #'F'
+   809 39CA D0 1E		 bne fnm
+   810 39CC AD C1 08		 lda ID+1
+   811 39CF C9 41		 cmp #'A'
+   812 39D1 D0 17		 bne fnm
+   813 39D3 A9 00		 lda #0
+   814 39D5 48			fbool pha
+   815 39D6 20 F5 33		 jsr vpush
+   816 39D9 A6 A1		 ldx vsp
+   817 39DB 8A			 txa
+   818 39DC 38			 sec
+   819 39DD E9 08		 sbc #8
+   820 39DF AA			 tax
+   821 39E0 A9 05		 lda #5
+   822 39E2 9D 00 08		 sta VSTK,x
+   823 39E5 68			 pla
+   824 39E6 9D 01 08		 sta VSTK+1,x
+   825 39E9 60			 rts
+   826 39EA 20 F5 33		fnm jsr vpush
+   827 39ED A6 A1		 ldx vsp
+   828 39EF 8A			 txa
+   829 39F0 38			 sec
+   830 39F1 E9 08		 sbc #8
+   831 39F3 AA			 tax
+   832 39F4 A9 03		 lda #3
+   833 39F6 4C 4C 34		 jmp puterr
+   834 39F9 20 35 3A		ffn jsr fnlook
+   835 39FC B0 06		 bcs ffn1
+   836 39FE E6 C5		 inc unsup
+   837 				 ; unknown function: skip the arguments by parsing them, result is #NAME?
+   838 3A00 A9 00		 lda #0
+   839 3A02 85 A3		 sta fid
+   840 3A04 A5 A3		ffn1 lda fid
+   841 3A06 48			 pha
+   842 3A07 A5 A1		 lda vsp
+   843 3A09 48			 pha
+   844 3A0A E6 A0		 inc pp
+   845 3A0C 20 01 34		 jsr nextc
+   846 3A0F C9 29		 cmp #')'
+   847 3A11 F0 16		 beq fnoarg
+   848 3A13 20 34 37		fa_l jsr fexpr
+   849 3A16 20 01 34		 jsr nextc
+   850 3A19 C9 2C		 cmp #','
+   851 3A1B D0 05		 bne fa_e
+   852 3A1D E6 A0		 inc pp
+   853 3A1F 4C 13 3A		 jmp fa_l
+   854 3A22 C9 29		fa_e cmp #')'
+   855 3A24 F0 03		 beq fnoarg
+   856 3A26 4C DD 33		 jmp perr
+   857 3A29 E6 A0		fnoarg inc pp
+   858 3A2B 68			 pla
+   859 3A2C 8D 21 15		 sta fbase
+   860 3A2F 68			 pla
+   861 3A30 85 A3		 sta fid
+   862 3A32 4C 75 3A		 jmp fcall
+   863
+   864 3A35			fnlook
+   865 3A35 A9 86		 lda #<FTAB
+   866 3A37 85 80		 sta ptr
+   867 3A39 A9 33		 lda #>FTAB
+   868 3A3B 85 81		 sta ptr+1
+   869 3A3D A0 00		fl1 ldy #0
+   870 3A3F B1 80		 lda (ptr),y
+   871 3A41 F0 30		 beq flz9
+   872 3A43 B1 80		fl2 lda (ptr),y
+   873 3A45 F0 09		 beq fl3
+   874 3A47 D9 C0 08		 cmp ID,y
+   875 3A4A D0 10		 bne flnext
+   876 3A4C C8			 iny
+   877 3A4D 4C 43 3A		 jmp fl2
+   878 3A50 CC 22 15		fl3 cpy idl
+   879 3A53 D0 07		 bne flnext
+   880 3A55 C8			 iny
+   881 3A56 B1 80		 lda (ptr),y
+   882 3A58 85 A3		 sta fid
+   883 3A5A 38			 sec
+   884 3A5B 60			 rts
+   885 3A5C A0 00		flnext ldy #0
+   886 3A5E B1 80		fl4 lda (ptr),y
+   887 3A60 C8			 iny
+   888 3A61 C9 00		 cmp #0
+   889 3A63 D0 F9		 bne fl4
+   890 3A65 C8			 iny
+   891 3A66 98			 tya
+   892 3A67 18			 clc
+   893 3A68 65 80		 adc ptr
+   894 3A6A 85 80		 sta ptr
+   895 3A6C 90 02		 bcc fl5
+   896 3A6E E6 81		 inc ptr+1
+   897 3A70 4C 3D 3A		fl5 jmp fl1
+   898 3A73 18			flz9 clc
+   899 3A74 60			 rts
+   900
+   901 				; function call: arguments between fbase and vsp; result into the slot at fbase
+   902 3A75			fcall
+   903 3A75 A5 A3		 lda fid
+   904 3A77 D0 03		 bne fc1
+   905 3A79 4C 02 3B		 jmp fcunk
+   906 3A7C C9 07		fc1 cmp #7
+   907 3A7E B0 03		 bcs fc2
+   908 3A80 4C 16 3B		 jmp fagg
+   909 3A83 C9 0C		fc2 cmp #12
+   910 3A85 D0 03		 bne fc3
+   911 3A87 4C 1B 3D		 jmp fif
+   912 3A8A C9 0D		fc3 cmp #13
+   913 3A8C 90 03		 bcc fc4
+   914 3A8E 4C 8F 3D		 jmp fbl
+   915 3A91			fc4 ; 7 ABS 8 INT 9 SQRT 10 ROUND 11 MOD
+   916 3A91 A5 A1		 lda vsp
+   917 3A93 38			 sec
+   918 3A94 ED 21 15		 sbc fbase
+   919 3A97 85 9B		 sta t1
+   920 3A99 A5 A3		 lda fid
+   921 3A9B C9 0A		 cmp #10
+   922 3A9D B0 09		 bcs fc5
+   923 3A9F A5 9B		 lda t1
+   924 3AA1 C9 08		 cmp #8
+   925 3AA3 F0 0C		 beq fc6
+   926 3AA5 4C DD 33		 jmp perr
+   927 3AA8 A5 9B		fc5 lda t1
+   928 3AAA C9 10		 cmp #16
+   929 3AAC F0 03		 beq fc6
+   930 3AAE 4C DD 33		 jmp perr
+   931 3AB1 AE 21 15		fc6 ldx fbase
+   932 3AB4 20 80 34		 jsr getnumv
+   933 3AB7 90 03		 bcc fc6a
+   934 3AB9 4C 0D 3B		 jmp fres
+   935 3ABC A5 A3		fc6a lda fid
+   936 3ABE C9 0A		 cmp #10
+   937 3AC0 B0 19		 bcs fc7
+   938 3AC2 C9 07		 cmp #7
+   939 3AC4 D0 0B		 bne fc6b
+   940 3AC6 BD 01 08		 lda VSTK+1,x
+   941 3AC9 29 7F		 and #$7F
+   942 3ACB 9D 01 08		 sta VSTK+1,x
+   943 3ACE 4C 0D 3B		 jmp fres
+   944 3AD1 C9 08		fc6b cmp #8
+   945 3AD3 D0 03		 bne fc6c
+   946 3AD5 4C 2A 3E		 jmp fint
+   947 3AD8 4C 71 3E		fc6c jmp fsqrt
+   948 3ADB AE 21 15		fc7 ldx fbase
+   949 3ADE 8A			 txa
+   950 3ADF 18			 clc
+   951 3AE0 69 08		 adc #8
+   952 3AE2 AA			 tax
+   953 3AE3 20 80 34		 jsr getnumv
+   954 3AE6 90 0E		 bcc fc7a
+   955 3AE8 BD 01 08		 lda VSTK+1,x
+   956 3AEB 48			 pha
+   957 3AEC AE 21 15		 ldx fbase
+   958 3AEF 68			 pla
+   959 3AF0 20 4C 34		 jsr puterr
+   960 3AF3 4C 0D 3B		 jmp fres
+   961 3AF6 A5 A3		fc7a lda fid
+   962 3AF8 C9 0A		 cmp #10
+   963 3AFA D0 03		 bne fc7b
+   964 3AFC 4C F5 3E		 jmp fround
+   965 3AFF 4C 56 3F		fc7b jmp fmod
+   966
+   967 3B02			fcunk
+   968 3B02 AE 21 15		 ldx fbase
+   969 3B05 A9 03		 lda #3
+   970 3B07 20 4C 34		 jsr puterr
+   971 3B0A 4C 0D 3B		 jmp fres
+   972
+   973 				; leave only the result at fbase
+   974 3B0D			fres
+   975 3B0D AD 21 15		 lda fbase
+   976 3B10 18			 clc
+   977 3B11 69 08		 adc #8
+   978 3B13 85 A1		 sta vsp
+   979 3B15 60			 rts
+   980
+   981 				; --- aggregates SUM AVERAGE MIN MAX COUNT PRODUCT
+   982 3B16			fagg
+   983 3B16 A9 00		 lda #0
+   984 3B18 85 BC		 sta acn
+   985 3B1A 85 BD		 sta acn+1
+   986 3B1C 85 BE		 sta fhave
+   987 3B1E A2 05		 ldx #5
+   988 3B20 A9 00		 lda #0
+   989 3B22 9D A0 08		fg0 sta FACC,x
+   990 3B25 CA			 dex
+   991 3B26 10 FA		 bpl fg0
+   992 3B28 A5 A3		 lda fid
+   993 3B2A C9 06		 cmp #6
+   994 3B2C D0 0B		 bne fg1
+   995 3B2E A2 05		 ldx #5
+   996 3B30 BD 6E 33		fg0a lda K1,x
+   997 3B33 9D A0 08		 sta FACC,x
+   998 3B36 CA			 dex
+   999 3B37 10 F7		 bpl fg0a
+  1000 3B39 AD 21 15		fg1 lda fbase
+  1001 3B3C 85 9D		 sta t3
+  1002 3B3E A5 9D		fg2 lda t3
+  1003 3B40 C5 A1		 cmp vsp
+  1004 3B42 90 03		 bcc fg3
+  1005 3B44 4C 07 3C		 jmp fgdone
+  1006 3B47 AA			fg3 tax
+  1007 3B48 BD 00 08		 lda VSTK,x
+  1008 3B4B C9 06		 cmp #6
+  1009 3B4D F0 2C		 beq fgrange
+  1010 3B4F C9 04		 cmp #4
+  1011 3B51 D0 03		 bne fg4
+  1012 3B53 4C F0 3B		 jmp fgerr
+  1013 3B56 C9 01		fg4 cmp #1
+  1014 3B58 F0 11		 beq fgnum
+  1015 3B5A C9 05		 cmp #5
+  1016 3B5C F0 0A		 beq fgbool
+  1017 3B5E A5 9D		fgnext lda t3
+  1018 3B60 18			 clc
+  1019 3B61 69 08		 adc #8
+  1020 3B63 85 9D		 sta t3
+  1021 3B65 4C 3E 3B		 jmp fg2
+  1022 3B68 20 80 34		fgbool jsr getnumv
+  1023 3B6B A6 9D		fgnum ldx t3
+  1024 3B6D 20 29 34		 jsr e2bv
+  1025 3B70 20 97 3C		 jsr agg1
+  1026 3B73 B0 03		 bcs fgnumerr
+  1027 3B75 4C 5E 3B		 jmp fgnext
+  1028 3B78 4C FC 3B		fgnumerr jmp fgovf
+  1029 3B7B			fgrange
+  1030 3B7B BD 01 08		 lda VSTK+1,x
+  1031 3B7E 8D 26 15		 sta rr
+  1032 3B81 BD 03 08		 lda VSTK+3,x
+  1033 3B84 85 C1		 sta r2
+  1034 3B86 BD 02 08		 lda VSTK+2,x
+  1035 3B89 85 C0		 sta c1
+  1036 3B8B BD 04 08		 lda VSTK+4,x
+  1037 3B8E 85 C2		 sta c2
+  1038 3B90 A5 C0		fgr1 lda c1
+  1039 3B92 8D 27 15		 sta rc
+  1040 3B95 AD 26 15		fgr2 lda rr
+  1041 3B98 85 8E		 sta qr
+  1042 3B9A AD 27 15		 lda rc
+  1043 3B9D 85 8F		 sta qc
+  1044 3B9F 20 63 22		 jsr rdrec
+  1045 3BA2 AD 01 07		 lda RECB+1
+  1046 3BA5 C9 01		 cmp #1
+  1047 3BA7 F0 0C		 beq fgrn
+  1048 3BA9 C9 04		 cmp #4
+  1049 3BAB D0 1B		 bne fgrs
+  1050 3BAD AD 04 07		 lda RECB+4
+  1051 3BB0 85 9B		 sta t1
+  1052 3BB2 4C E5 3B		 jmp fgerrc
+  1053 3BB5 A2 05		fgrn ldx #5
+  1054 3BB7 BD 04 07		fgr3 lda RECB+4,x
+  1055 3BBA 9D 90 08		 sta BV,x
+  1056 3BBD CA			 dex
+  1057 3BBE 10 F7		 bpl fgr3
+  1058 3BC0 20 97 3C		 jsr agg1
+  1059 3BC3 90 03		 bcc fgrs
+  1060 3BC5 4C FC 3B		 jmp fgovf
+  1061 3BC8 AD 27 15		fgrs lda rc
+  1062 3BCB C5 C2		 cmp c2
+  1063 3BCD B0 06		 bcs fgr4
+  1064 3BCF EE 27 15		 inc rc
+  1065 3BD2 4C 95 3B		 jmp fgr2
+  1066 3BD5 AD 26 15		fgr4 lda rr
+  1067 3BD8 C5 C1		 cmp r2
+  1068 3BDA B0 06		 bcs fgr5
+  1069 3BDC EE 26 15		 inc rr
+  1070 3BDF 4C 90 3B		 jmp fgr1
+  1071 3BE2 4C 5E 3B		fgr5 jmp fgnext
+  1072 3BE5 AE 21 15		fgerrc ldx fbase
+  1073 3BE8 A5 9B		 lda t1
+  1074 3BEA 20 4C 34		 jsr puterr
+  1075 3BED 4C 0D 3B		 jmp fres
+  1076 3BF0 BD 01 08		fgerr lda VSTK+1,x
+  1077 3BF3 AE 21 15		 ldx fbase
+  1078 3BF6 20 4C 34		 jsr puterr
+  1079 3BF9 4C 0D 3B		 jmp fres
+  1080 3BFC AE 21 15		fgovf ldx fbase
+  1081 3BFF A9 04		 lda #4
+  1082 3C01 20 4C 34		 jsr puterr
+  1083 3C04 4C 0D 3B		 jmp fres
+  1084 3C07			fgdone
+  1085 3C07 A5 A3		 lda fid
+  1086 3C09 C9 05		 cmp #5
+  1087 3C0B D0 03		 bne fd1
+  1088 3C0D 4C 64 3C		 jmp fdcount
+  1089 3C10 C9 02		fd1 cmp #2
+  1090 3C12 D0 1E		 bne fd2
+  1091 3C14 A5 BC		 lda acn
+  1092 3C16 05 BD		 ora acn+1
+  1093 3C18 D0 0B		 bne fd1a
+  1094 3C1A AE 21 15		 ldx fbase
+  1095 3C1D A9 00		 lda #0
+  1096 3C1F 20 4C 34		 jsr puterr
+  1097 3C22 4C 0D 3B		 jmp fres
+  1098 3C25 A2 A0		fd1a ldx #<FACC
+  1099 3C27 A0 08		 ldy #>FACC
+  1100 3C29 20 89 DD		 jsr FLD0R
+  1101 3C2C 20 78 3C		 jsr fdiv_acn
+  1102 3C2F 4C 6F 3C		 jmp fdst
+  1103 3C32 C9 03		fd2 cmp #3
+  1104 3C34 B0 03		 bcs fd3
+  1105 3C36 4C 54 3C		 jmp fdacc                    ; SUM
+  1106 3C39 C9 06		fd3 cmp #6
+  1107 3C3B D0 09		 bne fd4
+  1108 3C3D A5 BC		 lda acn
+  1109 3C3F 05 BD		 ora acn+1
+  1110 3C41 F0 1B		 beq fdzero
+  1111 3C43 4C 54 3C		 jmp fdacc                    ; PRODUCT
+  1112 3C46 A5 BE		fd4 lda fhave                 ; MIN / MAX
+  1113 3C48 F0 14		 beq fdzero
+  1114 3C4A A2 A8		 ldx #<FBEST
+  1115 3C4C A0 08		 ldy #>FBEST
+  1116 3C4E 20 89 DD		 jsr FLD0R
+  1117 3C51 4C 6F 3C		 jmp fdst
+  1118 3C54 A2 A0		fdacc ldx #<FACC
+  1119 3C56 A0 08		 ldy #>FACC
+  1120 3C58 20 89 DD		 jsr FLD0R
+  1121 3C5B 4C 6F 3C		 jmp fdst
+  1122 3C5E 20 44 DA		fdzero jsr ZFR0
+  1123 3C61 4C 6F 3C		 jmp fdst
+  1124 3C64 A5 BC		fdcount lda acn
+  1125 3C66 85 D4		 sta FR0
+  1126 3C68 A5 BD		 lda acn+1
+  1127 3C6A 85 D5		 sta FR0+1
+  1128 3C6C 20 AA D9		 jsr IFP
+  1129 3C6F AE 21 15		fdst ldx fbase
+  1130 3C72 20 1E 34		 jsr st0
+  1131 3C75 4C 0D 3B		 jmp fres
+  1132 3C78			fdiv_acn
+  1133 3C78 A5 BC		 lda acn
+  1134 3C7A 85 9B		 sta t1
+  1135 3C7C 20 B6 DD		 jsr FMOVE
+  1136 3C7F A5 BC		 lda acn
+  1137 3C81 85 D4		 sta FR0
+  1138 3C83 A5 BD		 lda acn+1
+  1139 3C85 85 D5		 sta FR0+1
+  1140 3C87 20 AA D9		 jsr IFP
+  1141 3C8A 20 B6 DD		 jsr FMOVE                    ; FR1 = count
+  1142 3C8D A2 A0		 ldx #<FACC
+  1143 3C8F A0 08		 ldy #>FACC
+  1144 3C91 20 89 DD		 jsr FLD0R
+  1145 3C94 4C 28 DB		 jmp FDIV
+  1146
+  1147 				; accumulate the number in BV; carry set on overflow
+  1148 3C97			agg1
+  1149 3C97 E6 BC		 inc acn
+  1150 3C99 D0 02		 bne ag0
+  1151 3C9B E6 BD		 inc acn+1
+  1152 3C9D A5 A3		ag0 lda fid
+  1153 3C9F C9 05		 cmp #5
+  1154 3CA1 D0 02		 bne ag1
+  1155 3CA3 18			 clc
+  1156 3CA4 60			 rts
+  1157 3CA5 C9 03		ag1 cmp #3
+  1158 3CA7 90 1A		 bcc agsum
+  1159 3CA9 C9 05		 cmp #5
+  1160 3CAB 90 32		 bcc agmm
+  1161 				 ; PRODUCT
+  1162 3CAD A2 A0		 ldx #<FACC
+  1163 3CAF A0 08		 ldy #>FACC
+  1164 3CB1 20 89 DD		 jsr FLD0R
+  1165 3CB4 A2 90		 ldx #<BV
+  1166 3CB6 A0 08		 ldy #>BV
+  1167 3CB8 20 98 DD		 jsr FLD1R
+  1168 3CBB 20 DB DA		 jsr FMUL
+  1169 3CBE B0 1E		 bcs ag9
+  1170 3CC0 4C D6 3C		 jmp agst
+  1171 3CC3 A2 A0		agsum ldx #<FACC
+  1172 3CC5 A0 08		 ldy #>FACC
+  1173 3CC7 20 89 DD		 jsr FLD0R
+  1174 3CCA A2 90		 ldx #<BV
+  1175 3CCC A0 08		 ldy #>BV
+  1176 3CCE 20 98 DD		 jsr FLD1R
+  1177 3CD1 20 66 DA		 jsr FADD
+  1178 3CD4 B0 08		 bcs ag9
+  1179 3CD6 A2 A0		agst ldx #<FACC
+  1180 3CD8 A0 08		 ldy #>FACC
+  1181 3CDA 20 A7 DD		 jsr FST0R
+  1182 3CDD 18			 clc
+  1183 3CDE 60			ag9 rts
+  1184 3CDF A5 BE		agmm lda fhave
+  1185 3CE1 D0 05		 bne agm1
+  1186 3CE3 E6 BE		 inc fhave
+  1187 3CE5 4C 0E 3D		 jmp agtake
+  1188 3CE8 A2 90		agm1 ldx #<BV
+  1189 3CEA A0 08		 ldy #>BV
+  1190 3CEC 20 89 DD		 jsr FLD0R
+  1191 3CEF A2 A8		 ldx #<FBEST
+  1192 3CF1 A0 08		 ldy #>FBEST
+  1193 3CF3 20 98 DD		 jsr FLD1R
+  1194 3CF6 20 60 DA		 jsr FSUB
+  1195 3CF9 A5 D5		 lda FR0+1
+  1196 3CFB F0 1C		 beq agmx
+  1197 3CFD A5 A3		 lda fid
+  1198 3CFF C9 03		 cmp #3
+  1199 3D01 D0 07		 bne agmax
+  1200 3D03 A5 D4		 lda FR0
+  1201 3D05 30 07		 bmi agtake
+  1202 3D07 4C 19 3D		 jmp agmx
+  1203 3D0A A5 D4		agmax lda FR0
+  1204 3D0C 30 0B		 bmi agmx
+  1205 3D0E A2 05		agtake ldx #5
+  1206 3D10 BD 90 08		agt1 lda BV,x
+  1207 3D13 9D A8 08		 sta FBEST,x
+  1208 3D16 CA			 dex
+  1209 3D17 10 F7		 bpl agt1
+  1210 3D19 18			agmx clc
+  1211 3D1A 60			 rts
+  1212
+  1213 				; IF(cond, a[, b])
+  1214 3D1B			fif
+  1215 3D1B A5 A1		 lda vsp
+  1216 3D1D 38			 sec
+  1217 3D1E ED 21 15		 sbc fbase
+  1218 3D21 C9 10		 cmp #16
+  1219 3D23 B0 03		 bcs fif0
+  1220 3D25 4C DD 33		 jmp perr
+  1221 3D28 C9 11		fif0 cmp #17
+  1222 3D2A 90 07		 bcc fif1
+  1223 3D2C C9 18		 cmp #24
+  1224 3D2E F0 03		 beq fif1
+  1225 3D30 4C DD 33		 jmp perr
+  1226 3D33 48			fif1 pha
+  1227 3D34 AE 21 15		 ldx fbase
+  1228 3D37 20 80 34		 jsr getnumv
+  1229 3D3A 68			 pla
+  1230 3D3B 90 03		 bcc fif2
+  1231 3D3D 4C 0D 3B		 jmp fres                     ; condition is an error
+  1232 3D40 C9 18		fif2 cmp #24
+  1233 3D42 F0 14		 beq fif3
+  1234 				 ; two arguments: else part is FALSE
+  1235 3D44 20 F5 33		 jsr vpush
+  1236 3D47 A6 A1		 ldx vsp
+  1237 3D49 8A			 txa
+  1238 3D4A 38			 sec
+  1239 3D4B E9 08		 sbc #8
+  1240 3D4D AA			 tax
+  1241 3D4E A9 05		 lda #5
+  1242 3D50 9D 00 08		 sta VSTK,x
+  1243 3D53 A9 00		 lda #0
+  1244 3D55 9D 01 08		 sta VSTK+1,x
+  1245 3D58 AE 21 15		fif3 ldx fbase
+  1246 3D5B BD 02 08		 lda VSTK+2,x
+  1247 3D5E F0 08		 beq fif4                     ; zero: take else (third)
+  1248 				 ; true: second -> result
+  1249 3D60 8A			 txa
+  1250 3D61 18			 clc
+  1251 3D62 69 08		 adc #8
+  1252 3D64 AA			 tax
+  1253 3D65 4C 6D 3D		 jmp fif5
+  1254 3D68 8A			fif4 txa
+  1255 3D69 18			 clc
+  1256 3D6A 69 10		 adc #16
+  1257 3D6C AA			 tax
+  1258 3D6D A0 00		fif5 ldy #0
+  1259 3D6F BD 00 08		fif6 lda VSTK,x
+  1260 3D72 99 D0 08		 sta FTMP,y
+  1261 3D75 E8			 inx
+  1262 3D76 C8			 iny
+  1263 3D77 C0 08		 cpy #8
+  1264 3D79 D0 F4		 bne fif6
+  1265 3D7B AE 21 15		 ldx fbase
+  1266 3D7E A0 00		 ldy #0
+  1267 3D80 B9 D0 08		fif7 lda FTMP,y
+  1268 3D83 9D 00 08		 sta VSTK,x
+  1269 3D86 E8			 inx
+  1270 3D87 C8			 iny
+  1271 3D88 C0 08		 cpy #8
+  1272 3D8A D0 F4		 bne fif7
+  1273 3D8C 4C 0D 3B		 jmp fres
+  1274
+  1275 				; AND / OR / NOT on numbers and booleans
+  1276 3D8F			fbl
+  1277 3D8F A5 A3		 lda fid
+  1278 3D91 C9 0F		 cmp #15
+  1279 3D93 D0 2E		 bne fbl2
+  1280 3D95 A5 A1		 lda vsp
+  1281 3D97 38			 sec
+  1282 3D98 ED 21 15		 sbc fbase
+  1283 3D9B C9 08		 cmp #8
+  1284 3D9D F0 03		 beq fbl1
+  1285 3D9F 4C DD 33		 jmp perr
+  1286 3DA2 AE 21 15		fbl1 ldx fbase
+  1287 3DA5 20 80 34		 jsr getnumv
+  1288 3DA8 90 03		 bcc fbl1a
+  1289 3DAA 4C 0D 3B		 jmp fres
+  1290 3DAD BD 02 08		fbl1a lda VSTK+2,x
+  1291 3DB0 F0 04		 beq fbl1t
+  1292 3DB2 A9 00		 lda #0
+  1293 3DB4 F0 02		 beq fbl1s
+  1294 3DB6 A9 01		fbl1t lda #1
+  1295 3DB8 9D 01 08		fbl1s sta VSTK+1,x
+  1296 3DBB A9 05		 lda #5
+  1297 3DBD 9D 00 08		 sta VSTK,x
+  1298 3DC0 4C 0D 3B		 jmp fres
+  1299 3DC3 A5 A3		fbl2 lda fid
+  1300 3DC5 C9 0D		 cmp #13
+  1301 3DC7 D0 04		 bne fbl3
+  1302 3DC9 A9 01		 lda #1
+  1303 3DCB D0 02		 bne fbl4
+  1304 3DCD A9 00		fbl3 lda #0
+  1305 3DCF 85 9E		fbl4 sta t4                    ; accumulator: AND starts true, OR false
+  1306 3DD1 AD 21 15		 lda fbase
+  1307 3DD4 85 9D		 sta t3
+  1308 3DD6 A5 9D		fbl5 lda t3
+  1309 3DD8 C5 A1		 cmp vsp
+  1310 3DDA B0 3E		 bcs fbl9
+  1311 3DDC AA			 tax
+  1312 3DDD 20 80 34		 jsr getnumv
+  1313 3DE0 90 0C		 bcc fbl6
+  1314 3DE2 BD 01 08		 lda VSTK+1,x
+  1315 3DE5 AE 21 15		 ldx fbase
+  1316 3DE8 20 4C 34		 jsr puterr
+  1317 3DEB 4C 0D 3B		 jmp fres
+  1318 3DEE BD 02 08		fbl6 lda VSTK+2,x
+  1319 3DF1 F0 04		 beq fbl7
+  1320 3DF3 A9 01		 lda #1
+  1321 3DF5 D0 02		 bne fbl8
+  1322 3DF7 A9 00		fbl7 lda #0
+  1323 3DF9 85 9C		fbl8 sta t2
+  1324 3DFB A5 A3		 lda fid
+  1325 3DFD C9 0D		 cmp #13
+  1326 3DFF D0 09		 bne fbl8o
+  1327 3E01 A5 9E		 lda t4
+  1328 3E03 25 9C		 and t2
+  1329 3E05 85 9E		 sta t4
+  1330 3E07 4C 10 3E		 jmp fbl8n
+  1331 3E0A A5 9E		fbl8o lda t4
+  1332 3E0C 05 9C		 ora t2
+  1333 3E0E 85 9E		 sta t4
+  1334 3E10 A5 9D		fbl8n lda t3
+  1335 3E12 18			 clc
+  1336 3E13 69 08		 adc #8
+  1337 3E15 85 9D		 sta t3
+  1338 3E17 4C D6 3D		 jmp fbl5
+  1339 3E1A AE 21 15		fbl9 ldx fbase
+  1340 3E1D A5 9E		 lda t4
+  1341 3E1F 9D 01 08		 sta VSTK+1,x
+  1342 3E22 A9 05		 lda #5
+  1343 3E24 9D 00 08		 sta VSTK,x
+  1344 3E27 4C 0D 3B		 jmp fres
+  1345
+  1346 				; INT(x) in the slot at fbase (X = fbase)
+  1347 3E2A			fint
+  1348 3E2A 20 29 34		 jsr e2bv
+  1349 3E2D A9 00		 lda #0
+  1350 3E2F 85 A5		 sta rn
+  1351 3E31 A9 01		 lda #1
+  1352 3E33 85 A7		 sta rmode
+  1353 3E35 20 79 23		 jsr bround
+  1354 3E38 A5 A8		 lda rlost
+  1355 3E3A F0 21		 beq fint1
+  1356 3E3C AD 90 08		 lda BV
+  1357 3E3F 10 1C		 bpl fint1
+  1358 3E41 A2 90		 ldx #<BV
+  1359 3E43 A0 08		 ldy #>BV
+  1360 3E45 20 89 DD		 jsr FLD0R
+  1361 3E48 A2 6E		 ldx #<K1
+  1362 3E4A A0 33		 ldy #>K1
+  1363 3E4C 20 98 DD		 jsr FLD1R
+  1364 3E4F 20 60 DA		 jsr FSUB
+  1365 3E52 B0 12		 bcs fint2
+  1366 3E54 AE 21 15		 ldx fbase
+  1367 3E57 20 1E 34		 jsr st0
+  1368 3E5A 4C 0D 3B		 jmp fres
+  1369 3E5D AE 21 15		fint1 ldx fbase
+  1370 3E60 20 38 34		 jsr bv2e
+  1371 3E63 4C 0D 3B		 jmp fres
+  1372 3E66 AE 21 15		fint2 ldx fbase
+  1373 3E69 A9 04		 lda #4
+  1374 3E6B 20 4C 34		 jsr puterr
+  1375 3E6E 4C 0D 3B		 jmp fres
+  1376
+  1377 				; SQRT(x): LOG10/EXP10 first guess, then Newton steps
+  1378 3E71			fsqrt
+  1379 3E71 BD 01 08		 lda VSTK+1,x
+  1380 3E74 10 08		 bpl fsq1
+  1381 3E76 A9 04		 lda #4
+  1382 3E78 20 4C 34		 jsr puterr
+  1383 3E7B 4C 0D 3B		 jmp fres
+  1384 3E7E BD 02 08		fsq1 lda VSTK+2,x
+  1385 3E81 D0 03		 bne fsq2
+  1386 3E83 4C 0D 3B		 jmp fres                     ; 0
+  1387 3E86 20 29 34		fsq2 jsr e2bv
+  1388 3E89 A2 90		 ldx #<BV
+  1389 3E8B A0 08		 ldy #>BV
+  1390 3E8D 20 89 DD		 jsr FLD0R
+  1391 3E90 20 D1 DE		 jsr LOG10
+  1392 3E93 B0 55		 bcs fsqe
+  1393 3E95 A2 80		 ldx #<KHF
+  1394 3E97 A0 33		 ldy #>KHF
+  1395 3E99 20 98 DD		 jsr FLD1R
+  1396 3E9C 20 DB DA		 jsr FMUL
+  1397 3E9F 20 CC DD		 jsr EXP10
+  1398 3EA2 B0 46		 bcs fsqe
+  1399 3EA4 A2 98		 ldx #<TA
+  1400 3EA6 A0 08		 ldy #>TA
+  1401 3EA8 20 A7 DD		 jsr FST0R                    ; TA = guess
+  1402 3EAB A9 05		 lda #5
+  1403 3EAD 85 9E		 sta t4
+  1404 3EAF A2 90		fsq3 ldx #<BV
+  1405 3EB1 A0 08		 ldy #>BV
+  1406 3EB3 20 89 DD		 jsr FLD0R
+  1407 3EB6 A2 98		 ldx #<TA
+  1408 3EB8 A0 08		 ldy #>TA
+  1409 3EBA 20 98 DD		 jsr FLD1R
+  1410 3EBD 20 28 DB		 jsr FDIV                     ; x / g
+  1411 3EC0 B0 28		 bcs fsqe
+  1412 3EC2 A2 98		 ldx #<TA
+  1413 3EC4 A0 08		 ldy #>TA
+  1414 3EC6 20 98 DD		 jsr FLD1R
+  1415 3EC9 20 66 DA		 jsr FADD                     ; x/g + g
+  1416 3ECC A2 80		 ldx #<KHF
+  1417 3ECE A0 33		 ldy #>KHF
+  1418 3ED0 20 98 DD		 jsr FLD1R
+  1419 3ED3 20 DB DA		 jsr FMUL                     ; * 0.5
+  1420 3ED6 A2 98		 ldx #<TA
+  1421 3ED8 A0 08		 ldy #>TA
+  1422 3EDA 20 A7 DD		 jsr FST0R
+  1423 3EDD C6 9E		 dec t4
+  1424 3EDF D0 CE		 bne fsq3
+  1425 3EE1 AE 21 15		 ldx fbase
+  1426 3EE4 20 1E 34		 jsr st0
+  1427 3EE7 4C 0D 3B		 jmp fres
+  1428 3EEA AE 21 15		fsqe ldx fbase
+  1429 3EED A9 04		 lda #4
+  1430 3EEF 20 4C 34		 jsr puterr
+  1431 3EF2 4C 0D 3B		 jmp fres
+  1432
+  1433 				; ROUND(x, n)
+  1434 3EF5			fround
+  1435 3EF5 AE 21 15		 ldx fbase
+  1436 3EF8 8A			 txa
+  1437 3EF9 18			 clc
+  1438 3EFA 69 08		 adc #8
+  1439 3EFC AA			 tax
+  1440 3EFD 20 29 34		 jsr e2bv
+  1441 3F00 AD 90 08		 lda BV
+  1442 3F03 29 80		 and #$80
+  1443 3F05 8D 2C 15		 sta neg
+  1444 3F08 AD 90 08		 lda BV
+  1445 3F0B 29 7F		 and #$7F
+  1446 3F0D 8D 90 08		 sta BV
+  1447 3F10 A2 90		 ldx #<BV
+  1448 3F12 A0 08		 ldy #>BV
+  1449 3F14 20 89 DD		 jsr FLD0R
+  1450 3F17 20 D2 D9		 jsr FPI
+  1451 3F1A 90 08		 bcc fro1
+  1452 3F1C A9 0F		 lda #15
+  1453 3F1E 85 D4		 sta FR0
+  1454 3F20 A9 00		 lda #0
+  1455 3F22 85 D5		 sta FR0+1
+  1456 3F24 A5 D5		fro1 lda FR0+1
+  1457 3F26 F0 04		 beq fro2
+  1458 3F28 A9 0F		 lda #15
+  1459 3F2A 85 D4		 sta FR0
+  1460 3F2C A5 D4		fro2 lda FR0
+  1461 3F2E C9 10		 cmp #16
+  1462 3F30 90 02		 bcc fro3
+  1463 3F32 A9 0F		 lda #15
+  1464 3F34 AE 2C 15		fro3 ldx neg
+  1465 3F37 F0 05		 beq fro4
+  1466 3F39 49 FF		 eor #$FF
+  1467 3F3B 18			 clc
+  1468 3F3C 69 01		 adc #1
+  1469 3F3E 85 A5		fro4 sta rn
+  1470 3F40 AE 21 15		 ldx fbase
+  1471 3F43 20 29 34		 jsr e2bv
+  1472 3F46 A9 00		 lda #0
+  1473 3F48 85 A7		 sta rmode
+  1474 3F4A 20 79 23		 jsr bround
+  1475 3F4D AE 21 15		 ldx fbase
+  1476 3F50 20 38 34		 jsr bv2e
+  1477 3F53 4C 0D 3B		 jmp fres
+  1478
+  1479 				; MOD(a, b) = a - b * floor(a / b)
+  1480 3F56			fmod
+  1481 3F56 AE 21 15		 ldx fbase
+  1482 3F59 8A			 txa
+  1483 3F5A 18			 clc
+  1484 3F5B 69 08		 adc #8
+  1485 3F5D AA			 tax
+  1486 3F5E BD 02 08		 lda VSTK+2,x
+  1487 3F61 D0 08		 bne fmo1
+  1488 3F63 A9 00		 lda #0
+  1489 3F65 20 4C 34		 jsr puterr
+  1490 3F68 4C 0D 3B		 jmp fres
+  1491 3F6B AE 21 15		fmo1 ldx fbase
+  1492 3F6E 20 12 34		 jsr vld0
+  1493 3F71 AE 21 15		 ldx fbase
+  1494 3F74 8A			 txa
+  1495 3F75 18			 clc
+  1496 3F76 69 08		 adc #8
+  1497 3F78 AA			 tax
+  1498 3F79 20 18 34		 jsr vld1
+  1499 3F7C 20 28 DB		 jsr FDIV
+  1500 3F7F B0 64		 bcs fmoe
+  1501 3F81 A2 05		 ldx #5
+  1502 3F83 B5 D4		fmo2 lda FR0,x
+  1503 3F85 9D 90 08		 sta BV,x
+  1504 3F88 CA			 dex
+  1505 3F89 10 F8		 bpl fmo2
+  1506 3F8B A9 00		 lda #0
+  1507 3F8D 85 A5		 sta rn
+  1508 3F8F A9 01		 lda #1
+  1509 3F91 85 A7		 sta rmode
+  1510 3F93 20 79 23		 jsr bround
+  1511 3F96 A5 A8		 lda rlost
+  1512 3F98 F0 1D		 beq fmo3
+  1513 3F9A AD 90 08		 lda BV
+  1514 3F9D 10 18		 bpl fmo3
+  1515 3F9F A2 90		 ldx #<BV
+  1516 3FA1 A0 08		 ldy #>BV
+  1517 3FA3 20 89 DD		 jsr FLD0R
+  1518 3FA6 A2 6E		 ldx #<K1
+  1519 3FA8 A0 33		 ldy #>K1
+  1520 3FAA 20 98 DD		 jsr FLD1R
+  1521 3FAD 20 60 DA		 jsr FSUB
+  1522 3FB0 A2 90		 ldx #<BV
+  1523 3FB2 A0 08		 ldy #>BV
+  1524 3FB4 20 A7 DD		 jsr FST0R
+  1525 3FB7 A2 90		fmo3 ldx #<BV
+  1526 3FB9 A0 08		 ldy #>BV
+  1527 3FBB 20 89 DD		 jsr FLD0R
+  1528 3FBE AE 21 15		 ldx fbase
+  1529 3FC1 8A			 txa
+  1530 3FC2 18			 clc
+  1531 3FC3 69 08		 adc #8
+  1532 3FC5 AA			 tax
+  1533 3FC6 20 18 34		 jsr vld1
+  1534 3FC9 20 DB DA		 jsr FMUL                     ; b * floor
+  1535 3FCC B0 17		 bcs fmoe
+  1536 3FCE 20 B6 DD		 jsr FMOVE
+  1537 3FD1 AE 21 15		 ldx fbase
+  1538 3FD4 20 12 34		 jsr vld0
+  1539 3FD7 20 60 DA		 jsr FSUB                     ; a - b*floor
+  1540 3FDA B0 09		 bcs fmoe
+  1541 3FDC AE 21 15		 ldx fbase
+  1542 3FDF 20 1E 34		 jsr st0
+  1543 3FE2 4C 0D 3B		 jmp fres
+  1544 3FE5 AE 21 15		fmoe ldx fbase
+  1545 3FE8 A9 04		 lda #4
+  1546 3FEA 20 4C 34		 jsr puterr
+  1547 3FED 4C 0D 3B		 jmp fres
+  1548
+  1549 				; ---- evaluate one formula cell (er, ec)
+  1550 3FF0			calccell
+  1551 3FF0 AD 23 15		 lda er
+  1552 3FF3 85 8E		 sta qr
+  1553 3FF5 AD 24 15		 lda ec
+  1554 3FF8 85 8F		 sta qc
+  1555 3FFA 20 63 22		 jsr rdrec
+  1556 3FFD AD 00 07		 lda RECB
+  1557 4000 C9 03		 cmp #3
+  1558 4002 F0 01		 beq ccok
+  1559 4004 60			 rts
+  1560 4005			ccok
+  1561 4005 A2 09		 ldx #9
+  1562 4007 BD 01 07		cc0 lda RECB+1,x
+  1563 400A 9D 10 07		 sta OLDV,x
+  1564 400D CA			 dex
+  1565 400E 10 F7		 bpl cc0
+  1566 4010 AD 0A 07		 lda RECB+10
+  1567 4013 85 86		 sta rp
+  1568 4015 AD 0B 07		 lda RECB+11
+  1569 4018 85 87		 sta rp+1
+  1570 401A 20 FE 22		 jsr hget
+  1571 401D A0 00		 ldy #0
+  1572 401F CC 20 07		cc1 cpy TMPS
+  1573 4022 B0 14		 bcs cc3
+  1574 4024 B9 21 07		 lda TMPS+1,y
+  1575 4027 C9 61		 cmp #'a'
+  1576 4029 90 07		 bcc cc2
+  1577 402B C9 7B		 cmp #'z'+1
+  1578 402D B0 03		 bcs cc2
+  1579 402F 38			 sec
+  1580 4030 E9 20		 sbc #$20
+  1581 4032 99 80 06		cc2 sta FBUF,y
+  1582 4035 C8			 iny
+  1583 4036 D0 E7		 bne cc1
+  1584 4038 A9 00		cc3 lda #0
+  1585 403A 99 80 06		 sta FBUF,y
+  1586 403D 85 A0		 sta pp
+  1587 403F 85 A1		 sta vsp
+  1588 4041 85 C5		 sta unsup
+  1589 4043 BA			 tsx
+  1590 4044 86 A4		 stx evsp
+  1591 4046 20 34 37		 jsr fexpr
+  1592 4049 20 01 34		 jsr nextc
+  1593 404C F0 03		 beq cc4
+  1594 404E 4C DD 33		 jmp perr
+  1595 4051 A5 A1		cc4 lda vsp
+  1596 4053 C9 08		 cmp #8
+  1597 4055 F0 03		 beq cfin
+  1598 4057 4C DD 33		 jmp perr
+  1599
+  1600 405A			cfin
+  1601 405A A9 00		 lda #0
+  1602 405C 85 A1		 sta vsp
+  1603 405E A2 00		 ldx #0
+  1604 4060 AD 00 08		 lda VSTK
+  1605 4063 C9 06		 cmp #6
+  1606 4065 D0 06		 bne cf1
+  1607 4067 20 55 34		 jsr derefx
+  1608 406A AD 00 08		 lda VSTK
+  1609 406D C9 00		cf1 cmp #0
+  1610 406F D0 05		 bne cf2
+  1611 4071 A9 01		 lda #1
+  1612 4073 8D 00 08		 sta VSTK
+  1613 4076 AD 23 15		cf2 lda er
+  1614 4079 85 8E		 sta qr
+  1615 407B AD 24 15		 lda ec
+  1616 407E 85 8F		 sta qc
+  1617 4080 20 63 22		 jsr rdrec
+  1618 4083 A5 C5		 lda unsup
+  1619 4085 F0 12		 beq cf3
+  1620 4087 AD 01 07		 lda RECB+1
+  1621 408A F0 03		 beq cfk
+  1622 408C 4C 19 41		 jmp cfret
+  1623 408F			cfk                    ; keep the cached value of an unsupported function
+  1624 408F A9 03		 lda #3
+  1625 4091 8D 01 08		 sta VSTK+1
+  1626 4094 A9 04		 lda #4
+  1627 4096 8D 00 08		 sta VSTK
+  1628 4099 A2 05		cf3 ldx #5
+  1629 409B A9 00		 lda #0
+  1630 409D 9D 04 07		cf4 sta RECB+4,x
+  1631 40A0 CA			 dex
+  1632 40A1 10 FA		 bpl cf4
+  1633 40A3 AD 00 08		 lda VSTK
+  1634 40A6 8D 01 07		 sta RECB+1
+  1635 40A9 A2 00		 ldx #0
+  1636 40AB BD 01 08		cf5 lda VSTK+1,x
+  1637 40AE 9D 04 07		 sta RECB+4,x
+  1638 40B1 E8			 inx
+  1639 40B2 E0 06		 cpx #6
+  1640 40B4 D0 F5		 bne cf5
+  1641 40B6 AD 01 07		 lda RECB+1
+  1642 40B9 C9 04		 cmp #4
+  1643 40BB D0 11		 bne cf6
+  1644 40BD A9 00		 lda #0                       ; errors: only the code byte matters
+  1645 40BF 8D 05 07		 sta RECB+5
+  1646 40C2 8D 06 07		 sta RECB+6
+  1647 40C5 8D 07 07		 sta RECB+7
+  1648 40C8 8D 08 07		 sta RECB+8
+  1649 40CB 8D 09 07		 sta RECB+9
+  1650 40CE AD 01 07		cf6 lda RECB+1
+  1651 40D1 C9 05		 cmp #5
+  1652 40D3 D0 11		 bne cf7
+  1653 40D5 A9 00		 lda #0
+  1654 40D7 8D 05 07		 sta RECB+5
+  1655 40DA 8D 06 07		 sta RECB+6
+  1656 40DD 8D 07 07		 sta RECB+7
+  1657 40E0 8D 08 07		 sta RECB+8
+  1658 40E3 8D 09 07		 sta RECB+9
+  1659 40E6 A2 08		cf7 ldx #8
+  1660 40E8 BD 01 07		cf8 lda RECB+1,x
+  1661 40EB DD 10 07		 cmp OLDV,x
+  1662 40EE D0 04		 bne cf9
+  1663 40F0 CA			 dex
+  1664 40F1 10 F5		 bpl cf8
+  1665 40F3 60			 rts
+  1666 40F4 AD 25 15		cf9 lda circm
+  1667 40F7 F0 1B		 beq cf10
+  1668 40F9 A9 04		 lda #4
+  1669 40FB 8D 01 07		 sta RECB+1
+  1670 40FE A9 06		 lda #6
+  1671 4100 8D 04 07		 sta RECB+4
+  1672 4103 A9 00		 lda #0
+  1673 4105 8D 05 07		 sta RECB+5
+  1674 4108 8D 06 07		 sta RECB+6
+  1675 410B 8D 07 07		 sta RECB+7
+  1676 410E 8D 08 07		 sta RECB+8
+  1677 4111 8D 09 07		 sta RECB+9
+  1678 4114 E6 B9		cf10 inc chg
+  1679 4116 4C 76 22		 jmp wrrec
+  1680 4119 60			cfret rts
+  1681
+  1682 				; recalculate all formulas until nothing changes (at most 40 passes, then the cells still changing become #CIRC!)
+  1683 411A			recalc
+  1684 411A A9 00		 lda #0
+  1685 411C 85 BA		 sta npass
+  1686 411E 8D 25 15		 sta circm
+  1687 4121 A9 00		rcp lda #0
+  1688 4123 85 B9		 sta chg
+  1689 4125 85 C3		 sta fli
+  1690 4127 85 C4		 sta fli+1
+  1691 4129 A5 C3		rcl lda fli
+  1692 412B C5 B7		 cmp fcnt
+  1693 412D D0 06		 bne rcl1
+  1694 412F A5 C4		 lda fli+1
+  1695 4131 C5 B8		 cmp fcnt+1
+  1696 4133 F0 2A		 beq rcend
+  1697 4135 A5 C3		rcl1 lda fli
+  1698 4137 85 80		 sta ptr
+  1699 4139 A5 C4		 lda fli+1
+  1700 413B 18			 clc
+  1701 413C 69 10		 adc #>FLL
+  1702 413E 85 81		 sta ptr+1
+  1703 4140 A0 00		 ldy #0
+  1704 4142 B1 80		 lda (ptr),y
+  1705 4144 8D 23 15		 sta er
+  1706 4147 A5 81		 lda ptr+1
+  1707 4149 18			 clc
+  1708 414A 69 02		 adc #>(FLH-FLL)
+  1709 414C 85 81		 sta ptr+1
+  1710 414E B1 80		 lda (ptr),y
+  1711 4150 8D 24 15		 sta ec
+  1712 4153 20 F0 3F		 jsr calccell
+  1713 4156 E6 C3		 inc fli
+  1714 4158 D0 CF		 bne rcl
+  1715 415A E6 C4		 inc fli+1
+  1716 415C 4C 29 41		 jmp rcl
+  1717 415F A5 B9		rcend lda chg
+  1718 4161 F0 15		 beq rcdone
+  1719 4163 AD 25 15		 lda circm
+  1720 4166 D0 10		 bne rcdone
+  1721 4168 E6 BA		 inc npass
+  1722 416A A5 BA		 lda npass
+  1723 416C C9 28		 cmp #40
+  1724 416E 90 B1		 bcc rcp
+  1725 4170 A9 01		 lda #1
+  1726 4172 8D 25 15		 sta circm
+  1727 4175 4C 21 41		 jmp rcp
+  1728 4178 A9 00		rcdone lda #0
+  1729 417A 8D 25 15		 sta circm
+  1730 417D A9 06		 lda #6
+  1731 417F 8D C2 14		 sta msg
+  1732 4182 60			 rts
+   281 4183			 icl 'save.inc'
+Source: save.inc
+     1 				; .XCS saver. Three passes over the same generator (genpay):
+     2 				;   wrm=2 counts the pool (strings, bytes), cells, rows and the payload length
+     3 				;   wrm=0 computes the CRC-16 and the plain checksum
+     4 				;   wrm=1 writes the header, the payload and the CRC to the file
+     5 				; Pool order: custom formats, sheet name, then every string a cell references (no de-duplication).
+     6 				; Only sheet 1 is written; names and charts are not kept (the loader skips them).
+     7
+     8 				; emit byte A to the current pass (preserves X, Y)
+     9 4183			sxb
+    10 4183 8D 30 15		 sta svb
+    11 4186 8A			 txa
+    12 4187 48			 pha
+    13 4188 98			 tya
+    14 4189 48			 pha
+    15 418A AD C8 14		 lda wrm
+    16 418D C9 01		 cmp #1
+    17 418F F0 25		 beq sxb1
+    18 4191 EE CD 14		 inc tlen
+    19 4194 D0 03		 bne sxb0
+    20 4196 EE CE 14		 inc tlen+1
+    21 4199 AD C8 14		sxb0 lda wrm
+    22 419C D0 1E		 bne sxb9
+    23 419E AD 30 15		 lda svb
+    24 41A1 20 E9 2D		 jsr crcb
+    25 41A4 AD 30 15		 lda svb
+    26 41A7 18			 clc
+    27 41A8 6D AD 14		 adc sum
+    28 41AB 8D AD 14		 sta sum
+    29 41AE 90 0C		 bcc sxb9
+    30 41B0 EE AE 14		 inc sum+1
+    31 41B3 4C BC 41		 jmp sxb9
+    32 41B6 AD 30 15		sxb1 lda svb
+    33 41B9 20 C1 41		 jsr sxput
+    34 41BC 68			sxb9 pla
+    35 41BD A8			 tay
+    36 41BE 68			 pla
+    37 41BF AA			 tax
+    38 41C0 60			 rts
+    39
+    40 41C1			sxput
+    41 41C1 AE D7 14		 ldx wpos
+    42 41C4 9D 00 14		 sta IOBUF,x
+    43 41C7 E8			 inx
+    44 41C8 8E D7 14		 stx wpos
+    45 41CB E0 80		 cpx #128
+    46 41CD 90 03		 bcc sxp9
+    47 41CF 20 D3 41		 jsr sxflush
+    48 41D2 60			sxp9 rts
+    49
+    50 41D3			sxflush
+    51 41D3 AD D7 14		 lda wpos
+    52 41D6 F0 1B		 beq sxf9
+    53 41D8 85 CC		 sta w16
+    54 41DA A9 00		 lda #0
+    55 41DC 85 CD		 sta w16+1
+    56 41DE 8D D7 14		 sta wpos
+    57 41E1 A9 0B		 lda #11
+    58 41E3 A2 00		 ldx #<IOBUF
+    59 41E5 A0 14		 ldy #>IOBUF
+    60 41E7 20 B6 2D		 jsr fblk
+    61 41EA C0 80		 cpy #$80
+    62 41EC 90 05		 bcc sxf9
+    63 41EE A9 02		 lda #2
+    64 41F0 4C D8 2D		 jmp ldabort
+    65 41F3 60			sxf9 rts
+    66
+    67 				; emit the heap string at rp as a pool entry (rp = 0 -> empty string)
+    68 41F4			sxstr
+    69 41F4 A5 86		 lda rp
+    70 41F6 05 87		 ora rp+1
+    71 41F8 D0 05		 bne sxs1
+    72 41FA 8D 20 07		 sta TMPS
+    73 41FD F0 03		 beq sxs2
+    74 41FF 20 FE 22		sxs1 jsr hget
+    75 4202 A0 00		sxs2 ldy #0
+    76 4204 B9 20 07		sxs3 lda TMPS,y
+    77 4207 20 83 41		 jsr sxb
+    78 420A CC 20 07		 cpy TMPS
+    79 420D F0 03		 beq sxs4
+    80 420F C8			 iny
+    81 4210 D0 F2		 bne sxs3
+    82 4212 EE D5 14		sxs4 inc sidxp
+    83 4215 D0 03		 bne sxs5
+    84 4217 EE D6 14		 inc sidxp+1
+    85 421A 60			sxs5 rts
+    86
+    87 				; emit a u16 pool reference and advance it
+    88 421B			sxref
+    89 421B AD 36 15		 lda sci
+    90 421E 20 83 41		 jsr sxb
+    91 4221 AD 37 15		 lda sci+1
+    92 4224 20 83 41		 jsr sxb
+    93 4227 EE 36 15		 inc sci
+    94 422A D0 03		 bne sxr9
+    95 422C EE 37 15		 inc sci+1
+    96 422F 60			sxr9 rts
+    97
+    98 4230			sxp4                        ; rp = string pointer at RECB+4
+    99 4230 AD 04 07		 lda RECB+4
+   100 4233 85 86		 sta rp
+   101 4235 AD 05 07		 lda RECB+5
+   102 4238 85 87		 sta rp+1
+   103 423A 60			 rts
+   104
+   105 				; C set when the record in RECB is a stored cell
+   106 423B			sxex
+   107 423B AD 00 07		 lda RECB
+   108 423E 0D 02 07		 ora RECB+2
+   109 4241 0D 03 07		 ora RECB+3
+   110 4244 F0 02		 beq sxe0
+   111 4246 38			 sec
+   112 4247 60			 rts
+   113 4248 18			sxe0 clc
+   114 4249 60			 rts
+   115
+   116 				; svw=0: emit the strings of the cell; svw=1: emit the cell
+   117 424A			sxcell
+   118 424A AD 31 15		 lda svw
+   119 424D D0 29		 bne sxc_w
+   120 424F AD 00 07		 lda RECB
+   121 4252 C9 03		 cmp #3
+   122 4254 D0 17		 bne sxc1
+   123 4256 AD 0A 07		 lda RECB+10
+   124 4259 85 86		 sta rp
+   125 425B AD 0B 07		 lda RECB+11
+   126 425E 85 87		 sta rp+1
+   127 4260 20 F4 41		 jsr sxstr
+   128 4263 AD 01 07		 lda RECB+1
+   129 4266 C9 02		 cmp #2
+   130 4268 D0 0D		 bne sxc9
+   131 426A 4C 71 42		 jmp sxc2
+   132 426D C9 02		sxc1 cmp #2
+   133 426F D0 06		 bne sxc9
+   134 4271 20 30 42		sxc2 jsr sxp4
+   135 4274 4C F4 41		 jmp sxstr
+   136 4277 60			sxc9 rts
+   137 4278			sxc_w
+   138 4278 AD C8 14		 lda wrm
+   139 427B C9 02		 cmp #2
+   140 427D D0 22		 bne sxw0
+   141 427F EE CF 14		 inc tcells
+   142 4282 D0 03		 bne sxw0a
+   143 4284 EE D0 14		 inc tcells+1
+   144 4287 A5 8F		sxw0a lda qc
+   145 4289 CD D3 14		 cmp tmaxc
+   146 428C 90 06		 bcc sxw0b
+   147 428E 18			 clc
+   148 428F 69 01		 adc #1
+   149 4291 8D D3 14		 sta tmaxc
+   150 4294 A5 8E		sxw0b lda qr
+   151 4296 CD D4 14		 cmp tmaxr
+   152 4299 90 06		 bcc sxw0
+   153 429B 18			 clc
+   154 429C 69 01		 adc #1
+   155 429E 8D D4 14		 sta tmaxr
+   156 42A1 A5 8F		sxw0 lda qc
+   157 42A3 20 83 41		 jsr sxb
+   158 42A6 AD 00 07		 lda RECB
+   159 42A9 29 07		 and #7
+   160 42AB AE 02 07		 ldx RECB+2
+   161 42AE F0 02		 beq sxw1
+   162 42B0 09 08		 ora #8
+   163 42B2 AE 03 07		sxw1 ldx RECB+3
+   164 42B5 F0 02		 beq sxw2
+   165 42B7 09 10		 ora #16
+   166 42B9 20 83 41		sxw2 jsr sxb
+   167 42BC AD 02 07		 lda RECB+2
+   168 42BF F0 03		 beq sxw3
+   169 42C1 20 83 41		 jsr sxb
+   170 42C4 AD 03 07		sxw3 lda RECB+3
+   171 42C7 F0 03		 beq sxw4
+   172 42C9 20 83 41		 jsr sxb
+   173 42CC AD 00 07		sxw4 lda RECB
+   174 42CF 29 07		 and #7
+   175 42D1 C9 01		 cmp #1
+   176 42D3 F0 1A		 beq sxnum
+   177 42D5 C9 02		 cmp #2
+   178 42D7 F0 13		 beq sxstrc
+   179 42D9 C9 03		 cmp #3
+   180 42DB F0 20		 beq sxform
+   181 42DD C9 04		 cmp #4
+   182 42DF F0 05		 beq sxbyte
+   183 42E1 C9 05		 cmp #5
+   184 42E3 F0 01		 beq sxbyte
+   185 42E5 60			 rts
+   186 42E6			sxbyte
+   187 42E6 AD 04 07		 lda RECB+4
+   188 42E9 4C 83 41		 jmp sxb
+   189 42EC			sxstrc
+   190 42EC 4C 1B 42		 jmp sxref
+   191 42EF			sxnum
+   192 42EF A2 00		 ldx #0
+   193 42F1 BD 04 07		sxn1 lda RECB+4,x
+   194 42F4 20 83 41		 jsr sxb
+   195 42F7 E8			 inx
+   196 42F8 E0 06		 cpx #6
+   197 42FA D0 F5		 bne sxn1
+   198 42FC 60			 rts
+   199 42FD			sxform
+   200 42FD 20 1B 42		 jsr sxref
+   201 4300 AD 01 07		 lda RECB+1
+   202 4303 C9 01		 cmp #1
+   203 4305 F0 11		 beq sxf_n
+   204 4307 C9 02		 cmp #2
+   205 4309 F0 15		 beq sxf_s
+   206 430B C9 04		 cmp #4
+   207 430D F0 19		 beq sxf_b
+   208 430F C9 05		 cmp #5
+   209 4311 F0 15		 beq sxf_b
+   210 4313 A9 00		 lda #0
+   211 4315 4C 83 41		 jmp sxb
+   212 4318			sxf_n
+   213 4318 A9 01		 lda #1
+   214 431A 20 83 41		 jsr sxb
+   215 431D 4C EF 42		 jmp sxnum
+   216 4320			sxf_s
+   217 4320 A9 02		 lda #2
+   218 4322 20 83 41		 jsr sxb
+   219 4325 4C 1B 42		 jmp sxref
+   220 4328			sxf_b
+   221 4328 AD 01 07		 lda RECB+1
+   222 432B 20 83 41		 jsr sxb
+   223 432E 4C E6 42		 jmp sxbyte
+   224
+   225 				; walk the grid in row order; svw selects what sxcell does
+   226 4331			sxwalk
+   227 4331 A9 00		 lda #0
+   228 4333 8D 32 15		 sta svrow
+   229 4336 AD 32 15		sxk0 lda svrow
+   230 4339 85 8E		 sta qr
+   231 433B A9 00		 lda #0
+   232 433D 8D 34 15		 sta svcnt
+   233 4340 8D 33 15		 sta svcol
+   234 4343 AD 33 15		sxk1 lda svcol
+   235 4346 85 8F		 sta qc
+   236 4348 20 63 22		 jsr rdrec
+   237 434B 20 3B 42		 jsr sxex
+   238 434E 90 03		 bcc sxk2
+   239 4350 EE 34 15		 inc svcnt
+   240 4353 EE 33 15		sxk2 inc svcol
+   241 4356 AD 33 15		 lda svcol
+   242 4359 C9 10		 cmp #NCOLS
+   243 435B D0 E6		 bne sxk1
+   244 435D AD 34 15		 lda svcnt
+   245 4360 F0 47		 beq sxk8
+   246 4362 AD 31 15		 lda svw
+   247 4365 F0 23		 beq sxk3
+   248 4367 AD C8 14		 lda wrm
+   249 436A C9 02		 cmp #2
+   250 436C D0 08		 bne sxk2a
+   251 436E EE D1 14		 inc tnrows
+   252 4371 D0 03		 bne sxk2a
+   253 4373 EE D2 14		 inc tnrows+1
+   254 4376 AD 32 15		sxk2a lda svrow
+   255 4379 20 83 41		 jsr sxb
+   256 437C A9 00		 lda #0
+   257 437E 20 83 41		 jsr sxb
+   258 4381 AD 34 15		 lda svcnt
+   259 4384 38			 sec
+   260 4385 E9 01		 sbc #1
+   261 4387 20 83 41		 jsr sxb
+   262 438A A9 00		sxk3 lda #0
+   263 438C 8D 33 15		 sta svcol
+   264 438F AD 33 15		sxk4 lda svcol
+   265 4392 85 8F		 sta qc
+   266 4394 20 63 22		 jsr rdrec
+   267 4397 20 3B 42		 jsr sxex
+   268 439A 90 03		 bcc sxk5
+   269 439C 20 4A 42		 jsr sxcell
+   270 439F EE 33 15		sxk5 inc svcol
+   271 43A2 AD 33 15		 lda svcol
+   272 43A5 C9 10		 cmp #NCOLS
+   273 43A7 D0 E6		 bne sxk4
+   274 43A9 EE 32 15		sxk8 inc svrow
+   275 43AC AD 32 15		 lda svrow
+   276 43AF C9 80		 cmp #NROWS
+   277 43B1 F0 03		 beq sxk9
+   278 43B3 4C 36 43		 jmp sxk0
+   279 43B6 60			sxk9 rts
+   280
+   281 43B7			genpay
+   282 43B7 A9 00		 lda #0
+   283 43B9 8D CD 14		 sta tlen
+   284 43BC 8D CE 14		 sta tlen+1
+   285 43BF 8D D5 14		 sta sidxp
+   286 43C2 8D D6 14		 sta sidxp+1
+   287 43C5 A9 01		 lda #1
+   288 43C7 20 83 41		 jsr sxb
+   289 43CA A9 01		 lda #1
+   290 43CC 20 83 41		 jsr sxb
+   291 43CF A9 00		 lda #0
+   292 43D1 20 83 41		 jsr sxb
+   293 43D4 AD A5 14		 lda ncfm
+   294 43D7 20 83 41		 jsr sxb
+   295 43DA A9 00		 lda #0
+   296 43DC 20 83 41		 jsr sxb
+   297 43DF A9 00		 lda #0
+   298 43E1 20 83 41		 jsr sxb
+   299 43E4 AD C9 14		 lda nstro
+   300 43E7 20 83 41		 jsr sxb
+   301 43EA AD CA 14		 lda nstro+1
+   302 43ED 20 83 41		 jsr sxb
+   303 43F0 AD CB 14		 lda pbytes
+   304 43F3 20 83 41		 jsr sxb
+   305 43F6 AD CC 14		 lda pbytes+1
+   306 43F9 20 83 41		 jsr sxb
+   307 43FC A9 00		 lda #0
+   308 43FE 8D 35 15		 sta svi
+   309 4401 AD 35 15		sxg1 lda svi
+   310 4404 CD A5 14		 cmp ncfm
+   311 4407 F0 15		 beq sxg2
+   312 4409 0A			 asl
+   313 440A AA			 tax
+   314 440B BD B0 0A		 lda CFM,x
+   315 440E 85 86		 sta rp
+   316 4410 BD B1 0A		 lda CFM+1,x
+   317 4413 85 87		 sta rp+1
+   318 4415 20 F4 41		 jsr sxstr
+   319 4418 EE 35 15		 inc svi
+   320 441B 4C 01 44		 jmp sxg1
+   321 441E AD A0 14		sxg2 lda shname
+   322 4421 85 86		 sta rp
+   323 4423 AD A1 14		 lda shname+1
+   324 4426 85 87		 sta rp+1
+   325 4428 20 F4 41		 jsr sxstr
+   326 442B A9 00		 lda #0
+   327 442D 8D 31 15		 sta svw
+   328 4430 20 31 43		 jsr sxwalk
+   329 4433 AD C8 14		 lda wrm
+   330 4436 C9 02		 cmp #2
+   331 4438 D0 1D		 bne sxg3
+   332 443A AD D5 14		 lda sidxp
+   333 443D 8D C9 14		 sta nstro
+   334 4440 AD D6 14		 lda sidxp+1
+   335 4443 8D CA 14		 sta nstro+1
+   336 4446 38			 sec
+   337 4447 AD CD 14		 lda tlen
+   338 444A E9 0A		 sbc #10
+   339 444C 8D CB 14		 sta pbytes
+   340 444F AD CE 14		 lda tlen+1
+   341 4452 E9 00		 sbc #0
+   342 4454 8D CC 14		 sta pbytes+1
+   343 4457 A9 00		sxg3 lda #0
+   344 4459 8D 35 15		 sta svi
+   345 445C AD 35 15		sxg4 lda svi
+   346 445F CD A5 14		 cmp ncfm
+   347 4462 F0 11		 beq sxg5
+   348 4464 20 83 41		 jsr sxb
+   349 4467 A9 00		 lda #0
+   350 4469 20 83 41		 jsr sxb
+   351 446C EE 35 15		 inc svi
+   352 446F AD 35 15		 lda svi
+   353 4472 4C 5C 44		 jmp sxg4
+   354 4475 AD A5 14		sxg5 lda ncfm
+   355 4478 20 83 41		 jsr sxb
+   356 447B A9 00		 lda #0
+   357 447D 20 83 41		 jsr sxb
+   358 4480 AD A2 14		 lda sfr
+   359 4483 20 83 41		 jsr sxb
+   360 4486 AD A3 14		 lda sfc
+   361 4489 20 83 41		 jsr sxb
+   362 448C AD A4 14		 lda dcw
+   363 448F 20 83 41		 jsr sxb
+   364 4492 A2 00		 ldx #0
+   365 4494 A0 00		 ldy #0
+   366 4496 BD 70 09		sxg6 lda CWR,x
+   367 4499 F0 01		 beq sxg6a
+   368 449B C8			 iny
+   369 449C E8			sxg6a inx
+   370 449D E0 10		 cpx #NCOLS
+   371 449F D0 F5		 bne sxg6
+   372 44A1 98			 tya
+   373 44A2 20 83 41		 jsr sxb
+   374 44A5 A2 00		 ldx #0
+   375 44A7 BD 70 09		sxg7 lda CWR,x
+   376 44AA F0 0A		 beq sxg7a
+   377 44AC 8A			 txa
+   378 44AD 20 83 41		 jsr sxb
+   379 44B0 BD 70 09		 lda CWR,x
+   380 44B3 20 83 41		 jsr sxb
+   381 44B6 E8			sxg7a inx
+   382 44B7 E0 10		 cpx #NCOLS
+   383 44B9 D0 EC		 bne sxg7
+   384 44BB AD D1 14		 lda tnrows
+   385 44BE 20 83 41		 jsr sxb
+   386 44C1 AD D2 14		 lda tnrows+1
+   387 44C4 20 83 41		 jsr sxb
+   388 44C7 AD A5 14		 lda ncfm
+   389 44CA 18			 clc
+   390 44CB 69 01		 adc #1
+   391 44CD 8D 36 15		 sta sci
+   392 44D0 A9 00		 lda #0
+   393 44D2 8D 37 15		 sta sci+1
+   394 44D5 A9 01		 lda #1
+   395 44D7 8D 31 15		 sta svw
+   396 44DA 4C 31 43		 jmp sxwalk
+   397
+   398 44DD			save
+   399 44DD BA			 tsx
+   400 44DE 86 CE		 stx ldsp
+   401 44E0 A9 00		 lda #0
+   402 44E2 8D B6 14		 sta lderr
+   403 44E5 8D C9 14		 sta nstro
+   404 44E8 8D CA 14		 sta nstro+1
+   405 44EB 8D CB 14		 sta pbytes
+   406 44EE 8D CC 14		 sta pbytes+1
+   407 44F1 8D CF 14		 sta tcells
+   408 44F4 8D D0 14		 sta tcells+1
+   409 44F7 8D D1 14		 sta tnrows
+   410 44FA 8D D2 14		 sta tnrows+1
+   411 44FD 8D D3 14		 sta tmaxc
+   412 4500 8D D4 14		 sta tmaxr
+   413 4503 8D D7 14		 sta wpos
+   414 4506 A9 02		 lda #2
+   415 4508 8D C8 14		 sta wrm
+   416 450B 20 B7 43		 jsr genpay
+   417 450E A9 00		 lda #0
+   418 4510 8D C8 14		 sta wrm
+   419 4513 8D AD 14		 sta sum
+   420 4516 8D AE 14		 sta sum+1
+   421 4519 A9 FF		 lda #$FF
+   422 451B 8D AB 14		 sta crc
+   423 451E 8D AC 14		 sta crc+1
+   424 4521 20 B7 43		 jsr genpay
+   425 4524 AD AB 14		 lda crc
+   426 4527 18			 clc
+   427 4528 6D AD 14		 adc sum
+   428 452B 8D AD 14		 sta sum
+   429 452E 90 03		 bcc sv1
+   430 4530 EE AE 14		 inc sum+1
+   431 4533 AD AC 14		sv1 lda crc+1
+   432 4536 18			 clc
+   433 4537 6D AD 14		 adc sum
+   434 453A 8D AD 14		 sta sum
+   435 453D 90 03		 bcc sv2
+   436 453F EE AE 14		 inc sum+1
+   437 4542 AD CD 14		sv2 lda tlen
+   438 4545 18			 clc
+   439 4546 69 02		 adc #2
+   440 4548 8D 38 15		 sta svl
+   441 454B AD CE 14		 lda tlen+1
+   442 454E 69 00		 adc #0
+   443 4550 8D 39 15		 sta svl+1
+   444 4553 90 05		 bcc sv3
+   445 4555 A9 02		 lda #2
+   446 4557 4C D8 2D		 jmp ldabort
+   447 455A A9 08		sv3 lda #8
+   448 455C 20 96 2D		 jsr fopen
+   449 455F C0 80		 cpy #$80
+   450 4561 90 05		 bcc sv4
+   451 4563 A9 02		 lda #2
+   452 4565 4C D8 2D		 jmp ldabort
+   453 4568 A9 01		sv4 lda #1
+   454 456A 8D C8 14		 sta wrm
+   455 456D A9 00		 lda #0
+   456 456F 8D 35 15		 sta svi
+   457 4572 AE 35 15		sv5 ldx svi
+   458 4575 BD 6A 33		 lda hmag,x
+   459 4578 20 C1 41		 jsr sxput
+   460 457B EE 35 15		 inc svi
+   461 457E AD 35 15		 lda svi
+   462 4581 C9 04		 cmp #4
+   463 4583 D0 ED		 bne sv5
+   464 4585 A9 01		 lda #1
+   465 4587 20 C1 41		 jsr sxput
+   466 458A A9 53		 lda #'S'
+   467 458C 20 C1 41		 jsr sxput
+   468 458F A9 00		 lda #0
+   469 4591 20 C1 41		 jsr sxput
+   470 4594 A9 00		 lda #0
+   471 4596 20 C1 41		 jsr sxput
+   472 4599 AD 38 15		 lda svl
+   473 459C 20 C1 41		 jsr sxput
+   474 459F AD 39 15		 lda svl+1
+   475 45A2 20 C1 41		 jsr sxput
+   476 45A5 AD CF 14		 lda tcells
+   477 45A8 20 C1 41		 jsr sxput
+   478 45AB AD D0 14		 lda tcells+1
+   479 45AE 20 C1 41		 jsr sxput
+   480 45B1 AD D3 14		 lda tmaxc
+   481 45B4 20 C1 41		 jsr sxput
+   482 45B7 AD D4 14		 lda tmaxr
+   483 45BA 20 C1 41		 jsr sxput
+   484 45BD AD AD 14		 lda sum
+   485 45C0 20 C1 41		 jsr sxput
+   486 45C3 AD AE 14		 lda sum+1
+   487 45C6 20 C1 41		 jsr sxput
+   488 45C9 20 B7 43		 jsr genpay
+   489 45CC AD AB 14		 lda crc
+   490 45CF 20 C1 41		 jsr sxput
+   491 45D2 AD AC 14		 lda crc+1
+   492 45D5 20 C1 41		 jsr sxput
+   493 45D8 20 D3 41		 jsr sxflush
+   494 45DB 20 CE 2D		 jsr fclose
+   495 45DE A9 05		 lda #5
+   496 45E0 8D C2 14		 sta msg
+   497 45E3 A9 00		 lda #0
+   498 45E5 8D C1 14		 sta dirty
+   499 45E8 60			 rts
+   282 45E9			 icl 'edit.inc'
+Source: edit.inc
+     1 				; Cell entry and editing: a printable key starts entry (mode 1), Return stores, Esc cancels.
+     2 				; ^E edits the cell, Backspace clears it, ^F cycles the number format (0-7), ^B toggles bold.
+     3 				; Text starting with = is a formula (stored without the =), a complete AFP number is a number, anything else is text.
+     4
+     5 = D8E6			FASC   = $D8E6                ; FR0 -> ASCII at INBUFF, last character has bit 7 set
+     6
+     7 				; nav mode keys not handled by navkey (key = code)
+     8 45E9			edkey
+     9 45E9 A5 AE		 lda key
+    10 45EB C9 7E		 cmp #$7E
+    11 45ED F0 2B		 beq ed_clr
+    12 45EF C9 05		 cmp #$05
+    13 45F1 F0 79		 beq ed_edit
+    14 45F3 C9 06		 cmp #$06
+    15 45F5 F0 42		 beq ed_fmt
+    16 45F7 C9 02		 cmp #$02
+    17 45F9 F0 5B		 beq ed_bold
+    18 45FB C9 20		 cmp #32
+    19 45FD 90 1A		 bcc edx
+    20 45FF C9 7F		 cmp #127
+    21 4601 B0 16		 bcs edx
+    22 4603 8D 00 06		 sta EBUF
+    23 4606 A9 01		 lda #1
+    24 4608 85 AD		 sta elen
+    25 460A A9 01		ed_go lda #1
+    26 460C 85 9F		 sta mode
+    27 460E A9 00		 lda #0
+    28 4610 8D C2 14		 sta msg
+    29 4613 20 C4 2B		 jsr drawbar
+    30 4616 4C 73 2C		 jmp drawstat
+    31 4619 60			edx rts
+    32
+    33 461A			ed_clr
+    34 461A 20 5C 47		 jsr edclear
+    35 461D 4C 20 46		 jmp ed_redraw
+    36
+    37 4620			ed_redraw
+    38 4620 20 1A 41		 jsr recalc
+    39 4623 A9 00		 lda #0
+    40 4625 8D C2 14		 sta msg
+    41 4628 20 9B 28		 jsr visible
+    42 462B 4C 6D 2D		 jmp drawall
+    43
+    44 462E			ed_cell
+    45 462E A5 90		 lda cr
+    46 4630 85 8E		 sta qr
+    47 4632 A5 91		 lda cc
+    48 4634 85 8F		 sta qc
+    49 4636 4C 63 22		 jmp rdrec
+    50
+    51 4639			ed_fmt
+    52 4639 20 2E 46		 jsr ed_cell
+    53 463C AD 02 07		 lda RECB+2
+    54 463F 18			 clc
+    55 4640 69 01		 adc #1
+    56 4642 C9 08		 cmp #8
+    57 4644 90 02		 bcc ef1
+    58 4646 A9 00		 lda #0
+    59 4648 8D 02 07		ef1 sta RECB+2
+    60 464B 20 76 22		 jsr wrrec
+    61 464E A9 01		 lda #1
+    62 4650 8D C1 14		 sta dirty
+    63 4653 4C 6D 2D		 jmp drawall
+    64
+    65 4656			ed_bold
+    66 4656 20 2E 46		 jsr ed_cell
+    67 4659 AD 03 07		 lda RECB+3
+    68 465C 49 01		 eor #1
+    69 465E 8D 03 07		 sta RECB+3
+    70 4661 20 76 22		 jsr wrrec
+    71 4664 A9 01		 lda #1
+    72 4666 8D C1 14		 sta dirty
+    73 4669 4C 6D 2D		 jmp drawall
+    74
+    75 				; ^E: load the cell text into EBUF
+    76 466C			ed_edit
+    77 466C 20 2E 46		 jsr ed_cell
+    78 466F A9 00		 lda #0
+    79 4671 85 AD		 sta elen
+    80 4673 AD 00 07		 lda RECB
+    81 4676 C9 03		 cmp #3
+    82 4678 D0 28		 bne ee1
+    83 467A AD 0A 07		 lda RECB+10
+    84 467D 85 86		 sta rp
+    85 467F AD 0B 07		 lda RECB+11
+    86 4682 85 87		 sta rp+1
+    87 4684 20 FE 22		 jsr hget
+    88 4687 A9 3D		 lda #'='
+    89 4689 8D 00 06		 sta EBUF
+    90 468C A2 00		 ldx #0
+    91 468E EC 20 07		ee0 cpx TMPS
+    92 4691 B0 09		 bcs ee0a
+    93 4693 BD 21 07		 lda TMPS+1,x
+    94 4696 9D 01 06		 sta EBUF+1,x
+    95 4699 E8			 inx
+    96 469A D0 F2		 bne ee0
+    97 469C E8			ee0a inx
+    98 469D 86 AD		 stx elen
+    99 469F 4C 0A 46		 jmp ed_go
+   100 46A2 C9 02		ee1 cmp #2
+   101 46A4 D0 22		 bne ee2
+   102 46A6 AD 04 07		 lda RECB+4
+   103 46A9 85 86		 sta rp
+   104 46AB AD 05 07		 lda RECB+5
+   105 46AE 85 87		 sta rp+1
+   106 46B0 20 FE 22		 jsr hget
+   107 46B3 A2 00		 ldx #0
+   108 46B5 EC 20 07		ee1a cpx TMPS
+   109 46B8 B0 09		 bcs ee1b
+   110 46BA BD 21 07		 lda TMPS+1,x
+   111 46BD 9D 00 06		 sta EBUF,x
+   112 46C0 E8			 inx
+   113 46C1 D0 F2		 bne ee1a
+   114 46C3 86 AD		ee1b stx elen
+   115 46C5 4C 0A 46		 jmp ed_go
+   116 46C8 C9 01		ee2 cmp #1
+   117 46CA D0 53		 bne ee9
+   118 46CC A2 04		 ldx #<(RECB+4)
+   119 46CE A0 07		 ldy #>(RECB+4)
+   120 46D0 20 89 DD		 jsr FLD0R
+   121 46D3 20 E6 D8		 jsr FASC
+   122 46D6 A0 00		 ldy #0
+   123 46D8 B1 F3		ee2a lda (INBUFF),y
+   124 46DA 8D 30 15		 sta svb
+   125 46DD 29 7F		 and #$7F
+   126 46DF 99 00 06		 sta EBUF,y
+   127 46E2 C8			 iny
+   128 46E3 AD 30 15		 lda svb
+   129 46E6 10 F0		 bpl ee2a
+   130 46E8 84 AD		 sty elen
+   131 46EA A2 00		ee3 ldx #0
+   132 46EC E4 AD		ee3a cpx elen
+   133 46EE B0 2F		 bcs ee9
+   134 46F0 BD 00 06		 lda EBUF,x
+   135 46F3 C9 2E		 cmp #'.'
+   136 46F5 D0 24		 bne ee3n
+   137 46F7 E8			 inx
+   138 46F8 E4 AD		 cpx elen
+   139 46FA F0 08		 beq ee3d
+   140 46FC BD 00 06		 lda EBUF,x
+   141 46FF CA			 dex
+   142 4700 C9 45		 cmp #'E'
+   143 4702 D0 17		 bne ee3n
+   144 4704 86 9B		ee3d stx t1
+   145 4706 8A			 txa
+   146 4707 AA			 tax
+   147 4708 E8			ee3s inx
+   148 4709 E4 AD		 cpx elen
+   149 470B B0 09		 bcs ee3e
+   150 470D BD 00 06		 lda EBUF,x
+   151 4710 9D FF 05		 sta EBUF-1,x
+   152 4713 4C 08 47		 jmp ee3s
+   153 4716 C6 AD		ee3e dec elen
+   154 4718 4C EA 46		 jmp ee3
+   155 471B E8			ee3n inx
+   156 471C 4C EC 46		 jmp ee3a
+   157 471F 4C 0A 46		ee9 jmp ed_go
+   158
+   159 				; ---- entry mode keys
+   160 4722			entrykey
+   161 4722 A5 AE		 lda key
+   162 4724 C9 9B		 cmp #$9B
+   163 4726 F0 5E		 beq ecommit
+   164 4728 C9 1B		 cmp #$1B
+   165 472A F0 23		 beq ecancel
+   166 472C C9 7E		 cmp #$7E
+   167 472E F0 16		 beq ebs
+   168 4730 C9 20		 cmp #32
+   169 4732 90 0F		 bcc ek9
+   170 4734 C9 7F		 cmp #127
+   171 4736 B0 0B		 bcs ek9
+   172 4738 A6 AD		 ldx elen
+   173 473A E0 64		 cpx #100
+   174 473C B0 05		 bcs ek9
+   175 473E 9D 00 06		 sta EBUF,x
+   176 4741 E6 AD		 inc elen
+   177 4743 4C C4 2B		ek9 jmp drawbar
+   178 4746 A5 AD		ebs lda elen
+   179 4748 F0 F9		 beq ek9
+   180 474A C6 AD		 dec elen
+   181 474C 4C C4 2B		 jmp drawbar
+   182 474F			ecancel
+   183 474F A9 00		 lda #0
+   184 4751 85 9F		 sta mode
+   185 4753 8D C2 14		 sta msg
+   186 4756 20 C4 2B		 jsr drawbar
+   187 4759 4C 73 2C		 jmp drawstat
+   188
+   189 				; remove the formula list entry for (qr,qc) when the cell is a formula; zero the value of the cell
+   190 475C			edclear
+   191 475C 20 2E 46		 jsr ed_cell
+   192 475F 20 6B 47		 jsr edzero
+   193 4762 20 76 22		 jsr wrrec
+   194 4765 A9 01		 lda #1
+   195 4767 8D C1 14		 sta dirty
+   196 476A 60			 rts
+   197
+   198 476B			edzero
+   199 476B AD 00 07		 lda RECB
+   200 476E C9 03		 cmp #3
+   201 4770 D0 03		 bne ez1
+   202 4772 20 AD 48		 jsr fldel
+   203 4775 A9 00		ez1 lda #0
+   204 4777 8D 00 07		 sta RECB
+   205 477A 8D 01 07		 sta RECB+1
+   206 477D A2 0B		 ldx #11
+   207 477F 9D 04 07		ez2 sta RECB+4,x
+   208 4782 CA			 dex
+   209 4783 10 FA		 bpl ez2
+   210 4785 60			 rts
+   211
+   212 4786			ecommit
+   213 4786 A9 00		 lda #0
+   214 4788 85 9F		 sta mode
+   215 478A 20 2E 46		 jsr ed_cell
+   216 478D A5 AD		 lda elen
+   217 478F D0 06		 bne ec0
+   218 4791 20 5C 47		 jsr edclear
+   219 4794 4C 48 48		 jmp ec_done
+   220 4797 20 6B 47		ec0 jsr edzero
+   221 479A AD 00 06		 lda EBUF
+   222 479D C9 3D		 cmp #'='
+   223 479F D0 06		 bne ec2
+   224 47A1 A5 AD		 lda elen
+   225 47A3 C9 02		 cmp #2
+   226 47A5 B0 5E		 bcs ec_f
+   227 47A7 A6 AD		ec2 ldx elen
+   228 47A9 A9 00		 lda #0
+   229 47AB 9D 00 06		 sta EBUF,x
+   230 47AE A9 00		 lda #<EBUF
+   231 47B0 85 F3		 sta INBUFF
+   232 47B2 A9 06		 lda #>EBUF
+   233 47B4 85 F4		 sta INBUFF+1
+   234 47B6 A9 00		 lda #0
+   235 47B8 85 F2		 sta CIX
+   236 47BA 20 00 D8		 jsr AFP
+   237 47BD B0 18		 bcs ec_txt
+   238 47BF A5 F2		 lda CIX
+   239 47C1 C5 AD		 cmp elen
+   240 47C3 D0 12		 bne ec_txt
+   241 47C5 A2 04		 ldx #<(RECB+4)
+   242 47C7 A0 07		 ldy #>(RECB+4)
+   243 47C9 20 A7 DD		 jsr FST0R
+   244 47CC A9 01		 lda #1
+   245 47CE 8D 00 07		 sta RECB
+   246 47D1 8D 01 07		 sta RECB+1
+   247 47D4 4C 40 48		 jmp ec_put
+   248 47D7			ec_txt
+   249 47D7 A5 AD		 lda elen
+   250 47D9 8D 20 07		 sta TMPS
+   251 47DC A2 00		 ldx #0
+   252 47DE E4 AD		et1 cpx elen
+   253 47E0 B0 09		 bcs et2
+   254 47E2 BD 00 06		 lda EBUF,x
+   255 47E5 9D 21 07		 sta TMPS+1,x
+   256 47E8 E8			 inx
+   257 47E9 D0 F3		 bne et1
+   258 47EB 20 B5 22		et2 jsr hput
+   259 47EE B0 63		 bcs ec_full
+   260 47F0 A5 86		 lda rp
+   261 47F2 8D 04 07		 sta RECB+4
+   262 47F5 A5 87		 lda rp+1
+   263 47F7 8D 05 07		 sta RECB+5
+   264 47FA A9 02		 lda #2
+   265 47FC 8D 00 07		 sta RECB
+   266 47FF 8D 01 07		 sta RECB+1
+   267 4802 4C 40 48		 jmp ec_put
+   268 4805			ec_f
+   269 4805 A5 B8		 lda fcnt+1
+   270 4807 C9 02		 cmp #>MAXF
+   271 4809 B0 4C		 bcs ec_nof
+   272 480B A5 AD		 lda elen
+   273 480D 38			 sec
+   274 480E E9 01		 sbc #1
+   275 4810 8D 20 07		 sta TMPS
+   276 4813 A2 00		 ldx #0
+   277 4815 EC 20 07		ef2 cpx TMPS
+   278 4818 B0 09		 bcs ef3
+   279 481A BD 01 06		 lda EBUF+1,x
+   280 481D 9D 21 07		 sta TMPS+1,x
+   281 4820 E8			 inx
+   282 4821 D0 F2		 bne ef2
+   283 4823 20 B5 22		ef3 jsr hput
+   284 4826 B0 2B		 bcs ec_full
+   285 4828 A5 86		 lda rp
+   286 482A 8D 0A 07		 sta RECB+10
+   287 482D A5 87		 lda rp+1
+   288 482F 8D 0B 07		 sta RECB+11
+   289 4832 A9 03		 lda #3
+   290 4834 8D 00 07		 sta RECB
+   291 4837 20 76 22		 jsr wrrec
+   292 483A 20 ED 48		 jsr fladd
+   293 483D 4C 43 48		 jmp ec_done2
+   294 4840			ec_put
+   295 4840 20 76 22		 jsr wrrec
+   296 4843			ec_done2
+   297 4843 A9 01		 lda #1
+   298 4845 8D C1 14		 sta dirty
+   299 4848			ec_done
+   300 4848 A5 90		 lda cr
+   301 484A C9 7F		 cmp #NROWS-1
+   302 484C B0 02		 bcs ec_d1
+   303 484E E6 90		 inc cr
+   304 4850 4C 20 46		ec_d1 jmp ed_redraw
+   305 4853			ec_full
+   306 4853 A9 09		 lda #9
+   307 4855 D0 02		 bne ec_err
+   308 4857			ec_nof
+   309 4857 A9 0C		 lda #12
+   310 4859 48			ec_err pha
+   311 485A 20 76 22		 jsr wrrec
+   312 485D 20 1A 41		 jsr recalc
+   313 4860 68			 pla
+   314 4861 8D C2 14		 sta msg
+   315 4864 20 9B 28		 jsr visible
+   316 4867 4C 6D 2D		 jmp drawall
+   317
+   318 				; ---- formula list maintenance (the list holds the cell addresses of the formula cells)
+   319 486A			flptr
+   320 486A A5 C3		 lda fli
+   321 486C 85 80		 sta ptr
+   322 486E A5 C4		 lda fli+1
+   323 4870 18			 clc
+   324 4871 69 10		 adc #>FLL
+   325 4873 85 81		 sta ptr+1
+   326 4875 60			 rts
+   327
+   328 				; C set when (qr,qc) is in the list; fli = its index
+   329 4876			flfind
+   330 4876 A9 00		 lda #0
+   331 4878 85 C3		 sta fli
+   332 487A 85 C4		 sta fli+1
+   333 487C A5 C3		flf1 lda fli
+   334 487E C5 B7		 cmp fcnt
+   335 4880 D0 06		 bne flf2
+   336 4882 A5 C4		 lda fli+1
+   337 4884 C5 B8		 cmp fcnt+1
+   338 4886 F0 23		 beq flfz
+   339 4888 20 6A 48		flf2 jsr flptr
+   340 488B A0 00		 ldy #0
+   341 488D B1 80		 lda (ptr),y
+   342 488F C5 8E		 cmp qr
+   343 4891 D0 0D		 bne flfn
+   344 4893 A5 81		 lda ptr+1
+   345 4895 18			 clc
+   346 4896 69 02		 adc #>(FLH-FLL)
+   347 4898 85 81		 sta ptr+1
+   348 489A B1 80		 lda (ptr),y
+   349 489C C5 8F		 cmp qc
+   350 489E F0 09		 beq flfy
+   351 48A0 E6 C3		flfn inc fli
+   352 48A2 D0 D8		 bne flf1
+   353 48A4 E6 C4		 inc fli+1
+   354 48A6 4C 7C 48		 jmp flf1
+   355 48A9 38			flfy sec
+   356 48AA 60			 rts
+   357 48AB 18			flfz clc
+   358 48AC 60			 rts
+   359
+   360 48AD			fldel
+   361 48AD 20 76 48		 jsr flfind
+   362 48B0 90 3A		 bcc fld9
+   363 48B2 A5 B7		fld1 lda fcnt
+   364 48B4 38			 sec
+   365 48B5 E9 01		 sbc #1
+   366 48B7 AA			 tax
+   367 48B8 A5 B8		 lda fcnt+1
+   368 48BA E9 00		 sbc #0
+   369 48BC C5 C4		 cmp fli+1
+   370 48BE D0 04		 bne fld2
+   371 48C0 E4 C3		 cpx fli
+   372 48C2 F0 20		 beq fld8
+   373 48C4 20 6A 48		fld2 jsr flptr
+   374 48C7 A0 01		 ldy #1
+   375 48C9 B1 80		 lda (ptr),y
+   376 48CB 88			 dey
+   377 48CC 91 80		 sta (ptr),y
+   378 48CE A5 81		 lda ptr+1
+   379 48D0 18			 clc
+   380 48D1 69 02		 adc #>(FLH-FLL)
+   381 48D3 85 81		 sta ptr+1
+   382 48D5 C8			 iny
+   383 48D6 B1 80		 lda (ptr),y
+   384 48D8 88			 dey
+   385 48D9 91 80		 sta (ptr),y
+   386 48DB E6 C3		 inc fli
+   387 48DD D0 D3		 bne fld1
+   388 48DF E6 C4		 inc fli+1
+   389 48E1 4C B2 48		 jmp fld1
+   390 48E4 A5 B7		fld8 lda fcnt
+   391 48E6 D0 02		 bne fld8a
+   392 48E8 C6 B8		 dec fcnt+1
+   393 48EA C6 B7		fld8a dec fcnt
+   394 48EC 60			fld9 rts
+   395
+   396 48ED			fladd
+   397 48ED A5 B7		 lda fcnt
+   398 48EF 85 C3		 sta fli
+   399 48F1 A5 B8		 lda fcnt+1
+   400 48F3 85 C4		 sta fli+1
+   401 48F5 20 6A 48		 jsr flptr
+   402 48F8 A0 00		 ldy #0
+   403 48FA A5 8E		 lda qr
+   404 48FC 91 80		 sta (ptr),y
+   405 48FE A5 81		 lda ptr+1
+   406 4900 18			 clc
+   407 4901 69 02		 adc #>(FLH-FLL)
+   408 4903 85 81		 sta ptr+1
+   409 4905 A5 8F		 lda qc
+   410 4907 91 80		 sta (ptr),y
+   411 4909 E6 B7		 inc fcnt
+   412 490B D0 02		 bne fla9
+   413 490D E6 B8		 inc fcnt+1
+   414 490F 60			fla9 rts
+   283 4910			 icl '..\acwriter\zfont.inc'
+Source: zfont.inc
+     1 				; generated by mkzoomfont.cjs from tools/craft8art.cjs - do not edit
+     2 4910			zfont:
+     3 4910 00 00 00 00 00 00 +         .byte 0,0,0,0,0,0,0,0,16,16,16,16,0,16,0,0
+     4 4920 28 28 28 00 00 00 +         .byte 40,40,40,0,0,0,0,0,40,124,40,124,40,40,0,0
+     5 4930 3C 50 38 14 78 10 +         .byte 60,80,56,20,120,16,0,0,100,104,16,44,76,0,0,0
+     6 4940 30 48 30 54 48 34 +         .byte 48,72,48,84,72,52,0,0,16,16,32,0,0,0,0,0
+     7 4950 08 10 20 20 10 08 +         .byte 8,16,32,32,16,8,0,0,32,16,8,8,16,32,0,0
+     8 4960 00 54 38 7C 38 54 +         .byte 0,84,56,124,56,84,0,0,0,16,16,124,16,16,0,0
+     9 4970 00 00 00 00 00 10 +         .byte 0,0,0,0,0,16,32,0,0,0,0,56,0,0,0,0
+    10 4980 00 00 00 00 00 10 +         .byte 0,0,0,0,0,16,0,0,4,8,16,16,32,64,0,0
+    11 4990 38 44 54 44 44 38 +         .byte 56,68,84,68,68,56,0,0,16,48,16,16,16,56,0,0
+    12 49A0 38 44 08 10 20 7C +         .byte 56,68,8,16,32,124,0,0,120,4,56,4,68,56,0,0
+    13 49B0 08 18 28 7C 08 08 +         .byte 8,24,40,124,8,8,0,0,124,64,120,4,68,56,0,0
+    14 49C0 38 40 78 44 44 38 +         .byte 56,64,120,68,68,56,0,0,124,4,8,16,32,32,0,0
+    15 49D0 38 44 38 44 44 38 +         .byte 56,68,56,68,68,56,0,0,56,68,60,4,4,56,0,0
+    16 49E0 00 00 10 00 00 10 +         .byte 0,0,16,0,0,16,0,0,0,0,16,0,0,16,32,0
+    17 49F0 00 08 10 20 10 08 +         .byte 0,8,16,32,16,8,0,0,0,0,124,0,124,0,0,0
+    18 4A00 00 20 10 08 10 20 +         .byte 0,32,16,8,16,32,0,0,56,68,8,16,0,16,0,0
+    19 4A10 38 44 5C 54 5C 20 +         .byte 56,68,92,84,92,32,0,0,56,68,68,124,68,68,0,0
+    20 4A20 78 44 78 44 44 78 +         .byte 120,68,120,68,68,120,0,0,56,68,64,64,68,56,0,0
+    21 4A30 78 44 44 44 44 78 +         .byte 120,68,68,68,68,120,0,0,124,64,120,64,64,124,0,0
+    22 4A40 7C 40 78 40 40 40 +         .byte 124,64,120,64,64,64,0,0,56,68,64,76,68,60,0,0
+    23 4A50 44 44 7C 44 44 44 +         .byte 68,68,124,68,68,68,0,0,124,16,16,16,16,124,0,0
+    24 4A60 1C 08 08 08 48 30 +         .byte 28,8,8,8,72,48,0,0,68,72,112,72,68,68,0,0
+    25 4A70 40 40 40 40 40 7C +         .byte 64,64,64,64,64,124,0,0,68,108,84,68,68,68,0,0
+    26 4A80 44 64 54 4C 44 44 +         .byte 68,100,84,76,68,68,0,0,56,68,68,68,68,56,0,0
+    27 4A90 78 44 44 78 40 40 +         .byte 120,68,68,120,64,64,0,0,56,68,68,84,72,52,0,0
+    28 4AA0 78 44 78 50 48 44 +         .byte 120,68,120,80,72,68,0,0,60,64,56,4,4,120,0,0
+    29 4AB0 7C 10 10 10 10 10 +         .byte 124,16,16,16,16,16,0,0,68,68,68,68,68,56,0,0
+    30 4AC0 44 44 44 44 28 10 +         .byte 68,68,68,68,40,16,0,0,68,68,68,84,108,68,0,0
+    31 4AD0 44 28 10 10 28 44 +         .byte 68,40,16,16,40,68,0,0,68,40,16,16,16,16,0,0
+    32 4AE0 7C 04 08 10 20 7C +         .byte 124,4,8,16,32,124,0,0,56,32,32,32,32,56,0,0
+    33 4AF0 40 20 10 10 08 04 +         .byte 64,32,16,16,8,4,0,0,56,8,8,8,8,56,0,0
+    34 4B00 10 28 44 00 00 00 +         .byte 16,40,68,0,0,0,0,0,0,0,0,0,0,0,0,124
+    35 4B10 20 10 00 00 00 00 +         .byte 32,16,0,0,0,0,0,0,0,0,56,4,60,68,60,0
+    36 4B20 40 40 78 44 44 78 +         .byte 64,64,120,68,68,120,0,0,0,0,56,64,64,68,56,0
+    37 4B30 04 04 3C 44 44 3C +         .byte 4,4,60,68,68,60,0,0,0,0,56,68,124,64,60,0
+    38 4B40 18 20 70 20 20 20 +         .byte 24,32,112,32,32,32,0,0,0,0,60,68,68,60,4,56
+    39 4B50 40 40 78 44 44 44 +         .byte 64,64,120,68,68,68,0,0,0,16,0,48,16,16,56,0
+    40 4B60 00 08 00 18 08 08 +         .byte 0,8,0,24,8,8,72,48,64,64,72,112,72,68,0,0
+    41 4B70 30 10 10 10 10 18 +         .byte 48,16,16,16,16,24,0,0,0,0,120,84,84,84,84,0
+    42 4B80 00 00 78 44 44 44 +         .byte 0,0,120,68,68,68,68,0,0,0,56,68,68,68,56,0
+    43 4B90 00 00 78 44 44 78 +         .byte 0,0,120,68,68,120,64,64,0,0,60,68,68,60,4,4
+    44 4BA0 00 00 58 64 40 40 +         .byte 0,0,88,100,64,64,64,0,0,0,60,64,56,4,120,0
+    45 4BB0 00 20 70 20 20 24 +         .byte 0,32,112,32,32,36,24,0,0,0,68,68,68,76,52,0
+    46 4BC0 00 00 44 44 44 28 +         .byte 0,0,68,68,68,40,16,0,0,0,68,68,84,84,40,0
+    47 4BD0 00 00 44 28 10 28 +         .byte 0,0,68,40,16,40,68,0,0,0,68,68,68,60,4,56
+    48 4BE0 00 00 7C 08 10 20 +         .byte 0,0,124,8,16,32,124,0,24,16,32,16,16,24,0,0
+    49 4BF0 10 10 10 10 10 10 +         .byte 16,16,16,16,16,16,16,0,48,16,8,16,16,48,0,0
+    50 4C00 00 00 34 58 00 00 +         .byte 0,0,52,88,0,0,0,0,56,68,8,16,0,16,0,0
+   284
+   285 4C10			 org $1600
+   286 1600			dl
+   287 1600-16C9> 70 70 70 4F +  dta b($70),b($70),b($70),b($4F),a(SCR)
+   288 1606 0F 0F 0F 0F 0F 0F +  :99 dta b($0F)
+   289 1669 4F 00 B0		 dta b($4F),a(SCR+4000)
+   290 166C 0F 0F 0F 0F 0F 0F +  :91 dta b($0F)
+   291 16C7 41 00 16		 dta b($41),a(dl)
+   292
+   293 02E0-02E1> 00 20		 run start

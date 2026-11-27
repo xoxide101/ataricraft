@@ -1,0 +1,232 @@
+{
+  "format": "ataricraft.bootrecords",
+  "version": 1,
+  "title": "DOS boot records",
+  "root": "C:\\Users\\raver\\ataricraft\\archive\\boot",
+  "generated": "2026-11-06",
+  "records": [
+    {
+      "id": "bwdos-16m-boot",
+      "name": "bwdos_16M_boot",
+      "kind": "dos",
+      "family": "bw-dos",
+      "version": "1.30",
+      "machine": {
+        "system": "atari8",
+        "model": "130xe",
+        "ram": "128",
+        "tv": "ntsc",
+        "basic": false,
+        "fastSio": true
+      },
+      "media": [
+        {
+          "slot": "D1",
+          "role": "boot",
+          "format": "atr",
+          "path": "bwdos_16M_boot.atr",
+          "sizeBytes": 16776976,
+          "sha1": "f40f5b5f3bb3c5ae1899922582b186d564c8eaa0"
+        }
+      ],
+      "boot": {
+        "target": "D1",
+        "autorun": null,
+        "expect": {
+          "anyText": [
+            "D1:",
+            "BW-DOS",
+            "DOS"
+          ],
+          "afterFrames": 600
+        }
+      },
+      "detect": {
+        "confidence": 95,
+        "bootHeader": "0003000900004c80",
+        "sectorSize": 256,
+        "sectors": 65535,
+        "files": [
+          "DOS",
+          "DOS/ARGSPRN.COM",
+          "DOS/ARGSRTC.COM",
+          "DOS/AUTOCWD.COM",
+          "DOS/BACKUP.COM",
+          "DOS/BLOAD.COM",
+          "DOS/BOOT.COM",
+          "DOS/CHKDSK.COM",
+          "DOS/CHVOL.COM",
+          "DOS/CLOCK.COM",
+          "DOS/COPY.COM",
+          "DOS/CUT.COM"
+        ],
+        "evidence": [
+          "XBW130.DOS"
+        ]
+      },
+      "notes": ""
+    },
+    {
+      "id": "mydos455b4-90k-boot",
+      "name": "mydos455b4_90K_boot",
+      "kind": "dos",
+      "family": "mydos",
+      "version": "4.55b4",
+      "machine": {
+        "system": "atari8",
+        "model": "130xe",
+        "ram": "128",
+        "tv": "ntsc",
+        "basic": false,
+        "fastSio": true
+      },
+      "media": [
+        {
+          "slot": "D1",
+          "role": "boot",
+          "format": "atr",
+          "path": "mydos455b4_90K_boot.atr",
+          "sizeBytes": 92176,
+          "sha1": "38d91259f5817ccbc547e3e65dff0de7e1b6e6b1"
+        }
+      ],
+      "boot": {
+        "target": "D1",
+        "autorun": null,
+        "expect": {
+          "anyText": [
+            "MYDOS",
+            "SELECT ITEM",
+            "D1:"
+          ],
+          "afterFrames": 600
+        }
+      },
+      "detect": {
+        "confidence": 90,
+        "bootHeader": "4d030007e0074c14",
+        "sectorSize": 128,
+        "sectors": 720,
+        "files": [
+          "DOS.SYS",
+          "DUP.SYS",
+          "RAMDISK.AR0"
+        ],
+        "evidence": [
+          "MyDOS boot header / ramdisk handler"
+        ]
+      },
+      "notes": ""
+    },
+    {
+      "id": "spartados443-16m-boot",
+      "name": "spartados443_16M_boot",
+      "kind": "dos",
+      "family": "spartados",
+      "version": "",
+      "machine": {
+        "system": "atari8",
+        "model": "130xe",
+        "ram": "128",
+        "tv": "ntsc",
+        "basic": false,
+        "fastSio": true
+      },
+      "media": [
+        {
+          "slot": "D1",
+          "role": "boot",
+          "format": "atr",
+          "path": "spartados443_16M_boot.atr",
+          "sizeBytes": 16776592,
+          "sha1": "0779b933b6dac91dd14f922634c8bb0b334e8a64"
+        }
+      ],
+      "boot": {
+        "target": "D1",
+        "autorun": null,
+        "expect": {
+          "anyText": [
+            "D1:",
+            "SPARTA"
+          ],
+          "afterFrames": 600
+        }
+      },
+      "detect": {
+        "confidence": 70,
+        "bootHeader": "53030030e0074c80",
+        "sectorSize": 256,
+        "sectors": 65535,
+        "files": [
+          "FILES.TXT",
+          "MAN_BAT.ARC",
+          "MAN_CMD.ARC",
+          "MAN_DRIV.ARC",
+          "BAT",
+          "BAT/BCREATE.BAT",
+          "BAT/CARCOPY.BAT",
+          "BAT/MAKE.ARC",
+          "BAT/NEW.ARC",
+          "BAT/PACKMAN.BAT",
+          "BAT/RSORT.BAT",
+          "BAT/RUNPACK.BAT"
+        ],
+        "evidence": [
+          "SpartaDOS-style boot loader (load $3000, init $07E0)"
+        ]
+      },
+      "notes": ""
+    },
+    {
+      "id": "spartados443-90k-boot",
+      "name": "spartados443_90K_boot",
+      "kind": "dos",
+      "family": "atari-dos2",
+      "version": "2.0",
+      "machine": {
+        "system": "atari8",
+        "model": "800xl",
+        "ram": "64",
+        "tv": "ntsc",
+        "basic": false,
+        "fastSio": true
+      },
+      "media": [
+        {
+          "slot": "D1",
+          "role": "boot",
+          "format": "atr",
+          "path": "spartados443_90K_boot.atr",
+          "sizeBytes": 92176,
+          "sha1": "5954fe31ed0bff3c4c049d8cb0f6d2595da4e7b9"
+        }
+      ],
+      "boot": {
+        "target": "D1",
+        "autorun": null,
+        "expect": {
+          "anyText": [
+            "SELECT ITEM",
+            "DISK OPERATING"
+          ],
+          "afterFrames": 600
+        }
+      },
+      "detect": {
+        "confidence": 60,
+        "bootHeader": "0003000740154c14",
+        "sectorSize": 128,
+        "sectors": 720,
+        "files": [
+          "DOS.SYS",
+          "DUP.SYS"
+        ],
+        "evidence": [
+          "DOS.SYS + DUP.SYS"
+        ]
+      },
+      "notes": ""
+    }
+  ]
+}
