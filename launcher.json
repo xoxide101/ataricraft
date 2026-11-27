@@ -1,0 +1,39 @@
+{
+ "name": "AtariCraft",
+ "icon": "🕹",
+ "about": "Atari 8-bit: consoles, library, studio, tools, FujiNet",
+ "group": "Play and stories",
+ "order": 20,
+ "entry": "web/index.html",
+ "status": "beta",
+ "pages": [
+  {
+   "name": "Consoles",
+   "entry": "web/console.html"
+  },
+  {
+   "name": "Studio",
+   "entry": "web/studio.html"
+  },
+  {
+   "name": "Tools and workbench",
+   "entry": "web/tools.html"
+  },
+  {
+   "name": "EBookCraft",
+   "entry": "web/ebookcraft.html"
+  },
+  {
+   "name": "Font editor",
+   "entry": "web/fontedit.html"
+  },
+  {
+   "name": "FujiNet explorer",
+   "entry": "web/fujiexplorer.html"
+  },
+  {
+   "name": "PDF viewer",
+   "entry": "web/pdfview.html"
+  }
+ ]
+}
